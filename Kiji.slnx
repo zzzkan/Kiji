@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Kiji/Kiji.csproj" />
+    <Project Path="src/Kiji.Markdown/Kiji.Markdown.csproj" />
+    <Project Path="src/Kiji.Images/Kiji.Images.csproj" />
+    <Project Path="src/Kiji.Tests/Kiji.Tests.csproj" />
+  </Folder>
+</Solution>

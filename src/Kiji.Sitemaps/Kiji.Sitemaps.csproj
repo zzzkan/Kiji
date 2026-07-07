@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <IsPackable>true</IsPackable>
+    <Description>Sitemap generation for the Kiji static site generator. Registers a sitemap.xml as a site artifact via app.MapSitemap().</Description>
+    <PackageTags>static-site-generator;ssg;sitemap;seo;kiji</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Kiji/Kiji.csproj" />
+  </ItemGroup>
+
+</Project>

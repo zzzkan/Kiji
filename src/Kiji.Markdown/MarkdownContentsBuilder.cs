@@ -1,11 +1,15 @@
+using YamlDotNet.Serialization;
+
 namespace Kiji.Markdown;
 
 public sealed class MarkdownContentsBuilder<TFrontMatter>(
     string contentsDirectory,
-    Func<MarkdownContent<TFrontMatter>, CancellationToken, Task<string>> renderAsync)
+    Func<MarkdownContent<TFrontMatter>, CancellationToken, Task<string>> renderAsync,
+    IDeserializer? frontMatterDeserializer = null)
 {
     private readonly string _contentsDirectory = contentsDirectory;
     private readonly Func<MarkdownContent<TFrontMatter>, CancellationToken, Task<string>> _renderAsync = renderAsync;
+    private readonly IDeserializer _frontMatterDeserializer = frontMatterDeserializer ?? MarkdownFrontMatterParser.DefaultDeserializer;
 
     public IReadOnlyList<MarkdownContent<TFrontMatter>> Build()
     {
@@ -24,7 +28,7 @@ public sealed class MarkdownContentsBuilder<TFrontMatter>(
         foreach (var markdownFile in markdownFiles)
         {
             var fileInfo = MarkdownFileInfo.Create(_contentsDirectory, markdownFile);
-            var frontMatter = MarkdownFrontMatterParser.Parse<TFrontMatter>(markdownFile);
+            var frontMatter = MarkdownFrontMatterParser.Parse<TFrontMatter>(markdownFile, _frontMatterDeserializer);
             items.Add(new MarkdownContent<TFrontMatter>(fileInfo, frontMatter, _renderAsync));
         }
 

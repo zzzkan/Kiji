@@ -1,4 +1,3 @@
-using Markdig;
 using Markdig.Renderers;
 using Markdig.Renderers.Html.Inlines;
 using Markdig.Syntax.Inlines;
@@ -7,37 +6,36 @@ using Kiji.Assets;
 namespace Kiji.Markdown;
 
 /// <summary>
-/// Custom Markdig extension for responsive images with lazy loading and CLS optimization.
+/// Per-document state for responsive image rendering: the processed image lookup,
+/// the content-scoped asset location, and the image counter driving eager/lazy loading.
 /// </summary>
-public sealed class ResponsiveImageExtension(
+internal sealed class ResponsiveImageContext(
     IReadOnlyDictionary<string, ProcessedImageInfo> imageInfoLookup,
     string assetsBaseUrl,
-    string contentKey) : IMarkdownExtension
+    string contentKey)
 {
-    private static readonly string[] ImageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
+    public IReadOnlyDictionary<string, ProcessedImageInfo> ImageInfoLookup { get; } = imageInfoLookup;
 
-    private readonly IReadOnlyDictionary<string, ProcessedImageInfo> _imageInfoLookup = imageInfoLookup;
-    private readonly string _assetsBaseUrl = $"/{assetsBaseUrl.Trim('/')}";
-    private readonly string _contentKey = contentKey;
-    private int _imageCount;
+    public string AssetsBaseUrl { get; } = $"/{assetsBaseUrl.Trim('/')}";
 
-    /// <inheritdoc/>
-    public void Setup(MarkdownPipelineBuilder pipeline)
+    public string ContentKey { get; } = contentKey;
+
+    public int ImageCount;
+}
+
+/// <summary>
+/// Renders local markdown images as responsive images with lazy loading and CLS optimization.
+/// Attached per renderer (not per pipeline) because its state is per document.
+/// </summary>
+internal static class ResponsiveImageWriter
+{
+    public static void Attach(HtmlRenderer renderer, ResponsiveImageContext context)
     {
-        // No setup needed for the pipeline builder
+        var linkRenderer = renderer.ObjectRenderers.FindExact<LinkInlineRenderer>();
+        linkRenderer?.TryWriters.Add((r, link) => TryWriteResponsiveImage(r, link, context));
     }
 
-    /// <inheritdoc/>
-    public void Setup(MarkdownPipeline pipeline, IMarkdownRenderer renderer)
-    {
-        if (renderer is HtmlRenderer htmlRenderer)
-        {
-            var linkRenderer = htmlRenderer.ObjectRenderers.FindExact<LinkInlineRenderer>();
-            linkRenderer?.TryWriters.Add(TryWriteResponsiveImage);
-        }
-    }
-
-    private bool TryWriteResponsiveImage(HtmlRenderer renderer, LinkInline link)
+    private static bool TryWriteResponsiveImage(HtmlRenderer renderer, LinkInline link, ResponsiveImageContext context)
     {
         // Only handle images
         if (!link.IsImage)
@@ -49,35 +47,34 @@ public sealed class ResponsiveImageExtension(
         var alt = GetAltText(link);
         var title = link.Title ?? string.Empty;
 
-        if (IsLocalImage(url))
+        if (LocalImageUrl.IsLocalImage(url))
         {
-            WriteResponsiveImage(renderer, url, alt, title);
+            WriteResponsiveImage(renderer, context, url, alt, title);
             return true;
         }
 
         return false;
     }
 
-    private void WriteResponsiveImage(HtmlRenderer renderer, string url, string alt, string title)
+    private static void WriteResponsiveImage(HtmlRenderer renderer, ResponsiveImageContext context, string url, string alt, string title)
     {
         var imageReferenceKey = ImageReferenceKey.FromMarkdownUrl(url);
-        var imageInfo = GetImageInfo(imageReferenceKey);
 
-        if (imageInfo is null)
+        if (!context.ImageInfoLookup.TryGetValue(imageReferenceKey, out var imageInfo))
         {
             // Fallback: if no image info found, render as simple img
-            WriteSimpleImage(renderer, url, alt, title);
+            WriteSimpleImage(renderer, context, url, alt, title);
             return;
         }
 
         // Image path: {assetsBaseUrl}/{contentKey}/{filename}.{hash}.{width}w.webp
         var availableWidths = imageInfo.AvailableWidths;
         var largestWidth = availableWidths.Length > 0 ? availableWidths.Max() : imageInfo.OriginalWidth;
-        var defaultImageUrl = $"{_assetsBaseUrl}/{_contentKey}/{imageInfo.AssetFileNameBase}.{imageInfo.ContentHash}.{largestWidth}w.webp";
+        var defaultImageUrl = $"{context.AssetsBaseUrl}/{context.ContentKey}/{imageInfo.AssetFileNameBase}.{imageInfo.ContentHash}.{largestWidth}w.webp";
 
         // Generate srcset with all available widths
         var srcsetParts = availableWidths.Select(w =>
-            $"{_assetsBaseUrl}/{_contentKey}/{imageInfo.AssetFileNameBase}.{imageInfo.ContentHash}.{w}w.webp {w}w"
+            $"{context.AssetsBaseUrl}/{context.ContentKey}/{imageInfo.AssetFileNameBase}.{imageInfo.ContentHash}.{w}w.webp {w}w"
         );
         var srcset = string.Join(", ", srcsetParts);
 
@@ -93,9 +90,9 @@ public sealed class ResponsiveImageExtension(
         renderer.Write(sizes);
         renderer.Write("\" alt=\"");
         renderer.WriteEscape(alt);
-        var loading = _imageCount == 0 ? "eager" : "lazy";
+        var loading = context.ImageCount == 0 ? "eager" : "lazy";
         renderer.Write($"\" loading=\"{loading}\" decoding=\"async\" class=\"blog-image\"");
-        _imageCount++;
+        context.ImageCount++;
 
         // Add actual image dimensions based on original aspect ratio
         renderer.Write($" width=\"{imageInfo.OriginalWidth}\" height=\"{imageInfo.OriginalHeight}\"");
@@ -110,15 +107,15 @@ public sealed class ResponsiveImageExtension(
         renderer.Write(">");
     }
 
-    private void WriteSimpleImage(HtmlRenderer renderer, string url, string alt, string title)
+    private static void WriteSimpleImage(HtmlRenderer renderer, ResponsiveImageContext context, string url, string alt, string title)
     {
         renderer.Write("<img src=\"");
         renderer.WriteEscapeUrl(url);
         renderer.Write("\" alt=\"");
         renderer.WriteEscape(alt);
-        var loading = _imageCount == 0 ? "eager" : "lazy";
+        var loading = context.ImageCount == 0 ? "eager" : "lazy";
         renderer.Write($"\" loading=\"{loading}\" decoding=\"async\" class=\"blog-image\"");
-        _imageCount++;
+        context.ImageCount++;
 
         if (!string.IsNullOrEmpty(title))
         {
@@ -130,13 +127,6 @@ public sealed class ResponsiveImageExtension(
         renderer.Write(">");
     }
 
-    private ProcessedImageInfo? GetImageInfo(string imageReferenceKey)
-    {
-        return _imageInfoLookup.TryGetValue(imageReferenceKey, out var info)
-            ? info
-            : null;
-    }
-
     private static string GetAltText(LinkInline link)
     {
         if (link.FirstChild is LiteralInline literal)
@@ -145,18 +135,5 @@ public sealed class ResponsiveImageExtension(
         }
 
         return string.Empty;
-    }
-
-    private static bool IsLocalImage(string url)
-    {
-        // Local images are relative paths with image extensions
-        if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-            url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        var extension = Path.GetExtension(url).ToLowerInvariant();
-        return ImageExtensions.Contains(extension);
     }
 }

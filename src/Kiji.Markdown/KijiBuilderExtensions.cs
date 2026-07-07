@@ -14,20 +14,33 @@ public static class KijiBuilderExtensions
     /// <typeparamref name="TFrontMatter"/> and bodies render lazily through the markdown
     /// pipeline (with image optimization when an image backend is registered).
     /// </summary>
-    public static ContentCollection<MarkdownContent<TFrontMatter>> AddMarkdownContent<TFrontMatter>(this KijiBuilder builder)
+    /// <param name="builder">The site builder.</param>
+    /// <param name="configure">
+    /// Optional configuration of the markdown pipeline, HTML post-processing, and
+    /// front matter deserialization. See <see cref="MarkdownContentOptions"/>.
+    /// </param>
+    public static ContentCollection<MarkdownContent<TFrontMatter>> AddMarkdownContent<TFrontMatter>(
+        this KijiBuilder builder,
+        Action<MarkdownContentOptions>? configure = null)
         where TFrontMatter : class
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        return builder.AddContentSource(static services =>
+        var contentOptions = new MarkdownContentOptions();
+        configure?.Invoke(contentOptions);
+
+        var frontMatterDeserializer = MarkdownFrontMatterParser.CreateDeserializer(contentOptions.FrontMatterConfigurations);
+
+        return builder.AddContentSource(services =>
         {
             var options = services.GetRequiredService<SsgOptions>();
             var imageAssetProcessor = services.GetRequiredService<IImageAssetProcessor>();
-            var markdownProcessor = new MarkdownProcessor(options, imageAssetProcessor);
+            var markdownProcessor = new MarkdownProcessor(options, imageAssetProcessor, contentOptions);
 
             return new MarkdownContentsBuilder<TFrontMatter>(
                 options.ContentsPath,
-                (content, cancellationToken) => markdownProcessor.ProcessAsync(content.FileInfo.FilePath, cancellationToken))
+                (content, cancellationToken) => markdownProcessor.ProcessAsync(content.FileInfo.FilePath, cancellationToken),
+                frontMatterDeserializer)
                 .Build();
         });
     }

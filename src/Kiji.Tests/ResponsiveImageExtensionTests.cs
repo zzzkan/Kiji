@@ -1,5 +1,6 @@
 using Kiji.Images;
 using Markdig;
+using Markdig.Renderers;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using Xunit;
@@ -9,16 +10,27 @@ using Kiji.Assets;
 namespace Kiji.Tests;
 
 /// <summary>
-/// Unit tests for <see cref="ResponsiveImageExtension"/>.
+/// Unit tests for <see cref="ResponsiveImageWriter"/>.
 /// </summary>
 public sealed class ResponsiveImageExtensionTests
 {
-    private static MarkdownPipeline CreatePipeline(IReadOnlyDictionary<string, ProcessedImageInfo> imageInfoLookup, string postsBaseUrl = "_assets")
+    private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder()
+        .UseAdvancedExtensions()
+        .Build();
+
+    private static string Render(
+        string markdown,
+        IReadOnlyDictionary<string, ProcessedImageInfo> imageInfoLookup,
+        string postsBaseUrl = "_assets")
     {
-        return new MarkdownPipelineBuilder()
-            .UseAdvancedExtensions()
-            .Use(new ResponsiveImageExtension(imageInfoLookup, postsBaseUrl, "test-post"))
-            .Build();
+        var document = global::Markdig.Markdown.Parse(markdown, Pipeline);
+        var writer = new StringWriter();
+        var renderer = new HtmlRenderer(writer);
+        Pipeline.Setup(renderer);
+        ResponsiveImageWriter.Attach(renderer, new ResponsiveImageContext(imageInfoLookup, postsBaseUrl, "test-post"));
+        renderer.Render(document);
+        writer.Flush();
+        return writer.ToString();
     }
 
     private static ProcessedImageInfo CreateImageInfo(string fileName, int width = 1920, int height = 1080, string hash = "abc12345")
@@ -61,11 +73,10 @@ public sealed class ResponsiveImageExtensionTests
     {
         var imageInfo = CreateImageInfo("test-image.png");
         var imageInfoLookup = new Dictionary<string, ProcessedImageInfo> { ["test-image.png"] = imageInfo };
-        var pipeline = CreatePipeline(imageInfoLookup);
         var markdown = "![Alt text](test-image.png)";
 
         // Act
-        var html = global::Markdig.Markdown.ToHtml(markdown, pipeline);
+        var html = Render(markdown, imageInfoLookup);
 
         // Assert
         Assert.Contains("srcset=\"", html);
@@ -81,11 +92,10 @@ public sealed class ResponsiveImageExtensionTests
     {
         var imageInfo = CreateImageInfo("test-image.png");
         var imageInfoLookup = new Dictionary<string, ProcessedImageInfo> { ["test-image.png"] = imageInfo };
-        var pipeline = CreatePipeline(imageInfoLookup);
         var markdown = "![Alt text](test-image.png)";
 
         // Act
-        var html = global::Markdig.Markdown.ToHtml(markdown, pipeline);
+        var html = Render(markdown, imageInfoLookup);
 
         // Assert
         Assert.Contains("sizes=\"", html);
@@ -97,11 +107,10 @@ public sealed class ResponsiveImageExtensionTests
     {
         var imageInfo = CreateImageInfo("test-image.png");
         var imageInfoLookup = new Dictionary<string, ProcessedImageInfo> { ["test-image.png"] = imageInfo };
-        var pipeline = CreatePipeline(imageInfoLookup);
         var markdown = "![Alt text](test-image.png)";
 
         // Act
-        var html = global::Markdig.Markdown.ToHtml(markdown, pipeline);
+        var html = Render(markdown, imageInfoLookup);
 
         // Assert
         Assert.Contains("loading=\"eager\"", html);
@@ -118,11 +127,10 @@ public sealed class ResponsiveImageExtensionTests
             ["image1.png"] = imageInfo1,
             ["image2.png"] = imageInfo2
         };
-        var pipeline = CreatePipeline(imageInfoLookup);
         var markdown = "![First](image1.png)\n\n![Second](image2.png)";
 
         // Act
-        var html = global::Markdig.Markdown.ToHtml(markdown, pipeline);
+        var html = Render(markdown, imageInfoLookup);
 
         // Assert
         Assert.Contains("loading=\"eager\"", html);
@@ -130,15 +138,31 @@ public sealed class ResponsiveImageExtensionTests
     }
 
     [Fact]
+    public void Process_SeparateRenders_EachDocumentStartsWithEagerLoading()
+    {
+        var imageInfoLookup = new Dictionary<string, ProcessedImageInfo>
+        {
+            ["image1.png"] = CreateImageInfo("image1.png"),
+        };
+
+        // Two renders over the same shared pipeline must not leak the image counter.
+        var first = Render("![First](image1.png)", imageInfoLookup);
+        var second = Render("![First](image1.png)", imageInfoLookup);
+
+        Assert.Contains("loading=\"eager\"", first);
+        Assert.Contains("loading=\"eager\"", second);
+        Assert.DoesNotContain("loading=\"lazy\"", second);
+    }
+
+    [Fact]
     public void Process_LocalImage_IncludesDimensions()
     {
         var imageInfo = CreateImageInfo("test-image.png", 1920, 1080);
         var imageInfoLookup = new Dictionary<string, ProcessedImageInfo> { ["test-image.png"] = imageInfo };
-        var pipeline = CreatePipeline(imageInfoLookup);
         var markdown = "![Alt text](test-image.png)";
 
         // Act
-        var html = global::Markdig.Markdown.ToHtml(markdown, pipeline);
+        var html = Render(markdown, imageInfoLookup);
 
         // Assert
         Assert.Contains("width=\"1920\"", html);
@@ -150,11 +174,10 @@ public sealed class ResponsiveImageExtensionTests
     {
         var imageInfo = CreateImageInfo("test-image.png");
         var imageInfoLookup = new Dictionary<string, ProcessedImageInfo> { ["test-image.png"] = imageInfo };
-        var pipeline = CreatePipeline(imageInfoLookup);
         var markdown = "![My beautiful image](test-image.png)";
 
         // Act
-        var html = global::Markdig.Markdown.ToHtml(markdown, pipeline);
+        var html = Render(markdown, imageInfoLookup);
 
         // Assert
         Assert.Contains("alt=\"My beautiful image\"", html);
@@ -165,11 +188,10 @@ public sealed class ResponsiveImageExtensionTests
     {
         var imageInfo = CreateImageInfo("test-image.png");
         var imageInfoLookup = new Dictionary<string, ProcessedImageInfo> { ["test-image.png"] = imageInfo };
-        var pipeline = CreatePipeline(imageInfoLookup);
         var markdown = "![Alt text](test-image.png \"Image title\")";
 
         // Act
-        var html = global::Markdig.Markdown.ToHtml(markdown, pipeline);
+        var html = Render(markdown, imageInfoLookup);
 
         // Assert
         Assert.Contains("title=\"Image title\"", html);
@@ -180,11 +202,10 @@ public sealed class ResponsiveImageExtensionTests
     {
         var imageInfo = CreateImageInfo("test-image.png");
         var imageInfoLookup = new Dictionary<string, ProcessedImageInfo> { ["test-image.png"] = imageInfo };
-        var pipeline = CreatePipeline(imageInfoLookup);
         var markdown = "![Alt text](test-image.png)";
 
         // Act
-        var html = global::Markdig.Markdown.ToHtml(markdown, pipeline);
+        var html = Render(markdown, imageInfoLookup);
 
         // Assert
         Assert.Contains("class=\"blog-image\"", html);
@@ -195,11 +216,10 @@ public sealed class ResponsiveImageExtensionTests
     {
         // Arrange
         var imageInfoLookup = new Dictionary<string, ProcessedImageInfo>();
-        var pipeline = CreatePipeline(imageInfoLookup);
         var markdown = "![External image](https://example.com/image.png)";
 
         // Act
-        var html = global::Markdig.Markdown.ToHtml(markdown, pipeline);
+        var html = Render(markdown, imageInfoLookup);
 
         // Assert
         Assert.Contains("src=\"https://example.com/image.png\"", html);
@@ -211,11 +231,10 @@ public sealed class ResponsiveImageExtensionTests
     {
         // Arrange - no image info provided
         var imageInfoLookup = new Dictionary<string, ProcessedImageInfo>();
-        var pipeline = CreatePipeline(imageInfoLookup);
         var markdown = "![Unknown](unknown-image.png)";
 
         // Act
-        var html = global::Markdig.Markdown.ToHtml(markdown, pipeline);
+        var html = Render(markdown, imageInfoLookup);
 
         // Assert
         Assert.Contains("src=\"unknown-image.png\"", html);
@@ -228,11 +247,10 @@ public sealed class ResponsiveImageExtensionTests
     {
         var imageInfo = CreateImageInfo("test-image.png");
         var imageInfoLookup = new Dictionary<string, ProcessedImageInfo> { ["test-image.png"] = imageInfo };
-        var pipeline = CreatePipeline(imageInfoLookup, "custom-posts");
 
         // Act
         var markdown = "![Alt text](test-image.png)";
-        var html = global::Markdig.Markdown.ToHtml(markdown, pipeline);
+        var html = Render(markdown, imageInfoLookup, "custom-posts");
 
         // Assert
         Assert.Contains("/custom-posts/test-post/", html);
@@ -243,11 +261,10 @@ public sealed class ResponsiveImageExtensionTests
     {
         var imageInfo = CreateImageInfo("test-image.png", hash: "xyz78901");
         var imageInfoLookup = new Dictionary<string, ProcessedImageInfo> { ["test-image.png"] = imageInfo };
-        var pipeline = CreatePipeline(imageInfoLookup);
         var markdown = "![Alt text](test-image.png)";
 
         // Act
-        var html = global::Markdig.Markdown.ToHtml(markdown, pipeline);
+        var html = Render(markdown, imageInfoLookup);
 
         // Assert
         Assert.Contains("xyz78901", html);
@@ -261,10 +278,9 @@ public sealed class ResponsiveImageExtensionTests
             ["foo.jpg"] = CreateImageInfo("foo.jpg", hash: "jpg12345"),
             ["foo.png"] = CreateImageInfo("foo.png", hash: "png67890")
         };
-        var pipeline = CreatePipeline(imageInfoLookup);
         var markdown = "![Jpg](foo.jpg)\n\n![Png](foo.png)";
 
-        var html = global::Markdig.Markdown.ToHtml(markdown, pipeline);
+        var html = Render(markdown, imageInfoLookup);
 
         var jpgIndex = html.IndexOf("jpg12345", StringComparison.Ordinal);
         var pngIndex = html.IndexOf("png67890", StringComparison.Ordinal);
@@ -290,10 +306,9 @@ public sealed class ResponsiveImageExtensionTests
             await CreateTestImageAsync(Path.Combine(sourceDir, "foo.png"), 400, 200);
 
             var imageInfoLookup = await new ImageProcessor().ProcessPostImagesAsync(outputDir, sourceDir);
-            var pipeline = CreatePipeline(imageInfoLookup);
             var markdown = "![Jpg](foo.jpg)\n\n![Png](foo.png)";
 
-            var html = global::Markdig.Markdown.ToHtml(markdown, pipeline);
+            var html = Render(markdown, imageInfoLookup);
             var jpgInfo = imageInfoLookup["foo.jpg"];
             var pngInfo = imageInfoLookup["foo.png"];
 
@@ -314,11 +329,10 @@ public sealed class ResponsiveImageExtensionTests
     {
         // Arrange
         var imageInfoLookup = new Dictionary<string, ProcessedImageInfo>();
-        var pipeline = CreatePipeline(imageInfoLookup);
         var markdown = "[Link text](https://example.com)";
 
         // Act
-        var html = global::Markdig.Markdown.ToHtml(markdown, pipeline);
+        var html = Render(markdown, imageInfoLookup);
 
         // Assert
         Assert.Contains("<a href=\"https://example.com\"", html);

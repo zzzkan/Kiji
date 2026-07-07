@@ -1,4 +1,4 @@
-namespace Kiji;
+namespace Kiji.Feeds;
 
 /// <summary>
 /// Feed metadata for a single content item. The item's route is resolved

@@ -1,3 +1,5 @@
+using Kiji.Feeds;
+using Kiji.Sitemaps;
 using Kiji.Tests.TestSite;
 using Xunit;
 
@@ -62,6 +64,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         await using var app = builder.Build();
         TestArticleContents.MapSite(app, posts);
         app.MapFeed(posts, static post => new FeedItem(post.Title, post.Description, post.CreatedAt));
+        app.MapSitemap();
 
         await app.BuildSiteAsync();
 
@@ -87,7 +90,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         Assert.DoesNotContain("404.html", sitemapXml, StringComparison.Ordinal);
 
         var feedXml = await File.ReadAllTextAsync(Path.Combine(_outputDir, "feed.xml"));
-        Assert.Contains("<![CDATA[Hello World]]>", feedXml, StringComparison.Ordinal);
+        Assert.Contains("<title>Hello World</title>", feedXml, StringComparison.Ordinal);
         Assert.Contains("https://example.com/blog/hello-world/", feedXml, StringComparison.Ordinal);
         // Feed entries follow collection order (newest first).
         Assert.True(

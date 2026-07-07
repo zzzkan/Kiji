@@ -2,6 +2,7 @@ using System.Text.Encodings.Web;
 using System.Text.Unicode;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
+using Microsoft.AspNetCore.Components.Web.HtmlRendering;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -62,6 +63,36 @@ public sealed class ComponentRenderer : IAsyncDisposable
         IReadOnlyDictionary<string, object?>? parameters = null,
         Uri? currentUri = null)
     {
+        string? html = null;
+        await RenderComponentCoreAsync(componentType, parameters, currentUri, document => html = document.ToHtmlString());
+        return html!;
+    }
+
+    /// <summary>
+    /// Renders the specified component type directly to a writer, avoiding an
+    /// intermediate full-page string.
+    /// </summary>
+    /// <param name="componentType">The component type to render.</param>
+    /// <param name="output">The destination writer; owned by the caller.</param>
+    /// <param name="parameters">Optional parameters passed to the component.</param>
+    /// <param name="currentUri">Optional absolute URI of the page being rendered; initializes the scoped navigation manager.</param>
+    public Task RenderComponentToAsync(
+        Type componentType,
+        TextWriter output,
+        IReadOnlyDictionary<string, object?>? parameters = null,
+        Uri? currentUri = null)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+
+        return RenderComponentCoreAsync(componentType, parameters, currentUri, document => document.WriteHtmlTo(output));
+    }
+
+    private async Task RenderComponentCoreAsync(
+        Type componentType,
+        IReadOnlyDictionary<string, object?>? parameters,
+        Uri? currentUri,
+        Action<HtmlRootComponent> writeDocument)
+    {
         ArgumentNullException.ThrowIfNull(componentType);
 
         await using var scope = _serviceProvider.CreateAsyncScope();
@@ -78,10 +109,10 @@ public sealed class ComponentRenderer : IAsyncDisposable
 
         // HeadOutlet keeps subscriptions on the renderer, so each page needs its own renderer instance
         // to keep head state isolated across renders.
-        return await renderer.Dispatcher.InvokeAsync(async () =>
+        await renderer.Dispatcher.InvokeAsync(async () =>
         {
             var document = await renderer.RenderComponentAsync(componentType, CreateParameterView(parameters));
-            return document.ToHtmlString();
+            writeDocument(document);
         });
     }
 

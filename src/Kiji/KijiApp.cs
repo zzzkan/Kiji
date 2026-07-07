@@ -28,7 +28,7 @@ public sealed class KijiApp : IAsyncDisposable
 
     private readonly KijiBuilder _builder;
     private readonly List<RouteRegistration> _routeRegistrations = [];
-    private readonly List<Func<IReadOnlyDictionary<string, string>, IReadOnlyList<FeedEntry>>> _feedRegistrations = [];
+    private readonly List<ISiteArtifact> _artifacts = [];
     private Type? _rootComponentType;
     private Assembly? _pageAssembly;
     private Type? _notFoundComponentType;
@@ -93,7 +93,8 @@ public sealed class KijiApp : IAsyncDisposable
     /// Maps every item of a content collection to a page rendered by <typeparamref name="TPage"/>.
     /// The route values object's property names must match the page's route parameters.
     /// When the collection has a key, each page is associated with its content item,
-    /// which enables <see cref="MapFeed{TContent}"/> route resolution.
+    /// which enables route resolution via <see cref="SiteOutputContext.TryResolveRoute"/>
+    /// (used by feed artifacts).
     /// </summary>
     public KijiApp MapContent<TPage, TContent>(ContentCollection<TContent> collection, Func<TContent, object> routeValues)
         where TPage : IComponent
@@ -106,7 +107,7 @@ public sealed class KijiApp : IAsyncDisposable
             typeof(TPage),
             () => [.. collection.Items.Select(item => new StaticPageRouteEntry(
                 RouteValues.ToDictionary(routeValues(item)),
-                AssociatedContentIdentity: collection.HasKey ? collection.GetKeyFor(item) : null))]));
+                AssociatedContentIdentity: collection.HasKey ? collection.GetKey(item) : null))]));
         return this;
     }
 
@@ -128,33 +129,14 @@ public sealed class KijiApp : IAsyncDisposable
     }
 
     /// <summary>
-    /// Generates an RSS feed from a keyed content collection. Each item's route is resolved
-    /// from its <see cref="MapContent{TPage, TContent}"/> association; items without a mapped
-    /// page are skipped. Entries appear in collection order.
+    /// Registers a site-wide output artifact (e.g. an RSS feed or a sitemap) generated
+    /// after all pages are rendered. Extension packages build on this method.
     /// </summary>
-    public KijiApp MapFeed<TContent>(ContentCollection<TContent> collection, Func<TContent, FeedItem> item)
-        where TContent : class
+    public KijiApp MapArtifact(ISiteArtifact artifact)
     {
-        ArgumentNullException.ThrowIfNull(collection);
-        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(artifact);
 
-        _feedRegistrations.Add(routesByIdentity =>
-        {
-            var entries = new List<FeedEntry>();
-            foreach (var content in collection.Items)
-            {
-                var identity = collection.GetKeyFor(content);
-                if (!routesByIdentity.TryGetValue(identity, out var routePath))
-                {
-                    continue;
-                }
-
-                var feedItem = item(content);
-                entries.Add(new FeedEntry(identity, feedItem.Title, feedItem.Description, feedItem.PublishedAt, routePath));
-            }
-
-            return entries;
-        });
+        _artifacts.Add(artifact);
         return this;
     }
 
@@ -175,35 +157,31 @@ public sealed class KijiApp : IAsyncDisposable
         using var sigInt = PosixSignalRegistration.Create(PosixSignal.SIGINT, HandleShutdownSignal);
         using var sigTerm = PosixSignalRegistration.Create(PosixSignal.SIGTERM, HandleShutdownSignal);
 
-        var args = _builder.Args;
-        var command = args.Length > 0 ? args[0].ToLowerInvariant() : "build";
+        var command = KijiCommandLine.Parse(_builder.Args);
 
         try
         {
-            switch (command)
+            switch (command.Kind)
             {
-                case "build":
-                    await BuildSiteAsync(
-                        GetOptionValue(args, "--output"),
-                        clean: !HasFlag(args, "--no-clean"),
-                        cts.Token);
+                case KijiCommandKind.Build:
+                    await BuildSiteAsync(command.Output, command.Clean, cts.Token);
                     return 0;
 
-                case "clean":
+                case KijiCommandKind.Clean:
                     CleanOutput();
                     return 0;
 
-                case "serve":
-                    await ServeAsync(ParsePort(args), cts.Token);
+                case KijiCommandKind.Serve:
+                    await ServeAsync(command.Port, cts.Token);
                     return 0;
 
-                case "preview":
-                    await PreviewAsync(ParsePort(args), cts.Token);
+                case KijiCommandKind.Preview:
+                    await PreviewAsync(command.Port, cts.Token);
                     return 0;
 
                 default:
-                    Console.Error.WriteLine($"Unknown command '{command}'.");
-                    Console.Error.WriteLine("Usage: [build [--output <path>] [--no-clean]] | clean | serve [--port <n>] | preview [--port <n>]");
+                    Console.Error.WriteLine($"Unknown command '{command.RawCommand}'.");
+                    Console.Error.WriteLine(KijiCommandLine.Usage);
                     return 1;
             }
         }
@@ -234,12 +212,11 @@ public sealed class KijiApp : IAsyncDisposable
 
         await StaticSiteGenerator.GenerateAsync(
             options,
-            Site.BaseUrl,
             snapshot.Pages,
-            (request, ct) => RenderPageAsync(renderer, request, ct),
+            (request, output, ct) => RenderPageAsync(renderer, request, output, ct),
             cancellationToken);
 
-        await GenerateFeedsAsync(options, snapshot);
+        await GenerateArtifactsAsync(options, snapshot, cancellationToken);
     }
 
     /// <summary>
@@ -346,33 +323,6 @@ public sealed class KijiApp : IAsyncDisposable
     internal void InvalidateContent()
     {
         _builder.Runtime.Invalidate();
-    }
-
-    internal string? BuildFeedXml(SiteSnapshot snapshot)
-    {
-        if (_feedRegistrations.Count == 0)
-        {
-            return null;
-        }
-
-        var routesByIdentity = CreateRoutesByIdentity(snapshot);
-        return FeedGenerator.BuildXml(
-            _feedRegistrations[0](routesByIdentity),
-            Site.BaseUrl,
-            Site.Name,
-            Site.Description,
-            Site.Language);
-    }
-
-    internal string BuildSitemapXml(SiteSnapshot snapshot)
-    {
-        var urls = snapshot.Pages
-            .Where(static page => !page.ExcludeFromSitemap)
-            .Select(static page => page.RoutePath)
-            .OrderBy(static route => route, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        return SitemapGenerator.BuildXml(Site.BaseUrl, urls);
     }
 
     internal SiteSnapshot CreateSnapshot()
@@ -505,47 +455,77 @@ public sealed class KijiApp : IAsyncDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var routeData = new RouteData(request.ComponentType, request.Parameters);
-        var parameters = new Dictionary<string, object?>(StringComparer.Ordinal)
-        {
-            [RouteDataParameterName] = routeData,
-        };
-
         return renderer.RenderComponentAsync(
             _rootComponentType!,
-            parameters,
+            CreateRootParameters(request),
             Site.BaseUrl.AppendRelativePath(request.RoutePath));
     }
 
-    private static Dictionary<string, string> CreateRoutesByIdentity(SiteSnapshot snapshot)
+    private Task RenderPageAsync(ComponentRenderer renderer, PageRenderRequest request, TextWriter output, CancellationToken cancellationToken)
     {
-        return snapshot.Pages
-            .Where(static request => request.AssociatedContentIdentity is not null)
-            .ToDictionary(
-                static request => request.AssociatedContentIdentity!,
-                static request => request.RoutePath,
-                StringComparer.OrdinalIgnoreCase);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return renderer.RenderComponentToAsync(
+            _rootComponentType!,
+            output,
+            CreateRootParameters(request),
+            Site.BaseUrl.AppendRelativePath(request.RoutePath));
     }
 
-    private async Task GenerateFeedsAsync(SsgOptions options, SiteSnapshot snapshot)
+    private static Dictionary<string, object?> CreateRootParameters(PageRenderRequest request)
     {
-        if (_feedRegistrations.Count == 0)
+        var routeData = new RouteData(request.ComponentType, request.Parameters);
+        return new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            [RouteDataParameterName] = routeData,
+        };
+    }
+
+    private SiteOutputContext CreateOutputContext(SiteSnapshot snapshot)
+    {
+        return new SiteOutputContext(
+            Site,
+            [.. snapshot.Pages.Select(static page => new SitePageInfo(
+                page.RoutePath,
+                page.OutputRelativePath,
+                page.ExcludeFromSitemap,
+                page.AssociatedContentIdentity))]);
+    }
+
+    private async Task GenerateArtifactsAsync(SsgOptions options, SiteSnapshot snapshot, CancellationToken cancellationToken)
+    {
+        if (_artifacts.Count == 0)
         {
             return;
         }
 
-        var routesByIdentity = CreateRoutesByIdentity(snapshot);
+        var context = CreateOutputContext(snapshot);
 
-        foreach (var feedRegistration in _feedRegistrations)
+        foreach (var artifact in _artifacts)
         {
-            await FeedGenerator.GenerateAsync(
-                options.OutputPath,
-                feedRegistration(routesByIdentity),
-                Site.BaseUrl,
-                Site.Name,
-                Site.Description,
-                Site.Language);
+            var fullPath = ResolveArtifactPath(options.OutputPath, artifact.OutputRelativePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+
+            await using var stream = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 4096, useAsync: true);
+            await artifact.WriteAsync(stream, context, cancellationToken);
+
+            Console.WriteLine($"Generated: {fullPath}");
         }
+    }
+
+    private static string ResolveArtifactPath(string outputPath, string relativePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
+
+        var outputRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(outputPath));
+        var fullPath = Path.GetFullPath(Path.Combine(outputRoot, relativePath));
+        if (!fullPath.StartsWith(outputRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Artifact output path '{relativePath}' escapes the output directory.");
+        }
+
+        return fullPath;
     }
 
     private void CleanOutput()
@@ -603,45 +583,6 @@ public sealed class KijiApp : IAsyncDisposable
             Site.BaseUrl);
 
         return _renderer;
-    }
-
-    private static int ParsePort(string[] args)
-    {
-        var value = GetOptionValue(args, "--port");
-        if (value is null)
-        {
-            return 8080;
-        }
-
-        return int.TryParse(value, out var port) && port is >= 0 and <= 65535
-            ? port
-            : throw new ArgumentException($"Invalid port: '{value}'.");
-    }
-
-    private static string? GetOptionValue(string[] args, string name)
-    {
-        for (var i = 1; i < args.Length - 1; i++)
-        {
-            if (string.Equals(args[i], name, StringComparison.OrdinalIgnoreCase))
-            {
-                return args[i + 1];
-            }
-        }
-
-        return null;
-    }
-
-    private static bool HasFlag(string[] args, string name)
-    {
-        for (var i = 1; i < args.Length; i++)
-        {
-            if (string.Equals(args[i], name, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private sealed record RouteRegistration(

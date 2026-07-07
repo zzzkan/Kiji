@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Text;
 using Kiji.Rendering;
 
@@ -8,13 +7,11 @@ public static class StaticSiteGenerator
 {
     public static async Task GenerateAsync(
         SsgOptions options,
-        Uri baseUrl,
         IReadOnlyList<PageRenderRequest> pageRequests,
-        Func<PageRenderRequest, CancellationToken, Task<string>> renderPageAsync,
+        Func<PageRenderRequest, TextWriter, CancellationToken, Task> renderPageAsync,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(baseUrl);
         ArgumentNullException.ThrowIfNull(pageRequests);
         ArgumentNullException.ThrowIfNull(renderPageAsync);
 
@@ -24,32 +21,8 @@ public static class StaticSiteGenerator
 
         await StaticFileCopier.CopyAsync(options.StaticPath, options.OutputPath);
 
-        var sitemapRoutes = await RenderPagesAsync(
-            options,
-            pageRequests,
-            renderPageAsync,
-            cancellationToken);
-
-        await GenerateSitemapAsync(options, baseUrl, sitemapRoutes);
-
-        Console.WriteLine("Site generation complete.");
-    }
-
-    private static async Task<HashSet<string>> RenderPagesAsync(
-        SsgOptions options,
-        IReadOnlyList<PageRenderRequest> pageRequests,
-        Func<PageRenderRequest, CancellationToken, Task<string>> renderPageAsync,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(pageRequests);
-        ArgumentNullException.ThrowIfNull(renderPageAsync);
-
         // Each page renders on its own HtmlRenderer/DI scope, so pages are safe to
-        // render concurrently. The sitemap is sorted afterwards, keeping output
-        // deterministic regardless of completion order.
-        var sitemapRoutes = new ConcurrentBag<string>();
-
+        // render concurrently.
         await Parallel.ForEachAsync(
             pageRequests,
             new ParallelOptions
@@ -59,43 +32,29 @@ public static class StaticSiteGenerator
             },
             async (pageRequest, ct) =>
             {
-                var html = await renderPageAsync(pageRequest, ct);
-                await WritePageAsync(options, pageRequest.OutputRelativePath, html);
-
-                if (!pageRequest.ExcludeFromSitemap)
-                {
-                    sitemapRoutes.Add(pageRequest.RoutePath);
-                }
+                await WritePageAsync(options, pageRequest, renderPageAsync, ct);
             });
 
-        return new HashSet<string>(sitemapRoutes, StringComparer.OrdinalIgnoreCase);
+        Console.WriteLine("Site generation complete.");
     }
 
-    private static async Task GenerateSitemapAsync(
+    private static async Task WritePageAsync(
         SsgOptions options,
-        Uri baseUrl,
-        IReadOnlyCollection<string> sitemapRoutes)
+        PageRenderRequest pageRequest,
+        Func<PageRenderRequest, TextWriter, CancellationToken, Task> renderPageAsync,
+        CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(baseUrl);
-        ArgumentNullException.ThrowIfNull(sitemapRoutes);
-
-        var sitemapUrls = sitemapRoutes
-            .OrderBy(static route => route, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        await SitemapGenerator.GenerateAsync(options.OutputPath, baseUrl, sitemapUrls);
-    }
-
-    private static async Task WritePageAsync(SsgOptions options, string relativePath, string html)
-    {
-        ArgumentNullException.ThrowIfNull(options);
-        ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
-        ArgumentNullException.ThrowIfNull(html);
-
-        var fullPath = Path.Combine(options.OutputPath, relativePath);
+        var fullPath = Path.Combine(options.OutputPath, pageRequest.OutputRelativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-        await File.WriteAllTextAsync(fullPath, html, Encoding.UTF8);
+
+        var stream = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 4096, useAsync: true);
+        var writer = new StreamWriter(stream, Encoding.UTF8);
+        await using (stream)
+        await using (writer)
+        {
+            await renderPageAsync(pageRequest, writer, cancellationToken);
+        }
+
         Console.WriteLine($"Generated: {fullPath}");
     }
 

@@ -143,8 +143,14 @@ public sealed class ContentCollection<T> : IEnumerable<T>
         return GetEnumerator();
     }
 
-    internal string GetKeyFor(T item)
+    /// <summary>
+    /// Returns the key of an item as declared by <see cref="WithKey"/>. Used by route
+    /// mappings and site artifacts (e.g. feeds) to correlate content with generated pages.
+    /// </summary>
+    public string GetKey(T item)
     {
+        ArgumentNullException.ThrowIfNull(item);
+
         var keySelector = _keySelector
             ?? throw new InvalidOperationException(
                 $"ContentCollection<{typeof(T).Name}> has no key selector. Call WithKey(...) to enable key-based lookups.");

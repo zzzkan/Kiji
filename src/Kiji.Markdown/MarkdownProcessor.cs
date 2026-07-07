@@ -1,6 +1,8 @@
-using System.Security.Cryptography;
+using System.Globalization;
+using System.IO.Hashing;
 using System.Text;
 using Markdig;
+using Markdig.Renderers;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
 using Kiji.Assets;
@@ -8,14 +10,39 @@ using Kiji.Assets;
 namespace Kiji.Markdown;
 
 /// <summary>
-/// Processes markdown bodies into HTML and optimizes referenced local images during rendering.
+/// Processes markdown bodies into HTML through a shared Markdig pipeline, optimizing
+/// referenced local images when an image backend is registered.
 /// </summary>
-public sealed class MarkdownProcessor(SsgOptions options, IImageAssetProcessor imageAssetProcessor)
+public sealed class MarkdownProcessor
 {
-    private static readonly string[] ImageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
+    private readonly MarkdownPipeline _pipeline;
+    private readonly IImageAssetProcessor _imageAssetProcessor;
+    private readonly bool _optimizeImages;
+    private readonly IReadOnlyList<Func<string, string>> _htmlPostProcessors;
+    private readonly string _assetsOutputDirectory;
+    private readonly string _assetsBaseUrl;
 
-    private readonly string _assetsOutputDirectory = Path.Combine(options.OutputPath, options.AssetsDirectoryName);
-    private readonly string _assetsBaseUrl = options.AssetsDirectoryName;
+    /// <param name="options">The resolved site paths.</param>
+    /// <param name="imageAssetProcessor">
+    /// The image backend. When this is a <see cref="NullImageAssetProcessor"/>, image
+    /// collection, optimization, and responsive markup are skipped entirely.
+    /// </param>
+    /// <param name="contentOptions">Optional pipeline and post-processing configuration.</param>
+    public MarkdownProcessor(
+        SsgOptions options,
+        IImageAssetProcessor imageAssetProcessor,
+        MarkdownContentOptions? contentOptions = null)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(imageAssetProcessor);
+
+        _imageAssetProcessor = imageAssetProcessor;
+        _optimizeImages = imageAssetProcessor is not NullImageAssetProcessor;
+        _assetsOutputDirectory = Path.Combine(options.OutputPath, options.AssetsDirectoryName);
+        _assetsBaseUrl = options.AssetsDirectoryName;
+        _htmlPostProcessors = contentOptions is null ? [] : [.. contentOptions.HtmlPostProcessors];
+        _pipeline = BuildPipeline(contentOptions);
+    }
 
     /// <summary>
     /// Processes a markdown file body, optimizing referenced images and converting the result to HTML.
@@ -29,29 +56,70 @@ public sealed class MarkdownProcessor(SsgOptions options, IImageAssetProcessor i
 
         var content = await File.ReadAllTextAsync(filePath, cancellationToken);
         var markdownBody = MarkdownFrontMatterParser.RemoveFrontMatter(content);
-        var contentKey = CreateContentKey(markdownBody);
-        var sourceDirectory = Path.GetDirectoryName(filePath)
-            ?? throw new InvalidOperationException($"Cannot determine source directory for markdown file: {filePath}");
-        var outputDirectory = Path.Combine(_assetsOutputDirectory, contentKey);
-        var imageUrls = CollectLocalImageUrls(markdownBody);
-        var imageInfoLookup = await imageAssetProcessor.ProcessReferencedImagesAsync(
-            outputDirectory,
-            sourceDirectory,
-            imageUrls,
-            cancellationToken);
+        var document = global::Markdig.Markdown.Parse(markdownBody, _pipeline);
 
-        var pipeline = new MarkdownPipelineBuilder()
-            .UseAdvancedExtensions()
-            .Use(new SecureLinkExtension())
-            .Use(new ResponsiveImageExtension(imageInfoLookup, _assetsBaseUrl, contentKey))
-            .Build();
+        ResponsiveImageContext? imageContext = null;
+        if (_optimizeImages)
+        {
+            var contentKey = CreateContentKey(markdownBody);
+            var sourceDirectory = Path.GetDirectoryName(filePath)
+                ?? throw new InvalidOperationException($"Cannot determine source directory for markdown file: {filePath}");
+            var outputDirectory = Path.Combine(_assetsOutputDirectory, contentKey);
+            var imageUrls = CollectLocalImageUrls(document);
+            var imageInfoLookup = await _imageAssetProcessor.ProcessReferencedImagesAsync(
+                outputDirectory,
+                sourceDirectory,
+                imageUrls,
+                cancellationToken);
 
-        return global::Markdig.Markdown.ToHtml(markdownBody, pipeline);
+            imageContext = new ResponsiveImageContext(imageInfoLookup, _assetsBaseUrl, contentKey);
+        }
+
+        var html = Render(document, imageContext);
+
+        foreach (var postProcess in _htmlPostProcessors)
+        {
+            html = postProcess(html);
+        }
+
+        return html;
     }
 
-    private static IReadOnlyList<string> CollectLocalImageUrls(string markdownBody)
+    private string Render(MarkdownDocument document, ResponsiveImageContext? imageContext)
     {
-        var document = global::Markdig.Markdown.Parse(markdownBody);
+        var writer = new StringWriter();
+        var renderer = new HtmlRenderer(writer);
+        _pipeline.Setup(renderer);
+
+        if (imageContext is not null)
+        {
+            ResponsiveImageWriter.Attach(renderer, imageContext);
+        }
+
+        renderer.Render(document);
+        writer.Flush();
+        return writer.ToString();
+    }
+
+    private static MarkdownPipeline BuildPipeline(MarkdownContentOptions? contentOptions)
+    {
+        var builder = new MarkdownPipelineBuilder()
+            .UseAdvancedExtensions()
+            .Use(new SecureLinkExtension());
+
+        if (contentOptions is not null)
+        {
+            foreach (var configure in contentOptions.PipelineConfigurations)
+            {
+                configure(builder);
+            }
+        }
+
+        return builder.Build();
+    }
+
+    private static IReadOnlyList<string> CollectLocalImageUrls(MarkdownDocument document)
+    {
         var urls = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var block in document)
@@ -85,7 +153,7 @@ public sealed class MarkdownProcessor(SsgOptions options, IImageAssetProcessor i
         {
             switch (current)
             {
-                case LinkInline { IsImage: true, Url: not null } linkInline when IsLocalImage(linkInline.Url):
+                case LinkInline { IsImage: true, Url: not null } linkInline when LocalImageUrl.IsLocalImage(linkInline.Url):
                     urls.Add(linkInline.Url);
                     break;
 
@@ -96,22 +164,10 @@ public sealed class MarkdownProcessor(SsgOptions options, IImageAssetProcessor i
         }
     }
 
-    private static bool IsLocalImage(string url)
-    {
-        if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-            url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        var extension = Path.GetExtension(url).ToLowerInvariant();
-        return ImageExtensions.Contains(extension);
-    }
-
     private static string CreateContentKey(string markdownBody)
     {
-        var bytes = Encoding.UTF8.GetBytes(markdownBody);
-        var hash = SHA256.HashData(bytes);
-        return Convert.ToHexString(hash)[..12].ToLowerInvariant();
+        // Cache-busting key for the per-content asset directory, not a security boundary.
+        var hash = XxHash3.HashToUInt64(Encoding.UTF8.GetBytes(markdownBody));
+        return hash.ToString("x16", CultureInfo.InvariantCulture);
     }
 }

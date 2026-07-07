@@ -69,25 +69,6 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
             OnPrepareResponse = static context => context.Context.Response.Headers.CacheControl = "no-store",
         });
 
-        web.MapGet("/feed.xml", async context =>
-        {
-            var xml = app.BuildFeedXml(GetSnapshot());
-            if (xml is null)
-            {
-                context.Response.StatusCode = StatusCodes.Status404NotFound;
-                return;
-            }
-
-            context.Response.ContentType = "application/rss+xml; charset=utf-8";
-            await context.Response.WriteAsync(xml, context.RequestAborted);
-        });
-
-        web.MapGet("/sitemap.xml", async context =>
-        {
-            context.Response.ContentType = "application/xml; charset=utf-8";
-            await context.Response.WriteAsync(app.BuildSitemapXml(GetSnapshot()), context.RequestAborted);
-        });
-
         web.MapFallback(HandlePageAsync);
 
         WatchDirectory(options.ContentsPath, contentDirectory: true);

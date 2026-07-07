@@ -89,23 +89,6 @@ public sealed class DevServerTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task Serve_ServesFeedAndSitemapOnDemand()
-    {
-        var (baseAddress, devServer) = await StartServerAsync();
-        await using (devServer)
-        {
-            using var client = CreateClient();
-
-            var feed = await client.GetStringAsync(new Uri(baseAddress, "/feed.xml"));
-            Assert.Contains("<![CDATA[Hello World]]>", feed, StringComparison.Ordinal);
-
-            var sitemap = await client.GetStringAsync(new Uri(baseAddress, "/sitemap.xml"));
-            Assert.Contains("https://example.com/blog/hello-world/", sitemap, StringComparison.Ordinal);
-            Assert.DoesNotContain("404.html", sitemap, StringComparison.Ordinal);
-        }
-    }
-
-    [Fact]
     public async Task Serve_ContentChangeBroadcastsReloadAndServesUpdatedContent()
     {
         var (baseAddress, devServer) = await StartServerAsync();
@@ -162,7 +145,6 @@ public sealed class DevServerTests : IAsyncDisposable
 
         _app = builder.Build();
         TestArticleContents.MapSite(_app, posts);
-        _app.MapFeed(posts, static post => new FeedItem(post.Title, post.Description, post.CreatedAt));
 
         var (devServer, web) = await _app.StartDevServerAsync(port: 0, CancellationToken.None);
         return (new Uri(web.Urls.First()), devServer);

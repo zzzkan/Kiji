@@ -3,7 +3,7 @@
   <PropertyGroup>
     <OutputType>Library</OutputType>
     <IsPackable>true</IsPackable>
-    <Description>Kiji is a static site generator framework for .NET. Pages are Razor components rendered to static HTML via HtmlRenderer, assembled with a minimal-API style builder, with a built-in on-demand dev server, RSS, and sitemap support.</Description>
+    <Description>Kiji is a static site generator framework for .NET. Pages are Razor components rendered to static HTML via HtmlRenderer, assembled with a minimal-API style builder, with a built-in on-demand dev server and extensible site artifacts (RSS and sitemap available as separate packages).</Description>
     <PackageTags>static-site-generator;ssg;razor;blazor</PackageTags>
   </PropertyGroup>
 

@@ -8,7 +8,7 @@ namespace Kiji.Tests;
 /// <summary>
 /// Integration tests for <see cref="MarkdownContentsBuilder{TFrontMatter}"/>.
 /// </summary>
-public sealed class PostProcessorTests : IDisposable
+public sealed class MarkdownContentsBuilderTests : IDisposable
 {
     private const string AssetsDirectoryName = "_assets";
     private readonly MarkdownProcessor _markdownProcessor;
@@ -16,9 +16,9 @@ public sealed class PostProcessorTests : IDisposable
     private readonly string _contentsDir;
     private readonly string _outputDir;
 
-    public PostProcessorTests()
+    public MarkdownContentsBuilderTests()
     {
-        _testDir = Path.Combine(Path.GetTempPath(), $"PostProcessorTests_{Guid.NewGuid():N}");
+        _testDir = Path.Combine(Path.GetTempPath(), $"MarkdownContentsBuilderTests_{Guid.NewGuid():N}");
         _contentsDir = Path.Combine(_testDir, "contents");
         _outputDir = Path.Combine(_testDir, "output");
         Directory.CreateDirectory(_contentsDir);

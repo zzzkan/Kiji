@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <IsPackable>true</IsPackable>
+    <Description>RSS 2.0 feed generation for the Kiji static site generator. Registers a feed as a site artifact via app.MapFeed(...).</Description>
+    <PackageTags>static-site-generator;ssg;rss;feed;kiji</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Kiji/Kiji.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
-using System.Security.Cryptography;
+using System.Globalization;
+using System.IO.Hashing;
 using System.Text.RegularExpressions;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats;
@@ -222,9 +223,10 @@ public sealed partial class ImageProcessor(ImageOptions? options = null) : IImag
     private static async Task<string> ComputeFileHashAsync(string filePath, CancellationToken cancellationToken)
     {
         using var stream = File.OpenRead(filePath);
-        var hashBytes = await SHA256.HashDataAsync(stream, cancellationToken);
-        var hashString = Convert.ToHexString(hashBytes);
-        return hashString[..8].ToLowerInvariant();
+        var hasher = new XxHash32();
+        await hasher.AppendAsync(stream, cancellationToken);
+        // Cache-busting hash, not a security boundary; 8 hex chars matches the variant file name format.
+        return hasher.GetCurrentHashAsUInt32().ToString("x8", CultureInfo.InvariantCulture);
     }
 
     private static void CleanupOldImageFiles(string outputDir, string assetFileNameBase, string currentHash)

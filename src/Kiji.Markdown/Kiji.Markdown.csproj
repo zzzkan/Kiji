@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <PackageReference Include="Markdig" />
+    <PackageReference Include="System.IO.Hashing" />
     <PackageReference Include="YamlDotNet" />
   </ItemGroup>
 

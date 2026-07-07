@@ -4,7 +4,7 @@ namespace Kiji.Assets;
 /// Default <see cref="IImageAssetProcessor"/> used when no image backend is registered.
 /// Performs no optimization; content keeps its original image references.
 /// </summary>
-internal sealed class NullImageAssetProcessor : IImageAssetProcessor
+public sealed class NullImageAssetProcessor : IImageAssetProcessor
 {
     public Task<IReadOnlyDictionary<string, ProcessedImageInfo>> ProcessReferencedImagesAsync(
         string outputDirectory,

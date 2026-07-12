@@ -1,8 +1,8 @@
 namespace Kiji.Tests.TestSite.Pages;
 
 /// <summary>
-/// The explicit page registration list for the test site, as passed to
-/// <see cref="KijiApp.MapPages"/>.
+/// The test site's page components, used as the expected set in page
+/// discovery tests.
 /// </summary>
 public static class TestSitePages
 {

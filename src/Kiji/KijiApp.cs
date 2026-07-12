@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Runtime.InteropServices;
 using Kiji.Assets;
 using Kiji.Components;
@@ -27,7 +28,7 @@ public sealed class KijiApp : IAsyncDisposable
     private readonly KijiBuilder _builder;
     private readonly List<RouteRegistration> _routeRegistrations = [];
     private readonly List<ISiteArtifact> _artifacts = [];
-    private readonly List<Type> _pageTypes = [];
+    private readonly List<Assembly> _pageAssemblies = [];
     private Type? _defaultLayoutType;
     private Type? _notFoundComponentType;
     private ServiceProvider? _services;
@@ -69,15 +70,41 @@ public sealed class KijiApp : IAsyncDisposable
     }
 
     /// <summary>
-    /// Registers page components explicitly. Every type must declare a <c>@page</c>
-    /// route template. May be called multiple times; a set of pages can be gathered
-    /// with LINQ, e.g. <c>assembly.GetTypes().Where(t => t.Namespace == "MySite.Pages")</c>.
+    /// Registers every routable page component in the entry assembly: public,
+    /// non-abstract components declaring a <c>@page</c> route template. This is the
+    /// .NET equivalent of file-based routing — writing <c>@page</c> is what makes a
+    /// component a page, wherever its file lives.
     /// </summary>
-    public KijiApp MapPages(IEnumerable<Type> pageTypes)
+    public KijiApp MapPages()
     {
-        ArgumentNullException.ThrowIfNull(pageTypes);
+        var entryAssembly = Assembly.GetEntryAssembly()
+            ?? throw new InvalidOperationException(
+                "No entry assembly is available in this host. Call MapPages(Assembly) with the assembly containing your pages.");
 
-        _pageTypes.AddRange(pageTypes);
+        return MapPages(entryAssembly);
+    }
+
+    /// <summary>
+    /// Registers every routable page component in the given assembly: public,
+    /// non-abstract components declaring a <c>@page</c> route template.
+    /// May be called multiple times with different assemblies.
+    /// </summary>
+    public KijiApp MapPages(Assembly assembly)
+    {
+        ArgumentNullException.ThrowIfNull(assembly);
+
+        if (_pageAssemblies.Contains(assembly))
+        {
+            return this;
+        }
+
+        if (PageDiscovery.FromAssembly(assembly).Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"Assembly '{assembly.GetName().Name}' contains no routable page components. Pages are public, non-abstract components declaring a '@page' route template.");
+        }
+
+        _pageAssemblies.Add(assembly);
         return this;
     }
 
@@ -340,12 +367,18 @@ public sealed class KijiApp : IAsyncDisposable
     {
         EnsureServices();
 
-        if (_pageTypes.Count == 0)
+        if (_pageAssemblies.Count == 0)
         {
             throw new InvalidOperationException("No pages are mapped. Call MapPages(...) first.");
         }
 
-        var discovered = PageDiscovery.FromTypes(_pageTypes);
+        var scanned = new List<PageDiscovery.DiscoveredPage>();
+        foreach (var assembly in _pageAssemblies)
+        {
+            scanned.AddRange(PageDiscovery.FromAssembly(assembly));
+        }
+
+        var discovered = PageDiscovery.EnsureUniqueRoutes(scanned);
         discovered = ApplyNotFoundOverride(discovered);
 
         var pagesByComponent = new Dictionary<string, PageDiscovery.DiscoveredPage>(StringComparer.OrdinalIgnoreCase);

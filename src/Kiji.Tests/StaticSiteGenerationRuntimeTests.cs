@@ -132,13 +132,15 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         builder.Paths.Static = GetStaticDirectory();
         builder.Paths.Output = _outputDir;
 
-        var posts = builder.AddMarkdownContent<FrontMatter>()
+        var markdownPosts = builder.AddMarkdownContent<FrontMatter>()
             .WithKey(static post => post.FileInfo.FileNameWithoutExtension);
+        var posts = builder.AddContentSource<Post>(static _ => [])
+            .WithKey(static post => post.Slug);
 
         await using var app = builder.Build();
-        app.MapPages([typeof(MarkdownPostTestPage)]);
+        TestArticleContents.MapSite(app, posts);
         app.MapContent<MarkdownPostTestPage, MarkdownContent<FrontMatter>>(
-            posts,
+            markdownPosts,
             static post => new { Slug = post.FileInfo.FileNameWithoutExtension });
 
         await app.BuildSiteAsync();

@@ -1,6 +1,5 @@
 using System.Text;
 using Kiji.Tests.TestSite;
-using Microsoft.AspNetCore.Components;
 using Xunit;
 
 namespace Kiji.Tests;
@@ -31,13 +30,6 @@ public sealed class SiteArtifactTests : IDisposable
         {
             Directory.Delete(_testDir, recursive: true);
         }
-    }
-
-    [Route("/mirror/{Slug}/")]
-    private sealed class MirrorPostPage : ComponentBase
-    {
-        [Parameter]
-        public string Slug { get; set; } = string.Empty;
     }
 
     private sealed class RecordingArtifact(string outputRelativePath) : ISiteArtifact
@@ -132,7 +124,6 @@ public sealed class SiteArtifactTests : IDisposable
             staticPath: null,
             configure: static (targetApp, posts) =>
             {
-                targetApp.MapPages([typeof(MirrorPostPage)]);
                 targetApp.MapContent<MirrorPostPage, Post>(posts, static post => new { post.Slug });
             });
 

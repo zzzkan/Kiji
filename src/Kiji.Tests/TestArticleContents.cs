@@ -48,10 +48,23 @@ internal static class TestArticleContents
         return (app, posts);
     }
 
+    /// <summary>
+    /// Registers the test assembly's pages via the scan API and neutralizes the
+    /// test-only dynamic templates with empty route sets, so callers only map the
+    /// templates they actually exercise.
+    /// </summary>
+    public static KijiApp MapTestAssemblyPages(KijiApp app)
+    {
+        app.MapPages(typeof(TestArticleContents).Assembly);
+        app.MapRoutes<MarkdownPostTestPage>(static () => []);
+        app.MapRoutes<MirrorPostPage>(static () => []);
+        return app;
+    }
+
     public static KijiApp MapSite(KijiApp app, ContentCollection<Post> posts)
     {
         app.MapDefaultLayout<MainLayout>();
-        app.MapPages(TestSitePages.All);
+        MapTestAssemblyPages(app);
         app.MapNotFound<NotFoundPage>();
 
         app.MapContent<PostPage, Post>(

@@ -32,8 +32,7 @@ var posts = builder.AddMarkdownContent<PostFrontMatter>()
 await using var app = builder.Build();
 
 app.MapDefaultLayout<MainLayout>(); // default layout for every page (pages may override via @layout)
-app.MapPages(typeof(MainLayout).Assembly.GetTypes()
-    .Where(t => t.Namespace == "MySite.Pages")); // explicit page registration
+app.MapPages(); // every public component with an @page route template in the entry assembly
 app.MapNotFound<NotFound>(); // rendered as 404.html
 
 app.MapContent<PostPage, MarkdownContent<PostFrontMatter>>(
@@ -64,8 +63,10 @@ Add `dist/` and `.kiji/` (the build cache) to your site's `.gitignore`.
   Pages contribute head content (charset meta, `<title>`, metas, links) through
   the `Kiji.Components.Head` component, and `MapDefaultLayout<TLayout>()` sets
   the layout applied to every page (optional; pages may override via `@layout`).
-- **Explicit pages**: `MapPages(...)` takes the routable components explicitly —
-  gather them with LINQ as above.
+- **Route-declared pages**: `MapPages()` discovers every public component with a
+  `@page` route template in the entry assembly — the .NET equivalent of
+  file-based routing, since writing `@page` is what makes a component a page.
+  Pages in another assembly register via `MapPages(assembly)`.
 - **Content collections**: `builder.AddContentSource(...)` /
   `AddMarkdownContent<TFrontMatter>()` declare lazily materialized collections,
   consumable from components via `@inject` and from route mappings via

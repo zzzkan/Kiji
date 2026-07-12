@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using Microsoft.AspNetCore.Components;
@@ -5,10 +6,13 @@ using Microsoft.AspNetCore.Components;
 namespace Kiji.Routing;
 
 /// <summary>
-/// Resolves explicitly registered Razor components into pages via their <c>@page</c> route templates.
+/// Resolves Razor components into pages via their <c>@page</c> route templates,
+/// either by scanning an assembly or from an explicit type list.
 /// </summary>
 public static class PageDiscovery
 {
+    private static readonly ConcurrentDictionary<Assembly, IReadOnlyList<DiscoveredPage>> AssemblyCache = new();
+
     /// <summary>
     /// A component resolved from its <c>@page</c> route template.
     /// </summary>
@@ -16,6 +20,45 @@ public static class PageDiscovery
         string SourceIdentifier,
         Type ComponentType,
         StaticPageDefinition PageDefinition);
+
+    /// <summary>
+    /// Finds the routable pages in an assembly: public, non-abstract
+    /// <see cref="IComponent"/> classes declaring at least one <c>@page</c> route
+    /// template. Other exported types are ignored. Results are cached per assembly;
+    /// the cache is dropped on hot reload.
+    /// </summary>
+    public static IReadOnlyList<DiscoveredPage> FromAssembly(Assembly assembly)
+    {
+        ArgumentNullException.ThrowIfNull(assembly);
+
+        return AssemblyCache.GetOrAdd(assembly, static assembly => ScanAssembly(assembly));
+    }
+
+    internal static void ClearCache()
+    {
+        AssemblyCache.Clear();
+    }
+
+    private static IReadOnlyList<DiscoveredPage> ScanAssembly(Assembly assembly)
+    {
+        // Cheapest checks first: metadata flags, then the component hierarchy,
+        // then a single attribute read reused for page creation.
+        var pages = new List<DiscoveredPage>();
+        foreach (var type in assembly.ExportedTypes)
+        {
+            if (type is not { IsClass: true, IsAbstract: false } || !typeof(IComponent).IsAssignableFrom(type))
+            {
+                continue;
+            }
+
+            foreach (var attribute in type.GetCustomAttributes<RouteAttribute>(inherit: false))
+            {
+                pages.Add(CreateDiscoveredPage(attribute.Template, type));
+            }
+        }
+
+        return EnsureUniqueRoutes(pages);
+    }
 
     /// <summary>
     /// Resolves the given page component types into pages. Every type must be a
@@ -69,13 +112,19 @@ public static class PageDiscovery
             }
         }
 
-        IReadOnlyList<DiscoveredPage> discoveredPages = [.. pages
+        return EnsureUniqueRoutes(pages);
+    }
+
+    /// <summary>
+    /// Validates that every route template resolves to exactly one component.
+    /// </summary>
+    internal static IReadOnlyList<DiscoveredPage> EnsureUniqueRoutes(IReadOnlyList<DiscoveredPage> pages)
+    {
+        return [.. pages
             .GroupBy(static page => page.SourceIdentifier, StringComparer.OrdinalIgnoreCase)
             .Select(static group => group.Count() == 1
                 ? group.Single()
                 : throw new InvalidOperationException($"Multiple components declare the route template '{group.Key}'."))];
-
-        return discoveredPages;
     }
 
     /// <summary>

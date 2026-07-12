@@ -27,8 +27,7 @@ builder.Site = new SiteInfo
 await using var app = builder.Build();
 
 app.MapDefaultLayout<MainLayout>(); // default layout for every page (pages may override via @layout)
-app.MapPages(typeof(MainLayout).Assembly.GetTypes()
-    .Where(t => t.Namespace == "MySite.Pages")); // explicit page registration
+app.MapPages(); // every public component with an @page route template in the entry assembly
 app.MapNotFound<NotFound>(); // rendered as 404.html
 
 return await app.RunAsync(); // build (default) | dev [--port <n>] | preview [--port <n>]

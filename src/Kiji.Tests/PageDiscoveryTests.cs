@@ -152,6 +152,30 @@ public sealed class PageDiscoveryTests
     }
 
     [Fact]
+    public void CreateSnapshot_MappingWithPathSeparatorInRouteValue_ThrowsInformativeException()
+    {
+        var (app, _) = CreateAppWithTagRoutes(static () => [new { TagSlug = "nested/value" }]);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());
+
+        Assert.Contains("supplied invalid route value 'TagSlug'", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("nested/value", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("single route segment", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CreateSnapshot_MappingWithDotDotRouteValue_ThrowsInformativeException()
+    {
+        var (app, _) = CreateAppWithTagRoutes(static () => [new { TagSlug = ".." }]);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());
+
+        Assert.Contains("supplied invalid route value 'TagSlug'", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("'..'", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("cannot be '.' or '..'", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CreateSnapshot_MapRoutesOnStaticPage_ThrowsInformativeException()
     {
         var builder = KijiApp.CreateBuilder([]);

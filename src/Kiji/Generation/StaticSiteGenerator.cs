@@ -44,7 +44,7 @@ public static class StaticSiteGenerator
         Func<PageRenderRequest, TextWriter, CancellationToken, Task> renderPageAsync,
         CancellationToken cancellationToken)
     {
-        var fullPath = Path.Combine(options.OutputPath, pageRequest.OutputRelativePath);
+        var fullPath = ResolvePageOutputPath(options.OutputPath, pageRequest.OutputRelativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
 
         var stream = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 4096, useAsync: true);
@@ -66,17 +66,33 @@ public static class StaticSiteGenerator
         }
 
         var pageOutputPaths = pageRequests
-            .Select(static request => request.OutputRelativePath)
+            .Select(request => ResolvePageOutputPath(options.OutputPath, request.OutputRelativePath))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         foreach (var file in Directory.EnumerateFiles(options.StaticPath, "*", SearchOption.AllDirectories))
         {
             var relativePath = Path.GetRelativePath(options.StaticPath, file);
-            if (pageOutputPaths.Contains(relativePath))
+            var staticOutputPath = Path.GetFullPath(Path.Combine(options.OutputPath, relativePath));
+            if (pageOutputPaths.Contains(staticOutputPath))
             {
                 throw new InvalidOperationException(
                     $"Static file '{relativePath}' collides with a generated page output path. Rename the static file or change the page route.");
             }
         }
+    }
+
+    private static string ResolvePageOutputPath(string outputPath, string relativePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
+
+        var outputRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(outputPath));
+        var fullPath = Path.GetFullPath(Path.Combine(outputRoot, relativePath));
+        if (!fullPath.StartsWith(outputRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Page output path '{relativePath}' escapes the output directory.");
+        }
+
+        return fullPath;
     }
 }

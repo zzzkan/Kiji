@@ -1,5 +1,6 @@
 using System.Text;
 using Kiji.Tests.TestSite;
+using Microsoft.AspNetCore.Components;
 using Xunit;
 
 namespace Kiji.Tests;
@@ -30,6 +31,13 @@ public sealed class SiteArtifactTests : IDisposable
         {
             Directory.Delete(_testDir, recursive: true);
         }
+    }
+
+    [Route("/mirror/{Slug}/")]
+    private sealed class MirrorPostPage : ComponentBase
+    {
+        [Parameter]
+        public string Slug { get; set; } = string.Empty;
     }
 
     private sealed class RecordingArtifact(string outputRelativePath) : ISiteArtifact
@@ -77,13 +85,84 @@ public sealed class SiteArtifactTests : IDisposable
         Assert.False(File.Exists(Path.Combine(_testDir, "evil.txt")));
     }
 
+    [Fact]
+    public async Task BuildSiteAsync_ArtifactPathCollidingWithGeneratedPage_Throws()
+    {
+        var artifact = new RecordingArtifact(Path.Combine("blog", "hello-world", "index.html"));
+        await using var app = await CreateAppAsync(artifact);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => app.BuildSiteAsync());
+
+        Assert.Contains("collides with a generated page output path", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task BuildSiteAsync_ArtifactPathCollidingWithStaticFile_Throws()
+    {
+        var staticDir = Path.Combine(_testDir, "static");
+        Directory.CreateDirectory(staticDir);
+        await File.WriteAllTextAsync(Path.Combine(staticDir, "feed.xml"), "static");
+
+        var artifact = new RecordingArtifact("feed.xml");
+        await using var app = await CreateAppAsync([artifact], staticDir);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => app.BuildSiteAsync());
+
+        Assert.Contains("collides with a static file output path", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task BuildSiteAsync_DuplicateArtifactPath_Throws()
+    {
+        var first = new RecordingArtifact(Path.Combine("meta", "info.txt"));
+        var second = new RecordingArtifact(Path.Combine("meta", "info.txt"));
+        await using var app = await CreateAppAsync([first, second], staticPath: null);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => app.BuildSiteAsync());
+
+        Assert.Contains("collides with another artifact output path", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task BuildSiteAsync_ContentIdentityMappedToMultiplePages_ThrowsInformativeException()
+    {
+        var artifact = new RecordingArtifact(Path.Combine("meta", "info.txt"));
+        await using var app = await CreateAppAsync(
+            [artifact],
+            staticPath: null,
+            configure: static (targetApp, posts) =>
+            {
+                targetApp.MapPages([typeof(MirrorPostPage)]);
+                targetApp.MapContent<MirrorPostPage, Post>(posts, static post => new { post.Slug });
+            });
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => app.BuildSiteAsync());
+
+        Assert.Contains("Content identity 'hello-world' is associated with multiple generated pages", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("'/blog/hello-world/'", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("'/mirror/hello-world/'", exception.Message, StringComparison.Ordinal);
+    }
+
     private async Task<KijiApp> CreateAppAsync(ISiteArtifact artifact)
+    {
+        return await CreateAppAsync([artifact], staticPath: null);
+    }
+
+    private async Task<KijiApp> CreateAppAsync(IReadOnlyList<ISiteArtifact> artifacts, string? staticPath)
+    {
+        return await CreateAppAsync(artifacts, staticPath, configure: null);
+    }
+
+    private async Task<KijiApp> CreateAppAsync(
+        IReadOnlyList<ISiteArtifact> artifacts,
+        string? staticPath,
+        Action<KijiApp, ContentCollection<Post>>? configure)
     {
         var builder = KijiApp.CreateBuilder([]);
         builder.Site = TestArticleContents.CreateSiteInfo();
         builder.Paths.Root = _testDir;
         builder.Paths.Content = _contentsDir;
-        builder.Paths.Static = TestSitePaths.StaticDirectory;
+        builder.Paths.Static = staticPath ?? TestSitePaths.StaticDirectory;
         builder.Paths.Output = _outputDir;
 
         IReadOnlyList<Post> items =
@@ -101,7 +180,11 @@ public sealed class SiteArtifactTests : IDisposable
 
         var app = builder.Build();
         TestArticleContents.MapSite(app, posts);
-        app.MapArtifact(artifact);
+        configure?.Invoke(app, posts);
+        foreach (var artifact in artifacts)
+        {
+            app.MapArtifact(artifact);
+        }
 
         await Task.CompletedTask;
         return app;

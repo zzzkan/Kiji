@@ -106,8 +106,9 @@ public sealed class KijiApp : IAsyncDisposable
     /// Maps every item of a content collection to a page rendered by <typeparamref name="TPage"/>.
     /// The route values object's property names must match the page's route parameters.
     /// When the collection has a key, each page is associated with its content item,
-    /// which enables route resolution via <see cref="SiteOutputContext.TryResolveRoute"/>
-    /// (used by feed artifacts).
+    /// which enables artifacts to resolve generated page metadata via
+    /// <see cref="SiteOutputContext.TryResolvePage"/> and <see cref="SiteOutputContext.TryResolveRoute"/>.
+    /// Each keyed content item must resolve to at most one generated page.
     /// </summary>
     /// <param name="collection">The content collection to expand into pages.</param>
     /// <param name="routeValues">Projects a content item into its route values.</param>
@@ -444,6 +445,11 @@ public sealed class KijiApp : IAsyncDisposable
                     $"Route mapping for '{page.ComponentType.FullName}' did not supply required route values for '{page.SourceIdentifier}': {string.Join(", ", missing.Select(static name => $"'{name}'"))}.");
             }
 
+            foreach (var (name, value) in entry.RouteValues)
+            {
+                ValidateRouteValue(page, name, value);
+            }
+
             var extra = routeKeys
                 .Where(name => !expectedParameterNames.Contains(name))
                 .OrderBy(static name => name, StringComparer.Ordinal)
@@ -453,6 +459,22 @@ public sealed class KijiApp : IAsyncDisposable
                 throw new InvalidOperationException(
                     $"Route mapping for '{page.ComponentType.FullName}' supplied route values not declared by '{page.SourceIdentifier}': {string.Join(", ", extra.Select(static name => $"'{name}'"))}.");
             }
+        }
+    }
+
+    private static void ValidateRouteValue(PageDiscovery.DiscoveredPage page, string name, string value)
+    {
+        if (value.Contains('/', StringComparison.Ordinal) || value.Contains('\\', StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Route mapping for '{page.ComponentType.FullName}' supplied invalid route value '{name}' for '{page.SourceIdentifier}': '{value}'. Route values must be a single route segment and cannot contain '/' or '\\'.");
+        }
+
+        var trimmed = value.Trim();
+        if (trimmed is "." or "..")
+        {
+            throw new InvalidOperationException(
+                $"Route mapping for '{page.ComponentType.FullName}' supplied invalid route value '{name}' for '{page.SourceIdentifier}': '{value}'. Route values cannot be '.' or '..'.");
         }
     }
 
@@ -554,10 +576,18 @@ public sealed class KijiApp : IAsyncDisposable
         }
 
         var context = CreateOutputContext(snapshot);
+        var reservedPaths = CreateReservedArtifactPaths(options, snapshot);
 
         foreach (var artifact in _artifacts)
         {
             var fullPath = ResolveArtifactPath(options.OutputPath, artifact.OutputRelativePath);
+            if (reservedPaths.TryGetValue(fullPath, out var collisionTarget))
+            {
+                throw new InvalidOperationException(
+                    $"Artifact output path '{artifact.OutputRelativePath}' collides with {collisionTarget}.");
+            }
+
+            reservedPaths[fullPath] = "another artifact output path";
             Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
 
             await using var stream = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 4096, useAsync: true);
@@ -565,6 +595,28 @@ public sealed class KijiApp : IAsyncDisposable
 
             Console.WriteLine($"Generated: {fullPath}");
         }
+    }
+
+    private static Dictionary<string, string> CreateReservedArtifactPaths(SsgOptions options, SiteSnapshot snapshot)
+    {
+        var reservedPaths = snapshot.Pages.ToDictionary(
+            page => ResolveArtifactPath(options.OutputPath, page.OutputRelativePath),
+            static _ => "a generated page output path",
+            StringComparer.OrdinalIgnoreCase);
+
+        if (!Directory.Exists(options.StaticPath))
+        {
+            return reservedPaths;
+        }
+
+        foreach (var file in Directory.EnumerateFiles(options.StaticPath, "*", SearchOption.AllDirectories))
+        {
+            var relativePath = Path.GetRelativePath(options.StaticPath, file);
+            var outputPath = ResolveArtifactPath(options.OutputPath, relativePath);
+            reservedPaths.TryAdd(outputPath, "a static file output path");
+        }
+
+        return reservedPaths;
     }
 
     private static string ResolveArtifactPath(string outputPath, string relativePath)

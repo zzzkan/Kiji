@@ -16,8 +16,8 @@ public sealed class DevServerStatusReporterTests
         reporter.DevServerStarted(new Uri("http://127.0.0.1:8080/"), @"C:\site\contents", @"C:\site\wwwroot");
 
         var log = output.ToString();
-        Assert.Contains($"{Esc}[90mkiji dev    🚀{Esc}[0m Started Kiji dev server at http://127.0.0.1:8080/", log, StringComparison.Ordinal);
-        Assert.Contains($"{Esc}[90mkiji dev    ⌚{Esc}[0m Watching content files under 'C:\\site\\contents'.", log, StringComparison.Ordinal);
+        Assert.Contains($"{Esc}[90mkiji dev     🚀{Esc}[0m Started Kiji dev server at http://127.0.0.1:8080/", log, StringComparison.Ordinal);
+        Assert.Contains($"{Esc}[90mkiji dev     ⌚{Esc}[0m Watching content files under 'C:\\site\\contents'.", log, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -29,7 +29,7 @@ public sealed class DevServerStatusReporterTests
         reporter.WatcherError(WatchedPathSource.Content, @"C:\site\contents", new IOException("boom"));
 
         var log = output.ToString();
-        Assert.Contains($"{Esc}[90mkiji dev    ⚠{Esc}[0m {Esc}[33mFile watcher for content path 'C:\\site\\contents' failed: boom{Esc}[0m", log, StringComparison.Ordinal);
+        Assert.Contains($"{Esc}[90mkiji dev     ⚠{Esc}[0m {Esc}[33mFile watcher for content path 'C:\\site\\contents' failed: boom{Esc}[0m", log, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -41,7 +41,7 @@ public sealed class DevServerStatusReporterTests
         reporter.DevServerStarted(new Uri("http://127.0.0.1:8080/"), @"C:\site\contents", staticPath: null);
 
         var log = output.ToString();
-        Assert.Contains("kiji dev    [Started] Started Kiji dev server at http://127.0.0.1:8080/", log, StringComparison.Ordinal);
+        Assert.Contains("kiji dev     [Started] Started Kiji dev server at http://127.0.0.1:8080/", log, StringComparison.Ordinal);
         Assert.DoesNotContain(Esc, log, StringComparison.Ordinal);
     }
 
@@ -59,8 +59,8 @@ public sealed class DevServerStatusReporterTests
             reloadedClientCount: 0);
 
         var log = output.ToString();
-        Assert.Contains($"kiji dev    ⌚ File updated: .{Path.DirectorySeparatorChar}posts{Path.DirectorySeparatorChar}entry.md", log, StringComparison.Ordinal);
-        Assert.Contains($"kiji dev    ⌚ File created: .{Path.DirectorySeparatorChar}images{Path.DirectorySeparatorChar}cover.png", log, StringComparison.Ordinal);
+        Assert.Contains($"kiji dev     ⌚ File updated: .{Path.DirectorySeparatorChar}posts{Path.DirectorySeparatorChar}entry.md", log, StringComparison.Ordinal);
+        Assert.Contains($"kiji dev     ⌚ File created: .{Path.DirectorySeparatorChar}images{Path.DirectorySeparatorChar}cover.png", log, StringComparison.Ordinal);
         Assert.DoesNotContain("Detected file changes", log, StringComparison.Ordinal);
     }
 }

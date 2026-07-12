@@ -61,9 +61,9 @@ public sealed class DevServerTests : IAsyncDisposable
             Assert.Contains("<h1>Hello World</h1>", blogHtml, StringComparison.Ordinal);
 
             var output = logs.ToString();
-            Assert.Contains("kiji dev 🚀 Started Kiji dev server at", output, StringComparison.Ordinal);
-            Assert.Contains("kiji dev ⌚ Watching content files under", output, StringComparison.Ordinal);
-            Assert.Contains("kiji dev ⌚ Watching static files under", output, StringComparison.Ordinal);
+            Assert.Contains("kiji dev     🚀 Started Kiji dev server at", output, StringComparison.Ordinal);
+            Assert.Contains("kiji dev     ⌚ Watching content files under", output, StringComparison.Ordinal);
+            Assert.Contains("kiji dev     ⌚ Watching static files under", output, StringComparison.Ordinal);
         }
     }
 

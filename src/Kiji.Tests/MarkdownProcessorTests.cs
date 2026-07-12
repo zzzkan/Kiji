@@ -1,5 +1,5 @@
 using Kiji.Markdown;
-using Kiji.Images;
+using Kiji.Assets;
 using Kiji.Rendering;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;

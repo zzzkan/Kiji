@@ -3,9 +3,8 @@ using System.IO.Hashing;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Webp;
 using SixLabors.ImageSharp.Processing;
-using Kiji.Assets;
 
-namespace Kiji.Images;
+namespace Kiji.Assets;
 
 /// <summary>
 /// Default <see cref="IImageAssetProcessor"/>: generates responsive WebP variants.

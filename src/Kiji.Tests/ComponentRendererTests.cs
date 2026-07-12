@@ -1,10 +1,11 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Rendering;
 using Microsoft.Extensions.DependencyInjection;
+using Kiji.Components;
 using Kiji.Rendering;
 using Kiji.Tests.TestSite;
+using Kiji.Tests.TestSite.Pages;
 using Xunit;
-using RouteData = Microsoft.AspNetCore.Components.RouteData;
 
 namespace Kiji.Tests;
 
@@ -24,19 +25,36 @@ public sealed class ComponentRendererTests
     }
 
     [Fact]
-    public async Task RenderComponentAsync_RendersRootWithRouteData()
+    public async Task RenderComponentAsync_RendersKijiRootWithRouteData()
     {
         var siteInfo = TestArticleContents.CreateSiteInfo();
 
         await using var renderer = CreateRenderer(siteInfo);
 
-        var html = await renderer.RenderComponentAsync<Root>(
+        var html = await renderer.RenderComponentAsync<KijiRoot>(
             CreateRootParameters(typeof(HomePage)),
             new Uri("https://example.com/"));
 
+        Assert.Contains("<!doctype html>", html, StringComparison.Ordinal);
+        Assert.Contains("<html lang=\"ja\">", html, StringComparison.Ordinal);
         Assert.Contains("<title>Home - zzzkan.me</title>", html, StringComparison.Ordinal);
         Assert.Contains("<h1>Home</h1>", html, StringComparison.Ordinal);
         Assert.Contains("href=\"https://example.com/\"", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RenderComponentAsync_RendersPageWithoutLayoutWhenNoDefaultLayout()
+    {
+        var siteInfo = TestArticleContents.CreateSiteInfo();
+
+        await using var renderer = CreateRenderer(siteInfo);
+
+        var html = await renderer.RenderComponentAsync<KijiRoot>(
+            CreateRootParameters(new RouteData(typeof(HomePage), new Dictionary<string, object?>()), defaultLayout: null),
+            new Uri("https://example.com/"));
+
+        Assert.Contains("<h1>Home</h1>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("site-header", html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -46,11 +64,11 @@ public sealed class ComponentRendererTests
 
         await using var renderer = CreateRenderer(siteInfo);
 
-        var indexHtml = await renderer.RenderComponentAsync<Root>(
+        var indexHtml = await renderer.RenderComponentAsync<KijiRoot>(
             CreateRootParameters(typeof(HomePage)),
             new Uri("https://example.com/"));
 
-        var aboutHtml = await renderer.RenderComponentAsync<Root>(
+        var aboutHtml = await renderer.RenderComponentAsync<KijiRoot>(
             CreateRootParameters(typeof(AboutPage)),
             new Uri("https://example.com/about/"));
 
@@ -70,7 +88,7 @@ public sealed class ComponentRendererTests
 
         await using var renderer = CreateRenderer(posts, siteInfo);
 
-        var html = await renderer.RenderComponentAsync<Root>(
+        var html = await renderer.RenderComponentAsync<KijiRoot>(
             CreateRootParameters(pageRequest),
             siteInfo.BaseUrl.AppendRelativePath(pageRequest.RoutePath));
 
@@ -90,7 +108,7 @@ public sealed class ComponentRendererTests
 
         await using var renderer = CreateRenderer(posts, siteInfo);
 
-        var html = await renderer.RenderComponentAsync<Root>(
+        var html = await renderer.RenderComponentAsync<KijiRoot>(
             CreateRootParameters(pageRequest),
             siteInfo.BaseUrl.AppendRelativePath(pageRequest.RoutePath));
 
@@ -123,21 +141,22 @@ public sealed class ComponentRendererTests
     {
         var routeData = new RouteData(pageType, new Dictionary<string, object?>());
 
-        return CreateRootParameters(routeData);
+        return CreateRootParameters(routeData, typeof(MainLayout));
     }
 
     private static Dictionary<string, object?> CreateRootParameters(PageRenderRequest pageRequest)
     {
         var routeData = new RouteData(pageRequest.ComponentType, pageRequest.Parameters);
 
-        return CreateRootParameters(routeData);
+        return CreateRootParameters(routeData, typeof(MainLayout));
     }
 
-    private static Dictionary<string, object?> CreateRootParameters(RouteData routeData)
+    private static Dictionary<string, object?> CreateRootParameters(RouteData routeData, Type? defaultLayout)
     {
         return new Dictionary<string, object?>
         {
-            [nameof(Root.RouteData)] = routeData,
+            [nameof(KijiRoot.RouteData)] = routeData,
+            [nameof(KijiRoot.DefaultLayout)] = defaultLayout,
         };
     }
 

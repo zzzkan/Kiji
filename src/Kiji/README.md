@@ -26,13 +26,18 @@ builder.Site = new SiteInfo
 
 await using var app = builder.Build();
 
-app.MapRoot<Root>(); // the document component wrapping every page
-app.MapPages(typeof(Root).Assembly.GetTypes()
+app.MapDefaultLayout<MainLayout>(); // default layout for every page (pages may override via @layout)
+app.MapPages(typeof(MainLayout).Assembly.GetTypes()
     .Where(t => t.Namespace == "MySite.Pages")); // explicit page registration
 app.MapNotFound<NotFound>(); // rendered as 404.html
 
 return await app.RunAsync(); // build (default) | dev [--port <n>] | preview [--port <n>]
 ```
+
+Kiji renders the document shell itself — the HTML5 doctype, `<html lang>` from
+`SiteInfo.Language`, `<head>`, and `<body>`. Pages contribute head content
+(charset meta, `<title>`, metas, links) through the `Kiji.Components.Head`
+component.
 
 Run `dotnet run` to build the site into `dist`, `dotnet run dev` for the
 live-reloading dev server, or `dotnet run preview` to serve the built output.

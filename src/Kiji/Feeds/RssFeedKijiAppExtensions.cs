@@ -3,7 +3,7 @@ namespace Kiji.Feeds;
 /// <summary>
 /// RSS feed support for <see cref="KijiApp"/>.
 /// </summary>
-public static class KijiAppExtensions
+public static class RssFeedKijiAppExtensions
 {
     /// <summary>
     /// Generates an RSS feed from a keyed content collection. Each item's route is resolved

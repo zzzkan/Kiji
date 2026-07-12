@@ -1,25 +1,6 @@
 namespace Kiji;
 
 /// <summary>
-/// The command selected from the command line, with its options.
-/// </summary>
-internal enum KijiCommandKind
-{
-    Build,
-    Dev,
-    Preview,
-    Unknown,
-}
-
-/// <summary>
-/// A parsed Kiji command line. Only the members relevant to <see cref="Kind"/> are meaningful.
-/// </summary>
-internal sealed record KijiCommand(
-    KijiCommandKind Kind,
-    int Port = KijiCommandLine.DefaultPort,
-    string? RawCommand = null);
-
-/// <summary>
 /// Parses the Kiji command line: <c>build</c> (default), <c>dev</c>, and <c>preview</c>.
 /// </summary>
 internal static class KijiCommandLine

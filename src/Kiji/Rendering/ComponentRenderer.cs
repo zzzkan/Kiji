@@ -92,6 +92,22 @@ public sealed class ComponentRenderer : IAsyncDisposable
     /// Renders the specified component type directly to a writer, avoiding an
     /// intermediate full-page string.
     /// </summary>
+    /// <param name="output">The destination writer; owned by the caller.</param>
+    /// <param name="parameters">Optional parameters passed to the component.</param>
+    /// <param name="currentUri">Optional absolute URI of the page being rendered; initializes the scoped navigation manager.</param>
+    public Task RenderComponentToAsync<TComponent>(
+        TextWriter output,
+        IReadOnlyDictionary<string, object?>? parameters = null,
+        Uri? currentUri = null)
+        where TComponent : IComponent
+    {
+        return RenderComponentToAsync(typeof(TComponent), output, parameters, currentUri);
+    }
+
+    /// <summary>
+    /// Renders the specified component type directly to a writer, avoiding an
+    /// intermediate full-page string.
+    /// </summary>
     /// <param name="componentType">The component type to render.</param>
     /// <param name="output">The destination writer; owned by the caller.</param>
     /// <param name="parameters">Optional parameters passed to the component.</param>

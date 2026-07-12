@@ -1,5 +1,5 @@
 using System.Text.RegularExpressions;
-using Kiji.Images;
+using Kiji.Assets;
 using Xunit;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;

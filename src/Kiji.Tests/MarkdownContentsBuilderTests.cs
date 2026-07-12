@@ -1,4 +1,4 @@
-using Kiji.Images;
+using Kiji.Assets;
 using Kiji.Markdown;
 using Kiji.Tests.TestSite;
 using Xunit;

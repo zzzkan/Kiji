@@ -1,5 +1,5 @@
 using System.Text.RegularExpressions;
-using Kiji.Images;
+using Kiji.Assets;
 using Kiji.Markdown;
 using Xunit;
 using YamlDotNet.Serialization.NamingConventions;

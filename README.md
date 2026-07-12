@@ -31,8 +31,8 @@ var posts = builder.AddMarkdownContent<PostFrontMatter>()
 
 await using var app = builder.Build();
 
-app.MapRoot<Root>(); // the document component wrapping every page
-app.MapPages(typeof(Root).Assembly.GetTypes()
+app.MapDefaultLayout<MainLayout>(); // default layout for every page (pages may override via @layout)
+app.MapPages(typeof(MainLayout).Assembly.GetTypes()
     .Where(t => t.Namespace == "MySite.Pages")); // explicit page registration
 app.MapNotFound<NotFound>(); // rendered as 404.html
 
@@ -59,9 +59,13 @@ Add `dist/` and `.kiji/` (the build cache) to your site's `.gitignore`.
 
 ## Concepts
 
-- **Explicit pages**: `MapRoot<TRoot>()` registers the document component (it must
-  declare a `RouteData` parameter); `MapPages(...)` takes the routable components
-  explicitly — gather them with LINQ as above.
+- **Built-in document shell**: Kiji renders the document itself — the HTML5
+  doctype, `<html lang>` from `SiteInfo.Language`, `<head>`, and `<body>`.
+  Pages contribute head content (charset meta, `<title>`, metas, links) through
+  the `Kiji.Components.Head` component, and `MapDefaultLayout<TLayout>()` sets
+  the layout applied to every page (optional; pages may override via `@layout`).
+- **Explicit pages**: `MapPages(...)` takes the routable components explicitly —
+  gather them with LINQ as above.
 - **Content collections**: `builder.AddContentSource(...)` /
   `AddMarkdownContent<TFrontMatter>()` declare lazily materialized collections,
   consumable from components via `@inject` and from route mappings via

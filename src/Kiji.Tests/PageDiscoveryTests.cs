@@ -1,5 +1,6 @@
 using Xunit;
 using Kiji.Tests.TestSite;
+using Kiji.Tests.TestSite.Pages;
 
 namespace Kiji.Tests;
 
@@ -116,7 +117,7 @@ public sealed class PageDiscoveryTests
         var posts = builder.AddContentSource<Post>(static _ => []).WithKey(static post => post.Slug);
 
         var app = builder.Build();
-        app.MapRoot<Root>();
+        app.MapDefaultLayout<MainLayout>();
         app.MapPages(TestSitePages.All);
         app.MapNotFound<NotFoundPage>();
         app.MapContent<PostPage, Post>(posts, static post => new { post.Slug });
@@ -182,7 +183,7 @@ public sealed class PageDiscoveryTests
         builder.Site = TestArticleContents.CreateSiteInfo();
 
         var app = builder.Build();
-        app.MapRoot<Root>();
+        app.MapDefaultLayout<MainLayout>();
         app.MapPages(TestSitePages.All);
         app.MapRoutes<HomePage>(static () => [new { Slug = "x" }]);
 
@@ -198,7 +199,7 @@ public sealed class PageDiscoveryTests
         builder.Site = TestArticleContents.CreateSiteInfo();
 
         var app = builder.Build();
-        app.MapRoot<Root>();
+        app.MapDefaultLayout<MainLayout>();
         app.MapPages(TestSitePages.All);
         app.MapNotFound<PostListComponent>();
 
@@ -214,7 +215,7 @@ public sealed class PageDiscoveryTests
         var posts = builder.AddContentSource<Post>(static _ => []).WithKey(static post => post.Slug);
 
         var app = builder.Build();
-        app.MapRoot<Root>();
+        app.MapDefaultLayout<MainLayout>();
         app.MapPages(TestSitePages.All);
         app.MapNotFound<NotFoundPage>();
         app.MapContent<PostPage, Post>(posts, static post => new { post.Slug });

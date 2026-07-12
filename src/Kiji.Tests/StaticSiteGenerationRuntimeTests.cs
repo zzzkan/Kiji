@@ -2,39 +2,11 @@ using Kiji.Feeds;
 using Kiji.Markdown;
 using Kiji.Sitemaps;
 using Kiji.Tests.TestSite;
-using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Rendering;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using Xunit;
 
 namespace Kiji.Tests;
-
-/// <summary>
-/// Minimal markdown-backed page used to exercise the full markdown + image pipeline
-/// end to end through <see cref="KijiApp.BuildSiteAsync"/>.
-/// </summary>
-[Route("/md/{Slug}/")]
-public sealed class MarkdownPostTestPage : ComponentBase
-{
-    [Inject]
-    public ContentCollection<MarkdownContent<FrontMatter>> Posts { get; set; } = default!;
-
-    [Parameter]
-    public string Slug { get; set; } = string.Empty;
-
-    private string _html = string.Empty;
-
-    protected override async Task OnParametersSetAsync()
-    {
-        _html = await Posts.GetRequired(Slug).RenderAsync();
-    }
-
-    protected override void BuildRenderTree(RenderTreeBuilder builder)
-    {
-        builder.AddMarkupContent(0, _html);
-    }
-}
 
 public sealed class StaticSiteGenerationRuntimeTests : IDisposable
 {
@@ -100,6 +72,9 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         await app.BuildSiteAsync();
 
         var blogHtml = await File.ReadAllTextAsync(Path.Combine(_outputDir, "blog", "hello-world", "index.html"));
+        Assert.StartsWith("<!doctype html>", blogHtml, StringComparison.Ordinal);
+        Assert.Contains("<html lang=\"ja\">", blogHtml, StringComparison.Ordinal);
+        Assert.Contains("<meta charset=\"utf-8\"", blogHtml, StringComparison.Ordinal);
         Assert.Contains("<title>Hello World - zzzkan.me</title>", blogHtml, StringComparison.Ordinal);
         Assert.Contains("<link rel=\"canonical\" href=\"https://example.com/blog/hello-world/\"", blogHtml, StringComparison.Ordinal);
         Assert.Contains("<h1>Hello World</h1>", blogHtml, StringComparison.Ordinal);
@@ -161,7 +136,6 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
             .WithKey(static post => post.FileInfo.FileNameWithoutExtension);
 
         await using var app = builder.Build();
-        app.MapRoot<Root>();
         app.MapPages([typeof(MarkdownPostTestPage)]);
         app.MapContent<MarkdownPostTestPage, MarkdownContent<FrontMatter>>(
             posts,

@@ -1,6 +1,7 @@
 using Kiji.Markdown;
 using Kiji.Rendering;
 using Kiji.Tests.TestSite;
+using Kiji.Tests.TestSite.Pages;
 
 namespace Kiji.Tests;
 
@@ -49,7 +50,7 @@ internal static class TestArticleContents
 
     public static KijiApp MapSite(KijiApp app, ContentCollection<Post> posts)
     {
-        app.MapRoot<Root>();
+        app.MapDefaultLayout<MainLayout>();
         app.MapPages(TestSitePages.All);
         app.MapNotFound<NotFoundPage>();
 

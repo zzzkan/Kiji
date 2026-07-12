@@ -1,9 +1,8 @@
-using System.Reflection;
 using System.Runtime.InteropServices;
 using Kiji.Assets;
+using Kiji.Components;
 using Kiji.Generation;
 using Kiji.Hosting;
-using Kiji.Images;
 using Kiji.Rendering;
 using Kiji.Routing;
 using Microsoft.AspNetCore.Builder;
@@ -25,13 +24,11 @@ namespace Kiji;
 /// </summary>
 public sealed class KijiApp : IAsyncDisposable
 {
-    private const string RouteDataParameterName = "RouteData";
-
     private readonly KijiBuilder _builder;
     private readonly List<RouteRegistration> _routeRegistrations = [];
     private readonly List<ISiteArtifact> _artifacts = [];
     private readonly List<Type> _pageTypes = [];
-    private Type? _rootComponentType;
+    private Type? _defaultLayoutType;
     private Type? _notFoundComponentType;
     private ServiceProvider? _services;
     private ComponentRenderer? _renderer;
@@ -60,21 +57,14 @@ public sealed class KijiApp : IAsyncDisposable
     }
 
     /// <summary>
-    /// Registers the root document component that wraps every page render.
-    /// The root component must declare a <c>RouteData</c> parameter.
+    /// Registers the default layout applied to every page by the built-in root document.
+    /// Individual pages can override it with the <c>@layout</c> directive. Optional:
+    /// without a default layout, pages render directly inside <c>&lt;body&gt;</c>.
     /// </summary>
-    public KijiApp MapRoot<TRoot>()
-        where TRoot : IComponent
+    public KijiApp MapDefaultLayout<TLayout>()
+        where TLayout : LayoutComponentBase
     {
-        var rootType = typeof(TRoot);
-        var routeDataProperty = rootType.GetProperty(RouteDataParameterName, BindingFlags.Public | BindingFlags.Instance);
-        if (routeDataProperty is null || routeDataProperty.PropertyType != typeof(RouteData))
-        {
-            throw new InvalidOperationException(
-                $"Root component '{rootType.FullName}' must declare a public '{RouteDataParameterName}' parameter of type '{nameof(RouteData)}'.");
-        }
-
-        _rootComponentType = rootType;
+        _defaultLayoutType = typeof(TLayout);
         return this;
     }
 
@@ -350,11 +340,6 @@ public sealed class KijiApp : IAsyncDisposable
     {
         EnsureServices();
 
-        if (_rootComponentType is null)
-        {
-            throw new InvalidOperationException("No root component is mapped. Call MapRoot<TRoot>() first.");
-        }
-
         if (_pageTypes.Count == 0)
         {
             throw new InvalidOperationException("No pages are mapped. Call MapPages(...) first.");
@@ -508,8 +493,7 @@ public sealed class KijiApp : IAsyncDisposable
         PageRenderContext.SetCurrent(CreatePageRenderContext(request));
         try
         {
-            return await renderer.RenderComponentAsync(
-                _rootComponentType!,
+            return await renderer.RenderComponentAsync<KijiRoot>(
                 CreateRootParameters(request),
                 Site.BaseUrl.AppendRelativePath(request.RoutePath));
         }
@@ -526,8 +510,7 @@ public sealed class KijiApp : IAsyncDisposable
         PageRenderContext.SetCurrent(CreatePageRenderContext(request));
         try
         {
-            await renderer.RenderComponentToAsync(
-                _rootComponentType!,
+            await renderer.RenderComponentToAsync<KijiRoot>(
                 output,
                 CreateRootParameters(request),
                 Site.BaseUrl.AppendRelativePath(request.RoutePath));
@@ -547,12 +530,12 @@ public sealed class KijiApp : IAsyncDisposable
         };
     }
 
-    private static Dictionary<string, object?> CreateRootParameters(PageRenderRequest request)
+    private Dictionary<string, object?> CreateRootParameters(PageRenderRequest request)
     {
-        var routeData = new RouteData(request.ComponentType, request.Parameters);
         return new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            [RouteDataParameterName] = routeData,
+            [nameof(KijiRoot.RouteData)] = new RouteData(request.ComponentType, request.Parameters),
+            [nameof(KijiRoot.DefaultLayout)] = _defaultLayoutType,
         };
     }
 

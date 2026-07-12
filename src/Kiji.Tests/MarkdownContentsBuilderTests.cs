@@ -10,7 +10,6 @@ namespace Kiji.Tests;
 /// </summary>
 public sealed class MarkdownContentsBuilderTests : IDisposable
 {
-    private const string AssetsDirectoryName = "_assets";
     private readonly MarkdownProcessor _markdownProcessor;
     private readonly string _testDir;
     private readonly string _contentsDir;
@@ -52,7 +51,7 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
         Assert.Equal("test-post", item.FileInfo.FileNameWithoutExtension);
         Assert.Equal("Test Post", item.FrontMatter.Title);
         Assert.Contains("Test content.", await item.RenderAsync(), StringComparison.Ordinal);
-        Assert.False(Directory.Exists(Path.Combine(_outputDir, AssetsDirectoryName)));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(_outputDir));
     }
 
     [Fact]
@@ -129,18 +128,17 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
 
         Assert.Contains("hello-world", exception.Message, StringComparison.Ordinal);
         Assert.Contains("duplicate key", exception.Message, StringComparison.Ordinal);
-        Assert.False(Directory.Exists(Path.Combine(_outputDir, AssetsDirectoryName)));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(_outputDir));
     }
 
     [Fact]
-    public async Task ProcessAsync_SourceNotFound_ThrowsException()
+    public void Build_ContentsDirectoryNotFound_ThrowsException()
     {
-        Assert.Throws<DirectoryNotFoundException>(() => new SsgOptions
-        {
-            ContentsPath = Path.Combine(_testDir, "non-existent"),
-            StaticPath = _testDir,
-            OutputPath = _outputDir,
-        });
+        var builder = new MarkdownContentsBuilder<FrontMatter>(
+            Path.Combine(_testDir, "non-existent"),
+            static (_, _) => Task.FromResult(string.Empty));
+
+        Assert.Throws<DirectoryNotFoundException>(() => builder.Build());
     }
 
     [Fact]

@@ -96,42 +96,21 @@ public sealed class ModelTests
         // Arrange & Act
         var imageInfo = new ProcessedImageInfo
         {
-            AssetFileNameBase = "test-image.png",
-            FileName = "test-image",
             OriginalWidth = 1920,
             OriginalHeight = 1080,
-            AvailableWidths = [320, 640, 960, 1280, 1920],
-            AspectRatio = 1920.0 / 1080.0,
-            ContentHash = "abc12345"
+            Variants =
+            [
+                new ImageVariant("test-image.png.abc12345.320w.webp", 320),
+                new ImageVariant("test-image.png.abc12345.1920w.webp", 1920),
+            ],
         };
 
         // Assert
-        Assert.Equal("test-image.png", imageInfo.AssetFileNameBase);
-        Assert.Equal("test-image", imageInfo.FileName);
         Assert.Equal(1920, imageInfo.OriginalWidth);
         Assert.Equal(1080, imageInfo.OriginalHeight);
-        Assert.Equal(5, imageInfo.AvailableWidths.Length);
-        Assert.Equal(1920.0 / 1080.0, imageInfo.AspectRatio);
-        Assert.Equal("abc12345", imageInfo.ContentHash);
-    }
-
-    [Fact]
-    public void ProcessedImageInfo_AspectRatio_CalculatedCorrectly()
-    {
-        // Arrange
-        var imageInfo = new ProcessedImageInfo
-        {
-            AssetFileNameBase = "wide.png",
-            FileName = "wide",
-            OriginalWidth = 1600,
-            OriginalHeight = 900,
-            AvailableWidths = [1600],
-            AspectRatio = 1600.0 / 900.0,
-            ContentHash = "abc"
-        };
-
-        // Assert - 16:9 aspect ratio
-        Assert.Equal(16.0 / 9.0, imageInfo.AspectRatio, precision: 4);
+        Assert.Equal(2, imageInfo.Variants.Count);
+        Assert.Equal("test-image.png.abc12345.1920w.webp", imageInfo.Variants[^1].FileName);
+        Assert.Equal(1920, imageInfo.Variants[^1].Width);
     }
 
     #endregion
@@ -154,19 +133,24 @@ public sealed class ModelTests
         Assert.Equal(Path.GetFullPath(Path.GetTempPath()), options.ContentsPath);
         Assert.Equal(Path.GetFullPath(Path.GetTempPath()), options.StaticPath);
         Assert.Equal(Path.GetFullPath(outputPath), options.OutputPath);
-        Assert.Equal("_assets", options.AssetsDirectoryName);
+        Assert.Null(options.ImageCachePath);
     }
 
     [Fact]
-    public void SsgOptions_RejectsMissingContentsDirectory()
+    public void SsgOptions_AllowsMissingContentsAndStaticDirectories()
     {
-        var exception = Assert.Throws<DirectoryNotFoundException>(() => new SsgOptions
+        var missingContents = Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}");
+        var missingStatic = Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}");
+
+        var options = new SsgOptions
         {
-            ContentsPath = Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}"),
-            StaticPath = Path.GetTempPath(),
+            ContentsPath = missingContents,
+            StaticPath = missingStatic,
             OutputPath = Path.Combine(Path.GetTempPath(), $"output-{Guid.NewGuid():N}"),
-        });
-        Assert.Contains("Directory not found", exception.Message, StringComparison.Ordinal);
+        };
+
+        Assert.Equal(Path.GetFullPath(missingContents), options.ContentsPath);
+        Assert.Equal(Path.GetFullPath(missingStatic), options.StaticPath);
     }
 
     [Fact]
@@ -182,17 +166,17 @@ public sealed class ModelTests
     }
 
     [Fact]
-    public void SsgOptions_RejectsInvalidAssetsDirectoryName()
+    public void SsgOptions_RejectsRelativeImageCachePath()
     {
         var exception = Assert.Throws<ArgumentException>(() => new SsgOptions
         {
             ContentsPath = Path.GetTempPath(),
             StaticPath = Path.GetTempPath(),
             OutputPath = Path.Combine(Path.GetTempPath(), $"output-{Guid.NewGuid():N}"),
-            AssetsDirectoryName = "bad/name",
+            ImageCachePath = "relative-cache",
         });
 
-        Assert.Contains("AssetsDirectoryName", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("The path must be absolute.", exception.Message, StringComparison.Ordinal);
     }
 
     #endregion

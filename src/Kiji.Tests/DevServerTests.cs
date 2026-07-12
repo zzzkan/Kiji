@@ -59,7 +59,7 @@ public sealed class DevServerTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task Serve_RedirectsMissingTrailingSlashLikeProduction()
+    public async Task Serve_ResolvesMissingTrailingSlashWithoutRedirect()
     {
         var (baseAddress, devServer) = await StartServerAsync();
         await using (devServer)
@@ -67,9 +67,24 @@ public sealed class DevServerTests : IAsyncDisposable
             using var client = CreateClient();
 
             var response = await client.GetAsync(new Uri(baseAddress, "/blog"));
+            var html = await response.Content.ReadAsStringAsync();
 
-            Assert.Equal(HttpStatusCode.PermanentRedirect, response.StatusCode);
-            Assert.Equal("/blog/", response.Headers.Location?.OriginalString);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Contains("<title>Blog - zzzkan.me</title>", html, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task Serve_RouteMatchingIsCaseSensitive()
+    {
+        var (baseAddress, devServer) = await StartServerAsync();
+        await using (devServer)
+        {
+            using var client = CreateClient();
+
+            var response = await client.GetAsync(new Uri(baseAddress, "/Blog/"));
+
+            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         }
     }
 

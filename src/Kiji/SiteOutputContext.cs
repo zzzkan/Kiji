@@ -9,11 +9,13 @@ namespace Kiji;
 /// <param name="OutputRelativePath">The output file path relative to the output directory.</param>
 /// <param name="ExcludeFromSitemap">Whether the page opted out of sitemap listing.</param>
 /// <param name="ContentIdentity">The associated content key when the page was mapped from a keyed collection.</param>
+/// <param name="LastModified">Optional last-modification timestamp, emitted as the sitemap <c>lastmod</c>.</param>
 public sealed record SitePageInfo(
     string RoutePath,
     string OutputRelativePath,
     bool ExcludeFromSitemap,
-    string? ContentIdentity);
+    string? ContentIdentity,
+    DateTimeOffset? LastModified = null);
 
 /// <summary>
 /// The full-site input handed to <see cref="ISiteArtifact.WriteAsync"/>: site metadata
@@ -21,17 +23,17 @@ public sealed record SitePageInfo(
 /// </summary>
 public sealed class SiteOutputContext
 {
-    private readonly Dictionary<string, string> _routesByIdentity;
+    private readonly Dictionary<string, SitePageInfo> _pagesByIdentity;
 
     internal SiteOutputContext(SiteInfo site, IReadOnlyList<SitePageInfo> pages)
     {
         Site = site;
         Pages = pages;
-        _routesByIdentity = pages
+        _pagesByIdentity = pages
             .Where(static page => page.ContentIdentity is not null)
             .ToDictionary(
                 static page => page.ContentIdentity!,
-                static page => page.RoutePath,
+                static page => page,
                 StringComparer.OrdinalIgnoreCase);
     }
 
@@ -51,8 +53,23 @@ public sealed class SiteOutputContext
     /// </summary>
     public bool TryResolveRoute(string contentIdentity, [NotNullWhen(true)] out string? routePath)
     {
+        if (TryResolvePage(contentIdentity, out var page))
+        {
+            routePath = page.RoutePath;
+            return true;
+        }
+
+        routePath = null;
+        return false;
+    }
+
+    /// <summary>
+    /// Resolves the generated page of a content item by its collection key.
+    /// </summary>
+    public bool TryResolvePage(string contentIdentity, [NotNullWhen(true)] out SitePageInfo? page)
+    {
         ArgumentNullException.ThrowIfNull(contentIdentity);
 
-        return _routesByIdentity.TryGetValue(contentIdentity, out routePath);
+        return _pagesByIdentity.TryGetValue(contentIdentity, out page);
     }
 }

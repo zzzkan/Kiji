@@ -1,10 +1,6 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Kiji/Kiji.csproj" />
-    <Project Path="src/Kiji.Markdown/Kiji.Markdown.csproj" />
-    <Project Path="src/Kiji.Images/Kiji.Images.csproj" />
-    <Project Path="src/Kiji.Feeds/Kiji.Feeds.csproj" />
-    <Project Path="src/Kiji.Sitemaps/Kiji.Sitemaps.csproj" />
     <Project Path="src/Kiji.Tests/Kiji.Tests.csproj" />
   </Folder>
 </Solution>

@@ -27,33 +27,29 @@ public sealed class SitePaths
     public string? Static { get; set; }
 
     /// <summary>
-    /// The output directory for the generated site. Defaults to <c>dist/wwwroot</c>.
+    /// The output directory for the generated site. Defaults to <c>dist</c>.
     /// </summary>
-    public string Output { get; set; } = Path.Combine("dist", "wwwroot");
+    public string Output { get; set; } = "dist";
 
-    /// <summary>
-    /// The subdirectory name under <see cref="Output"/> for generated content assets. Defaults to <c>_assets</c>.
-    /// </summary>
-    public string AssetsDirectoryName { get; set; } = "_assets";
-
-    internal string ResolveOutputPath(string? outputOverride = null)
+    internal string ResolveOutputPath()
     {
-        return ResolveAgainstRoot(outputOverride ?? Output);
+        return ResolveAgainstRoot(Output);
     }
 
     internal string ResolveCachePath()
     {
-        return Path.Combine(Path.GetFullPath(Root), ".kiji-cache");
+        return Path.Combine(Path.GetFullPath(Root), ".kiji", "cache");
     }
 
     internal SsgOptions ResolveForServe()
     {
         var cachePath = ResolveCachePath();
-        Directory.CreateDirectory(cachePath);
-        return ResolveForBuild() with { OutputPath = cachePath };
+        var siteMirrorPath = Path.Combine(cachePath, "site");
+        Directory.CreateDirectory(siteMirrorPath);
+        return ResolveForBuild() with { OutputPath = siteMirrorPath };
     }
 
-    internal SsgOptions ResolveForBuild(string? outputOverride = null)
+    internal SsgOptions ResolveForBuild()
     {
         var staticPath = Static is not null
             ? ResolveAgainstRoot(Static)
@@ -63,8 +59,8 @@ public sealed class SitePaths
         {
             ContentsPath = ResolveAgainstRoot(Content),
             StaticPath = staticPath,
-            OutputPath = ResolveOutputPath(outputOverride),
-            AssetsDirectoryName = AssetsDirectoryName,
+            OutputPath = ResolveOutputPath(),
+            ImageCachePath = Path.Combine(ResolveCachePath(), "images"),
         };
     }
 

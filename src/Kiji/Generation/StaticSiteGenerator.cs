@@ -17,7 +17,7 @@ public static class StaticSiteGenerator
 
         Console.WriteLine("=== Site Generation ===");
 
-        CleanupLegacyNotFoundOutput(options);
+        ValidateNoStaticFileCollisions(options, pageRequests);
 
         await StaticFileCopier.CopyAsync(options.StaticPath, options.OutputPath);
 
@@ -58,23 +58,25 @@ public static class StaticSiteGenerator
         Console.WriteLine($"Generated: {fullPath}");
     }
 
-    private static void CleanupLegacyNotFoundOutput(SsgOptions options)
+    private static void ValidateNoStaticFileCollisions(SsgOptions options, IReadOnlyList<PageRenderRequest> pageRequests)
     {
-        ArgumentNullException.ThrowIfNull(options);
-
-        var legacyNotFoundDirectory = Path.Combine(options.OutputPath, "not-found");
-        var legacyNotFoundPath = Path.Combine(legacyNotFoundDirectory, "index.html");
-        if (!File.Exists(legacyNotFoundPath))
+        if (!Directory.Exists(options.StaticPath))
         {
             return;
         }
 
-        File.Delete(legacyNotFoundPath);
-        if (!Directory.EnumerateFileSystemEntries(legacyNotFoundDirectory).Any())
-        {
-            Directory.Delete(legacyNotFoundDirectory);
-        }
+        var pageOutputPaths = pageRequests
+            .Select(static request => request.OutputRelativePath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        Console.WriteLine($"Removed legacy output: {legacyNotFoundPath}");
+        foreach (var file in Directory.EnumerateFiles(options.StaticPath, "*", SearchOption.AllDirectories))
+        {
+            var relativePath = Path.GetRelativePath(options.StaticPath, file);
+            if (pageOutputPaths.Contains(relativePath))
+            {
+                throw new InvalidOperationException(
+                    $"Static file '{relativePath}' collides with a generated page output path. Rename the static file or change the page route.");
+            }
+        }
     }
 }

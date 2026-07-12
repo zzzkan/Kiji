@@ -1,12 +1,16 @@
+using System.Collections.Concurrent;
+using Kiji.Rendering;
+
 namespace Kiji.Markdown;
 
 public sealed class MarkdownContent<TFrontMatter>
 {
     private readonly Func<MarkdownContent<TFrontMatter>, CancellationToken, Task<string>> _renderAsync;
-    private readonly Lock _renderLock = new();
-    private string? _cachedRendered;
-    private bool _hasCachedRendered;
-    private Task<string>? _inFlightRenderTask;
+
+    // Rendered HTML is cached per page route: the markup is identical everywhere, but
+    // rendering also materializes referenced images into the rendering page's output
+    // directory, so each page that embeds this content must run the pipeline once.
+    private readonly ConcurrentDictionary<string, Task<string>> _renderTasksByRoute = new(StringComparer.Ordinal);
 
     public MarkdownContent(
         MarkdownFileInfo fileInfo,
@@ -27,50 +31,23 @@ public sealed class MarkdownContent<TFrontMatter>
 
     public async ValueTask<string> RenderAsync(CancellationToken cancellationToken = default)
     {
-        if (_hasCachedRendered)
-        {
-            return _cachedRendered!;
-        }
-
-        Task<string> renderTask;
-        lock (_renderLock)
-        {
-            if (_hasCachedRendered)
-            {
-                return _cachedRendered!;
-            }
-
-            _inFlightRenderTask ??= RenderCoreAsync();
-            renderTask = _inFlightRenderTask;
-        }
+        var cacheKey = PageRenderContext.Current?.RoutePath ?? string.Empty;
+        var renderTask = _renderTasksByRoute.GetOrAdd(cacheKey, key => RenderCoreAsync(key));
 
         return cancellationToken.CanBeCanceled
             ? await renderTask.WaitAsync(cancellationToken)
             : await renderTask;
     }
 
-    private async Task<string> RenderCoreAsync()
+    private async Task<string> RenderCoreAsync(string cacheKey)
     {
         try
         {
-            var rendered = await _renderAsync(this, CancellationToken.None);
-
-            lock (_renderLock)
-            {
-                _cachedRendered = rendered;
-                _hasCachedRendered = true;
-                _inFlightRenderTask = null;
-            }
-
-            return rendered;
+            return await _renderAsync(this, CancellationToken.None);
         }
         catch
         {
-            lock (_renderLock)
-            {
-                _inFlightRenderTask = null;
-            }
-
+            _renderTasksByRoute.TryRemove(cacheKey, out _);
             throw;
         }
     }

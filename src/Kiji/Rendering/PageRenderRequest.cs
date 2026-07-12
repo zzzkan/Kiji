@@ -7,4 +7,5 @@ public sealed record PageRenderRequest(
     string RoutePath,
     string OutputRelativePath,
     string? AssociatedContentIdentity = null,
-    bool ExcludeFromSitemap = false);
+    bool ExcludeFromSitemap = false,
+    DateTimeOffset? LastModified = null);

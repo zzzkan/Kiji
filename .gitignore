@@ -58,3 +58,7 @@ nunit-*.xml
 
 # Visual Studio
 .vs
+
+# Kiji build outputs
+dist/
+.kiji/

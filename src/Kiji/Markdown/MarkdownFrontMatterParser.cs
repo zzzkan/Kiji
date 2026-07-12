@@ -22,7 +22,16 @@ public static partial class MarkdownFrontMatterParser
         ArgumentNullException.ThrowIfNull(deserializer);
 
         var content = File.ReadAllText(filePath);
-        return ParseContent<TFrontMatter>(content, deserializer);
+        try
+        {
+            return ParseContent<TFrontMatter>(content, deserializer);
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException(
+                $"Failed to parse YAML front matter of '{filePath}'. {exception.Message}",
+                exception);
+        }
     }
 
     internal static TFrontMatter ParseContent<TFrontMatter>(string content)

@@ -1,5 +1,5 @@
 using System.Text.RegularExpressions;
-using Kiji.Assets;
+using Kiji.Images;
 using Kiji.Markdown;
 using Xunit;
 using YamlDotNet.Serialization.NamingConventions;
@@ -84,17 +84,18 @@ public sealed class MarkdownContentOptionsTests : IDisposable
     }
 
     [Fact]
-    public async Task NullImageBackend_RendersPlainImg_AndSkipsAssetOutput()
+    public async Task ExternalAndSiteRootImages_RenderWithoutPageRenderContext()
     {
-        var mdPath = CreateMarkdownFile("plain-image.md", "![Alt](local.png)");
+        var mdPath = CreateMarkdownFile(
+            "plain-image.md",
+            "![External](https://example.com/a.png)\n\n![Static](/icons/b.png)");
         var processor = CreateProcessor();
 
         var html = await processor.ProcessAsync(mdPath);
 
-        Assert.Contains("<img src=\"local.png\" alt=\"Alt\"", html);
+        Assert.Contains("src=\"https://example.com/a.png\"", html);
+        Assert.Contains("src=\"/icons/b.png\"", html);
         Assert.DoesNotContain("srcset", html);
-        Assert.DoesNotContain("class=\"blog-image\"", html);
-        Assert.False(Directory.Exists(Path.Combine(_testDir, "test-assets")));
     }
 
     [Fact]
@@ -149,9 +150,8 @@ public sealed class MarkdownContentOptionsTests : IDisposable
                 ContentsPath = _testFilesDir,
                 StaticPath = _testDir,
                 OutputPath = _testDir,
-                AssetsDirectoryName = "test-assets",
             },
-            new NullImageAssetProcessor(),
+            new ImageProcessor(),
             contentOptions);
     }
 

@@ -15,11 +15,13 @@ public sealed class ComponentRenderer : IAsyncDisposable
 {
     private readonly ServiceProvider _serviceProvider;
     private readonly Uri? _baseUri;
+    private readonly bool _ownsProvider;
 
-    private ComponentRenderer(ServiceProvider serviceProvider, Uri? baseUri)
+    private ComponentRenderer(ServiceProvider serviceProvider, Uri? baseUri, bool ownsProvider)
     {
         _serviceProvider = serviceProvider;
         _baseUri = baseUri;
+        _ownsProvider = ownsProvider;
     }
 
     /// <summary>
@@ -30,15 +32,33 @@ public sealed class ComponentRenderer : IAsyncDisposable
     public static ComponentRenderer Create(Action<IServiceCollection>? configureServices = null, Uri? baseUri = null)
     {
         var services = new ServiceCollection();
-        services.AddLogging(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Warning));
-        services.AddSingleton(_ => HtmlEncoder.Create(UnicodeRanges.All));
-        services.AddScoped<StaticNavigationManager>();
-        services.AddScoped<NavigationManager>(static provider => provider.GetRequiredService<StaticNavigationManager>());
+        AddComponentRenderingServices(services);
         configureServices?.Invoke(services);
 
         var serviceProvider = services.BuildServiceProvider();
 
-        return new ComponentRenderer(serviceProvider, baseUri);
+        return new ComponentRenderer(serviceProvider, baseUri, ownsProvider: true);
+    }
+
+    /// <summary>
+    /// Wraps an existing provider without taking ownership of it. The provider must
+    /// contain the registrations added by <see cref="AddComponentRenderingServices"/>.
+    /// </summary>
+    internal static ComponentRenderer Attach(ServiceProvider serviceProvider, Uri? baseUri)
+    {
+        return new ComponentRenderer(serviceProvider, baseUri, ownsProvider: false);
+    }
+
+    /// <summary>
+    /// Registers the services component rendering depends on: logging, HTML encoding,
+    /// and the per-render scoped navigation manager.
+    /// </summary>
+    internal static void AddComponentRenderingServices(IServiceCollection services)
+    {
+        services.AddLogging(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Warning));
+        services.AddSingleton(_ => HtmlEncoder.Create(UnicodeRanges.All));
+        services.AddScoped<StaticNavigationManager>();
+        services.AddScoped<NavigationManager>(static provider => provider.GetRequiredService<StaticNavigationManager>());
     }
 
     /// <summary>
@@ -119,7 +139,10 @@ public sealed class ComponentRenderer : IAsyncDisposable
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
     {
-        await _serviceProvider.DisposeAsync();
+        if (_ownsProvider)
+        {
+            await _serviceProvider.DisposeAsync();
+        }
     }
 
     private static ParameterView CreateParameterView(IReadOnlyDictionary<string, object?>? parameters)

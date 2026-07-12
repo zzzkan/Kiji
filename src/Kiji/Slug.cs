@@ -22,8 +22,6 @@ public sealed partial record Slug
 
         var trimmed = value.Trim().Trim('/', '\\');
         var normalized = trimmed.ToLowerInvariant();
-        normalized = normalized.Replace(".net", "dot-net", StringComparison.Ordinal);
-        normalized = normalized.Replace("c#", "c-sharp", StringComparison.Ordinal);
         normalized = NonAlphaNumericRegex().Replace(normalized, "-");
         normalized = MultipleDashRegex().Replace(normalized, "-");
         normalized = normalized.Trim('-');
@@ -62,32 +60,6 @@ public sealed partial record Slug
         {
             throw new InvalidOperationException($"Slug '{value}' must be a single route segment and cannot contain '/' or '\\'.");
         }
-    }
-
-    public static IReadOnlyDictionary<string, string> CreateNameMap(
-        IEnumerable<string> values,
-        string singularDisplayName,
-        string pluralDisplayName)
-    {
-        var namesBySlug = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var value in values
-            .Where(static value => !string.IsNullOrWhiteSpace(value))
-            .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
-            .Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            var slug = Normalize(value);
-            if (namesBySlug.TryGetValue(slug, out var existingValue) &&
-                !string.Equals(existingValue, value, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException(
-                    $"{pluralDisplayName} '{existingValue}' and '{value}' both normalize to canonical {singularDisplayName} slug '{slug}'. Rename one of the {pluralDisplayName.ToLowerInvariant()} so each {singularDisplayName.ToLowerInvariant()} keeps a unique canonical URL.");
-            }
-
-            namesBySlug[slug] = value;
-        }
-
-        return namesBySlug;
     }
 
     public override string ToString()

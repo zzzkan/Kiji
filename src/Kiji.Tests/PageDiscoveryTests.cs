@@ -32,6 +32,24 @@ public sealed class PageDiscoveryTests
     }
 
     [Fact]
+    public void FromTypes_SkipsCompilerGeneratedTypes()
+    {
+        // Closures report the namespace of their declaring type, so the documented
+        // namespace-filtered assembly.GetTypes() idiom must not trip over them.
+        var compilerGenerated = typeof(TestArticleContents).Assembly.GetTypes()
+            .Where(static type => type.IsDefined(
+                typeof(System.Runtime.CompilerServices.CompilerGeneratedAttribute),
+                inherit: false))
+            .Take(3);
+
+        var discovered = Kiji.Routing.PageDiscovery.FromTypes([.. TestSitePages.All, .. compilerGenerated]);
+
+        Assert.Equal(
+            TestSitePages.All.Length,
+            discovered.Select(static page => page.ComponentType).Distinct().Count());
+    }
+
+    [Fact]
     public void CreateSnapshot_UsesBlogIndexAsTheOnlyBlogListingPage()
     {
         var requests = TestArticleContents.CreatePageRequests();
@@ -54,7 +72,7 @@ public sealed class PageDiscoveryTests
                 "desc",
                 new DateOnly(2026, 3, 9),
                 null,
-                "C# Basics"), "<p>Hello</p>"));
+                "C Sharp Basics"), "<p>Hello</p>"));
 
         var blogRequest = Assert.Single(
             requests,
@@ -82,7 +100,7 @@ public sealed class PageDiscoveryTests
     {
         var (app, _) = TestArticleContents.CreateApp(
             (TestArticleContents.CreatePost("first-post", "First", "desc", new DateOnly(2026, 3, 9), null, "C Sharp"), "<p>First</p>"),
-            (TestArticleContents.CreatePost("second-post", "Second", "desc", new DateOnly(2026, 3, 10), null, "C#"), "<p>Second</p>"));
+            (TestArticleContents.CreatePost("second-post", "Second", "desc", new DateOnly(2026, 3, 10), null, "C-Sharp"), "<p>Second</p>"));
 
         var exception = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());
 
@@ -98,7 +116,8 @@ public sealed class PageDiscoveryTests
         var posts = builder.AddContentSource<Post>(static _ => []).WithKey(static post => post.Slug);
 
         var app = builder.Build();
-        app.MapPages<Root>();
+        app.MapRoot<Root>();
+        app.MapPages(TestSitePages.All);
         app.MapNotFound<NotFoundPage>();
         app.MapContent<PostPage, Post>(posts, static post => new { post.Slug });
         // No mapping for the dynamic /tags/{TagSlug}/ template.
@@ -139,7 +158,8 @@ public sealed class PageDiscoveryTests
         builder.Site = TestArticleContents.CreateSiteInfo();
 
         var app = builder.Build();
-        app.MapPages<Root>();
+        app.MapRoot<Root>();
+        app.MapPages(TestSitePages.All);
         app.MapRoutes<HomePage>(static () => [new { Slug = "x" }]);
 
         var exception = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());
@@ -154,7 +174,8 @@ public sealed class PageDiscoveryTests
         builder.Site = TestArticleContents.CreateSiteInfo();
 
         var app = builder.Build();
-        app.MapPages<Root>();
+        app.MapRoot<Root>();
+        app.MapPages(TestSitePages.All);
         app.MapNotFound<PostListComponent>();
 
         var exception = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());
@@ -169,7 +190,8 @@ public sealed class PageDiscoveryTests
         var posts = builder.AddContentSource<Post>(static _ => []).WithKey(static post => post.Slug);
 
         var app = builder.Build();
-        app.MapPages<Root>();
+        app.MapRoot<Root>();
+        app.MapPages(TestSitePages.All);
         app.MapNotFound<NotFoundPage>();
         app.MapContent<PostPage, Post>(posts, static post => new { post.Slug });
         app.MapRoutes<TagsPage>(tagRoutes);

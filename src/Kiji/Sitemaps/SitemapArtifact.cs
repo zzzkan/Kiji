@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Xml;
 
@@ -5,7 +6,8 @@ namespace Kiji.Sitemaps;
 
 /// <summary>
 /// Generates a sitemap from every generated page, excluding pages marked
-/// with <c>ExcludeFromSitemap</c>. URLs are sorted for deterministic output.
+/// with <c>ExcludeFromSitemap</c>. Pages with a known last-modification timestamp
+/// emit <c>lastmod</c>. URLs are sorted for deterministic output.
 /// </summary>
 public sealed class SitemapArtifact : ISiteArtifact
 {
@@ -30,10 +32,9 @@ public sealed class SitemapArtifact : ISiteArtifact
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var urls = context.Pages
+        var pages = context.Pages
             .Where(static page => !page.ExcludeFromSitemap)
-            .Select(static page => page.RoutePath)
-            .OrderBy(static route => route, StringComparer.OrdinalIgnoreCase);
+            .OrderBy(static page => page.RoutePath, StringComparer.OrdinalIgnoreCase);
 
         var settings = new XmlWriterSettings
         {
@@ -49,12 +50,21 @@ public sealed class SitemapArtifact : ISiteArtifact
             await writer.WriteStartDocumentAsync();
             await writer.WriteStartElementAsync(prefix: null, "urlset", SitemapNamespace);
 
-            foreach (var url in urls)
+            foreach (var page in pages)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
                 await writer.WriteStartElementAsync(prefix: null, "url", ns: null);
-                await writer.WriteElementStringAsync(prefix: null, "loc", ns: null, context.Site.BaseUrl.AppendRelativePath(url).AbsoluteUri);
+                await writer.WriteElementStringAsync(prefix: null, "loc", ns: null, context.Site.BaseUrl.AppendRelativePath(page.RoutePath).AbsoluteUri);
+                if (page.LastModified is { } lastModified)
+                {
+                    await writer.WriteElementStringAsync(
+                        prefix: null,
+                        "lastmod",
+                        ns: null,
+                        lastModified.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture));
+                }
+
                 await writer.WriteEndElementAsync();
             }
 

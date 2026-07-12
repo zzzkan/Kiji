@@ -1,38 +1,23 @@
 namespace Kiji.Assets;
 
 /// <summary>
-/// Normalizes image references (file paths and markdown URLs) into canonical lookup keys.
+/// Normalizes markdown image URLs into canonical lookup keys: the referenced path
+/// relative to the markdown file, with forward slashes and no <c>./</c> prefix.
 /// </summary>
 public static class ImageReferenceKey
 {
-    public static string FromFilePath(string filePath)
-    {
-        return Normalize(Path.GetFileName(filePath));
-    }
-
     public static string FromMarkdownUrl(string url)
     {
-        var path = StripQueryAndFragment(url)
-            .Replace('\\', Path.DirectorySeparatorChar)
-            .Replace('/', Path.DirectorySeparatorChar);
+        ArgumentNullException.ThrowIfNull(url);
 
-        return Normalize(Path.GetFileName(path));
-    }
+        var path = StripQueryAndFragment(url).Replace('\\', '/');
 
-    public static string GetStem(string referenceKey)
-    {
-        var normalizedReferenceKey = referenceKey
-            .Replace('\\', Path.DirectorySeparatorChar)
-            .Replace('/', Path.DirectorySeparatorChar);
+        while (path.StartsWith("./", StringComparison.Ordinal))
+        {
+            path = path[2..];
+        }
 
-        return Path.GetFileNameWithoutExtension(normalizedReferenceKey);
-    }
-
-    private static string Normalize(string? fileName)
-    {
-        return string.IsNullOrWhiteSpace(fileName)
-            ? string.Empty
-            : fileName.Replace('\\', '/');
+        return path;
     }
 
     private static string StripQueryAndFragment(string url)

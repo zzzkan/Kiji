@@ -57,7 +57,88 @@ public sealed class FeedsTests
         Assert.Equal("Hello World", item.Element("title")!.Value);
         Assert.Equal("https://example.com/blog/hello/", item.Element("link")!.Value);
         Assert.Equal("https://example.com/blog/hello/", item.Element("guid")!.Value);
-        Assert.Equal("Wed, 18 Mar 2026 00:00:00 +0000", item.Element("pubDate")!.Value);
+        Assert.Equal("Wed, 18 Mar 2026 00:00:00 GMT", item.Element("pubDate")!.Value);
+    }
+
+    [Fact]
+    public async Task WriteAsync_HalfHourOffset_ConvertsPubDateToUtc()
+    {
+        // 2026-03-18 09:30 +05:30 == 2026-03-18 04:00 UTC. The previous formatter
+        // produced "+0500" for half-hour offsets, shifting the timestamp by 30 minutes.
+        var entries = Content.FromItems<Entry>([
+            new("india", "India Post", "d", new DateTimeOffset(2026, 3, 18, 9, 30, 0, TimeSpan.FromMinutes(330))),
+        ]).WithKey(static entry => entry.Slug);
+        var context = CreateContext([new SitePageInfo("/blog/india/", "blog/india/index.html", false, "india")]);
+        var artifact = new RssFeedArtifact<Entry>(entries, static entry => new FeedItem(entry.Title, entry.Description, entry.PublishedAt));
+
+        var xml = await WriteFeedAsync(artifact, context);
+        var document = XDocument.Parse(xml);
+
+        var item = Assert.Single(document.Root!.Element("channel")!.Elements("item"));
+        Assert.Equal("Wed, 18 Mar 2026 04:00:00 GMT", item.Element("pubDate")!.Value);
+    }
+
+    [Fact]
+    public async Task WriteAsync_ContentHtml_EmitsContentEncoded()
+    {
+        var entries = Content.FromItems<Entry>([
+            new("hello", "Hello World", "First post", new DateTimeOffset(2026, 3, 18, 0, 0, 0, TimeSpan.Zero)),
+        ]).WithKey(static entry => entry.Slug);
+        var context = CreateContext([new SitePageInfo("/blog/hello/", "blog/hello/index.html", false, "hello")]);
+        var artifact = new RssFeedArtifact<Entry>(
+            entries,
+            static (entry, _) => Task.FromResult(new FeedItem(entry.Title, entry.Description, entry.PublishedAt)
+            {
+                ContentHtml = "<p>Full <strong>HTML</strong> body.</p>",
+            }));
+
+        var xml = await WriteFeedAsync(artifact, context);
+        var document = XDocument.Parse(xml);
+
+        XNamespace content = "http://purl.org/rss/1.0/modules/content/";
+        var item = Assert.Single(document.Root!.Element("channel")!.Elements("item"));
+        Assert.Equal("<p>Full <strong>HTML</strong> body.</p>", item.Element(content + "encoded")!.Value);
+    }
+
+    [Fact]
+    public async Task WriteAsync_ItemSelector_RunsUnderItemPageRenderContext()
+    {
+        var entries = Content.FromItems<Entry>([
+            new("hello", "Hello World", "First post", new DateTimeOffset(2026, 3, 18, 0, 0, 0, TimeSpan.Zero)),
+        ]).WithKey(static entry => entry.Slug);
+        var context = CreateContext([new SitePageInfo("/blog/hello/", Path.Combine("blog", "hello", "index.html"), false, "hello")]);
+        var artifact = new RssFeedArtifact<Entry>(entries, static (entry, _) =>
+        {
+            // Content renderers (e.g. MarkdownContent.RenderAsync) rely on this ambient
+            // context to hit the per-page cache built during page generation.
+            var renderContext = Kiji.Rendering.PageRenderContext.Current;
+            Assert.NotNull(renderContext);
+            Assert.Equal("/blog/hello/", renderContext.RoutePath);
+            Assert.Equal(Path.Combine("blog", "hello"), renderContext.OutputRelativeDirectory);
+            return Task.FromResult(new FeedItem(entry.Title, entry.Description, entry.PublishedAt));
+        });
+
+        var xml = await WriteFeedAsync(artifact, context);
+
+        Assert.Contains("Hello World", xml, StringComparison.Ordinal);
+        Assert.Null(Kiji.Rendering.PageRenderContext.Current);
+    }
+
+    [Fact]
+    public async Task WriteAsync_WithoutContentHtml_OmitsContentEncoded()
+    {
+        var entries = Content.FromItems<Entry>([
+            new("hello", "Hello World", "First post", new DateTimeOffset(2026, 3, 18, 0, 0, 0, TimeSpan.Zero)),
+        ]).WithKey(static entry => entry.Slug);
+        var context = CreateContext([new SitePageInfo("/blog/hello/", "blog/hello/index.html", false, "hello")]);
+        var artifact = new RssFeedArtifact<Entry>(entries, static entry => new FeedItem(entry.Title, entry.Description, entry.PublishedAt));
+
+        var xml = await WriteFeedAsync(artifact, context);
+        var document = XDocument.Parse(xml);
+
+        XNamespace content = "http://purl.org/rss/1.0/modules/content/";
+        var item = Assert.Single(document.Root!.Element("channel")!.Elements("item"));
+        Assert.Null(item.Element(content + "encoded"));
     }
 
     [Fact]

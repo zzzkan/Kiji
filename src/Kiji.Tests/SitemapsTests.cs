@@ -73,6 +73,31 @@ public sealed class SitemapsTests
     }
 
     [Fact]
+    public async Task WriteAsync_PageWithLastModified_EmitsLastmodInUtc()
+    {
+        var context = CreateContext([
+            new SitePageInfo(
+                "/blog/dated/",
+                "blog/dated/index.html",
+                false,
+                null,
+                new DateTimeOffset(2026, 3, 18, 9, 30, 0, TimeSpan.FromMinutes(330))),
+            new SitePageInfo("/blog/undated/", "blog/undated/index.html", false, null),
+        ]);
+        var artifact = new SitemapArtifact();
+
+        var document = await WriteSitemapAsync(artifact, context);
+
+        XNamespace ns = "http://www.sitemaps.org/schemas/sitemap/0.9";
+        var urls = document.Root!.Elements(ns + "url").ToArray();
+        var dated = Assert.Single(urls, url => url.Element(ns + "loc")!.Value.Contains("/dated/", StringComparison.Ordinal));
+        var undated = Assert.Single(urls, url => url.Element(ns + "loc")!.Value.Contains("/undated/", StringComparison.Ordinal));
+
+        Assert.Equal("2026-03-18T04:00:00Z", dated.Element(ns + "lastmod")!.Value);
+        Assert.Null(undated.Element(ns + "lastmod"));
+    }
+
+    [Fact]
     public void Constructor_CustomPath_IsExposed()
     {
         var artifact = new SitemapArtifact("seo/sitemap.xml");

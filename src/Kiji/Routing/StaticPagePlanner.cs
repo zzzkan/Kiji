@@ -61,7 +61,8 @@ public static class StaticPagePlanner
                 page.ResolveRoutePath(match.RouteValues),
                 page.ResolveOutputRelativePath(match.RouteValues),
                 AssociatedContentIdentity: match.AssociatedContentIdentity,
-                ExcludeFromSitemap: page.ExcludeFromSitemap || match.ExcludeFromSitemap))];
+                ExcludeFromSitemap: page.ExcludeFromSitemap || match.ExcludeFromSitemap,
+                LastModified: match.LastModified))];
     }
 
     private static void ValidateDynamicPageCoverage(

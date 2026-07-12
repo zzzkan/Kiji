@@ -7,13 +7,13 @@ public static class StaticFileCopier
 {
     /// <summary>
     /// Copies all files from <paramref name="staticDirectory"/> to <paramref name="outputDirectory"/>,
-    /// preserving the directory structure.
+    /// preserving the directory structure. Skipped when the static directory does not exist.
     /// </summary>
     public static async Task CopyAsync(string staticDirectory, string outputDirectory)
     {
         if (!Directory.Exists(staticDirectory))
         {
-            throw new DirectoryNotFoundException($"Static directory not found: {staticDirectory}");
+            return;
         }
 
         foreach (var file in Directory.EnumerateFiles(staticDirectory, "*", SearchOption.TopDirectoryOnly))

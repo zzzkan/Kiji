@@ -8,13 +8,11 @@ namespace Kiji.Tests;
 public sealed class KijiCommandLineTests
 {
     [Fact]
-    public void Parse_NoArguments_DefaultsToBuildWithClean()
+    public void Parse_NoArguments_DefaultsToBuild()
     {
         var command = KijiCommandLine.Parse([]);
 
         Assert.Equal(KijiCommandKind.Build, command.Kind);
-        Assert.Null(command.Output);
-        Assert.True(command.Clean);
     }
 
     [Theory]
@@ -29,38 +27,20 @@ public sealed class KijiCommandLineTests
     }
 
     [Fact]
-    public void Parse_BuildWithOutputAndNoClean_ParsesOptions()
+    public void Parse_DevWithoutPort_UsesDefaultPort()
     {
-        var command = KijiCommandLine.Parse(["build", "--output", "custom/dist", "--no-clean"]);
+        var command = KijiCommandLine.Parse(["dev"]);
 
-        Assert.Equal(KijiCommandKind.Build, command.Kind);
-        Assert.Equal("custom/dist", command.Output);
-        Assert.False(command.Clean);
-    }
-
-    [Fact]
-    public void Parse_CleanCommand_ReturnsClean()
-    {
-        var command = KijiCommandLine.Parse(["clean"]);
-
-        Assert.Equal(KijiCommandKind.Clean, command.Kind);
-    }
-
-    [Fact]
-    public void Parse_ServeWithoutPort_UsesDefaultPort()
-    {
-        var command = KijiCommandLine.Parse(["serve"]);
-
-        Assert.Equal(KijiCommandKind.Serve, command.Kind);
+        Assert.Equal(KijiCommandKind.Dev, command.Kind);
         Assert.Equal(8080, command.Port);
     }
 
     [Theory]
-    [InlineData("serve")]
+    [InlineData("dev")]
     [InlineData("preview")]
     public void Parse_WithPort_ParsesPort(string arg)
     {
-        var expectedKind = arg == "serve" ? KijiCommandKind.Serve : KijiCommandKind.Preview;
+        var expectedKind = arg == "dev" ? KijiCommandKind.Dev : KijiCommandKind.Preview;
 
         var command = KijiCommandLine.Parse([arg, "--port", "5000"]);
 
@@ -74,26 +54,29 @@ public sealed class KijiCommandLineTests
     [InlineData("65536")]
     public void Parse_InvalidPort_ThrowsArgumentException(string port)
     {
-        var exception = Assert.Throws<ArgumentException>(() => KijiCommandLine.Parse(["serve", "--port", port]));
+        var exception = Assert.Throws<ArgumentException>(() => KijiCommandLine.Parse(["dev", "--port", port]));
 
         Assert.Contains(port, exception.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void Parse_UnknownCommand_ReportsRawCommand()
+    [Theory]
+    [InlineData("deploy")]
+    [InlineData("serve")]
+    [InlineData("clean")]
+    public void Parse_UnknownCommand_ReportsRawCommand(string arg)
     {
-        var command = KijiCommandLine.Parse(["deploy"]);
+        var command = KijiCommandLine.Parse([arg]);
 
         Assert.Equal(KijiCommandKind.Unknown, command.Kind);
-        Assert.Equal("deploy", command.RawCommand);
+        Assert.Equal(arg, command.RawCommand);
     }
 
     [Fact]
-    public void Parse_OptionValueMissing_IsIgnored()
+    public void Parse_PortValueMissing_UsesDefaultPort()
     {
-        var command = KijiCommandLine.Parse(["build", "--output"]);
+        var command = KijiCommandLine.Parse(["dev", "--port"]);
 
-        Assert.Equal(KijiCommandKind.Build, command.Kind);
-        Assert.Null(command.Output);
+        Assert.Equal(KijiCommandKind.Dev, command.Kind);
+        Assert.Equal(KijiCommandLine.DefaultPort, command.Port);
     }
 }

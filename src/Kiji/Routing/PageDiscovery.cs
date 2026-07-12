@@ -1,15 +1,16 @@
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Microsoft.AspNetCore.Components;
 
 namespace Kiji.Routing;
 
 /// <summary>
-/// Discovers Razor components annotated with <c>@page</c> route templates.
+/// Resolves explicitly registered Razor components into pages via their <c>@page</c> route templates.
 /// </summary>
 public static class PageDiscovery
 {
     /// <summary>
-    /// A component discovered via its <c>@page</c> route template.
+    /// A component resolved from its <c>@page</c> route template.
     /// </summary>
     public sealed record DiscoveredPage(
         string SourceIdentifier,
@@ -17,16 +18,56 @@ public static class PageDiscovery
         StaticPageDefinition PageDefinition);
 
     /// <summary>
-    /// Scans the assembly for components declaring <c>@page</c> route templates.
+    /// Resolves the given page component types into pages. Every type must be a
+    /// non-abstract <see cref="IComponent"/> declaring at least one <c>@page</c> route template.
+    /// Duplicate types are tolerated; duplicate route templates are an error.
+    /// Compiler-generated types (closures, display classes) are skipped, so a
+    /// namespace-filtered <c>assembly.GetTypes()</c> query can be passed directly.
     /// </summary>
-    public static IReadOnlyList<DiscoveredPage> LoadDiscoveredPages(Assembly assembly)
+    public static IReadOnlyList<DiscoveredPage> FromTypes(IEnumerable<Type> pageTypes)
     {
-        ArgumentNullException.ThrowIfNull(assembly);
+        ArgumentNullException.ThrowIfNull(pageTypes);
 
-        var pages = assembly.GetTypes()
-            .Where(static type => type is { IsClass: true, IsAbstract: false } && typeof(IComponent).IsAssignableFrom(type))
-            .SelectMany(CreateDiscoveredPages)
-            .ToList();
+        var pages = new List<DiscoveredPage>();
+        var seenTypes = new HashSet<Type>();
+
+        foreach (var pageType in pageTypes)
+        {
+            if (pageType is null)
+            {
+                throw new ArgumentException("Page type collection contains a null entry.", nameof(pageTypes));
+            }
+
+            if (!seenTypes.Add(pageType))
+            {
+                continue;
+            }
+
+            // Closures and other compiler-generated nested types report the namespace
+            // of their declaring type, so namespace-based LINQ queries pick them up.
+            if (pageType.IsDefined(typeof(CompilerGeneratedAttribute), inherit: false))
+            {
+                continue;
+            }
+
+            if (pageType is not { IsClass: true, IsAbstract: false } || !typeof(IComponent).IsAssignableFrom(pageType))
+            {
+                throw new InvalidOperationException(
+                    $"Type '{pageType.FullName}' is not a routable Razor component. Map only non-abstract classes implementing '{nameof(IComponent)}'.");
+            }
+
+            var routeAttributes = pageType.GetCustomAttributes<RouteAttribute>(inherit: false).ToArray();
+            if (routeAttributes.Length == 0)
+            {
+                throw new InvalidOperationException(
+                    $"Page component '{pageType.FullName}' does not declare a '@page' route template.");
+            }
+
+            foreach (var attribute in routeAttributes)
+            {
+                pages.Add(CreateDiscoveredPage(attribute.Template, pageType));
+            }
+        }
 
         IReadOnlyList<DiscoveredPage> discoveredPages = [.. pages
             .GroupBy(static page => page.SourceIdentifier, StringComparer.OrdinalIgnoreCase)
@@ -54,13 +95,5 @@ public static class PageDiscovery
             pageDefinition.SourceIdentifier,
             componentType,
             pageDefinition);
-    }
-
-    private static IEnumerable<DiscoveredPage> CreateDiscoveredPages(Type componentType)
-    {
-        foreach (var attribute in componentType.GetCustomAttributes<RouteAttribute>(inherit: false))
-        {
-            yield return CreateDiscoveredPage(attribute.Template, componentType);
-        }
     }
 }

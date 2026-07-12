@@ -17,6 +17,11 @@ public sealed class MarkdownContentOptions
     internal List<Action<DeserializerBuilder>> FrontMatterConfigurations { get; } = [];
 
     /// <summary>
+    /// Optional CSS class applied to images rendered from markdown. Default: none.
+    /// </summary>
+    public string? ImageCssClass { get; set; }
+
+    /// <summary>
     /// Configures the shared Markdig pipeline. Runs after the built-in defaults
     /// (advanced extensions and <see cref="SecureLinkExtension"/>), so built-ins can be
     /// removed here, e.g.

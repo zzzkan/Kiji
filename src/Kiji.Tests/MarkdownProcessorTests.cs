@@ -1,5 +1,6 @@
 using Kiji.Markdown;
 using Kiji.Images;
+using Kiji.Rendering;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using Xunit;
@@ -13,12 +14,17 @@ public sealed class MarkdownProcessorTests : IDisposable
 {
     private readonly string _testDir;
     private readonly string _testFilesDir;
+    private readonly string _outputDir;
+    private readonly string _cacheDir;
 
     public MarkdownProcessorTests()
     {
         _testDir = Path.Combine(Path.GetTempPath(), $"MarkdownProcessorTests_{Guid.NewGuid():N}");
         _testFilesDir = Path.Combine(_testDir, "files");
+        _outputDir = Path.Combine(_testDir, "output");
+        _cacheDir = Path.Combine(_testDir, "cache");
         Directory.CreateDirectory(_testFilesDir);
+        Directory.CreateDirectory(_outputDir);
     }
 
     public void Dispose()
@@ -28,8 +34,6 @@ public sealed class MarkdownProcessorTests : IDisposable
             Directory.Delete(_testDir, recursive: true);
         }
     }
-
-    #region ProcessAsync Tests
 
     [Fact]
     public async Task ProcessAsync_ValidMarkdown_ConvertsToHtml()
@@ -51,15 +55,7 @@ public sealed class MarkdownProcessorTests : IDisposable
         var mdPath = Path.Combine(_testFilesDir, "test.md");
         File.WriteAllText(mdPath, mdContent);
 
-        var processor = new MarkdownProcessor(new SsgOptions
-        {
-            ContentsPath = _testFilesDir,
-            StaticPath = _testDir,
-            OutputPath = _testDir,
-            AssetsDirectoryName = "test-assets",
-        }, new ImageProcessor());
-
-        var htmlContent = await processor.ProcessAsync(mdPath);
+        var htmlContent = await CreateProcessor().ProcessAsync(mdPath);
 
         Assert.Contains("<h1", htmlContent);
         Assert.Contains("Hello World", htmlContent);
@@ -78,15 +74,7 @@ public sealed class MarkdownProcessorTests : IDisposable
         var mdPath = Path.Combine(_testFilesDir, "no-frontmatter.md");
         File.WriteAllText(mdPath, mdContent);
 
-        var processor = new MarkdownProcessor(new SsgOptions
-        {
-            ContentsPath = _testFilesDir,
-            StaticPath = _testDir,
-            OutputPath = _testDir,
-            AssetsDirectoryName = "test-assets",
-        }, new ImageProcessor());
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() => processor.ProcessAsync(mdPath));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => CreateProcessor().ProcessAsync(mdPath));
     }
 
     [Fact]
@@ -111,15 +99,7 @@ public sealed class MarkdownProcessorTests : IDisposable
         var mdPath = Path.Combine(_testFilesDir, "rich.md");
         File.WriteAllText(mdPath, mdContent);
 
-        var processor = new MarkdownProcessor(new SsgOptions
-        {
-            ContentsPath = _testFilesDir,
-            StaticPath = _testDir,
-            OutputPath = _testDir,
-            AssetsDirectoryName = "test-assets",
-        }, new ImageProcessor());
-
-        var htmlContent = await processor.ProcessAsync(mdPath);
+        var htmlContent = await CreateProcessor().ProcessAsync(mdPath);
 
         Assert.Contains("<strong>Bold</strong>", htmlContent);
         Assert.Contains("<em>italic</em>", htmlContent);
@@ -129,77 +109,149 @@ public sealed class MarkdownProcessorTests : IDisposable
     }
 
     [Fact]
-    public async Task ProcessAsync_OnlyProcessesReferencedImagesUnderContentHashDirectory()
+    public async Task ProcessAsync_ReferencedImage_MaterializedIntoPageOutputWithRelativeUrl()
     {
-        var mdContent = """
-            ---
-            title: Post With Image
-            createdAt: 2024-01-15
-            ---
-
-            ![Used](used.png)
-            """;
-
-        var mdPath = Path.Combine(_testFilesDir, "with-image.md");
-        File.WriteAllText(mdPath, mdContent);
+        var mdPath = CreateMarkdownFile("with-image.md", "![Used](used.png)");
         await CreateTestImageAsync(Path.Combine(_testFilesDir, "used.png"), 1200, 800);
         await CreateTestImageAsync(Path.Combine(_testFilesDir, "unused.png"), 800, 600);
 
-        var processor = new MarkdownProcessor(new SsgOptions
-        {
-            ContentsPath = _testFilesDir,
-            StaticPath = _testDir,
-            OutputPath = _testDir,
-            AssetsDirectoryName = "test-assets",
-        }, new ImageProcessor());
+        var htmlContent = await WithPageContextAsync(
+            "/blog/with-image/",
+            Path.Combine("blog", "with-image"),
+            () => CreateProcessor().ProcessAsync(mdPath));
 
-        var htmlContent = await processor.ProcessAsync(mdPath);
-        var assetDirectory = Assert.Single(Directory.GetDirectories(Path.Combine(_testDir, "test-assets")));
-        var contentKey = Path.GetFileName(assetDirectory);
-        var generatedFiles = Directory.GetFiles(assetDirectory, "*.webp")
+        var pageOutputDir = Path.Combine(_outputDir, "blog", "with-image");
+        var generatedFiles = Directory.GetFiles(pageOutputDir, "*.webp")
             .Select(Path.GetFileName)
-            .Where(static fileName => fileName is not null)
             .Cast<string>()
             .ToArray();
 
-        Assert.Contains($"/test-assets/{contentKey}/used.png.", htmlContent, StringComparison.Ordinal);
+        Assert.Contains("src=\"./used.png.", htmlContent, StringComparison.Ordinal);
         Assert.Contains(generatedFiles, static fileName => fileName.StartsWith("used.png.", StringComparison.Ordinal));
         Assert.DoesNotContain(generatedFiles, static fileName => fileName.StartsWith("unused.png.", StringComparison.Ordinal));
     }
 
     [Fact]
-    public async Task ProcessAsync_MixedExtensions_UsesExactReferencedFileNames()
+    public async Task ProcessAsync_ImageInSubdirectory_ResolvesAndKeepsRelativeStructure()
     {
-        var mdContent = """
-            ---
-            title: Mixed Extensions
-            createdAt: 2024-01-15
-            ---
+        Directory.CreateDirectory(Path.Combine(_testFilesDir, "images"));
+        var mdPath = CreateMarkdownFile("subdir.md", "![Photo](./images/photo.png)");
+        await CreateTestImageAsync(Path.Combine(_testFilesDir, "images", "photo.png"), 640, 480);
 
-            ![Jpg](foo.jpg)
+        var htmlContent = await WithPageContextAsync(
+            "/blog/subdir/",
+            Path.Combine("blog", "subdir"),
+            () => CreateProcessor().ProcessAsync(mdPath));
 
-            ![Png](foo.png)
-            """;
+        var imageOutputDir = Path.Combine(_outputDir, "blog", "subdir", "images");
+        Assert.Contains("src=\"./images/photo.png.", htmlContent, StringComparison.Ordinal);
+        Assert.NotEmpty(Directory.GetFiles(imageOutputDir, "photo.png.*.webp"));
+    }
 
-        var mdPath = Path.Combine(_testFilesDir, "mixed.md");
-        File.WriteAllText(mdPath, mdContent);
-        await CreateTestImageAsync(Path.Combine(_testFilesDir, "foo.jpg"), 900, 450);
-        await CreateTestImageAsync(Path.Combine(_testFilesDir, "foo.png"), 400, 200);
+    [Fact]
+    public async Task ProcessAsync_ImagesAreCachedAcrossOutputCleans()
+    {
+        var mdPath = CreateMarkdownFile("cached.md", "![Used](used.png)");
+        await CreateTestImageAsync(Path.Combine(_testFilesDir, "used.png"), 800, 600);
 
-        var processor = new MarkdownProcessor(new SsgOptions
+        await WithPageContextAsync("/p/", "p", () => CreateProcessor().ProcessAsync(mdPath));
+
+        var cacheFiles = Directory.GetFiles(_cacheDir, "*.webp", SearchOption.AllDirectories);
+        Assert.NotEmpty(cacheFiles);
+        var cacheWriteTimes = cacheFiles.ToDictionary(static f => f, static f => File.GetLastWriteTimeUtc(f));
+
+        // Simulate a clean build: output wiped, cache survives, no re-encode.
+        Directory.Delete(_outputDir, recursive: true);
+        await Task.Delay(100);
+
+        await WithPageContextAsync("/p/", "p", () => CreateProcessor().ProcessAsync(mdPath));
+
+        Assert.NotEmpty(Directory.GetFiles(Path.Combine(_outputDir, "p"), "*.webp"));
+        foreach (var (file, writeTime) in cacheWriteTimes)
+        {
+            Assert.Equal(writeTime, File.GetLastWriteTimeUtc(file));
+        }
+    }
+
+    [Fact]
+    public async Task ProcessAsync_MissingImage_ThrowsWithFileAndUrl()
+    {
+        var mdPath = CreateMarkdownFile("broken.md", "![Missing](missing.png)");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => WithPageContextAsync("/p/", "p", () => CreateProcessor().ProcessAsync(mdPath)));
+
+        Assert.Contains("missing.png", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("broken.md", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ImageOutsideContentDirectory_Throws()
+    {
+        var mdPath = CreateMarkdownFile("escape.md", "![Escape](../escape.png)");
+        await CreateTestImageAsync(Path.Combine(_testDir, "escape.png"), 320, 240);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => WithPageContextAsync("/p/", "p", () => CreateProcessor().ProcessAsync(mdPath)));
+
+        Assert.Contains("resolves outside", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ImageWithoutPageRenderContext_Throws()
+    {
+        var mdPath = CreateMarkdownFile("no-context.md", "![Used](used.png)");
+        await CreateTestImageAsync(Path.Combine(_testFilesDir, "used.png"), 320, 240);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => CreateProcessor().ProcessAsync(mdPath));
+
+        Assert.Contains("page render", exception.Message, StringComparison.Ordinal);
+    }
+
+    private MarkdownProcessor CreateProcessor()
+    {
+        return new MarkdownProcessor(new SsgOptions
         {
             ContentsPath = _testFilesDir,
             StaticPath = _testDir,
-            OutputPath = _testDir,
-            AssetsDirectoryName = "test-assets",
+            OutputPath = _outputDir,
+            ImageCachePath = _cacheDir,
         }, new ImageProcessor());
+    }
 
-        var htmlContent = await processor.ProcessAsync(mdPath);
-        var assetDirectory = Assert.Single(Directory.GetDirectories(Path.Combine(_testDir, "test-assets")));
-        var contentKey = Path.GetFileName(assetDirectory);
+    private string CreateMarkdownFile(string fileName, string body)
+    {
+        var content = $"""
+            ---
+            title: Test
+            createdAt: 2024-01-15
+            ---
 
-        Assert.Contains($"/test-assets/{contentKey}/foo.jpg.", htmlContent, StringComparison.Ordinal);
-        Assert.Contains($"/test-assets/{contentKey}/foo.png.", htmlContent, StringComparison.Ordinal);
+            {body}
+            """;
+
+        var path = Path.Combine(_testFilesDir, fileName);
+        File.WriteAllText(path, content);
+        return path;
+    }
+
+    private static async Task<T> WithPageContextAsync<T>(string routePath, string outputRelativeDirectory, Func<Task<T>> action)
+    {
+        PageRenderContext.SetCurrent(new PageRenderContext
+        {
+            RoutePath = routePath,
+            OutputRelativeDirectory = outputRelativeDirectory,
+        });
+
+        try
+        {
+            return await action();
+        }
+        finally
+        {
+            PageRenderContext.SetCurrent(null);
+        }
     }
 
     private static async Task CreateTestImageAsync(string path, int width, int height)
@@ -214,19 +266,6 @@ public sealed class MarkdownProcessorTests : IDisposable
             }
         }
 
-        var extension = Path.GetExtension(path).ToLowerInvariant();
-        switch (extension)
-        {
-            case ".jpg":
-            case ".jpeg":
-                await image.SaveAsJpegAsync(path);
-                break;
-
-            default:
-                await image.SaveAsPngAsync(path);
-                break;
-        }
+        await image.SaveAsPngAsync(path);
     }
-
-    #endregion
 }

@@ -5,24 +5,15 @@
 
 Kiji is a static site generator framework for .NET. Pages are Razor components
 rendered to static HTML via `HtmlRenderer`, assembled with a minimal-API style
-builder, with a built-in on-demand dev server.
-
-## Packages
-
-| Package | Description |
-| --- | --- |
-| `Kiji` | Core: routing, rendering, site artifacts, dev server |
-| `Kiji.Markdown` | Markdown content pipeline with YAML front matter |
-| `Kiji.Images` | Responsive WebP image optimization (ImageSharp) |
-| `Kiji.Feeds` | RSS feed generation (`app.MapFeed(...)`) |
-| `Kiji.Sitemaps` | Sitemap generation (`app.MapSitemap()`) |
+builder. A single `Kiji` package includes the markdown content pipeline (YAML
+front matter), responsive WebP image optimization, RSS feed and sitemap
+artifacts, and a live-reloading on-demand dev server.
 
 ## Getting started
 
 ```csharp
 using Kiji;
 using Kiji.Feeds;
-using Kiji.Images;
 using Kiji.Markdown;
 using Kiji.Sitemaps;
 
@@ -32,36 +23,67 @@ builder.Site = new SiteInfo
     BaseUrl = new Uri("https://example.com"),
     Name = "My Site",
 };
-builder.AddImageOptimization();
 
-var posts = builder.AddMarkdownContent<FrontMatter>()
+// Front matter is site-defined: declare your own shape.
+var posts = builder.AddMarkdownContent<PostFrontMatter>()
     .WithKey(post => post.FileInfo.FileNameWithoutExtension)
     .OrderByDescending(post => post.FrontMatter.CreatedAt);
 
 await using var app = builder.Build();
-app.MapPages<Root>();
-app.MapNotFound<NotFound>();
-app.MapContent<BlogPage, MarkdownContent<FrontMatter>>(posts, post => new { Slug = ... });
-app.MapFeed(posts, post => new FeedItem(post.FrontMatter.Title!, post.FrontMatter.Description!, post.FrontMatter.CreatedAt!.Value));
+
+app.MapRoot<Root>(); // the document component wrapping every page
+app.MapPages(typeof(Root).Assembly.GetTypes()
+    .Where(t => t.Namespace == "MySite.Pages")); // explicit page registration
+app.MapNotFound<NotFound>(); // rendered as 404.html
+
+app.MapContent<PostPage, MarkdownContent<PostFrontMatter>>(
+    posts,
+    post => new { Slug = post.FileInfo.FileNameWithoutExtension },
+    post => post.FrontMatter.UpdatedAt); // optional: sitemap <lastmod>
+
+app.MapFeed(posts, async (post, ct) =>
+    new FeedItem(post.FrontMatter.Title!, post.FrontMatter.Description!, post.FrontMatter.CreatedAt!.Value)
+    {
+        ContentHtml = await post.RenderAsync(ct), // optional: <content:encoded>
+    });
 app.MapSitemap();
 
-return await app.RunAsync(); // build (default) | clean | serve [--port <n>] | preview [--port <n>]
+return await app.RunAsync(); // build (default) | dev [--port <n>] | preview [--port <n>]
 ```
 
-RSS feeds and sitemaps are opt-in: call `app.MapFeed(...)` / `app.MapSitemap()`
-explicitly. Custom site-wide outputs implement `ISiteArtifact` and register via
-`app.MapArtifact(...)`. Per-file markdown post-processing (e.g. heading anchor
-links) hooks in via `AddMarkdownContent(options => ...)` — see the
-[Kiji.Markdown README](src/Kiji.Markdown/README.md).
+- `dotnet run` — builds the site into `dist` (cleaned first)
+- `dotnet run dev` — on-demand dev server with live reload
+- `dotnet run preview` — serves the built `dist` output
+
+Add `dist/` and `.kiji/` (the build cache) to your site's `.gitignore`.
+
+## Concepts
+
+- **Explicit pages**: `MapRoot<TRoot>()` registers the document component (it must
+  declare a `RouteData` parameter); `MapPages(...)` takes the routable components
+  explicitly — gather them with LINQ as above.
+- **Content collections**: `builder.AddContentSource(...)` /
+  `AddMarkdownContent<TFrontMatter>()` declare lazily materialized collections,
+  consumable from components via `@inject` and from route mappings via
+  `MapContent` / `MapRoutes`.
+- **Page-bundle images**: local images referenced from markdown are optimized to
+  responsive WebP variants written next to the page's `index.html` and referenced
+  with `./`-relative URLs, so sites work at any base path. Encoded variants are
+  cached under `.kiji/cache` so unchanged images are never re-encoded. Replace the
+  backend by registering your own `IImageAssetProcessor` in `builder.Services`.
+- **Trailing slashes**: pages are generated as `route/index.html`; the dev and
+  preview servers resolve `/route` and `/route/` to the same page without
+  redirecting. Canonical URLs use the trailing-slash form.
+- **Artifacts**: RSS feeds and sitemaps are opt-in via `app.MapFeed(...)` /
+  `app.MapSitemap()`. Custom site-wide outputs implement `ISiteArtifact` and
+  register via `app.MapArtifact(...)`.
+- **Markdown pipeline**: customize Markdig, front matter deserialization, and
+  HTML post-processing (e.g. heading anchors) via `AddMarkdownContent(options => ...)`.
 
 ## Repository layout
 
-- `src/Kiji`: core SSG runtime, routing, rendering, site artifacts, and dev server
-- `src/Kiji.Markdown`: markdown content pipeline and extensions
-- `src/Kiji.Images`: responsive image generation support
-- `src/Kiji.Feeds`: RSS feed artifact
-- `src/Kiji.Sitemaps`: sitemap artifact
-- `src/Kiji.Tests`: unit and integration tests for the Kiji stack
+- `src/Kiji`: the framework — routing, rendering, markdown, images, feeds, sitemaps, dev server
+- `src/Kiji.Tests`: unit and integration tests
 
 ## Build
 
@@ -89,7 +111,7 @@ git tags and published to NuGet.org by GitHub Actions:
    ```
 
 3. The [release workflow](.github/workflows/release.yml) builds, tests, packs,
-   and pushes the packages (with symbol packages) to NuGet.org.
+   and pushes the package (with symbol package) to NuGet.org.
 
 For a dry run, tag a prerelease first (e.g. `v0.1.0-preview.1`) and confirm the
 listing on NuGet.org before tagging the final version.

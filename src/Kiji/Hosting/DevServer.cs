@@ -26,7 +26,7 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
 
     internal async Task<WebApplication> StartAsync(SsgOptions options, int port, CancellationToken cancellationToken)
     {
-        Directory.CreateDirectory(Path.Combine(options.OutputPath, options.AssetsDirectoryName));
+        Directory.CreateDirectory(options.OutputPath);
 
         var builder = WebApplication.CreateSlimBuilder();
         builder.Logging.SetMinimumLevel(LogLevel.Warning);
@@ -54,17 +54,21 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
             await context.Response.WriteAsync(LiveReloadScript.Value, context.RequestAborted);
         });
 
-        web.UseStaticFiles(new StaticFileOptions
+        if (Directory.Exists(options.StaticPath))
         {
-            FileProvider = new PhysicalFileProvider(options.StaticPath),
-            ServeUnknownFileTypes = true,
-            OnPrepareResponse = static context => context.Context.Response.Headers.CacheControl = "no-store",
-        });
+            web.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = new PhysicalFileProvider(options.StaticPath),
+                ServeUnknownFileTypes = true,
+                OnPrepareResponse = static context => context.Context.Response.Headers.CacheControl = "no-store",
+            });
+        }
 
+        // Page-bundle assets (e.g. optimized images) are materialized into the output
+        // mirror during on-demand page renders and served from there.
         web.UseStaticFiles(new StaticFileOptions
         {
-            FileProvider = new PhysicalFileProvider(Path.Combine(options.OutputPath, options.AssetsDirectoryName)),
-            RequestPath = "/" + options.AssetsDirectoryName,
+            FileProvider = new PhysicalFileProvider(options.OutputPath),
             ServeUnknownFileTypes = true,
             OnPrepareResponse = static context => context.Context.Response.Headers.CacheControl = "no-store",
         });
@@ -112,11 +116,11 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
 
         if (!snapshot.PagesByRoute.TryGetValue(path, out var page))
         {
-            // Mirror Cloudflare's auto-trailing-slash behavior so dev matches production.
-            if (!path.EndsWith('/') && snapshot.PagesByRoute.ContainsKey(path + "/"))
+            // Resolve /route and /route/ to the same page without redirecting,
+            // matching common static host behavior for directory-style output.
+            if (!path.EndsWith('/') && snapshot.PagesByRoute.TryGetValue(path + "/", out var slashPage))
             {
-                context.Response.Redirect(path + "/" + context.Request.QueryString, permanent: true);
-                context.Response.StatusCode = StatusCodes.Status308PermanentRedirect;
+                await WritePageAsync(context, slashPage, StatusCodes.Status200OK);
                 return;
             }
 
@@ -168,6 +172,11 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
 
     private void WatchDirectory(string path, bool contentDirectory)
     {
+        if (!Directory.Exists(path))
+        {
+            return;
+        }
+
         var watcher = new FileSystemWatcher(path)
         {
             IncludeSubdirectories = true,
@@ -195,9 +204,13 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
             _contentChanged = true;
         }
 
-        // Editors fire multiple events per save; debounce before reloading.
-        _debounceTimer ??= new Timer(_ => OnDebounceElapsed(), state: null, Timeout.Infinite, Timeout.Infinite);
-        _debounceTimer.Change(DebounceMilliseconds, Timeout.Infinite);
+        // Editors fire multiple events per save; debounce before reloading. Watcher
+        // callbacks arrive on thread-pool threads, so timer creation must be locked.
+        lock (_snapshotLock)
+        {
+            _debounceTimer ??= new Timer(_ => OnDebounceElapsed(), state: null, Timeout.Infinite, Timeout.Infinite);
+            _debounceTimer.Change(DebounceMilliseconds, Timeout.Infinite);
+        }
     }
 
     private void OnDebounceElapsed()

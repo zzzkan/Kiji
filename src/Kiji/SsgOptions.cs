@@ -6,21 +6,23 @@ namespace Kiji;
 public sealed record SsgOptions
 {
     /// <summary>
-    /// Gets or sets the absolute path to the contents directory.
+    /// Gets or sets the absolute path to the contents directory. The directory may not
+    /// exist; content sources that need it (e.g. markdown) report their own errors.
     /// </summary>
     public required string ContentsPath
     {
         get;
-        init => field = ValidateExistingDirectory(value);
+        init => field = ValidateAbsolutePath(value);
     }
 
     /// <summary>
-    /// Gets or sets the absolute path to the static assets directory.
+    /// Gets or sets the absolute path to the static assets directory. The directory may
+    /// not exist; static file copying is skipped in that case.
     /// </summary>
     public required string StaticPath
     {
         get;
-        init => field = ValidateExistingDirectory(value);
+        init => field = ValidateAbsolutePath(value);
     }
 
     /// <summary>
@@ -33,23 +35,14 @@ public sealed record SsgOptions
     }
 
     /// <summary>
-    /// Gets or sets the subdirectory name under <see cref="OutputPath"/> for generated post assets. Defaults to "_assets".
+    /// Gets or sets the persistent image cache directory. When set, encoded image
+    /// variants are kept here across builds and copied into the output, so unchanged
+    /// images are not re-encoded. When null, variants are encoded directly into the output.
     /// </summary>
-    public string AssetsDirectoryName
+    public string? ImageCachePath
     {
         get;
-        init => field = ValidateAssetsDirectoryName(value);
-    } = "_assets";
-
-    private static string ValidateExistingDirectory(string value)
-    {
-        var fullPath = ValidateAbsolutePath(value);
-        if (!Directory.Exists(fullPath))
-        {
-            throw new DirectoryNotFoundException($"Directory not found: {fullPath}");
-        }
-
-        return fullPath;
+        init => field = value is null ? null : ValidateAbsolutePath(value);
     }
 
     private static string ValidateAbsolutePath(string value)
@@ -62,28 +55,5 @@ public sealed record SsgOptions
         }
 
         return Path.GetFullPath(value);
-    }
-
-    private static string ValidateAssetsDirectoryName(string value)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(value);
-
-        var trimmed = value.Trim();
-        if (trimmed is "." or "..")
-        {
-            throw new ArgumentException("AssetsDirectoryName must be a single directory name.", nameof(value));
-        }
-
-        if (!string.Equals(trimmed, Path.GetFileName(trimmed), StringComparison.Ordinal))
-        {
-            throw new ArgumentException("AssetsDirectoryName must be a single directory name.", nameof(value));
-        }
-
-        if (trimmed.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
-        {
-            throw new ArgumentException("AssetsDirectoryName contains invalid file name characters.", nameof(value));
-        }
-
-        return trimmed;
     }
 }

@@ -7,25 +7,24 @@ namespace Kiji.Markdown;
 
 /// <summary>
 /// Per-document state for responsive image rendering: the processed image lookup,
-/// the content-scoped asset location, and the image counter driving eager/lazy loading.
+/// the optional CSS class, and the image counter driving eager/lazy loading.
 /// </summary>
 internal sealed class ResponsiveImageContext(
     IReadOnlyDictionary<string, ProcessedImageInfo> imageInfoLookup,
-    string assetsBaseUrl,
-    string contentKey)
+    string? imageCssClass = null)
 {
     public IReadOnlyDictionary<string, ProcessedImageInfo> ImageInfoLookup { get; } = imageInfoLookup;
 
-    public string AssetsBaseUrl { get; } = $"/{assetsBaseUrl.Trim('/')}";
-
-    public string ContentKey { get; } = contentKey;
+    public string? ImageCssClass { get; } = imageCssClass;
 
     public int ImageCount;
 }
 
 /// <summary>
-/// Renders local markdown images as responsive images with lazy loading and CLS optimization.
-/// Attached per renderer (not per pipeline) because its state is per document.
+/// Renders local markdown images as responsive images with lazy loading and CLS
+/// optimization. Variants live in the page's own output directory, so URLs are
+/// <c>./</c>-relative. Attached per renderer (not per pipeline) because its state
+/// is per document.
 /// </summary>
 internal static class ResponsiveImageWriter
 {
@@ -58,52 +57,38 @@ internal static class ResponsiveImageWriter
 
     private static void WriteResponsiveImage(HtmlRenderer renderer, ResponsiveImageContext context, string url, string alt, string title)
     {
-        var imageReferenceKey = ImageReferenceKey.FromMarkdownUrl(url);
+        var referenceKey = ImageReferenceKey.FromMarkdownUrl(url);
 
-        if (!context.ImageInfoLookup.TryGetValue(imageReferenceKey, out var imageInfo))
+        if (!context.ImageInfoLookup.TryGetValue(referenceKey, out var imageInfo) || imageInfo.Variants.Count == 0)
         {
             // Fallback: if no image info found, render as simple img
             WriteSimpleImage(renderer, context, url, alt, title);
             return;
         }
 
-        // Image path: {assetsBaseUrl}/{contentKey}/{filename}.{hash}.{width}w.webp
-        var availableWidths = imageInfo.AvailableWidths;
-        var largestWidth = availableWidths.Length > 0 ? availableWidths.Max() : imageInfo.OriginalWidth;
-        var defaultImageUrl = $"{context.AssetsBaseUrl}/{context.ContentKey}/{imageInfo.AssetFileNameBase}.{imageInfo.ContentHash}.{largestWidth}w.webp";
+        // Variants sit beside the page output, mirroring the reference's directory part.
+        var directory = GetDirectoryPrefix(referenceKey);
+        var variants = imageInfo.Variants;
+        var largest = variants[^1];
 
-        // Generate srcset with all available widths
-        var srcsetParts = availableWidths.Select(w =>
-            $"{context.AssetsBaseUrl}/{context.ContentKey}/{imageInfo.AssetFileNameBase}.{imageInfo.ContentHash}.{w}w.webp {w}w"
-        );
-        var srcset = string.Join(", ", srcsetParts);
-
-        // Generate sizes attribute based on maximum width (capped at 960px)
-        var maxSizeForSizes = Math.Min(largestWidth, 960);
-        var sizes = $"(max-width: {maxSizeForSizes}px) 100vw, {maxSizeForSizes}px";
+        var srcset = string.Join(", ", variants.Select(variant => $"./{directory}{variant.FileName} {variant.Width}w"));
+        var sizes = $"(max-width: {largest.Width}px) 100vw, {largest.Width}px";
 
         renderer.Write("<img src=\"");
-        renderer.WriteEscapeUrl(defaultImageUrl);
+        renderer.WriteEscapeUrl($"./{directory}{largest.FileName}");
         renderer.Write("\" srcset=\"");
-        renderer.Write(srcset);
+        renderer.WriteEscape(srcset);
         renderer.Write("\" sizes=\"");
-        renderer.Write(sizes);
+        renderer.WriteEscape(sizes);
         renderer.Write("\" alt=\"");
         renderer.WriteEscape(alt);
-        var loading = context.ImageCount == 0 ? "eager" : "lazy";
-        renderer.Write($"\" loading=\"{loading}\" decoding=\"async\" class=\"blog-image\"");
-        context.ImageCount++;
+        renderer.Write("\"");
+        WriteCommonImageAttributes(renderer, context);
 
         // Add actual image dimensions based on original aspect ratio
         renderer.Write($" width=\"{imageInfo.OriginalWidth}\" height=\"{imageInfo.OriginalHeight}\"");
 
-        if (!string.IsNullOrEmpty(title))
-        {
-            renderer.Write(" title=\"");
-            renderer.WriteEscape(title);
-            renderer.Write("\"");
-        }
-
+        WriteTitleAttribute(renderer, title);
         renderer.Write(">");
     }
 
@@ -113,18 +98,41 @@ internal static class ResponsiveImageWriter
         renderer.WriteEscapeUrl(url);
         renderer.Write("\" alt=\"");
         renderer.WriteEscape(alt);
+        renderer.Write("\"");
+        WriteCommonImageAttributes(renderer, context);
+        WriteTitleAttribute(renderer, title);
+        renderer.Write(">");
+    }
+
+    private static string GetDirectoryPrefix(string referenceKey)
+    {
+        var separatorIndex = referenceKey.LastIndexOf('/');
+        return separatorIndex >= 0 ? referenceKey[..(separatorIndex + 1)] : string.Empty;
+    }
+
+    private static void WriteCommonImageAttributes(HtmlRenderer renderer, ResponsiveImageContext context)
+    {
+        // The first image is above the fold more often than not; load it eagerly.
         var loading = context.ImageCount == 0 ? "eager" : "lazy";
-        renderer.Write($"\" loading=\"{loading}\" decoding=\"async\" class=\"blog-image\"");
+        renderer.Write($" loading=\"{loading}\" decoding=\"async\"");
         context.ImageCount++;
 
+        if (!string.IsNullOrEmpty(context.ImageCssClass))
+        {
+            renderer.Write(" class=\"");
+            renderer.WriteEscape(context.ImageCssClass);
+            renderer.Write("\"");
+        }
+    }
+
+    private static void WriteTitleAttribute(HtmlRenderer renderer, string title)
+    {
         if (!string.IsNullOrEmpty(title))
         {
             renderer.Write(" title=\"");
             renderer.WriteEscape(title);
             renderer.Write("\"");
         }
-
-        renderer.Write(">");
     }
 
     private static string GetAltText(LinkInline link)

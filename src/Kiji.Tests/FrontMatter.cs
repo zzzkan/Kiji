@@ -1,7 +1,8 @@
-namespace Kiji.Markdown;
+namespace Kiji.Tests;
 
 /// <summary>
-/// Represents the YAML front matter in a markdown file.
+/// The site-defined YAML front matter shape used by the test site. Kiji itself is
+/// front-matter-shape agnostic; each site declares its own type.
 /// </summary>
 public sealed class FrontMatter
 {

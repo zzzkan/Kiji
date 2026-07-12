@@ -18,10 +18,6 @@
 
   <ItemGroup>
     <ProjectReference Include="../Kiji/Kiji.csproj" />
-    <ProjectReference Include="../Kiji.Markdown/Kiji.Markdown.csproj" />
-    <ProjectReference Include="../Kiji.Images/Kiji.Images.csproj" />
-    <ProjectReference Include="../Kiji.Feeds/Kiji.Feeds.csproj" />
-    <ProjectReference Include="../Kiji.Sitemaps/Kiji.Sitemaps.csproj" />
   </ItemGroup>
 
 </Project>

@@ -22,10 +22,14 @@ namespace Kiji.Routing;
 /// <param name="ExcludeFromSitemap">
 /// Indicates whether this page should be excluded from the generated sitemap.
 /// </param>
+/// <param name="LastModified">
+/// Optional last-modification timestamp, emitted as the sitemap <c>lastmod</c>.
+/// </param>
 public sealed record PlannedPage(
     string SourceIdentifier,
     IReadOnlyDictionary<string, string> Parameters,
     string RoutePath,
     string OutputRelativePath,
     string? AssociatedContentIdentity = null,
-    bool ExcludeFromSitemap = false);
+    bool ExcludeFromSitemap = false,
+    DateTimeOffset? LastModified = null);

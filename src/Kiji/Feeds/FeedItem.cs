@@ -7,4 +7,10 @@ namespace Kiji.Feeds;
 /// <param name="Title">The entry title.</param>
 /// <param name="Description">The entry description.</param>
 /// <param name="PublishedAt">The publication timestamp.</param>
-public sealed record FeedItem(string Title, string Description, DateTimeOffset PublishedAt);
+public sealed record FeedItem(string Title, string Description, DateTimeOffset PublishedAt)
+{
+    /// <summary>
+    /// Optional full entry HTML, emitted as <c>content:encoded</c> when set.
+    /// </summary>
+    public string? ContentHtml { get; init; }
+}

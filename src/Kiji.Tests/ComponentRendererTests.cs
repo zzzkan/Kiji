@@ -94,8 +94,8 @@ public sealed class ComponentRendererTests
             CreateRootParameters(pageRequest),
             siteInfo.BaseUrl.AppendRelativePath(pageRequest.RoutePath));
 
-        Assert.Contains("<title>Tag: C# Basics - zzzkan.me</title>", html, StringComparison.Ordinal);
-        Assert.Contains("<h1>Tag: C# Basics</h1>", html, StringComparison.Ordinal);
+        Assert.Contains("<title>Tag: C Sharp Basics - zzzkan.me</title>", html, StringComparison.Ordinal);
+        Assert.Contains("<h1>Tag: C Sharp Basics</h1>", html, StringComparison.Ordinal);
         Assert.Contains("Hello World", html, StringComparison.Ordinal);
         Assert.DoesNotContain("Other Post", html, StringComparison.Ordinal);
         Assert.Contains("<link rel=\"canonical\" href=\"https://example.com/tags/c-sharp-basics/\"", html, StringComparison.Ordinal);
@@ -164,7 +164,7 @@ public sealed class ComponentRendererTests
                 "Hello world description",
                 new DateOnly(2026, 3, 18),
                 new DateOnly(2026, 3, 19),
-                "C# Basics",
+                "C Sharp Basics",
                 "Testing"), "<p>Hello body</p>"),
             (TestArticleContents.CreatePost(
                 "other-post",

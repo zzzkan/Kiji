@@ -12,9 +12,11 @@ internal sealed class SiteSnapshot
     internal SiteSnapshot(IReadOnlyList<PageRenderRequest> pages)
     {
         Pages = pages;
+        // Ordinal (case-sensitive) so dev matches production static hosts, which
+        // serve files case-sensitively.
         PagesByRoute = pages.ToFrozenDictionary(
             static page => page.RoutePath,
-            StringComparer.OrdinalIgnoreCase);
+            StringComparer.Ordinal);
     }
 
     internal IReadOnlyList<PageRenderRequest> Pages { get; }

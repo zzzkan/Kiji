@@ -49,18 +49,47 @@ internal static class TestArticleContents
 
     public static KijiApp MapSite(KijiApp app, ContentCollection<Post> posts)
     {
-        app.MapPages<Root>();
+        app.MapRoot<Root>();
+        app.MapPages(TestSitePages.All);
         app.MapNotFound<NotFoundPage>();
 
-        app.MapContent<PostPage, Post>(posts, static post => new { post.Slug });
-        app.MapRoutes<TagsPage>(() => Slug.CreateNameMap(
-                posts.Items.SelectMany(static post => post.Tags.Select(static tag => tag.Name)),
-                "tag",
-                "Tags")
+        app.MapContent<PostPage, Post>(
+            posts,
+            static post => new { post.Slug },
+            static post => post.UpdatedAt ?? post.CreatedAt);
+        app.MapRoutes<TagsPage>(() => CreateTagNameMap(
+                posts.Items.SelectMany(static post => post.Tags.Select(static tag => tag.Name)))
             .OrderBy(static pair => pair.Value, StringComparer.OrdinalIgnoreCase)
             .Select(static pair => new { TagSlug = pair.Key }));
 
         return app;
+    }
+
+    /// <summary>
+    /// Site-side taxonomy helper: maps canonical tag slugs to their display names,
+    /// rejecting tags whose slugs collide.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> CreateTagNameMap(IEnumerable<string> tagNames)
+    {
+        var namesBySlug = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var tagName in tagNames
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
+            .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var slug = Slug.Normalize(tagName);
+            if (namesBySlug.TryGetValue(slug, out var existingValue) &&
+                !string.Equals(existingValue, tagName, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Tags '{existingValue}' and '{tagName}' both normalize to canonical tag slug '{slug}'. Rename one of the tags so each tag keeps a unique canonical URL.");
+            }
+
+            namesBySlug[slug] = tagName;
+        }
+
+        return namesBySlug;
     }
 
     public static IReadOnlyList<PageRenderRequest> CreatePageRequests(params (Post Metadata, string Html)[] entries)

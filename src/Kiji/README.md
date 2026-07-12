@@ -2,7 +2,9 @@
 
 Kiji is a static site generator framework for .NET. Pages are Razor components
 rendered to static HTML via `HtmlRenderer`, assembled with a minimal-API style
-builder, with a built-in on-demand dev server.
+builder. Includes a markdown content pipeline with YAML front matter, responsive
+WebP image optimization, RSS feed and sitemap artifacts, and a live-reloading
+on-demand dev server.
 
 ## Install
 
@@ -23,18 +25,20 @@ builder.Site = new SiteInfo
 };
 
 await using var app = builder.Build();
-app.MapPages<Root>();          // discovers all @page components in Root's assembly
-app.MapNotFound<NotFound>();   // rendered as 404.html
 
-return await app.RunAsync();   // build (default) | clean | serve | preview
+app.MapRoot<Root>(); // the document component wrapping every page
+app.MapPages(typeof(Root).Assembly.GetTypes()
+    .Where(t => t.Namespace == "MySite.Pages")); // explicit page registration
+app.MapNotFound<NotFound>(); // rendered as 404.html
+
+return await app.RunAsync(); // build (default) | dev [--port <n>] | preview [--port <n>]
 ```
 
-Run `dotnet run` to build the site into `dist/wwwroot`, or `dotnet run serve`
-for the live-reloading dev server.
+Run `dotnet run` to build the site into `dist`, `dotnet run dev` for the
+live-reloading dev server, or `dotnet run preview` to serve the built output.
+Add `dist/` and `.kiji/` (the build cache) to your site's `.gitignore`.
 
-## Related packages
-
-- `Kiji.Markdown` — markdown content sources with YAML front matter
-- `Kiji.Images` — responsive WebP image optimization
-- `Kiji.Feeds` — RSS feed generation (`app.MapFeed(...)`)
-- `Kiji.Sitemaps` — sitemap generation (`app.MapSitemap()`)
+Markdown content (`builder.AddMarkdownContent<TFrontMatter>()`), responsive
+image optimization, RSS feeds (`app.MapFeed(...)`), and sitemaps
+(`app.MapSitemap()`) are all included — see the
+[project README](https://github.com/zzzkan/kiji) for the full walkthrough.

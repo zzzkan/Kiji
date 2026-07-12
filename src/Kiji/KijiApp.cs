@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using Kiji.Assets;
 using Kiji.Generation;
 using Kiji.Hosting;
+using Kiji.Images;
 using Kiji.Rendering;
 using Kiji.Routing;
 using Microsoft.AspNetCore.Builder;
@@ -20,7 +21,7 @@ namespace Kiji;
 /// <summary>
 /// A Kiji static site application. Created via <see cref="KijiBuilder.Build"/>;
 /// declare page mappings with the <c>Map*</c> methods, then dispatch commands
-/// (<c>build</c>, <c>clean</c>, <c>serve</c>, <c>preview</c>) with <see cref="RunAsync"/>.
+/// (<c>build</c>, <c>dev</c>, <c>preview</c>) with <see cref="RunAsync"/>.
 /// </summary>
 public sealed class KijiApp : IAsyncDisposable
 {
@@ -29,12 +30,12 @@ public sealed class KijiApp : IAsyncDisposable
     private readonly KijiBuilder _builder;
     private readonly List<RouteRegistration> _routeRegistrations = [];
     private readonly List<ISiteArtifact> _artifacts = [];
+    private readonly List<Type> _pageTypes = [];
     private Type? _rootComponentType;
-    private Assembly? _pageAssembly;
     private Type? _notFoundComponentType;
     private ServiceProvider? _services;
     private ComponentRenderer? _renderer;
-    private SsgOptions? _serveOptions;
+    private SsgOptions? _activeOptions;
 
     internal KijiApp(KijiBuilder builder)
     {
@@ -59,10 +60,10 @@ public sealed class KijiApp : IAsyncDisposable
     }
 
     /// <summary>
-    /// Registers the root document component and discovers all <c>@page</c> components
-    /// in its assembly. The root component must declare a <c>RouteData</c> parameter.
+    /// Registers the root document component that wraps every page render.
+    /// The root component must declare a <c>RouteData</c> parameter.
     /// </summary>
-    public KijiApp MapPages<TRoot>()
+    public KijiApp MapRoot<TRoot>()
         where TRoot : IComponent
     {
         var rootType = typeof(TRoot);
@@ -74,7 +75,19 @@ public sealed class KijiApp : IAsyncDisposable
         }
 
         _rootComponentType = rootType;
-        _pageAssembly = rootType.Assembly;
+        return this;
+    }
+
+    /// <summary>
+    /// Registers page components explicitly. Every type must declare a <c>@page</c>
+    /// route template. May be called multiple times; a set of pages can be gathered
+    /// with LINQ, e.g. <c>assembly.GetTypes().Where(t => t.Namespace == "MySite.Pages")</c>.
+    /// </summary>
+    public KijiApp MapPages(IEnumerable<Type> pageTypes)
+    {
+        ArgumentNullException.ThrowIfNull(pageTypes);
+
+        _pageTypes.AddRange(pageTypes);
         return this;
     }
 
@@ -96,7 +109,15 @@ public sealed class KijiApp : IAsyncDisposable
     /// which enables route resolution via <see cref="SiteOutputContext.TryResolveRoute"/>
     /// (used by feed artifacts).
     /// </summary>
-    public KijiApp MapContent<TPage, TContent>(ContentCollection<TContent> collection, Func<TContent, object> routeValues)
+    /// <param name="collection">The content collection to expand into pages.</param>
+    /// <param name="routeValues">Projects a content item into its route values.</param>
+    /// <param name="lastModified">
+    /// Optional last-modification timestamp per item, emitted as the sitemap <c>lastmod</c>.
+    /// </param>
+    public KijiApp MapContent<TPage, TContent>(
+        ContentCollection<TContent> collection,
+        Func<TContent, object> routeValues,
+        Func<TContent, DateTimeOffset?>? lastModified = null)
         where TPage : IComponent
         where TContent : class
     {
@@ -107,7 +128,8 @@ public sealed class KijiApp : IAsyncDisposable
             typeof(TPage),
             () => [.. collection.Items.Select(item => new StaticPageRouteEntry(
                 RouteValues.ToDictionary(routeValues(item)),
-                AssociatedContentIdentity: collection.HasKey ? collection.GetKey(item) : null))]));
+                AssociatedContentIdentity: collection.HasKey ? collection.GetKey(item) : null,
+                LastModified: lastModified?.Invoke(item)))]));
         return this;
     }
 
@@ -141,7 +163,7 @@ public sealed class KijiApp : IAsyncDisposable
     }
 
     /// <summary>
-    /// Dispatches the command line: <c>build</c> (default), <c>clean</c>, <c>serve</c>, or <c>preview</c>.
+    /// Dispatches the command line: <c>build</c> (default), <c>dev</c>, or <c>preview</c>.
     /// </summary>
     /// <returns>The process exit code.</returns>
     public async Task<int> RunAsync(CancellationToken cancellationToken = default)
@@ -164,15 +186,11 @@ public sealed class KijiApp : IAsyncDisposable
             switch (command.Kind)
             {
                 case KijiCommandKind.Build:
-                    await BuildSiteAsync(command.Output, command.Clean, cts.Token);
+                    await BuildSiteAsync(cts.Token);
                     return 0;
 
-                case KijiCommandKind.Clean:
-                    CleanOutput();
-                    return 0;
-
-                case KijiCommandKind.Serve:
-                    await ServeAsync(command.Port, cts.Token);
+                case KijiCommandKind.Dev:
+                    await DevAsync(command.Port, cts.Token);
                     return 0;
 
                 case KijiCommandKind.Preview:
@@ -187,20 +205,21 @@ public sealed class KijiApp : IAsyncDisposable
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
-            return 1;
+            // Stopping a long-running server with Ctrl+C is a normal exit; an
+            // interrupted build left partial output and is reported as failure.
+            return command.Kind is KijiCommandKind.Dev or KijiCommandKind.Preview ? 0 : 1;
         }
     }
 
     /// <summary>
-    /// Generates the full static site into the output directory.
+    /// Generates the full static site into the output directory, cleaning it first.
     /// </summary>
-    /// <param name="outputOverride">Optional output directory override.</param>
-    /// <param name="clean">Whether to delete the output directory before generating.</param>
-    public async Task BuildSiteAsync(string? outputOverride = null, bool clean = true, CancellationToken cancellationToken = default)
+    public async Task BuildSiteAsync(CancellationToken cancellationToken = default)
     {
-        var options = _builder.Paths.ResolveForBuild(outputOverride);
+        var options = _builder.Paths.ResolveForBuild();
+        _activeOptions ??= options;
 
-        if (clean && Directory.Exists(options.OutputPath))
+        if (Directory.Exists(options.OutputPath))
         {
             Directory.Delete(options.OutputPath, recursive: true);
         }
@@ -222,9 +241,9 @@ public sealed class KijiApp : IAsyncDisposable
     /// <summary>
     /// Starts the on-demand development server. Pages render per request through the
     /// same pipeline as <see cref="BuildSiteAsync"/>, content changes reload the browser
-    /// automatically, and optimized images are cached under <c>.kiji-cache</c>.
+    /// automatically, and optimized images are cached under <c>.kiji/cache</c>.
     /// </summary>
-    public async Task ServeAsync(int port = 8080, CancellationToken cancellationToken = default)
+    public async Task DevAsync(int port = 8080, CancellationToken cancellationToken = default)
     {
         var (devServer, web) = await StartDevServerAsync(port, cancellationToken);
         await using (devServer)
@@ -253,21 +272,22 @@ public sealed class KijiApp : IAsyncDisposable
 
         await using var web = builder.Build();
 
-        web.Use(static async (context, next) =>
+        var fileProvider = new PhysicalFileProvider(outputPath);
+
+        web.Use(async (context, next) =>
         {
-            // Mirror Cloudflare's auto-trailing-slash behavior.
+            // Resolve /route and /route/ to the same page without redirecting,
+            // matching common static host behavior for directory-style output.
             var path = context.Request.Path.Value ?? "/";
-            if (!path.EndsWith('/') && !Path.HasExtension(path))
+            if (!path.EndsWith('/')
+                && !fileProvider.GetFileInfo(path).Exists
+                && fileProvider.GetFileInfo(path + "/index.html").Exists)
             {
-                context.Response.Redirect(path + "/" + context.Request.QueryString, permanent: true);
-                context.Response.StatusCode = StatusCodes.Status308PermanentRedirect;
-                return;
+                context.Request.Path = path + "/";
             }
 
             await next(context);
         });
-
-        var fileProvider = new PhysicalFileProvider(outputPath);
         web.UseDefaultFiles(new DefaultFilesOptions { FileProvider = fileProvider });
         web.UseStaticFiles(new StaticFileOptions { FileProvider = fileProvider, ServeUnknownFileTypes = true });
 
@@ -307,11 +327,11 @@ public sealed class KijiApp : IAsyncDisposable
         int port,
         CancellationToken cancellationToken)
     {
-        _serveOptions = _builder.Paths.ResolveForServe();
+        _activeOptions = _builder.Paths.ResolveForServe();
         EnsureServices();
 
         var devServer = new DevServer(this);
-        var web = await devServer.StartAsync(_serveOptions, port, cancellationToken);
+        var web = await devServer.StartAsync(_activeOptions, port, cancellationToken);
         return (devServer, web);
     }
 
@@ -329,10 +349,17 @@ public sealed class KijiApp : IAsyncDisposable
     {
         EnsureServices();
 
-        var pageAssembly = _pageAssembly
-            ?? throw new InvalidOperationException("No pages are mapped. Call MapPages<TRoot>() first.");
+        if (_rootComponentType is null)
+        {
+            throw new InvalidOperationException("No root component is mapped. Call MapRoot<TRoot>() first.");
+        }
 
-        var discovered = PageDiscovery.LoadDiscoveredPages(pageAssembly);
+        if (_pageTypes.Count == 0)
+        {
+            throw new InvalidOperationException("No pages are mapped. Call MapPages(...) first.");
+        }
+
+        var discovered = PageDiscovery.FromTypes(_pageTypes);
         discovered = ApplyNotFoundOverride(discovered);
 
         var pagesByComponent = new Dictionary<string, PageDiscovery.DiscoveredPage>(StringComparer.OrdinalIgnoreCase);
@@ -376,7 +403,8 @@ public sealed class KijiApp : IAsyncDisposable
             planned.RoutePath,
             planned.OutputRelativePath,
             AssociatedContentIdentity: planned.AssociatedContentIdentity,
-            ExcludeFromSitemap: planned.ExcludeFromSitemap);
+            ExcludeFromSitemap: planned.ExcludeFromSitemap,
+            LastModified: planned.LastModified);
     }
 
     private static PageDiscovery.DiscoveredPage FindDynamicPage(
@@ -451,25 +479,50 @@ public sealed class KijiApp : IAsyncDisposable
             : page)];
     }
 
-    private Task<string> RenderPageAsync(ComponentRenderer renderer, PageRenderRequest request, CancellationToken cancellationToken)
+    private async Task<string> RenderPageAsync(ComponentRenderer renderer, PageRenderRequest request, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        return renderer.RenderComponentAsync(
-            _rootComponentType!,
-            CreateRootParameters(request),
-            Site.BaseUrl.AppendRelativePath(request.RoutePath));
+        PageRenderContext.SetCurrent(CreatePageRenderContext(request));
+        try
+        {
+            return await renderer.RenderComponentAsync(
+                _rootComponentType!,
+                CreateRootParameters(request),
+                Site.BaseUrl.AppendRelativePath(request.RoutePath));
+        }
+        finally
+        {
+            PageRenderContext.SetCurrent(null);
+        }
     }
 
-    private Task RenderPageAsync(ComponentRenderer renderer, PageRenderRequest request, TextWriter output, CancellationToken cancellationToken)
+    private async Task RenderPageAsync(ComponentRenderer renderer, PageRenderRequest request, TextWriter output, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        return renderer.RenderComponentToAsync(
-            _rootComponentType!,
-            output,
-            CreateRootParameters(request),
-            Site.BaseUrl.AppendRelativePath(request.RoutePath));
+        PageRenderContext.SetCurrent(CreatePageRenderContext(request));
+        try
+        {
+            await renderer.RenderComponentToAsync(
+                _rootComponentType!,
+                output,
+                CreateRootParameters(request),
+                Site.BaseUrl.AppendRelativePath(request.RoutePath));
+        }
+        finally
+        {
+            PageRenderContext.SetCurrent(null);
+        }
+    }
+
+    private static PageRenderContext CreatePageRenderContext(PageRenderRequest request)
+    {
+        return new PageRenderContext
+        {
+            RoutePath = request.RoutePath,
+            OutputRelativeDirectory = Path.GetDirectoryName(request.OutputRelativePath) ?? string.Empty,
+        };
     }
 
     private static Dictionary<string, object?> CreateRootParameters(PageRenderRequest request)
@@ -489,7 +542,8 @@ public sealed class KijiApp : IAsyncDisposable
                 page.RoutePath,
                 page.OutputRelativePath,
                 page.ExcludeFromSitemap,
-                page.AssociatedContentIdentity))]);
+                page.AssociatedContentIdentity,
+                page.LastModified))]);
     }
 
     private async Task GenerateArtifactsAsync(SsgOptions options, SiteSnapshot snapshot, CancellationToken cancellationToken)
@@ -528,16 +582,6 @@ public sealed class KijiApp : IAsyncDisposable
         return fullPath;
     }
 
-    private void CleanOutput()
-    {
-        var outputPath = _builder.Paths.ResolveOutputPath();
-        if (Directory.Exists(outputPath))
-        {
-            Directory.Delete(outputPath, recursive: true);
-            Console.WriteLine($"Removed: {outputPath}");
-        }
-    }
-
     private void EnsureServices()
     {
         if (_services is not null)
@@ -546,8 +590,9 @@ public sealed class KijiApp : IAsyncDisposable
         }
 
         var services = new ServiceCollection();
+        ComponentRenderer.AddComponentRenderingServices(services);
         services.AddSingleton(Site);
-        services.AddSingleton(_ => _serveOptions ?? _builder.Paths.ResolveForBuild());
+        services.AddSingleton(_ => _activeOptions ?? _builder.Paths.ResolveForBuild());
         _builder.Runtime.ApplyRegistrations(services);
 
         foreach (var descriptor in _builder.Services)
@@ -555,7 +600,7 @@ public sealed class KijiApp : IAsyncDisposable
             services.Add(descriptor);
         }
 
-        services.TryAddSingleton<IImageAssetProcessor, NullImageAssetProcessor>();
+        services.TryAddSingleton<IImageAssetProcessor>(static _ => new ImageProcessor());
 
         _services = services.BuildServiceProvider();
         _builder.Runtime.Attach(_services);
@@ -570,18 +615,9 @@ public sealed class KijiApp : IAsyncDisposable
 
         EnsureServices();
 
-        _renderer = ComponentRenderer.Create(
-            services =>
-            {
-                services.AddSingleton(Site);
-                _builder.Runtime.ApplyRegistrations(services);
-                foreach (var descriptor in _builder.Services)
-                {
-                    services.Add(descriptor);
-                }
-            },
-            Site.BaseUrl);
-
+        // The renderer shares the single app container, so components see the exact
+        // same registrations (options, content collections, image backend) as loaders.
+        _renderer = ComponentRenderer.Attach(_services!, Site.BaseUrl);
         return _renderer;
     }
 

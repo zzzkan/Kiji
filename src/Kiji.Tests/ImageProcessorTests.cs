@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Kiji.Images;
 using Xunit;
 using SixLabors.ImageSharp;
@@ -8,11 +9,12 @@ namespace Kiji.Tests;
 /// <summary>
 /// Unit tests for <see cref="ImageProcessor"/>.
 /// </summary>
-public sealed class ImageProcessorTests : IDisposable
+public sealed partial class ImageProcessorTests : IDisposable
 {
     private readonly string _testDir;
     private readonly string _sourceDir;
     private readonly string _outputDir;
+    private readonly string _cacheDir;
     private readonly ImageProcessor _processor = new();
 
     public ImageProcessorTests()
@@ -20,6 +22,7 @@ public sealed class ImageProcessorTests : IDisposable
         _testDir = Path.Combine(Path.GetTempPath(), $"ImageProcessorTests_{Guid.NewGuid():N}");
         _sourceDir = Path.Combine(_testDir, "source");
         _outputDir = Path.Combine(_testDir, "output");
+        _cacheDir = Path.Combine(_testDir, "cache");
         Directory.CreateDirectory(_sourceDir);
         Directory.CreateDirectory(_outputDir);
     }
@@ -30,6 +33,180 @@ public sealed class ImageProcessorTests : IDisposable
         {
             Directory.Delete(_testDir, recursive: true);
         }
+    }
+
+    [Fact]
+    public async Task ProcessImage_LargeImage_GeneratesAscendingVariants()
+    {
+        var imagePath = Path.Combine(_sourceDir, "test-image.png");
+        await CreateTestImageAsync(imagePath, 1920, 1080);
+
+        var info = await _processor.ProcessImageAsync(imagePath, _outputDir);
+
+        Assert.Equal(1920, info.OriginalWidth);
+        Assert.Equal(1080, info.OriginalHeight);
+        Assert.Equal([320, 640, 960, 1280, 1920], info.Variants.Select(static variant => variant.Width));
+
+        foreach (var variant in info.Variants)
+        {
+            Assert.Matches(VariantFileNameRegex(), variant.FileName);
+            Assert.True(File.Exists(Path.Combine(_outputDir, variant.FileName)));
+        }
+    }
+
+    [Fact]
+    public async Task ProcessImage_SmallImage_LimitedVariants()
+    {
+        var imagePath = Path.Combine(_sourceDir, "small-image.png");
+        await CreateTestImageAsync(imagePath, 500, 300);
+
+        var info = await _processor.ProcessImageAsync(imagePath, _outputDir);
+
+        Assert.Equal([320, 500], info.Variants.Select(static variant => variant.Width));
+    }
+
+    [Fact]
+    public async Task ProcessImage_VerySmallImage_OnlyOriginalSize()
+    {
+        var imagePath = Path.Combine(_sourceDir, "tiny-image.png");
+        await CreateTestImageAsync(imagePath, 200, 150);
+
+        var info = await _processor.ProcessImageAsync(imagePath, _outputDir);
+
+        var variant = Assert.Single(info.Variants);
+        Assert.Equal(200, variant.Width);
+    }
+
+    [Fact]
+    public async Task ProcessImage_LargeImage_CappedAtMaxSourceWidth()
+    {
+        var imagePath = Path.Combine(_sourceDir, "huge.png");
+        await CreateTestImageAsync(imagePath, 2500, 1400);
+
+        var info = await _processor.ProcessImageAsync(imagePath, _outputDir);
+
+        Assert.Equal(2500, info.OriginalWidth);
+        Assert.Equal(1400, info.OriginalHeight);
+        Assert.Equal(1920, info.Variants[^1].Width);
+    }
+
+    [Fact]
+    public async Task ProcessImage_ExistingVariants_AreNotRegenerated()
+    {
+        var imagePath = Path.Combine(_sourceDir, "existing.png");
+        await CreateTestImageAsync(imagePath, 800, 600);
+
+        await _processor.ProcessImageAsync(imagePath, _outputDir);
+        var firstWriteTimes = Directory.GetFiles(_outputDir, "*.webp")
+            .ToDictionary(static file => file, static file => File.GetLastWriteTimeUtc(file));
+
+        await Task.Delay(100);
+
+        await _processor.ProcessImageAsync(imagePath, _outputDir);
+
+        foreach (var (file, firstWriteTime) in firstWriteTimes)
+        {
+            Assert.Equal(firstWriteTime, File.GetLastWriteTimeUtc(file));
+        }
+    }
+
+    [Fact]
+    public async Task ProcessImage_ContentChange_ReplacesStaleVariants()
+    {
+        var imagePath = Path.Combine(_sourceDir, "hash-test.png");
+        await CreateTestImageAsync(imagePath, 500, 300);
+
+        var first = await _processor.ProcessImageAsync(imagePath, _outputDir);
+        var firstFileNames = first.Variants.Select(static variant => variant.FileName).ToArray();
+
+        await CreateTestImageAsync(imagePath, 600, 400);
+
+        var second = await _processor.ProcessImageAsync(imagePath, _outputDir);
+        var generatedFiles = Directory.GetFiles(_outputDir, "*.webp").Select(Path.GetFileName).ToArray();
+
+        Assert.NotEqual(firstFileNames, [.. second.Variants.Select(static variant => variant.FileName)]);
+        foreach (var staleFileName in firstFileNames)
+        {
+            Assert.DoesNotContain(staleFileName, generatedFiles);
+        }
+    }
+
+    [Fact]
+    public async Task ProcessImage_SameBaseNameDifferentExtension_KeepsDistinctVariants()
+    {
+        var jpgPath = Path.Combine(_sourceDir, "shared.jpg");
+        var pngPath = Path.Combine(_sourceDir, "shared.png");
+        await CreateTestImageAsync(jpgPath, 900, 450);
+        await CreateTestImageAsync(pngPath, 400, 200);
+
+        await _processor.ProcessImageAsync(jpgPath, _outputDir);
+        await _processor.ProcessImageAsync(pngPath, _outputDir);
+
+        var generatedFiles = Directory.GetFiles(_outputDir, "*.webp").Select(Path.GetFileName).Cast<string>().ToArray();
+
+        Assert.Contains(generatedFiles, static fileName => fileName.StartsWith("shared.jpg.", StringComparison.Ordinal));
+        Assert.Contains(generatedFiles, static fileName => fileName.StartsWith("shared.png.", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ProcessImage_WithCacheDirectory_MaterializesInCacheAndCopiesToOutput()
+    {
+        var imagePath = Path.Combine(_sourceDir, "cached.png");
+        await CreateTestImageAsync(imagePath, 800, 600);
+
+        var info = await _processor.ProcessImageAsync(imagePath, _outputDir, _cacheDir);
+
+        foreach (var variant in info.Variants)
+        {
+            Assert.True(File.Exists(Path.Combine(_cacheDir, variant.FileName)));
+            Assert.True(File.Exists(Path.Combine(_outputDir, variant.FileName)));
+        }
+    }
+
+    [Fact]
+    public async Task ProcessImage_WithCacheDirectory_SurvivesOutputCleanWithoutReencoding()
+    {
+        var imagePath = Path.Combine(_sourceDir, "cached.png");
+        await CreateTestImageAsync(imagePath, 800, 600);
+
+        await _processor.ProcessImageAsync(imagePath, _outputDir, _cacheDir);
+        var cacheWriteTimes = Directory.GetFiles(_cacheDir, "*.webp")
+            .ToDictionary(static file => file, static file => File.GetLastWriteTimeUtc(file));
+
+        // Simulate a clean build: output is wiped, cache survives.
+        Directory.Delete(_outputDir, recursive: true);
+        await Task.Delay(100);
+
+        var info = await _processor.ProcessImageAsync(imagePath, _outputDir, _cacheDir);
+
+        foreach (var variant in info.Variants)
+        {
+            Assert.True(File.Exists(Path.Combine(_outputDir, variant.FileName)));
+        }
+
+        foreach (var (file, writeTime) in cacheWriteTimes)
+        {
+            Assert.Equal(writeTime, File.GetLastWriteTimeUtc(file));
+        }
+    }
+
+    [Fact]
+    public async Task ProcessImage_SupportedFormats_AllProcessed()
+    {
+        var pngPath = Path.Combine(_sourceDir, "image.png");
+        await CreateTestImageAsync(pngPath, 500, 300);
+
+        var jpegPath = Path.Combine(_sourceDir, "image2.jpg");
+        using (var image = new Image<Rgba32>(500, 300))
+        {
+            await image.SaveAsJpegAsync(jpegPath);
+        }
+
+        var pngInfo = await _processor.ProcessImageAsync(pngPath, _outputDir);
+        var jpegInfo = await _processor.ProcessImageAsync(jpegPath, _outputDir);
+
+        Assert.NotEmpty(pngInfo.Variants);
+        Assert.NotEmpty(jpegInfo.Variants);
     }
 
     private static async Task CreateTestImageAsync(string path, int width, int height)
@@ -51,310 +228,6 @@ public sealed class ImageProcessorTests : IDisposable
         await image.SaveAsPngAsync(path);
     }
 
-    #region ProcessPostImagesAsync Tests
-
-    [Fact]
-    public async Task ProcessPostImagesAsync_EmptyDirectory_ReturnsEmptyDictionary()
-    {
-        // Act
-        var result = await _processor.ProcessPostImagesAsync(_outputDir, _sourceDir);
-
-        // Assert
-        Assert.Empty(result);
-    }
-
-    [Fact]
-    public async Task ProcessPostImagesAsync_NonExistentDirectory_ReturnsEmptyDictionary()
-    {
-        // Arrange
-        var nonExistentDir = Path.Combine(_testDir, "non-existent");
-
-        // Act
-        var result = await _processor.ProcessPostImagesAsync(_outputDir, nonExistentDir);
-
-        // Assert
-        Assert.Empty(result);
-    }
-
-    [Fact]
-    public async Task ProcessPostImagesAsync_SingleImage_GeneratesResponsiveSizes()
-    {
-        var imagePath = Path.Combine(_sourceDir, "test-image.png");
-        await CreateTestImageAsync(imagePath, 1920, 1080);
-
-        var result = await _processor.ProcessPostImagesAsync(_outputDir, _sourceDir);
-
-        Assert.Single(result);
-        Assert.True(result.ContainsKey("test-image.png"));
-
-        var imageInfo = result["test-image.png"];
-        Assert.Equal("test-image.png", imageInfo.AssetFileNameBase);
-        Assert.Equal("test-image", imageInfo.FileName);
-        Assert.Equal(1920, imageInfo.OriginalWidth);
-        Assert.Equal(1080, imageInfo.OriginalHeight);
-        Assert.NotEmpty(imageInfo.AvailableWidths);
-        Assert.NotEmpty(imageInfo.ContentHash);
-        Assert.Equal(8, imageInfo.ContentHash.Length);
-
-        // Verify WebP files were created
-        var webpFiles = Directory.GetFiles(_outputDir, "*.webp");
-        Assert.NotEmpty(webpFiles);
-    }
-
-    [Fact]
-    public async Task ProcessPostImagesAsync_SmallImage_LimitedResponsiveSizes()
-    {
-        var imagePath = Path.Combine(_sourceDir, "small-image.png");
-        await CreateTestImageAsync(imagePath, 500, 300);
-
-        var result = await _processor.ProcessPostImagesAsync(_outputDir, _sourceDir);
-
-        Assert.Single(result);
-        var imageInfo = result["small-image.png"];
-
-        // Should only include sizes smaller than original (320) plus the original (500)
-        Assert.Contains(320, imageInfo.AvailableWidths);
-        Assert.Contains(500, imageInfo.AvailableWidths);
-        Assert.DoesNotContain(640, imageInfo.AvailableWidths);
-        Assert.DoesNotContain(960, imageInfo.AvailableWidths);
-        Assert.DoesNotContain(1280, imageInfo.AvailableWidths);
-    }
-
-    [Fact]
-    public async Task ProcessPostImagesAsync_VerySmallImage_OnlyOriginalSize()
-    {
-        var imagePath = Path.Combine(_sourceDir, "tiny-image.png");
-        await CreateTestImageAsync(imagePath, 200, 150);
-
-        var result = await _processor.ProcessPostImagesAsync(_outputDir, _sourceDir);
-
-        Assert.Single(result);
-        var imageInfo = result["tiny-image.png"];
-
-        // Should only include original size since it's smaller than all target widths
-        Assert.Single(imageInfo.AvailableWidths);
-        Assert.Contains(200, imageInfo.AvailableWidths);
-    }
-
-    [Fact]
-    public async Task ProcessPostImagesAsync_MultipleImages_ProcessesAll()
-    {
-        await CreateTestImageAsync(Path.Combine(_sourceDir, "image1.png"), 1000, 600);
-        await CreateTestImageAsync(Path.Combine(_sourceDir, "image2.jpg"), 800, 500);
-
-        // Also create a .jpg file (just rename .png for test purposes)
-        var jpgPath = Path.Combine(_sourceDir, "image2.jpg");
-        File.Move(Path.Combine(_sourceDir, "image2.jpg"), jpgPath + ".tmp", true);
-        await CreateTestImageAsync(jpgPath, 800, 500);
-        if (File.Exists(jpgPath + ".tmp"))
-        {
-            File.Delete(jpgPath + ".tmp");
-        }
-
-        var result = await _processor.ProcessPostImagesAsync(_outputDir, _sourceDir);
-
-        Assert.Equal(2, result.Count);
-        Assert.True(result.ContainsKey("image1.png"));
-        Assert.True(result.ContainsKey("image2.jpg"));
-    }
-
-    [Fact]
-    public async Task ProcessPostImagesAsync_NonImageFiles_Ignored()
-    {
-        await CreateTestImageAsync(Path.Combine(_sourceDir, "valid.png"), 500, 300);
-        await File.WriteAllTextAsync(Path.Combine(_sourceDir, "readme.txt"), "Not an image");
-        await File.WriteAllTextAsync(Path.Combine(_sourceDir, "style.css"), "body {}");
-
-        var result = await _processor.ProcessPostImagesAsync(_outputDir, _sourceDir);
-
-        Assert.Single(result);
-        Assert.True(result.ContainsKey("valid.png"));
-    }
-
-    [Fact]
-    public async Task ProcessPostImagesAsync_ExistingFiles_SkipsWhenNotForced()
-    {
-        // Arrange
-        var imagePath = Path.Combine(_sourceDir, "existing.png");
-        await CreateTestImageAsync(imagePath, 800, 600);
-
-        // First processing
-        var result1 = await _processor.ProcessPostImagesAsync(_outputDir, _sourceDir);
-        var webpFiles1 = Directory.GetFiles(_outputDir, "*.webp");
-        var firstWriteTimes = webpFiles1.ToDictionary(f => f, f => File.GetLastWriteTimeUtc(f));
-
-        // Wait a bit
-        await Task.Delay(100);
-
-        // Second processing without force
-        var result2 = await _processor.ProcessPostImagesAsync(_outputDir, _sourceDir);
-        var webpFiles2 = Directory.GetFiles(_outputDir, "*.webp");
-
-        // Assert
-        Assert.Equal(webpFiles1.Length, webpFiles2.Length);
-        foreach (var file in webpFiles2)
-        {
-            if (firstWriteTimes.TryGetValue(file, out var firstWriteTime))
-            {
-                Assert.Equal(firstWriteTime, File.GetLastWriteTimeUtc(file));
-            }
-        }
-    }
-
-    [Fact]
-    public async Task ProcessPostImagesAsync_AspectRatio_CalculatedCorrectly()
-    {
-        // Arrange
-        var imagePath = Path.Combine(_sourceDir, "aspect.png");
-        await CreateTestImageAsync(imagePath, 1600, 900); // 16:9
-
-        var result = await _processor.ProcessPostImagesAsync(_outputDir, _sourceDir);
-
-        var imageInfo = result["aspect.png"];
-        var expectedAspectRatio = 1600.0 / 900.0;
-        Assert.Equal(expectedAspectRatio, imageInfo.AspectRatio, precision: 4);
-    }
-
-    [Fact]
-    public async Task ProcessPostImagesAsync_LargeImage_CappedAtMaxWidth()
-    {
-        var imagePath = Path.Combine(_sourceDir, "huge.png");
-        await CreateTestImageAsync(imagePath, 2500, 1400);
-
-        var result = await _processor.ProcessPostImagesAsync(_outputDir, _sourceDir);
-
-        var imageInfo = result["huge.png"];
-
-        // Original dimensions should be preserved in info
-        Assert.Equal(2500, imageInfo.OriginalWidth);
-        Assert.Equal(1400, imageInfo.OriginalHeight);
-
-        // But the largest available width should be capped at 1920
-        Assert.Equal(1920, imageInfo.AvailableWidths.Max());
-    }
-
-    [Fact]
-    public async Task ProcessPostImagesAsync_ContentHash_ChangesWithContent()
-    {
-        var imagePath = Path.Combine(_sourceDir, "hash-test.png");
-        await CreateTestImageAsync(imagePath, 500, 300);
-
-        // First processing
-        var result1 = await _processor.ProcessPostImagesAsync(_outputDir, _sourceDir);
-        var hash1 = result1["hash-test.png"].ContentHash;
-
-        // Delete output and create different image with same name
-        foreach (var file in Directory.GetFiles(_outputDir))
-        {
-            File.Delete(file);
-        }
-
-        await CreateTestImageAsync(imagePath, 600, 400); // Different dimensions
-
-        // Second processing
-        var result2 = await _processor.ProcessPostImagesAsync(_outputDir, _sourceDir);
-        var hash2 = result2["hash-test.png"].ContentHash;
-
-        Assert.NotEqual(hash1, hash2);
-    }
-
-    [Fact]
-    public async Task ProcessPostImagesAsync_SupportedFormats_AllProcessed()
-    {
-        await CreateTestImageAsync(Path.Combine(_sourceDir, "image.png"), 500, 300);
-        await CreateTestImageAsync(Path.Combine(_sourceDir, "image2.jpg"), 500, 300);
-
-        // For JPEG format
-        using (var image = new Image<Rgba32>(500, 300))
-        {
-            var jpegPath = Path.Combine(_sourceDir, "image2.jpg");
-            if (File.Exists(jpegPath))
-            {
-                File.Delete(jpegPath);
-            }
-            await image.SaveAsJpegAsync(jpegPath);
-        }
-
-        var result = await _processor.ProcessPostImagesAsync(_outputDir, _sourceDir);
-
-        Assert.Equal(2, result.Count);
-    }
-
-    [Fact]
-    public async Task ProcessReferencedImagesAsync_OnlyProcessesReferencedImagesAndRemovesStaleVariants()
-    {
-        await CreateTestImageAsync(Path.Combine(_sourceDir, "used.png"), 1200, 800);
-        await CreateTestImageAsync(Path.Combine(_sourceDir, "unused.png"), 800, 600);
-
-        await _processor.ProcessPostImagesAsync(_outputDir, _sourceDir);
-
-        var result = await _processor.ProcessReferencedImagesAsync(
-            _outputDir,
-            _sourceDir,
-            ["used.png"]);
-
-        var generatedFiles = Directory.GetFiles(_outputDir, "*.webp")
-            .Select(Path.GetFileName)
-            .Where(static fileName => fileName is not null)
-            .Cast<string>()
-            .ToArray();
-
-        Assert.Single(result);
-        Assert.Contains("used.png", result.Keys);
-        Assert.Contains(generatedFiles, static fileName => fileName.StartsWith("used.png.", StringComparison.Ordinal));
-        Assert.DoesNotContain(generatedFiles, static fileName => fileName.StartsWith("unused.png.", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public async Task ProcessPostImagesAsync_MixedExtensionImages_KeepDistinctGeneratedVariants()
-    {
-        await CreateTestImageAsync(Path.Combine(_sourceDir, "shared.jpg"), 900, 450);
-        await CreateTestImageAsync(Path.Combine(_sourceDir, "shared.png"), 400, 200);
-
-        var result = await _processor.ProcessPostImagesAsync(_outputDir, _sourceDir);
-
-        var jpgInfo = result["shared.jpg"];
-        var pngInfo = result["shared.png"];
-        var generatedFiles = Directory.GetFiles(_outputDir, "*.webp").Select(Path.GetFileName).ToArray();
-
-        Assert.Equal("shared.jpg", jpgInfo.AssetFileNameBase);
-        Assert.Equal("shared.png", pngInfo.AssetFileNameBase);
-        Assert.Contains(generatedFiles, static fileName =>
-            fileName is not null && fileName.StartsWith("shared.jpg.", StringComparison.Ordinal));
-        Assert.Contains(generatedFiles, static fileName =>
-            fileName is not null && fileName.StartsWith("shared.png.", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public async Task ProcessPostImagesAsync_MixedExtensionCleanup_RemovesOnlyMatchingGeneratedVariants()
-    {
-        var jpgPath = Path.Combine(_sourceDir, "shared.jpg");
-        var pngPath = Path.Combine(_sourceDir, "shared.png");
-
-        await CreateTestImageAsync(jpgPath, 900, 450);
-        await CreateTestImageAsync(pngPath, 400, 200);
-
-        var firstResult = await _processor.ProcessPostImagesAsync(_outputDir, _sourceDir);
-        var jpgHash = firstResult["shared.jpg"].ContentHash;
-        var oldPngHash = firstResult["shared.png"].ContentHash;
-
-        await CreateTestImageAsync(pngPath, 500, 250);
-
-        var secondResult = await _processor.ProcessPostImagesAsync(_outputDir, _sourceDir);
-        var newPngHash = secondResult["shared.png"].ContentHash;
-        var generatedFiles = Directory.GetFiles(_outputDir, "*.webp").Select(Path.GetFileName).ToArray();
-        var expectedJpgFragment = $"shared.jpg.{jpgHash}.";
-        var expectedNewPngFragment = $"shared.png.{newPngHash}.";
-        var expectedOldPngFragment = $"shared.png.{oldPngHash}.";
-
-        Assert.NotEqual(oldPngHash, newPngHash);
-        Assert.Contains(generatedFiles, fileName =>
-            fileName is not null && fileName.Contains(expectedJpgFragment, StringComparison.Ordinal));
-        Assert.Contains(generatedFiles, fileName =>
-            fileName is not null && fileName.Contains(expectedNewPngFragment, StringComparison.Ordinal));
-        Assert.DoesNotContain(generatedFiles, fileName =>
-            fileName is not null && fileName.Contains(expectedOldPngFragment, StringComparison.Ordinal));
-    }
-
-    #endregion
+    [GeneratedRegex(@"^.+\.[0-9a-f]{8}\.\d+w\.webp$")]
+    private static partial Regex VariantFileNameRegex();
 }

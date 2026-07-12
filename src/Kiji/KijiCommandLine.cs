@@ -6,8 +6,7 @@ namespace Kiji;
 internal enum KijiCommandKind
 {
     Build,
-    Clean,
-    Serve,
+    Dev,
     Preview,
     Unknown,
 }
@@ -17,19 +16,17 @@ internal enum KijiCommandKind
 /// </summary>
 internal sealed record KijiCommand(
     KijiCommandKind Kind,
-    string? Output = null,
-    bool Clean = true,
     int Port = KijiCommandLine.DefaultPort,
     string? RawCommand = null);
 
 /// <summary>
-/// Parses the Kiji command line: <c>build</c> (default), <c>clean</c>, <c>serve</c>, and <c>preview</c>.
+/// Parses the Kiji command line: <c>build</c> (default), <c>dev</c>, and <c>preview</c>.
 /// </summary>
 internal static class KijiCommandLine
 {
     internal const int DefaultPort = 8080;
 
-    internal const string Usage = "Usage: [build [--output <path>] [--no-clean]] | clean | serve [--port <n>] | preview [--port <n>]";
+    internal const string Usage = "Usage: [build] | dev [--port <n>] | preview [--port <n>]";
 
     internal static KijiCommand Parse(string[] args)
     {
@@ -39,12 +36,8 @@ internal static class KijiCommandLine
 
         return command switch
         {
-            "build" => new KijiCommand(
-                KijiCommandKind.Build,
-                Output: GetOptionValue(args, "--output"),
-                Clean: !HasFlag(args, "--no-clean")),
-            "clean" => new KijiCommand(KijiCommandKind.Clean),
-            "serve" => new KijiCommand(KijiCommandKind.Serve, Port: ParsePort(args)),
+            "build" => new KijiCommand(KijiCommandKind.Build),
+            "dev" => new KijiCommand(KijiCommandKind.Dev, Port: ParsePort(args)),
             "preview" => new KijiCommand(KijiCommandKind.Preview, Port: ParsePort(args)),
             _ => new KijiCommand(KijiCommandKind.Unknown, RawCommand: command),
         };
@@ -74,18 +67,5 @@ internal static class KijiCommandLine
         }
 
         return null;
-    }
-
-    private static bool HasFlag(string[] args, string name)
-    {
-        for (var i = 1; i < args.Length; i++)
-        {
-            if (string.Equals(args[i], name, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 }

@@ -52,7 +52,7 @@ return await app.RunAsync(); // build (default) | dev [--port <n>] | preview [--
 ```
 
 - `dotnet run` — builds the site into `dist` (cleaned first)
-- `dotnet run dev` — on-demand dev server with live reload
+- `dotnet run dev` — on-demand dev server with live reload; when run under `dotnet watch`, Kiji emits watch-style logs for content/static reload activity
 - `dotnet run preview` — serves the built `dist` output
 
 Add `dist/` and `.kiji/` (the build cache) to your site's `.gitignore`.

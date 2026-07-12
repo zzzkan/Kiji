@@ -27,6 +27,8 @@
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <MinVerTagPrefix>v</MinVerTagPrefix>
+    <!-- dotnet watch hot reload compiles without running MinVer (design-time build). -->
+    <MinVerSkip Condition="'$(Configuration)' != 'Release'">true</MinVerSkip>
     <MinVerDefaultPreReleaseIdentifiers>preview.0</MinVerDefaultPreReleaseIdentifiers>
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>

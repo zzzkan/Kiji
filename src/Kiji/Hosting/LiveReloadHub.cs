@@ -44,8 +44,10 @@ internal sealed class LiveReloadHub
         }
     }
 
-    internal async Task BroadcastReloadAsync(CancellationToken cancellationToken)
+    internal async Task<int> BroadcastReloadAsync(CancellationToken cancellationToken)
     {
+        var reloadedClients = 0;
+
         foreach (var (id, socket) in _clients)
         {
             if (socket.State != WebSocketState.Open)
@@ -57,11 +59,14 @@ internal sealed class LiveReloadHub
             try
             {
                 await socket.SendAsync(ReloadMessage, WebSocketMessageType.Text, endOfMessage: true, cancellationToken);
+                reloadedClients++;
             }
             catch (WebSocketException)
             {
                 _clients.TryRemove(id, out _);
             }
         }
+
+        return reloadedClients;
     }
 }

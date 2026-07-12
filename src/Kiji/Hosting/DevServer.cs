@@ -16,13 +16,25 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
     private const string LiveReloadScriptTag = """<script src="/_kiji/livereload.js" defer></script>""";
     private const int DebounceMilliseconds = 250;
 
+    // Servers currently accepting live-reload clients; hot reload notifications
+    // (see HotReloadHandler) fan out to every active instance.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<DevServer, byte> ActiveServers = new();
+
     private readonly LiveReloadHub _hub = new();
+    private readonly DevServerStatusReporter _reporter = DevServerStatusReporter.CreateForCurrentProcess();
     private readonly Lock _snapshotLock = new();
     private readonly List<FileSystemWatcher> _watchers = [];
+    private readonly List<WatchedChange> _pendingChanges = [];
     private SiteSnapshot? _snapshot;
     private Timer? _debounceTimer;
     private volatile bool _contentChanged;
     private WebApplication? _webApplication;
+
+    internal DevServer(KijiApp app, DevServerStatusReporter? reporter = null)
+        : this(app)
+    {
+        _reporter = reporter ?? DevServerStatusReporter.CreateForCurrentProcess();
+    }
 
     internal async Task<WebApplication> StartAsync(SsgOptions options, int port, CancellationToken cancellationToken)
     {
@@ -75,16 +87,44 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
 
         web.MapFallback(HandlePageAsync);
 
-        WatchDirectory(options.ContentsPath, contentDirectory: true);
-        WatchDirectory(options.StaticPath, contentDirectory: false);
+        WatchDirectory(options.ContentsPath, WatchedPathSource.Content);
+        WatchDirectory(options.StaticPath, WatchedPathSource.Static);
 
         await web.StartAsync(cancellationToken);
         _webApplication = web;
+        ActiveServers.TryAdd(this, 0);
+        _reporter.DevServerStarted(new Uri(web.Urls.First()), options.ContentsPath, Directory.Exists(options.StaticPath) ? options.StaticPath : null);
         return web;
+    }
+
+    /// <summary>
+    /// Called after a hot reload (e.g. dotnet watch) applied code updates to this
+    /// process: drops cached snapshots so updated components render fresh, then
+    /// reloads connected browsers.
+    /// </summary>
+    internal static void NotifyCodeUpdated()
+    {
+        foreach (var server in ActiveServers.Keys)
+        {
+            _ = server.ReloadAfterCodeUpdateAsync();
+        }
+    }
+
+    private async Task ReloadAfterCodeUpdateAsync()
+    {
+        lock (_snapshotLock)
+        {
+            _snapshot = null;
+        }
+
+        var reloadedClients = await _hub.BroadcastReloadAsync(CancellationToken.None);
+        _reporter.CodeUpdated(reloadedClients);
     }
 
     public async ValueTask DisposeAsync()
     {
+        ActiveServers.TryRemove(this, out _);
+
         foreach (var watcher in _watchers)
         {
             watcher.Dispose();
@@ -170,7 +210,7 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
         }
     }
 
-    private void WatchDirectory(string path, bool contentDirectory)
+    private void WatchDirectory(string path, WatchedPathSource source)
     {
         if (!Directory.Exists(path))
         {
@@ -185,19 +225,34 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
 
         void HandleChange(object sender, FileSystemEventArgs args)
         {
-            ScheduleReload(contentDirectory);
+            // A file save also touches its parent directory's timestamp, raising a
+            // second Changed event for the directory itself; only files matter here.
+            if (args.ChangeType is WatcherChangeTypes.Changed && Directory.Exists(args.FullPath))
+            {
+                return;
+            }
+
+            ScheduleReload(new WatchedChange(source, args.ChangeType, Path.GetRelativePath(path, args.FullPath)), source is WatchedPathSource.Content);
         }
 
         watcher.Changed += HandleChange;
         watcher.Created += HandleChange;
         watcher.Deleted += HandleChange;
-        watcher.Renamed += (_, _) => ScheduleReload(contentDirectory);
+        watcher.Renamed += (_, args) => ScheduleReload(new WatchedChange(source, WatcherChangeTypes.Renamed, Path.GetRelativePath(path, args.FullPath)), source is WatchedPathSource.Content);
+        watcher.Error += (_, args) =>
+        {
+            var exception = args.GetException();
+            if (exception is not null)
+            {
+                _reporter.WatcherError(source, path, exception);
+            }
+        };
         watcher.EnableRaisingEvents = true;
 
         _watchers.Add(watcher);
     }
 
-    private void ScheduleReload(bool contentChanged)
+    private void ScheduleReload(WatchedChange change, bool contentChanged)
     {
         if (contentChanged)
         {
@@ -208,6 +263,7 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
         // callbacks arrive on thread-pool threads, so timer creation must be locked.
         lock (_snapshotLock)
         {
+            _pendingChanges.Add(change);
             _debounceTimer ??= new Timer(_ => OnDebounceElapsed(), state: null, Timeout.Infinite, Timeout.Infinite);
             _debounceTimer.Change(DebounceMilliseconds, Timeout.Infinite);
         }
@@ -215,16 +271,41 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
 
     private void OnDebounceElapsed()
     {
-        if (_contentChanged)
+        List<WatchedChange> changes;
+
+        lock (_snapshotLock)
         {
-            _contentChanged = false;
-            lock (_snapshotLock)
+            changes = DeduplicateChanges(_pendingChanges);
+            _pendingChanges.Clear();
+
+            if (_contentChanged)
             {
+                _contentChanged = false;
                 _snapshot = null;
                 app.InvalidateContent();
             }
         }
 
-        _ = _hub.BroadcastReloadAsync(CancellationToken.None);
+        _ = ReportReloadAsync(changes);
+    }
+
+    // Editors fire several watcher events per save (and debounce collects them all),
+    // so collapse to one entry per file, keeping the latest change type.
+    internal static List<WatchedChange> DeduplicateChanges(IEnumerable<WatchedChange> changes)
+    {
+        return [.. changes
+            .GroupBy(static change => (change.Source, change.Path))
+            .Select(static group => group.Last())];
+    }
+
+    private async Task ReportReloadAsync(List<WatchedChange> changes)
+    {
+        if (changes.Count == 0)
+        {
+            return;
+        }
+
+        var reloadedClients = await _hub.BroadcastReloadAsync(CancellationToken.None);
+        _reporter.ChangesDetected(changes, reloadedClients);
     }
 }

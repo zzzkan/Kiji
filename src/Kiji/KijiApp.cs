@@ -249,7 +249,6 @@ public sealed class KijiApp : IAsyncDisposable
         var (devServer, web) = await StartDevServerAsync(port, cancellationToken);
         await using (devServer)
         {
-            Console.WriteLine($"Kiji dev server: {web.Urls.First()}");
             await web.WaitForShutdownAsync(cancellationToken);
         }
     }
@@ -326,12 +325,13 @@ public sealed class KijiApp : IAsyncDisposable
 
     internal async Task<(DevServer DevServer, WebApplication WebApplication)> StartDevServerAsync(
         int port,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        DevServerStatusReporter? reporter = null)
     {
         _activeOptions = _builder.Paths.ResolveForServe();
         EnsureServices();
 
-        var devServer = new DevServer(this);
+        var devServer = new DevServer(this, reporter);
         var web = await devServer.StartAsync(_activeOptions, port, cancellationToken);
         return (devServer, web);
     }

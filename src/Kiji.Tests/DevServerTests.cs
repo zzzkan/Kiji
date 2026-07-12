@@ -13,13 +13,16 @@ public sealed class DevServerTests : IAsyncDisposable
 {
     private readonly string _testDir;
     private readonly string _contentsDir;
+    private readonly string _staticDir;
     private KijiApp? _app;
 
     public DevServerTests()
     {
         _testDir = Path.Combine(Path.GetTempPath(), $"DevServerTests_{Guid.NewGuid():N}");
         _contentsDir = Path.Combine(_testDir, "contents");
+        _staticDir = Path.Combine(_testDir, "wwwroot");
         Directory.CreateDirectory(_contentsDir);
+        Directory.CreateDirectory(_staticDir);
     }
 
     public async ValueTask DisposeAsync()
@@ -38,7 +41,8 @@ public sealed class DevServerTests : IAsyncDisposable
     [Fact]
     public async Task Serve_RendersPageOnDemandWithLiveReloadScript()
     {
-        var (baseAddress, devServer) = await StartServerAsync();
+        using var logs = new StringWriter();
+        var (baseAddress, devServer) = await StartServerAsync(logs);
         await using (devServer)
         {
             using var client = CreateClient();
@@ -55,6 +59,11 @@ public sealed class DevServerTests : IAsyncDisposable
 
             Assert.Equal(HttpStatusCode.OK, blogResponse.StatusCode);
             Assert.Contains("<h1>Hello World</h1>", blogHtml, StringComparison.Ordinal);
+
+            var output = logs.ToString();
+            Assert.Contains("kiji dev 🚀 Started Kiji dev server at", output, StringComparison.Ordinal);
+            Assert.Contains("kiji dev ⌚ Watching content files under", output, StringComparison.Ordinal);
+            Assert.Contains("kiji dev ⌚ Watching static files under", output, StringComparison.Ordinal);
         }
     }
 
@@ -106,7 +115,8 @@ public sealed class DevServerTests : IAsyncDisposable
     [Fact]
     public async Task Serve_ContentChangeBroadcastsReloadAndServesUpdatedContent()
     {
-        var (baseAddress, devServer) = await StartServerAsync();
+        using var logs = new StringWriter();
+        var (baseAddress, devServer) = await StartServerAsync(logs);
         await using (devServer)
         {
             using var client = CreateClient();
@@ -127,7 +137,75 @@ public sealed class DevServerTests : IAsyncDisposable
 
             var updatedHtml = await client.GetStringAsync(new Uri(baseAddress, "/blog/hello-world/"));
             Assert.Contains("<h1>Hello Updated</h1>", updatedHtml, StringComparison.Ordinal);
+
+            var output = logs.ToString();
+            Assert.Contains($"File updated: .{Path.DirectorySeparatorChar}hello-world.txt", output, StringComparison.Ordinal);
+            Assert.Contains("Reloaded 1 browser client(s).", output, StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public async Task Serve_StaticChangeBroadcastsReloadWithoutInvalidatingContent()
+    {
+        await File.WriteAllTextAsync(Path.Combine(_staticDir, "site.css"), "body { color: black; }");
+
+        using var logs = new StringWriter();
+        var (baseAddress, devServer) = await StartServerAsync(logs);
+        await using (devServer)
+        {
+            using var socket = new ClientWebSocket();
+            var wsUri = new UriBuilder(baseAddress) { Scheme = "ws", Path = "/_kiji/reload" }.Uri;
+            await socket.ConnectAsync(wsUri, CancellationToken.None);
+
+            await File.WriteAllTextAsync(Path.Combine(_staticDir, "site.css"), "body { color: red; }");
+
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var buffer = new byte[64];
+            var result = await socket.ReceiveAsync(buffer, timeout.Token);
+            Assert.Equal("reload", Encoding.UTF8.GetString(buffer, 0, result.Count));
+
+            var output = logs.ToString();
+            Assert.Contains($"File updated: .{Path.DirectorySeparatorChar}site.css", output, StringComparison.Ordinal);
+            Assert.Contains("Reloaded 1 browser client(s).", output, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task Serve_CodeUpdateNotificationBroadcastsReload()
+    {
+        using var logs = new StringWriter();
+        var (baseAddress, devServer) = await StartServerAsync(logs);
+        await using (devServer)
+        {
+            using var socket = new ClientWebSocket();
+            var wsUri = new UriBuilder(baseAddress) { Scheme = "ws", Path = "/_kiji/reload" }.Uri;
+            await socket.ConnectAsync(wsUri, CancellationToken.None);
+
+            Kiji.Hosting.DevServer.NotifyCodeUpdated();
+
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var buffer = new byte[64];
+            var result = await socket.ReceiveAsync(buffer, timeout.Token);
+            Assert.Equal("reload", Encoding.UTF8.GetString(buffer, 0, result.Count));
+        }
+    }
+
+    [Fact]
+    public void DeduplicateChanges_CollapsesRepeatedEventsPerFileKeepingLatestChangeType()
+    {
+        List<Kiji.Hosting.WatchedChange> events =
+        [
+            new(Kiji.Hosting.WatchedPathSource.Content, WatcherChangeTypes.Created, @"2026\post\index.md"),
+            new(Kiji.Hosting.WatchedPathSource.Content, WatcherChangeTypes.Changed, @"2026\post\index.md"),
+            new(Kiji.Hosting.WatchedPathSource.Content, WatcherChangeTypes.Changed, @"2026\post\index.md"),
+            new(Kiji.Hosting.WatchedPathSource.Static, WatcherChangeTypes.Changed, "site.css"),
+        ];
+
+        var deduplicated = Kiji.Hosting.DevServer.DeduplicateChanges(events);
+
+        Assert.Equal(2, deduplicated.Count);
+        Assert.Equal(new Kiji.Hosting.WatchedChange(Kiji.Hosting.WatchedPathSource.Content, WatcherChangeTypes.Changed, @"2026\post\index.md"), deduplicated[0]);
+        Assert.Equal(new Kiji.Hosting.WatchedChange(Kiji.Hosting.WatchedPathSource.Static, WatcherChangeTypes.Changed, "site.css"), deduplicated[1]);
     }
 
     private static HttpClient CreateClient()
@@ -135,7 +213,12 @@ public sealed class DevServerTests : IAsyncDisposable
         return new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
     }
 
-    private async Task<(Uri BaseAddress, IAsyncDisposable DevServer)> StartServerAsync()
+    private Task<(Uri BaseAddress, IAsyncDisposable DevServer)> StartServerAsync()
+    {
+        return StartServerAsync(new StringWriter());
+    }
+
+    private async Task<(Uri BaseAddress, IAsyncDisposable DevServer)> StartServerAsync(StringWriter logs)
     {
         await File.WriteAllTextAsync(Path.Combine(_contentsDir, "hello-world.txt"), "Hello World");
 
@@ -143,7 +226,7 @@ public sealed class DevServerTests : IAsyncDisposable
         builder.Site = TestArticleContents.CreateSiteInfo();
         builder.Paths.Root = _testDir;
         builder.Paths.Content = _contentsDir;
-        builder.Paths.Static = GetStaticDirectory();
+        builder.Paths.Static = _staticDir;
 
         var contentsDir = _contentsDir;
         var posts = builder.AddContentSource<Post>(_ =>
@@ -161,12 +244,8 @@ public sealed class DevServerTests : IAsyncDisposable
         _app = builder.Build();
         TestArticleContents.MapSite(_app, posts);
 
-        var (devServer, web) = await _app.StartDevServerAsync(port: 0, CancellationToken.None);
+        var reporter = new Kiji.Hosting.DevServerStatusReporter(logs, prefix: "kiji dev", useEmoji: true);
+        var (devServer, web) = await _app.StartDevServerAsync(port: 0, CancellationToken.None, reporter);
         return (new Uri(web.Urls.First()), devServer);
-    }
-
-    private static string GetStaticDirectory()
-    {
-        return TestSitePaths.StaticDirectory;
     }
 }

@@ -68,7 +68,7 @@ public sealed class ImageProcessor(ImageOptions? options = null) : IImageAssetPr
                         {
                             image ??= await LoadImageWithoutMetadataAsync(sourceFilePath, cancellationToken);
                             await EncodeVariantAsync(image, originalWidth, originalHeight, targetWidth, materializedPath, cancellationToken);
-                            Console.WriteLine($"Generated: {materializedPath} ({targetWidth}w)");
+                            BuildOutput.Detail($"Generated: {materializedPath} ({targetWidth}w)");
                         }
                     }
                     finally

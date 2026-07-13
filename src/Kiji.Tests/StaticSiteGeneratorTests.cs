@@ -50,4 +50,33 @@ public sealed class StaticSiteGeneratorTests : IDisposable
         Assert.Contains("escapes the output directory", exception.Message, StringComparison.Ordinal);
         Assert.False(File.Exists(Path.Combine(_testDir, "evil.txt")));
     }
+
+    [Fact]
+    public async Task GenerateAsync_WritesUtf8WithoutBom()
+    {
+        var outputDir = Path.Combine(_testDir, "output");
+        var options = new SsgOptions
+        {
+            ContentsPath = _testDir,
+            StaticPath = Path.Combine(_testDir, "static"),
+            OutputPath = outputDir,
+        };
+
+        var request = new PageRenderRequest(
+            SourceIdentifier: "/",
+            ComponentType: typeof(StaticSiteGeneratorTests),
+            Parameters: new Dictionary<string, object?>(),
+            RoutePath: "/",
+            OutputRelativePath: "index.html");
+
+        await StaticSiteGenerator.GenerateAsync(
+            options,
+            [request],
+            static async (_, output, _) => await output.WriteAsync("<!doctype html><html>日本語</html>"));
+
+        var bytes = await File.ReadAllBytesAsync(Path.Combine(outputDir, "index.html"));
+        Assert.True(bytes.Length >= 3);
+        Assert.False(bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF, "Page output must not start with a UTF-8 BOM.");
+        Assert.Equal("<!doctype html><html>日本語</html>", System.Text.Encoding.UTF8.GetString(bytes));
+    }
 }

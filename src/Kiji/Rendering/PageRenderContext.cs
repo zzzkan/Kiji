@@ -26,6 +26,12 @@ public sealed class PageRenderContext
     /// </summary>
     public required string OutputRelativeDirectory { get; init; }
 
+    /// <summary>
+    /// Dependency recorder for the incremental build, or <see langword="null"/> when
+    /// the render is not being tracked (dev server, direct renders).
+    /// </summary>
+    internal Generation.BuildDependencyRecorder? Dependencies { get; init; }
+
     internal static void SetCurrent(PageRenderContext? context)
     {
         Ambient.Value = context;

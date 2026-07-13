@@ -55,7 +55,10 @@ public sealed class ComponentRenderer : IAsyncDisposable
     /// </summary>
     internal static void AddComponentRenderingServices(IServiceCollection services)
     {
-        services.AddLogging(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Warning));
+        // No providers by default: each per-page HtmlRenderer resolves loggers, and
+        // provider-backed loggers add measurable setup cost across thousands of pages.
+        // Sites can register their own logging via KijiBuilder.Services.
+        services.AddLogging();
         services.AddSingleton(_ => HtmlEncoder.Create(UnicodeRanges.All));
         services.AddScoped<StaticNavigationManager>();
         services.AddScoped<NavigationManager>(static provider => provider.GetRequiredService<StaticNavigationManager>());
@@ -144,7 +147,10 @@ public sealed class ComponentRenderer : IAsyncDisposable
             scope.ServiceProvider.GetRequiredService<ILoggerFactory>());
 
         // HeadOutlet keeps subscriptions on the renderer, so each page needs its own renderer instance
-        // to keep head state isolated across renders.
+        // to keep head state isolated across renders. Pooling was evaluated and rejected: scope +
+        // HtmlRenderer construction measures ~6% of a representative page render (Kiji.Benchmarks
+        // ComponentRendererBenchmarks), and resetting the internal SectionRegistry would require
+        // reflection into ASP.NET Core internals.
         await renderer.Dispatcher.InvokeAsync(async () =>
         {
             var document = await renderer.RenderComponentAsync(componentType, CreateParameterView(parameters));
@@ -166,6 +172,13 @@ public sealed class ComponentRenderer : IAsyncDisposable
         if (parameters is null || parameters.Count == 0)
         {
             return ParameterView.Empty;
+        }
+
+        // ParameterView only reads the dictionary during the render call, so a
+        // dictionary-shaped argument can be wrapped without a defensive copy.
+        if (parameters is IDictionary<string, object?> dictionary)
+        {
+            return ParameterView.FromDictionary(dictionary);
         }
 
         return ParameterView.FromDictionary(

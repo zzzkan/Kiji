@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- Internal measurement harness; collection-shaped front matter and console output are fine here. -->
+    <NoWarn>$(NoWarn);CA1002;CA2227;CA1819;CA1303</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Kiji/Kiji.csproj" />
+  </ItemGroup>
+
+</Project>

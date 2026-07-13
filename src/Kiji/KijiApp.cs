@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using Kiji.Assets;
@@ -34,6 +36,7 @@ public sealed class KijiApp : IAsyncDisposable
     private ServiceProvider? _services;
     private ComponentRenderer? _renderer;
     private SsgOptions? _activeOptions;
+    private bool _forceFullBuild;
 
     internal KijiApp(KijiBuilder builder)
     {
@@ -198,6 +201,8 @@ public sealed class KijiApp : IAsyncDisposable
         using var sigTerm = PosixSignalRegistration.Create(PosixSignal.SIGTERM, HandleShutdownSignal);
 
         var command = KijiCommandLine.Parse(_builder.Args);
+        BuildOutput.Verbose = command.Verbose;
+        _forceFullBuild = command.Force;
 
         try
         {
@@ -230,30 +235,86 @@ public sealed class KijiApp : IAsyncDisposable
     }
 
     /// <summary>
-    /// Generates the full static site into the output directory, cleaning it first.
+    /// Generates the static site into the output directory incrementally: pages whose
+    /// inputs (content files, options, site assemblies) are unchanged since the last
+    /// build are skipped and their outputs kept. Any ambiguity — no manifest, unknown
+    /// files in the output directory, changed assemblies — falls back to a full
+    /// rebuild. Run the <c>build</c> command with <c>--force</c> to always rebuild.
     /// </summary>
     public async Task BuildSiteAsync(CancellationToken cancellationToken = default)
     {
         var options = _builder.Paths.ResolveForBuild();
         _activeOptions ??= options;
 
-        if (Directory.Exists(options.OutputPath))
+        var stopwatch = Stopwatch.StartNew();
+        var snapshot = CreateSnapshot();
+        var renderer = GetRenderer();
+
+        StaticSiteGenerator.ValidateNoStaticFileCollisions(options, snapshot.Pages);
+
+        var planner = new IncrementalBuildPlanner(
+            options,
+            _builder.Paths.Root,
+            _builder.Paths.ResolveCachePath(),
+            Site,
+            _builder.BuildInputs);
+
+        var plan = await planner.CreatePlanAsync(
+            snapshot.Pages,
+            [.. _pageAssemblies, typeof(KijiApp).Assembly],
+            _forceFullBuild,
+            cancellationToken);
+
+        if (plan.FullClean && Directory.Exists(options.OutputPath))
         {
             Directory.Delete(options.OutputPath, recursive: true);
         }
 
         Directory.CreateDirectory(options.OutputPath);
 
-        var snapshot = CreateSnapshot();
-        var renderer = GetRenderer();
+        var staticFiles = await planner.SyncStaticFilesAsync(plan);
 
-        await StaticSiteGenerator.GenerateAsync(
+        // Render only the pages the plan could not prove unchanged, recording what
+        // each render reads and writes for the next build's skip checks.
+        var recorders = new ConcurrentDictionary<string, BuildDependencyRecorder>(StringComparer.OrdinalIgnoreCase);
+        var rendered = await StaticSiteGenerator.RenderPagesAsync(
             options,
-            snapshot.Pages,
-            (request, output, ct) => RenderPageAsync(renderer, request, output, ct),
+            plan.PagesToRender,
+            (request, output, ct) =>
+            {
+                var recorder = recorders.GetOrAdd(request.OutputRelativePath, static _ => new BuildDependencyRecorder());
+                return RenderPageAsync(renderer, request, output, recorder, ct);
+            },
             cancellationToken);
 
-        await GenerateArtifactsAsync(options, snapshot, cancellationToken);
+        var artifacts = await GenerateArtifactsAsync(options, snapshot, cancellationToken);
+
+        var pageEntries = new List<BuildManifestPage>(plan.CarriedPages.Count + rendered.Count);
+        pageEntries.AddRange(plan.CarriedPages);
+        foreach (var page in rendered)
+        {
+            pageEntries.Add(planner.CreatePageEntry(
+                page.Request,
+                page.OutputHash,
+                recorders[page.Request.OutputRelativePath],
+                plan.ContentSetFingerprint));
+        }
+
+        var manifest = new BuildManifest
+        {
+            SchemaVersion = BuildManifest.CurrentSchemaVersion,
+            OptionsHash = plan.OptionsHash,
+            AssemblyMvids = plan.AssemblyMvids,
+            Pages = pageEntries,
+            StaticFiles = staticFiles,
+            Artifacts = artifacts,
+        };
+
+        planner.RemoveOrphans(plan.OldManifest, manifest);
+        await planner.SaveManifestAsync(manifest, cancellationToken);
+
+        BuildOutput.Info(
+            $"Generated {rendered.Count} pages ({plan.CarriedPages.Count} unchanged, skipped) in {stopwatch.ElapsedMilliseconds} ms.");
     }
 
     /// <summary>
@@ -410,12 +471,12 @@ public sealed class KijiApp : IAsyncDisposable
         return new SiteSnapshot(requests);
     }
 
-    private static PageRenderRequest CreatePageRenderRequest(PageDiscovery.DiscoveredPage page, PlannedPage planned)
+    private PageRenderRequest CreatePageRenderRequest(PageDiscovery.DiscoveredPage page, PlannedPage planned)
     {
         var parameters = planned.Parameters
             .ToDictionary(static pair => pair.Key, static pair => (object?)pair.Value, StringComparer.Ordinal);
 
-        return new PageRenderRequest(
+        var request = new PageRenderRequest(
             planned.SourceIdentifier,
             page.ComponentType,
             parameters,
@@ -424,6 +485,8 @@ public sealed class KijiApp : IAsyncDisposable
             AssociatedContentIdentity: planned.AssociatedContentIdentity,
             ExcludeFromSitemap: planned.ExcludeFromSitemap,
             LastModified: planned.LastModified);
+
+        return request with { RootParameters = CreateRootParameters(request) };
     }
 
     private static PageDiscovery.DiscoveredPage FindDynamicPage(
@@ -527,7 +590,7 @@ public sealed class KijiApp : IAsyncDisposable
         try
         {
             return await renderer.RenderComponentAsync<KijiRoot>(
-                CreateRootParameters(request),
+                request.RootParameters ?? CreateRootParameters(request),
                 Site.BaseUrl.AppendRelativePath(request.RoutePath));
         }
         finally
@@ -536,16 +599,21 @@ public sealed class KijiApp : IAsyncDisposable
         }
     }
 
-    private async Task RenderPageAsync(ComponentRenderer renderer, PageRenderRequest request, TextWriter output, CancellationToken cancellationToken)
+    private async Task RenderPageAsync(
+        ComponentRenderer renderer,
+        PageRenderRequest request,
+        TextWriter output,
+        BuildDependencyRecorder? dependencies,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        PageRenderContext.SetCurrent(CreatePageRenderContext(request));
+        PageRenderContext.SetCurrent(CreatePageRenderContext(request, dependencies));
         try
         {
             await renderer.RenderComponentToAsync<KijiRoot>(
                 output,
-                CreateRootParameters(request),
+                request.RootParameters ?? CreateRootParameters(request),
                 Site.BaseUrl.AppendRelativePath(request.RoutePath));
         }
         finally
@@ -554,12 +622,13 @@ public sealed class KijiApp : IAsyncDisposable
         }
     }
 
-    private static PageRenderContext CreatePageRenderContext(PageRenderRequest request)
+    private static PageRenderContext CreatePageRenderContext(PageRenderRequest request, BuildDependencyRecorder? dependencies = null)
     {
         return new PageRenderContext
         {
             RoutePath = request.RoutePath,
             OutputRelativeDirectory = Path.GetDirectoryName(request.OutputRelativePath) ?? string.Empty,
+            Dependencies = dependencies,
         };
     }
 
@@ -584,13 +653,14 @@ public sealed class KijiApp : IAsyncDisposable
                 page.LastModified))]);
     }
 
-    private async Task GenerateArtifactsAsync(SsgOptions options, SiteSnapshot snapshot, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<string>> GenerateArtifactsAsync(SsgOptions options, SiteSnapshot snapshot, CancellationToken cancellationToken)
     {
         if (_artifacts.Count == 0)
         {
-            return;
+            return [];
         }
 
+        var artifactRelativePaths = new List<string>(_artifacts.Count);
         var context = CreateOutputContext(snapshot);
         var reservedPaths = CreateReservedArtifactPaths(options, snapshot);
 
@@ -606,11 +676,14 @@ public sealed class KijiApp : IAsyncDisposable
             reservedPaths[fullPath] = "another artifact output path";
             Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
 
-            await using var stream = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 4096, useAsync: true);
+            await using var stream = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 64 * 1024, useAsync: true);
             await artifact.WriteAsync(stream, context, cancellationToken);
 
-            Console.WriteLine($"Generated: {fullPath}");
+            artifactRelativePaths.Add(Path.GetRelativePath(options.OutputPath, fullPath));
+            BuildOutput.Info($"Generated: {fullPath}");
         }
+
+        return artifactRelativePaths;
     }
 
     private static Dictionary<string, string> CreateReservedArtifactPaths(SsgOptions options, SiteSnapshot snapshot)

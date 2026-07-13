@@ -1,5 +1,6 @@
 using Kiji.Assets;
 using Microsoft.Extensions.DependencyInjection;
+using YamlDotNet.Serialization;
 
 namespace Kiji.Markdown;
 
@@ -29,7 +30,16 @@ public static class KijiBuilderExtensions
         var contentOptions = new MarkdownContentOptions();
         configure?.Invoke(contentOptions);
 
-        var frontMatterDeserializer = MarkdownFrontMatterParser.CreateDeserializer(contentOptions.FrontMatterConfigurations);
+        // A factory rather than a shared instance: front matter parsing runs on
+        // multiple threads and YamlDotNet deserializers are not documented as thread-safe.
+        IDeserializer CreateFrontMatterDeserializer()
+        {
+            return MarkdownFrontMatterParser.CreateDeserializer(contentOptions.FrontMatterConfigurations);
+        }
+
+        // Created once per registration so it survives content re-materializations
+        // in the dev server; a file save re-parses only the files that changed.
+        var frontMatterCache = new MarkdownFrontMatterCache<TFrontMatter>();
 
         return builder.AddContentSource(services =>
         {
@@ -40,7 +50,8 @@ public static class KijiBuilderExtensions
             return new MarkdownContentsBuilder<TFrontMatter>(
                 options.ContentsPath,
                 (content, cancellationToken) => markdownProcessor.ProcessAsync(content.FileInfo.FilePath, cancellationToken),
-                frontMatterDeserializer)
+                CreateFrontMatterDeserializer,
+                frontMatterCache)
                 .Build();
         });
     }

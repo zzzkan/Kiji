@@ -38,7 +38,8 @@ Kiji renders the document shell itself — the HTML5 doctype, `<html lang>` from
 (charset meta, `<title>`, metas, links) through the `Kiji.Components.Head`
 component.
 
-Run `dotnet run` to build the site into `dist`, `dotnet run dev` for the
+Run `dotnet run` to build the site into `dist` (incremental — unchanged pages
+are skipped; pass `--force` for a full rebuild), `dotnet run dev` for the
 live-reloading dev server, or `dotnet run preview` to serve the built output.
 Add `dist/` and `.kiji/` (the build cache) to your site's `.gitignore`.
 

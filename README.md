@@ -50,7 +50,8 @@ app.MapSitemap();
 return await app.RunAsync(); // build (default) | dev [--port <n>] | preview [--port <n>]
 ```
 
-- `dotnet run` — builds the site into `dist` (cleaned first)
+- `dotnet run` — builds the site into `dist` incrementally (`--force` for a full
+  rebuild, `--verbose` for per-file output)
 - `dotnet run dev` — on-demand dev server with live reload; when run under `dotnet watch`, Kiji emits watch-style logs for content/static reload activity
 - `dotnet run preview` — serves the built `dist` output
 
@@ -84,11 +85,53 @@ Add `dist/` and `.kiji/` (the build cache) to your site's `.gitignore`.
   register via `app.MapArtifact(...)`.
 - **Markdown pipeline**: customize Markdig, front matter deserialization, and
   HTML post-processing (e.g. heading anchors) via `AddMarkdownContent(options => ...)`.
+- **Incremental builds**: `build` records what every page read (content files,
+  the content set, options, your site's assemblies) in
+  `.kiji/cache/build-manifest.json` and skips pages whose inputs are unchanged —
+  editing one post re-renders that post, list pages, and artifacts instead of the
+  whole site. Any ambiguity (no manifest, unknown files in `dist`, recompiled
+  assemblies, tampered outputs) falls back to a full rebuild; stale output is
+  never acceptable. Two assumptions to know about:
+  - Renders must be deterministic in their inputs. If a page reads data Kiji
+    cannot see (a data file consumed by a custom content loader, an HTTP call),
+    declare it with `builder.AddBuildInput("path/to/data")` or
+    `builder.AddBuildInput("key", versionValue)` so changes trigger a rebuild —
+    or run `dotnet run -- build --force`.
+  - Framework (`System.*`/`Microsoft.*`) assemblies are excluded from the change
+    fingerprint; after an SDK update, use `--force` if you want to be certain.
+
+## Performance
+
+Pages render in parallel (one `HtmlRenderer`/DI scope per page) straight into
+pooled UTF-8 buffers written with a single preallocated write per file, markdown
+front matter parses in parallel, and incremental builds skip unchanged pages
+entirely. For large sites built in-process (CI, scripts), enabling server GC in
+the site's project file typically speeds up full builds:
+
+```xml
+<PropertyGroup>
+  <ServerGarbageCollection>true</ServerGarbageCollection>
+</PropertyGroup>
+```
+
+Measurement infrastructure lives in the repo: `src/Kiji.Benchmarks`
+(BenchmarkDotNet microbenchmarks) and `tools/Kiji.SyntheticSite` (an end-to-end
+harness that generates an N-page site and measures full, no-change, and
+one-post-edited builds):
+
+```powershell
+dotnet run -c Release --project tools/Kiji.SyntheticSite -- --pages 1000 --runs 3
+```
 
 ## Repository layout
 
 - `src/Kiji`: the framework — routing, rendering, markdown, images, feeds, sitemaps, dev server
 - `src/Kiji.Tests`: unit and integration tests
+- `src/Kiji.Benchmarks`: BenchmarkDotNet microbenchmarks for the hot paths
+- `tools/Kiji.SyntheticSite`: end-to-end build performance harness
+
+An architecture and design document (in Japanese) lives at
+[docs/design.md](docs/design.md).
 
 ## Build
 

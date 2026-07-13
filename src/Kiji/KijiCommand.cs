@@ -6,4 +6,6 @@ namespace Kiji;
 internal sealed record KijiCommand(
     KijiCommandKind Kind,
     int Port = KijiCommandLine.DefaultPort,
-    string? RawCommand = null);
+    string? RawCommand = null,
+    bool Verbose = false,
+    bool Force = false);

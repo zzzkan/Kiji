@@ -7,7 +7,7 @@ internal static class KijiCommandLine
 {
     internal const int DefaultPort = 8080;
 
-    internal const string Usage = "Usage: [build] | dev [--port <n>] | preview [--port <n>]";
+    internal const string Usage = "Usage: [build [--verbose] [--force]] | dev [--port <n>] | preview [--port <n>]";
 
     internal static KijiCommand Parse(string[] args)
     {
@@ -17,11 +17,24 @@ internal static class KijiCommandLine
 
         return command switch
         {
-            "build" => new KijiCommand(KijiCommandKind.Build),
+            "build" => new KijiCommand(KijiCommandKind.Build, Verbose: HasFlag(args, "--verbose"), Force: HasFlag(args, "--force")),
             "dev" => new KijiCommand(KijiCommandKind.Dev, Port: ParsePort(args)),
             "preview" => new KijiCommand(KijiCommandKind.Preview, Port: ParsePort(args)),
             _ => new KijiCommand(KijiCommandKind.Unknown, RawCommand: command),
         };
+    }
+
+    private static bool HasFlag(string[] args, string name)
+    {
+        for (var i = 1; i < args.Length; i++)
+        {
+            if (string.Equals(args[i], name, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static int ParsePort(string[] args)

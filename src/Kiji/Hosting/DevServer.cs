@@ -94,6 +94,22 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
         _webApplication = web;
         ActiveServers.TryAdd(this, 0);
         _reporter.DevServerStarted(new Uri(web.Urls.First()), options.ContentsPath, Directory.Exists(options.StaticPath) ? options.StaticPath : null);
+
+        // Warm the snapshot (page discovery + content materialization) in the
+        // background so the first request doesn't pay for it. Failures are ignored
+        // here; the first request recomputes and surfaces the real error.
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                GetSnapshot();
+            }
+            catch
+            {
+                // Reported on first request.
+            }
+        }, CancellationToken.None);
+
         return web;
     }
 

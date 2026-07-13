@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 using Kiji.Hosting;
+using Kiji.Rendering;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Kiji;
@@ -16,22 +17,37 @@ public sealed class ContentCollection<T> : IEnumerable<T>
     where T : class
 {
     private readonly ContentRuntime _runtime;
-    private readonly Func<IServiceProvider, IReadOnlyList<T>> _load;
+    private readonly Func<IServiceProvider, (IReadOnlyList<T> Items, IReadOnlyList<string?>? Provenance)> _load;
     private Func<T, string>? _keySelector;
     private Comparison<T>? _comparison;
 
     internal ContentCollection(ContentRuntime runtime, Func<IServiceProvider, IReadOnlyList<T>> load)
+        : this(runtime, services => (load(services), null))
+    {
+    }
+
+    private ContentCollection(
+        ContentRuntime runtime,
+        Func<IServiceProvider, (IReadOnlyList<T> Items, IReadOnlyList<string?>? Provenance)> load)
     {
         _runtime = runtime;
         _load = load;
         _runtime.AddRegistration(services => services.AddSingleton(this));
     }
 
-
     /// <summary>
     /// The materialized items in declared order.
     /// </summary>
-    public IReadOnlyList<T> Items => Materialized.Items;
+    public IReadOnlyList<T> Items
+    {
+        get
+        {
+            // Enumerating the collection during a tracked render couples the page to
+            // the content set as a whole (list pages must reflect added/removed items).
+            PageRenderContext.Current?.Dependencies?.MarkContentSetDependency();
+            return Materialized.Items;
+        }
+    }
 
     internal bool HasKey => _keySelector is not null;
 
@@ -43,7 +59,14 @@ public sealed class ContentCollection<T> : IEnumerable<T>
     {
         ArgumentNullException.ThrowIfNull(projection);
 
-        return new ContentCollection<TResult>(_runtime, services => [.. GetMaterialized(services).Items.Select(projection)]);
+        // Projection is positional, so each result item inherits the provenance
+        // (source file) of the item it was projected from.
+        return new ContentCollection<TResult>(_runtime, services =>
+        {
+            var materialized = GetMaterialized(services);
+            IReadOnlyList<TResult> items = [.. materialized.Items.Select(projection)];
+            return (items, materialized.Provenance);
+        });
     }
 
     /// <summary>
@@ -89,7 +112,14 @@ public sealed class ContentCollection<T> : IEnumerable<T>
     {
         ArgumentNullException.ThrowIfNull(key);
 
-        return Materialized.Index.TryGetValue(key, out item);
+        var materialized = Materialized;
+        if (!materialized.Index.TryGetValue(key, out item))
+        {
+            return false;
+        }
+
+        RecordItemDependency(materialized, key);
+        return true;
     }
 
     /// <summary>
@@ -128,6 +158,26 @@ public sealed class ContentCollection<T> : IEnumerable<T>
         return keySelector(item);
     }
 
+    private static void RecordItemDependency(MaterializedCollection materialized, string key)
+    {
+        var dependencies = PageRenderContext.Current?.Dependencies;
+        if (dependencies is null)
+        {
+            return;
+        }
+
+        // A keyed lookup depends only on that item's source file when known;
+        // untracked items fall back to the whole content set (conservative).
+        if (materialized.ProvenanceByKey.TryGetValue(key, out var sourceFile) && sourceFile is not null)
+        {
+            dependencies.AddFile(sourceFile);
+        }
+        else
+        {
+            dependencies.MarkContentSetDependency();
+        }
+    }
+
     private MaterializedCollection Materialized => GetMaterialized(services: null);
 
     private MaterializedCollection GetMaterialized(IServiceProvider? services)
@@ -140,44 +190,84 @@ public sealed class ContentCollection<T> : IEnumerable<T>
 
     private MaterializedCollection Materialize(IServiceProvider services)
     {
-        var items = _load(services);
+        var (loaded, loadedProvenance) = _load(services);
+
+        var items = loaded;
+        var provenance = loadedProvenance ?? DeriveProvenance(loaded);
 
         if (_comparison is not null)
         {
-            var sorted = new List<T>(items);
-            sorted.Sort(_comparison);
-            items = sorted;
+            // Sort items and provenance together so item-level dependency tracking
+            // survives ordering operators.
+            var indices = Enumerable.Range(0, items.Count).ToArray();
+            var comparison = _comparison;
+            Array.Sort(indices, (left, right) => comparison(items[left], items[right]));
+
+            var sortedItems = new T[items.Count];
+            var sortedProvenance = new string?[items.Count];
+            for (var i = 0; i < indices.Length; i++)
+            {
+                sortedItems[i] = items[indices[i]];
+                sortedProvenance[i] = provenance[indices[i]];
+            }
+
+            items = sortedItems;
+            provenance = sortedProvenance;
         }
 
         FrozenDictionary<string, T> index;
+        FrozenDictionary<string, string?> provenanceByKey;
         if (_keySelector is null)
         {
             index = FrozenDictionary<string, T>.Empty;
+            provenanceByKey = FrozenDictionary<string, string?>.Empty;
         }
         else
         {
-            var builder = new Dictionary<string, T>(items.Count, StringComparer.OrdinalIgnoreCase);
-            foreach (var item in items)
+            var indexBuilder = new Dictionary<string, T>(items.Count, StringComparer.OrdinalIgnoreCase);
+            var provenanceBuilder = new Dictionary<string, string?>(items.Count, StringComparer.OrdinalIgnoreCase);
+            for (var i = 0; i < items.Count; i++)
             {
-                var key = _keySelector(item);
-                if (!builder.TryAdd(key, item))
+                var key = _keySelector(items[i]);
+                if (!indexBuilder.TryAdd(key, items[i]))
                 {
                     throw new InvalidOperationException(
                         $"ContentCollection<{typeof(T).Name}> contains duplicate key '{key}'. Keys must be unique (case-insensitive).");
                 }
+
+                provenanceBuilder[key] = provenance[i];
             }
 
-            index = builder.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
+            index = indexBuilder.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
+            provenanceByKey = provenanceBuilder.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
         }
 
-        return new MaterializedCollection(items, index);
+        return new MaterializedCollection(items, index, provenance, provenanceByKey);
     }
 
-    private sealed class MaterializedCollection(IReadOnlyList<T> items, FrozenDictionary<string, T> index)
+    private static string?[] DeriveProvenance(IReadOnlyList<T> items)
+    {
+        var provenance = new string?[items.Count];
+        for (var i = 0; i < items.Count; i++)
+        {
+            provenance[i] = (items[i] as IContentSourceFile)?.SourceFilePath;
+        }
+
+        return provenance;
+    }
+
+    private sealed class MaterializedCollection(
+        IReadOnlyList<T> items,
+        FrozenDictionary<string, T> index,
+        IReadOnlyList<string?> provenance,
+        FrozenDictionary<string, string?> provenanceByKey)
     {
         public IReadOnlyList<T> Items { get; } = items;
 
         public FrozenDictionary<string, T> Index { get; } = index;
-    }
 
+        public IReadOnlyList<string?> Provenance { get; } = provenance;
+
+        public FrozenDictionary<string, string?> ProvenanceByKey { get; } = provenanceByKey;
+    }
 }

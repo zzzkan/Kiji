@@ -3,7 +3,7 @@ using Kiji.Rendering;
 
 namespace Kiji.Markdown;
 
-public sealed class MarkdownContent<TFrontMatter>
+public sealed class MarkdownContent<TFrontMatter> : IContentSourceFile
 {
     private readonly Func<MarkdownContent<TFrontMatter>, CancellationToken, Task<string>> _renderAsync;
 
@@ -27,10 +27,22 @@ public sealed class MarkdownContent<TFrontMatter>
 
     public MarkdownFileInfo FileInfo { get; }
 
-    public TFrontMatter FrontMatter { get; }
+    public TFrontMatter FrontMatter
+    {
+        get
+        {
+            // Reading front matter during a tracked render makes the page depend on
+            // this file, so front-matter-only pages re-render when the file changes.
+            PageRenderContext.Current?.Dependencies?.AddFile(FileInfo.FilePath);
+            return field;
+        }
+    }
+
+    string IContentSourceFile.SourceFilePath => FileInfo.FilePath;
 
     public async ValueTask<string> RenderAsync(CancellationToken cancellationToken = default)
     {
+        PageRenderContext.Current?.Dependencies?.AddFile(FileInfo.FilePath);
         var cacheKey = PageRenderContext.Current?.RoutePath ?? string.Empty;
         var renderTask = _renderTasksByRoute.GetOrAdd(cacheKey, key => RenderCoreAsync(key));
 

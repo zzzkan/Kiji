@@ -62,3 +62,6 @@ nunit-*.xml
 # Kiji build outputs
 dist/
 .kiji/
+
+# BenchmarkDotNet results
+BenchmarkDotNet.Artifacts/

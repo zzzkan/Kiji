@@ -54,6 +54,8 @@ public sealed class MarkdownProcessor
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        PageRenderContext.Current?.Dependencies?.AddFile(Path.GetFullPath(filePath));
+
         var content = await File.ReadAllTextAsync(filePath, cancellationToken);
         var markdownBody = MarkdownFrontMatterParser.RemoveFrontMatter(content);
         var document = global::Markdig.Markdown.Parse(markdownBody, _pipeline);
@@ -103,11 +105,23 @@ public sealed class MarkdownProcessor
                 ? null
                 : Path.Combine(_imageCachePath, CreateCacheKey(Path.GetDirectoryName(sourceFile)!));
 
-            imageInfoLookup[referenceKey] = await _imageAssetProcessor.ProcessImageAsync(
+            pageContext.Dependencies?.AddFile(sourceFile);
+
+            var processed = await _imageAssetProcessor.ProcessImageAsync(
                 sourceFile,
                 outputDirectory,
                 cacheDirectory,
                 cancellationToken);
+
+            if (pageContext.Dependencies is { } dependencies)
+            {
+                foreach (var variant in processed.Variants)
+                {
+                    dependencies.AddOutput(Path.Combine(outputDirectory, variant.FileName));
+                }
+            }
+
+            imageInfoLookup[referenceKey] = processed;
         }
 
         return imageInfoLookup;

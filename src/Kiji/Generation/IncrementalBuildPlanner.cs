@@ -1,0 +1,481 @@
+using System.Collections.Concurrent;
+using System.Reflection;
+using System.Text;
+using System.Text.Json;
+using Kiji.Rendering;
+
+namespace Kiji.Generation;
+
+/// <summary>
+/// Drives the incremental build: loads the previous manifest, fingerprints the
+/// current inputs (options, assemblies, content files), decides per page whether the
+/// existing output is still valid, syncs static files by stamp, removes orphaned
+/// outputs, and writes the new manifest. Every ambiguous situation falls back to a
+/// full rebuild — a stale output is never acceptable.
+/// </summary>
+internal sealed class IncrementalBuildPlanner(
+    SsgOptions options,
+    string rootPath,
+    string cacheDirectory,
+    SiteInfo site,
+    IReadOnlyList<KijiBuildInput> buildInputs)
+{
+    private readonly string _rootPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
+    private readonly string _manifestPath = Path.Combine(cacheDirectory, "build-manifest.json");
+    private readonly ConcurrentDictionary<string, string> _fileFingerprints = new(StringComparer.OrdinalIgnoreCase);
+
+    internal async Task<IncrementalBuildPlan> CreatePlanAsync(
+        IReadOnlyList<PageRenderRequest> pages,
+        IEnumerable<Assembly> assemblies,
+        bool force,
+        CancellationToken cancellationToken)
+    {
+        var optionsHash = ComputeOptionsHash();
+        var assemblyMvids = CollectAssemblyMvids(assemblies);
+        var contentSetFingerprint = ComputeContentSetFingerprint();
+
+        var oldManifest = force ? null : await LoadManifestAsync(cancellationToken);
+
+        // No usable manifest means the output directory's contents are unknown:
+        // rebuild from a clean slate. Same when files appeared that no build produced.
+        var fullClean = oldManifest is null;
+        if (!fullClean && HasUnknownOutputs(oldManifest!))
+        {
+            fullClean = true;
+            oldManifest = null;
+        }
+
+        var renderAll = fullClean
+            || oldManifest!.OptionsHash != optionsHash
+            || !oldManifest.AssemblyMvids.SequenceEqual(assemblyMvids, StringComparer.Ordinal);
+
+        if (renderAll)
+        {
+            return new IncrementalBuildPlan(fullClean, pages, [], oldManifest, optionsHash, assemblyMvids, contentSetFingerprint);
+        }
+
+        var oldPages = oldManifest!.Pages.ToDictionary(
+            static page => page.OutputRelativePath,
+            StringComparer.OrdinalIgnoreCase);
+
+        var decisions = new (PageRenderRequest? Render, BuildManifestPage? Carried)[pages.Count];
+        Parallel.For(0, pages.Count, index =>
+        {
+            var request = pages[index];
+            decisions[index] = oldPages.TryGetValue(request.OutputRelativePath, out var oldPage)
+                && CanSkip(request, oldPage, contentSetFingerprint)
+                    ? (null, oldPage)
+                    : (request, null);
+        });
+
+        var pagesToRender = new List<PageRenderRequest>();
+        var carriedPages = new List<BuildManifestPage>();
+        foreach (var (render, carried) in decisions)
+        {
+            if (render is not null)
+            {
+                pagesToRender.Add(render);
+            }
+            else
+            {
+                carriedPages.Add(carried!);
+            }
+        }
+
+        return new IncrementalBuildPlan(
+            FullClean: false, pagesToRender, carriedPages, oldManifest, optionsHash, assemblyMvids, contentSetFingerprint);
+    }
+
+    private bool CanSkip(PageRenderRequest request, BuildManifestPage oldPage, string contentSetFingerprint)
+    {
+        if (!string.Equals(oldPage.RoutePath, request.RoutePath, StringComparison.Ordinal)
+            || !string.Equals(oldPage.ParametersHash, BuildFingerprint.HashParameters(request.Parameters), StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        // The existing output (and everything the page materialized beside it) must
+        // still be exactly what the previous build wrote.
+        var outputPath = Path.Combine(options.OutputPath, oldPage.OutputRelativePath);
+        if (!string.Equals(HashFileCached(outputPath), oldPage.OutputHash, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        foreach (var additionalOutput in oldPage.AdditionalOutputs)
+        {
+            if (!File.Exists(Path.Combine(options.OutputPath, additionalOutput)))
+            {
+                return false;
+            }
+        }
+
+        foreach (var dependency in oldPage.Dependencies)
+        {
+            var currentFingerprint = dependency.Kind switch
+            {
+                BuildManifestDependency.FileKind => HashFileCached(ResolveDependencyPath(dependency.Key)),
+                BuildManifestDependency.ContentSetKind => contentSetFingerprint,
+                _ => BuildFingerprint.Missing, // Unknown kind from a newer schema: re-render.
+            };
+
+            if (!string.Equals(currentFingerprint, dependency.Fingerprint, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    internal BuildManifestPage CreatePageEntry(
+        PageRenderRequest request,
+        string outputHash,
+        BuildDependencyRecorder recorder,
+        string contentSetFingerprint)
+    {
+        var dependencies = new List<BuildManifestDependency>();
+        foreach (var file in recorder.Files.OrderBy(static path => path, StringComparer.OrdinalIgnoreCase))
+        {
+            dependencies.Add(new BuildManifestDependency(
+                BuildManifestDependency.FileKind,
+                ToDependencyKey(file),
+                HashFileCached(file)));
+        }
+
+        if (recorder.DependsOnContentSet)
+        {
+            dependencies.Add(new BuildManifestDependency(
+                BuildManifestDependency.ContentSetKind,
+                "contents",
+                contentSetFingerprint));
+        }
+
+        var additionalOutputs = recorder.AdditionalOutputs
+            .Select(path => Path.GetRelativePath(options.OutputPath, path))
+            .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return new BuildManifestPage(
+            request.OutputRelativePath,
+            request.RoutePath,
+            BuildFingerprint.HashParameters(request.Parameters),
+            outputHash,
+            dependencies,
+            additionalOutputs);
+    }
+
+    /// <summary>
+    /// Copies static files whose source or destination stamp changed since the last
+    /// build; untouched files are skipped entirely.
+    /// </summary>
+    internal async Task<IReadOnlyList<BuildManifestStaticFile>> SyncStaticFilesAsync(IncrementalBuildPlan plan)
+    {
+        if (!Directory.Exists(options.StaticPath))
+        {
+            return [];
+        }
+
+        var oldEntries = (plan.OldManifest?.StaticFiles ?? [])
+            .ToDictionary(static entry => entry.RelativePath, StringComparer.OrdinalIgnoreCase);
+
+        var files = Directory.EnumerateFiles(options.StaticPath, "*", SearchOption.AllDirectories).ToArray();
+        var entries = new BuildManifestStaticFile[files.Length];
+        var copied = 0;
+
+        await Parallel.ForEachAsync(
+            Enumerable.Range(0, files.Length),
+            new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
+            (index, _) =>
+            {
+                var source = new FileInfo(files[index]);
+                var relativePath = Path.GetRelativePath(options.StaticPath, source.FullName);
+                var destinationPath = Path.Combine(options.OutputPath, relativePath);
+
+                if (!plan.FullClean
+                    && oldEntries.TryGetValue(relativePath, out var oldEntry)
+                    && oldEntry.SourceLength == source.Length
+                    && oldEntry.SourceLastWriteTimeUtc == source.LastWriteTimeUtc)
+                {
+                    var destination = new FileInfo(destinationPath);
+                    if (destination.Exists
+                        && destination.Length == oldEntry.DestinationLength
+                        && destination.LastWriteTimeUtc == oldEntry.DestinationLastWriteTimeUtc)
+                    {
+                        entries[index] = oldEntry;
+                        return ValueTask.CompletedTask;
+                    }
+                }
+
+                Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+                File.Copy(source.FullName, destinationPath, overwrite: true);
+                Interlocked.Increment(ref copied);
+
+                var copiedInfo = new FileInfo(destinationPath);
+                entries[index] = new BuildManifestStaticFile(
+                    relativePath,
+                    source.Length,
+                    source.LastWriteTimeUtc,
+                    copiedInfo.Length,
+                    copiedInfo.LastWriteTimeUtc);
+                return ValueTask.CompletedTask;
+            });
+
+        if (copied > 0 || files.Length > 0)
+        {
+            BuildOutput.Info($"Static files: {copied} copied, {files.Length - copied} unchanged.");
+        }
+
+        return entries;
+    }
+
+    /// <summary>
+    /// Deletes files the previous build produced that no current output claims, then
+    /// prunes directories left empty.
+    /// </summary>
+    internal void RemoveOrphans(BuildManifest? oldManifest, BuildManifest newManifest)
+    {
+        if (oldManifest is null)
+        {
+            return;
+        }
+
+        var expected = CollectOutputRelativePaths(newManifest);
+        var removed = 0;
+
+        foreach (var oldOutput in CollectOutputRelativePaths(oldManifest))
+        {
+            if (expected.Contains(oldOutput))
+            {
+                continue;
+            }
+
+            var fullPath = Path.Combine(options.OutputPath, oldOutput);
+            if (File.Exists(fullPath))
+            {
+                File.Delete(fullPath);
+                removed++;
+            }
+        }
+
+        if (removed > 0)
+        {
+            PruneEmptyDirectories(options.OutputPath);
+            BuildOutput.Info($"Removed {removed} stale output file(s).");
+        }
+    }
+
+    internal async Task SaveManifestAsync(BuildManifest manifest, CancellationToken cancellationToken)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(_manifestPath)!);
+        var json = JsonSerializer.Serialize(manifest, BuildManifestJsonContext.Default.BuildManifest);
+        await File.WriteAllTextAsync(_manifestPath, json, cancellationToken);
+    }
+
+    internal async Task<BuildManifest?> LoadManifestAsync(CancellationToken cancellationToken)
+    {
+        if (!File.Exists(_manifestPath))
+        {
+            return null;
+        }
+
+        try
+        {
+            var json = await File.ReadAllTextAsync(_manifestPath, cancellationToken);
+            var manifest = JsonSerializer.Deserialize(json, BuildManifestJsonContext.Default.BuildManifest);
+            return manifest?.SchemaVersion == BuildManifest.CurrentSchemaVersion ? manifest : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+    }
+
+    internal string ComputeContentSetFingerprint()
+    {
+        if (!Directory.Exists(options.ContentsPath))
+        {
+            return BuildFingerprint.Missing;
+        }
+
+        var files = Directory.EnumerateFiles(options.ContentsPath, "*.md", SearchOption.AllDirectories)
+            .Select(Path.GetFullPath)
+            .ToArray();
+
+        var hashed = new (string RelativePath, string ContentHash)[files.Length];
+        Parallel.For(0, files.Length, index =>
+        {
+            hashed[index] = (
+                Path.GetRelativePath(options.ContentsPath, files[index]!),
+                HashFileCached(files[index]!));
+        });
+
+        return BuildFingerprint.HashFileSet(hashed);
+    }
+
+    private bool HasUnknownOutputs(BuildManifest oldManifest)
+    {
+        if (!Directory.Exists(options.OutputPath))
+        {
+            return false;
+        }
+
+        var expected = CollectOutputRelativePaths(oldManifest);
+        foreach (var file in Directory.EnumerateFiles(options.OutputPath, "*", SearchOption.AllDirectories))
+        {
+            var relativePath = Path.GetRelativePath(options.OutputPath, file);
+            if (!expected.Contains(relativePath))
+            {
+                BuildOutput.Info($"Unexpected file in output directory ('{relativePath}'); rebuilding from scratch.");
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static HashSet<string> CollectOutputRelativePaths(BuildManifest manifest)
+    {
+        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var page in manifest.Pages)
+        {
+            paths.Add(page.OutputRelativePath);
+            foreach (var additionalOutput in page.AdditionalOutputs)
+            {
+                paths.Add(additionalOutput);
+            }
+        }
+
+        foreach (var staticFile in manifest.StaticFiles)
+        {
+            paths.Add(staticFile.RelativePath);
+        }
+
+        foreach (var artifact in manifest.Artifacts)
+        {
+            paths.Add(artifact);
+        }
+
+        return paths;
+    }
+
+    private static void PruneEmptyDirectories(string root)
+    {
+        foreach (var directory in Directory.EnumerateDirectories(root))
+        {
+            PruneEmptyDirectories(directory);
+            if (!Directory.EnumerateFileSystemEntries(directory).Any())
+            {
+                Directory.Delete(directory);
+            }
+        }
+    }
+
+    private string ComputeOptionsHash()
+    {
+        var builder = new StringBuilder()
+            .Append("baseUrl=").Append(site.BaseUrl).Append('\n')
+            .Append("name=").Append(site.Name).Append('\n')
+            .Append("description=").Append(site.Description).Append('\n')
+            .Append("language=").Append(site.Language).Append('\n')
+            .Append("author=").Append(site.Author).Append('\n')
+            .Append("contents=").Append(ToDependencyKey(options.ContentsPath)).Append('\n')
+            .Append("static=").Append(ToDependencyKey(options.StaticPath)).Append('\n')
+            .Append("output=").Append(ToDependencyKey(options.OutputPath)).Append('\n');
+
+        foreach (var input in buildInputs)
+        {
+            builder.Append("input:").Append(input.Key).Append('=');
+            builder.Append(input.Path is not null ? HashBuildInputPath(input.Path) : input.Value);
+            builder.Append('\n');
+        }
+
+        return BuildFingerprint.HashText(builder.ToString());
+    }
+
+    private string HashBuildInputPath(string path)
+    {
+        var fullPath = Path.IsPathFullyQualified(path) ? path : Path.Combine(_rootPath, path);
+        if (Directory.Exists(fullPath))
+        {
+            var files = Directory.EnumerateFiles(fullPath, "*", SearchOption.AllDirectories)
+                .Select(file => (Path.GetRelativePath(fullPath, file), BuildFingerprint.HashFile(file)));
+            return BuildFingerprint.HashFileSet(files);
+        }
+
+        return BuildFingerprint.HashFile(fullPath);
+    }
+
+    internal static IReadOnlyList<string> CollectAssemblyMvids(IEnumerable<Assembly> roots)
+    {
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        var mvids = new List<string>();
+        var queue = new Queue<Assembly>(roots.Distinct());
+
+        while (queue.TryDequeue(out var assembly))
+        {
+            var name = assembly.GetName().Name ?? string.Empty;
+            if (!visited.Add(name) || IsFrameworkAssembly(name))
+            {
+                continue;
+            }
+
+            mvids.Add($"{name}:{assembly.ManifestModule.ModuleVersionId:N}");
+
+            foreach (var reference in assembly.GetReferencedAssemblies())
+            {
+                if (visited.Contains(reference.Name ?? string.Empty) || IsFrameworkAssembly(reference.Name ?? string.Empty))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    queue.Enqueue(Assembly.Load(reference));
+                }
+                catch (Exception exception) when (exception is FileNotFoundException or FileLoadException or BadImageFormatException)
+                {
+                    // Unresolvable references still participate deterministically.
+                    visited.Add(reference.Name ?? string.Empty);
+                    mvids.Add($"{reference.Name}:unresolved");
+                }
+            }
+        }
+
+        mvids.Sort(StringComparer.Ordinal);
+        return mvids;
+    }
+
+    private static bool IsFrameworkAssembly(string name)
+    {
+        // Framework assemblies change only with SDK updates; excluding them keeps the
+        // fingerprint small. Use --force after an SDK update if in doubt.
+        return name.StartsWith("System.", StringComparison.Ordinal)
+            || name.StartsWith("Microsoft.", StringComparison.Ordinal)
+            || name is "System" or "mscorlib" or "netstandard" or "WindowsBase";
+    }
+
+    internal string HashFileCached(string path)
+    {
+        return _fileFingerprints.GetOrAdd(Path.GetFullPath(path), static fullPath => BuildFingerprint.HashFile(fullPath));
+    }
+
+    private string ToDependencyKey(string absolutePath)
+    {
+        var fullPath = Path.GetFullPath(absolutePath);
+        return fullPath.StartsWith(_rootPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            ? Path.GetRelativePath(_rootPath, fullPath).Replace('\\', '/')
+            : fullPath;
+    }
+
+    private string ResolveDependencyPath(string key)
+    {
+        return Path.IsPathFullyQualified(key)
+            ? key
+            : Path.Combine(_rootPath, key.Replace('/', Path.DirectorySeparatorChar));
+    }
+}

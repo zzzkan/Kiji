@@ -173,6 +173,79 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
         Assert.Contains("<strong>bold</strong>", await item.RenderAsync(), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Build_ManyFiles_ParsesInParallelWithDeterministicOrder()
+    {
+        var expected = new List<string>(64);
+        for (var i = 0; i < 64; i++)
+        {
+            var fileName = $"post-{i:D3}.md";
+            expected.Add($"post-{i:D3}");
+            await File.WriteAllTextAsync(
+                Path.Combine(_contentsDir, fileName),
+                CreateValidMarkdown($"Post {i}", new DateTime(2024, 1, 1).AddDays(i)));
+        }
+
+        var contents = CreateBuilder().Build();
+
+        Assert.Equal(expected, contents.Select(static item => item.FileInfo.FileNameWithoutExtension));
+        Assert.All(contents, static item => Assert.NotNull(item.FrontMatter.Title));
+    }
+
+    [Fact]
+    public async Task Build_InvalidFrontMatter_SurfacesFirstFailingFileUnwrapped()
+    {
+        await File.WriteAllTextAsync(
+            Path.Combine(_contentsDir, "aaa-broken.md"),
+            "no front matter at all");
+        await File.WriteAllTextAsync(
+            Path.Combine(_contentsDir, "bbb-valid.md"),
+            CreateValidMarkdown("Valid", new DateTime(2024, 1, 15)));
+
+        var exception = Assert.Throws<InvalidOperationException>(() => CreateBuilder().Build());
+
+        Assert.Contains("aaa-broken.md", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Build_WithFrontMatterCache_ReparsesOnlyChangedFiles()
+    {
+        await File.WriteAllTextAsync(
+            Path.Combine(_contentsDir, "stable.md"),
+            CreateValidMarkdown("Stable", new DateTime(2024, 1, 10)));
+        await File.WriteAllTextAsync(
+            Path.Combine(_contentsDir, "changing.md"),
+            CreateValidMarkdown("Changing", new DateTime(2024, 1, 15)));
+
+        var cache = new MarkdownFrontMatterCache<FrontMatter>();
+        var builder = new MarkdownContentsBuilder<FrontMatter>(
+            _contentsDir,
+            RenderAsync,
+            static () => MarkdownFrontMatterParser.CreateDeserializer(null),
+            cache);
+
+        var first = builder.Build();
+        var second = builder.Build();
+
+        // Unchanged files reuse the cached front matter instance across builds.
+        Assert.Same(
+            Assert.Single(first, static item => item.FileInfo.FileNameWithoutExtension == "changing").FrontMatter,
+            Assert.Single(second, static item => item.FileInfo.FileNameWithoutExtension == "changing").FrontMatter);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(_contentsDir, "changing.md"),
+            CreateValidMarkdown("Changing Updated Title", new DateTime(2024, 1, 15)));
+
+        var third = builder.Build();
+
+        Assert.Equal(
+            "Changing Updated Title",
+            Assert.Single(third, static item => item.FileInfo.FileNameWithoutExtension == "changing").FrontMatter.Title);
+        Assert.Same(
+            Assert.Single(first, static item => item.FileInfo.FileNameWithoutExtension == "stable").FrontMatter,
+            Assert.Single(third, static item => item.FileInfo.FileNameWithoutExtension == "stable").FrontMatter);
+    }
+
     private MarkdownContentsBuilder<FrontMatter> CreateBuilder()
     {
         return new MarkdownContentsBuilder<FrontMatter>(_contentsDir, RenderAsync);

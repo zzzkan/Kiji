@@ -35,6 +35,36 @@ public sealed class KijiBuilder
 
     internal ContentRuntime Runtime { get; }
 
+    internal List<KijiBuildInput> BuildInputs { get; } = [];
+
+    /// <summary>
+    /// Declares a file or directory (relative paths resolve against <see cref="SitePaths.Root"/>)
+    /// whose content participates in the incremental build fingerprint. Use this for
+    /// inputs Kiji cannot track itself — data files read by custom content loaders,
+    /// templates, configuration — so changing them triggers a full re-render.
+    /// </summary>
+    public KijiBuilder AddBuildInput(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        BuildInputs.Add(new KijiBuildInput($"path:{path}", Value: null, Path: path));
+        return this;
+    }
+
+    /// <summary>
+    /// Declares a key/value pair participating in the incremental build fingerprint.
+    /// Use this for untrackable inputs (e.g. data fetched over HTTP): pass a value that
+    /// changes whenever the fetched data changes, and the build re-renders everything.
+    /// </summary>
+    public KijiBuilder AddBuildInput(string key, string value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        ArgumentNullException.ThrowIfNull(value);
+
+        BuildInputs.Add(new KijiBuildInput(key, value, Path: null));
+        return this;
+    }
+
     /// <summary>
     /// Registers a content source and returns its typed collection handle.
     /// Extension packages (e.g. markdown support) build on this method.

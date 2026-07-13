@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace Kiji.Generation;
 
 /// <summary>
@@ -16,30 +18,37 @@ public static class StaticFileCopier
             return;
         }
 
-        foreach (var file in Directory.EnumerateFiles(staticDirectory, "*", SearchOption.TopDirectoryOnly))
+        var stopwatch = Stopwatch.StartNew();
+
+        var files = Directory.EnumerateFiles(staticDirectory, "*", SearchOption.AllDirectories).ToArray();
+
+        var copies = new (string Source, string Destination)[files.Length];
+        var destinationDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < files.Length; i++)
         {
-            await CopyFileAsync(staticDirectory, outputDirectory, file);
+            var relativePath = Path.GetRelativePath(staticDirectory, files[i]);
+            var destination = Path.Combine(outputDirectory, relativePath);
+            copies[i] = (files[i], destination);
+            destinationDirectories.Add(Path.GetDirectoryName(destination)!);
         }
 
-        foreach (var directory in Directory.EnumerateDirectories(staticDirectory, "*", SearchOption.TopDirectoryOnly))
+        foreach (var directory in destinationDirectories)
         {
-            foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
+            Directory.CreateDirectory(directory);
+        }
+
+        await Parallel.ForEachAsync(
+            copies,
+            new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
+            static (copy, _) =>
             {
-                await CopyFileAsync(staticDirectory, outputDirectory, file);
-            }
-        }
+                // File.Copy takes the kernel copy fast path (CopyFileEx on Windows),
+                // which beats streaming through managed buffers.
+                File.Copy(copy.Source, copy.Destination, overwrite: true);
+                BuildOutput.Detail($"Copied: {copy.Destination}");
+                return ValueTask.CompletedTask;
+            });
 
-        Console.WriteLine($"Static files copied from: {staticDirectory}");
-    }
-
-    private static async Task CopyFileAsync(string staticDirectory, string outputDirectory, string file)
-    {
-        var relativePath = Path.GetRelativePath(staticDirectory, file);
-        var dest = Path.Combine(outputDirectory, relativePath);
-        Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
-
-        using var src = File.OpenRead(file);
-        using var dst = File.Create(dest);
-        await src.CopyToAsync(dst);
+        BuildOutput.Info($"Copied {files.Length} static files in {stopwatch.ElapsedMilliseconds} ms.");
     }
 }

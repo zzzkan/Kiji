@@ -24,9 +24,9 @@ Kiji は .NET 製の静的サイトジェネレーター（SSG）フレームワ
 ## 全体アーキテクチャ
 
 ```
-KijiBuilder ──build()──▶ KijiApp ──RunAsync()──▶ build | dev | preview
+KijiBuilder ──build()──▶ KijiApp ──RunAsync()──▶ build | dev | preview | clean
    │                        │
-   │ AddContentSource /     │ MapPages / MapContent / MapRoutes /
+   │ AddContentSource /     │ MapPages / MapRoutes /
    │ AddMarkdownContent     │ MapDefaultLayout / MapNotFound / MapArtifact
    ▼                        ▼
 ContentRuntime          CreateSnapshot()
@@ -58,7 +58,7 @@ ContentRuntime          CreateSnapshot()
 `contents` / `wwwroot` / `dist` / `.kiji`）、DI サービス、コンテンツソース、ビルド入力
 （`AddBuildInput`）を集める。`Build()` で `KijiApp` を生成し、`Map*` 系メソッドで
 ページ・ルート・アーティファクトを宣言、`RunAsync()` が CLI（`build`（既定）/ `dev` /
-`preview`）をディスパッチする。
+`preview` / `clean`）をディスパッチする。
 
 ### ページ発見とルーティング（`src/Kiji/Routing`）
 
@@ -70,7 +70,7 @@ ContentRuntime          CreateSnapshot()
 - **`StaticPageDefinition`**: ルートテンプレートを正規化しセグメントへパースする。
   catch-all・ルート制約・オプションパラメータ・複合セグメントは非対応（例外で拒否）。
 - **`StaticPagePlanner`**: 静的ルートはそのまま、動的ルート（`/blog/{Slug}/`）は
-  `MapContent` / `MapRoutes` が供給するルート値で展開し、`route/index.html` 形式の
+  `MapRoutes` が供給するルート値で展開し、`route/index.html` 形式の
   出力パスへ計画する。ルート重複・出力パス衝突・ルート値の不足/過剰・パス区切り文字
   混入はすべて計画段階で検証して失敗させる（出力を書く前に落とす）。
 
@@ -81,6 +81,12 @@ ContentRuntime          CreateSnapshot()
 `ConcurrentDictionary` で保持し、dev での変更時に無効化）。コレクションは
 `WithKey`（キー付け・重複はエラー）、`OrderBy(Descending)`、`Map`（射影）を持ち、
 コンポーネントからは `@inject` で消費する。
+
+戻り値の `ContentCollection<T>` はそのコンテンツソースの**唯一のハンドル**であり、
+ルートマッピング（`MapRoutes` のコンテンツオーバーロード）・フィード（`MapFeed`）・
+コンポーネントへの DI 注入で同じインスタンスを共有する。builder 段階で宣言した
+ハンドルを app 段階へ明示的に受け渡すのは意図的な設計で、DI からの暗黙解決にしない
+ことで型安全性を保ち、同じ要素型のコレクションを複数登録しても曖昧にならない。
 
 各アイテムには **provenance（由来ソースファイル）** が付随する。ルートコレクションでは
 `IContentSourceFile`（`MarkdownContent<T>` が実装）から導出し、`Map` は射影が位置対応で
@@ -136,7 +142,8 @@ ContentRuntime          CreateSnapshot()
 ### アーティファクト（`src/Kiji/Feeds` / `src/Kiji/Sitemaps`）
 
 RSS フィードとサイトマップは `ISiteArtifact` の実装としてページ描画後に生成される。
-`MapContent` のキー関連付けから各コンテンツの生成ページ URL・`lastmod` を解決する。
+`MapRoutes`（コンテンツオーバーロード）のキー関連付けから各コンテンツの生成ページ
+URL・`lastmod` を解決する。
 サードパーティは `MapArtifact(ISiteArtifact)` で任意のサイト全体出力を追加できる。
 
 ### 開発サーバー（`src/Kiji/Hosting`）
@@ -157,8 +164,10 @@ RSS フィードとサイトマップは `ISiteArtifact` の実装としてペ�
 ### CLI（`KijiCommandLine`）
 
 `build`（既定。`--verbose` でファイル単位ログ、`--force` でフルビルド強制）、
-`dev [--port <n>]`、`preview [--port <n>]`。`preview` は生成済み `dist` を本番同等の
-trailing-slash・404 セマンティクスで配信する。ビルド中のコンソール出力は集約サマリが
+`dev [--port <n>]`、`preview [--port <n>]`、`clean`。`preview` は生成済み `dist` を本番同等の
+trailing-slash・404 セマンティクスで配信する。`clean` は出力ディレクトリ（`dist`）と
+`.kiji`（ビルドマニフェスト・画像キャッシュ・dev サイトミラー）を削除する。フラグは
+持たず、次のビルドは必然的にフルビルドになる。ビルド中のコンソール出力は集約サマリが
 既定（並列ループからのページごとの出力はコンソールロックで直列化し支配的コストに
 なり得るため）。
 
@@ -236,7 +245,7 @@ Kiji が観測できない入力を使うサイトは、`KijiBuilder.AddBuildInp
   プロバイダなしの logging を登録する（ページごとのレンダラー生成でロガー解決が
   走るため）。
 - 測定基盤を同居させる: `src/Kiji.Benchmarks`（BenchmarkDotNet マイクロベンチ）と
-  `tools/Kiji.SyntheticSite`（N ページの合成サイトでフル / 無変更 / 1 記事編集の
+  `src/Kiji.SyntheticSite`（N ページの合成サイトでフル / 無変更 / 1 記事編集の
   E2E ビルドを計測、JSON 出力）。最適化は測ってから入れる。
   参考値（1,000 ページ、Ryzen 級デスクトップ）: フルビルド約 1.3〜1.6 秒、
   1 記事編集後のリビルド約 0.2 秒。
@@ -278,6 +287,9 @@ xUnit v3 + Microsoft.Testing.Platform。`InternalsVisibleTo` で internal を直
 
 - `src/Kiji` — フレームワーク本体（routing / rendering / markdown / assets /
   generation / feeds / sitemaps / hosting）
-- `src/Kiji.Tests` — 単体・統合テスト（`TestSite/` を含む）
+- `src/Kiji.Tests` — 単体・統合テスト（正しさ検証用フィクスチャ `TestSite/` を含む。
+  テストの都合で自由に進化する）
 - `src/Kiji.Benchmarks` — ホットパスのマイクロベンチマーク
-- `tools/Kiji.SyntheticSite` — E2E ビルド性能ハーネス
+- `src/Kiji.SyntheticSite` — E2E ビルド性能ハーネス。サイト定義は計測値の比較
+  可能性を保つための凍結された代表ワークロードであり、`TestSite/` とは意図的に
+  共有しない（テスト都合のサイト変更が計測値へ暗黙に波及する結合を避ける）

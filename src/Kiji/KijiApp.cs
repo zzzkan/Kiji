@@ -23,7 +23,7 @@ namespace Kiji;
 /// <summary>
 /// A Kiji static site application. Created via <see cref="KijiBuilder.Build"/>;
 /// declare page mappings with the <c>Map*</c> methods, then dispatch commands
-/// (<c>build</c>, <c>dev</c>, <c>preview</c>) with <see cref="RunAsync"/>.
+/// (<c>build</c>, <c>dev</c>, <c>preview</c>, <c>clean</c>) with <see cref="RunAsync"/>.
 /// </summary>
 public sealed class KijiApp : IAsyncDisposable
 {
@@ -129,13 +129,14 @@ public sealed class KijiApp : IAsyncDisposable
     /// which enables artifacts to resolve generated page metadata via
     /// <see cref="SiteOutputContext.TryResolvePage"/> and <see cref="SiteOutputContext.TryResolveRoute"/>.
     /// Each keyed content item must resolve to at most one generated page.
+    /// For routes not backed by a content item, use <see cref="MapRoutes{TPage}"/>.
     /// </summary>
     /// <param name="collection">The content collection to expand into pages.</param>
     /// <param name="routeValues">Projects a content item into its route values.</param>
     /// <param name="lastModified">
     /// Optional last-modification timestamp per item, emitted as the sitemap <c>lastmod</c>.
     /// </param>
-    public KijiApp MapContent<TPage, TContent>(
+    public KijiApp MapRoutes<TPage, TContent>(
         ContentCollection<TContent> collection,
         Func<TContent, object> routeValues,
         Func<TContent, DateTimeOffset?>? lastModified = null)
@@ -157,6 +158,10 @@ public sealed class KijiApp : IAsyncDisposable
     /// <summary>
     /// Maps arbitrary dynamic routes to a page rendered by <typeparamref name="TPage"/>.
     /// The factory is re-evaluated for every site snapshot.
+    /// Use this overload for routes not backed by a content item (e.g. taxonomy pages
+    /// computed from a collection); such pages carry no content association and no
+    /// sitemap <c>lastmod</c>. For pages backed by a content collection, use
+    /// <see cref="MapRoutes{TPage, TContent}"/>.
     /// </summary>
     public KijiApp MapRoutes<TPage>(Func<IEnumerable<object>> routeValues, bool excludeFromSitemap = false)
         where TPage : IComponent
@@ -184,7 +189,7 @@ public sealed class KijiApp : IAsyncDisposable
     }
 
     /// <summary>
-    /// Dispatches the command line: <c>build</c> (default), <c>dev</c>, or <c>preview</c>.
+    /// Dispatches the command line: <c>build</c> (default), <c>dev</c>, <c>preview</c>, or <c>clean</c>.
     /// </summary>
     /// <returns>The process exit code.</returns>
     public async Task<int> RunAsync(CancellationToken cancellationToken = default)
@@ -218,6 +223,10 @@ public sealed class KijiApp : IAsyncDisposable
 
                 case KijiCommandKind.Preview:
                     await PreviewAsync(command.Port, cts.Token);
+                    return 0;
+
+                case KijiCommandKind.Clean:
+                    Clean();
                     return 0;
 
                 default:
@@ -385,6 +394,28 @@ public sealed class KijiApp : IAsyncDisposable
         await web.StartAsync(cancellationToken);
         Console.WriteLine($"Kiji preview server: {web.Urls.First()}");
         await web.WaitForShutdownAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Deletes the build outputs: the output directory (default <c>dist</c>) and the
+    /// <c>.kiji</c> directory (build manifest, image cache, dev-server site mirror).
+    /// The next build is a full rebuild.
+    /// </summary>
+    public void Clean()
+    {
+        DeleteRecursively(_builder.Paths.ResolveOutputPath());
+        DeleteRecursively(_builder.Paths.ResolveKijiPath());
+    }
+
+    private static void DeleteRecursively(string path)
+    {
+        if (!Directory.Exists(path))
+        {
+            return;
+        }
+
+        Directory.Delete(path, recursive: true);
+        BuildOutput.Info($"Removed: {path}");
     }
 
     /// <inheritdoc/>

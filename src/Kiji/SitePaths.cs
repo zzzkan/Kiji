@@ -36,9 +36,14 @@ public sealed class SitePaths
         return ResolveAgainstRoot(Output);
     }
 
+    internal string ResolveKijiPath()
+    {
+        return Path.Combine(Path.GetFullPath(Root), ".kiji");
+    }
+
     internal string ResolveCachePath()
     {
-        return Path.Combine(Path.GetFullPath(Root), ".kiji", "cache");
+        return Path.Combine(ResolveKijiPath(), "cache");
     }
 
     internal SsgOptions ResolveForServe()

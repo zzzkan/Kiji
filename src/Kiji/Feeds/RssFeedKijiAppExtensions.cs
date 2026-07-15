@@ -7,7 +7,7 @@ public static class RssFeedKijiAppExtensions
 {
     /// <summary>
     /// Generates an RSS feed from a keyed content collection. Each item's route is resolved
-    /// from its <see cref="KijiApp.MapContent{TPage, TContent}"/> association; items without
+    /// from its <see cref="KijiApp.MapRoutes{TPage, TContent}"/> association; items without
     /// a mapped page are skipped. Entries appear in collection order.
     /// </summary>
     /// <param name="app">The Kiji application.</param>

@@ -62,7 +62,7 @@ public static class BuildRunner
         app.MapDefaultLayout<MainLayout>();
         app.MapPages(typeof(BuildRunner).Assembly);
         app.MapNotFound<NotFoundPage>();
-        app.MapContent<PostPage, MarkdownContent<PostFrontMatter>>(
+        app.MapRoutes<PostPage, MarkdownContent<PostFrontMatter>>(
             posts,
             static post => new { Slug = PostSlug.From(post.FileInfo) },
             static post => post.FrontMatter.CreatedAt);

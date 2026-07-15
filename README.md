@@ -35,7 +35,7 @@ app.MapDefaultLayout<MainLayout>(); // default layout for every page (pages may 
 app.MapPages(); // every public component with an @page route template in the entry assembly
 app.MapNotFound<NotFound>(); // rendered as 404.html
 
-app.MapContent<PostPage, MarkdownContent<PostFrontMatter>>(
+app.MapRoutes<PostPage, MarkdownContent<PostFrontMatter>>(
     posts,
     post => new { Slug = post.FileInfo.FileNameWithoutExtension },
     post => post.FrontMatter.UpdatedAt); // optional: sitemap <lastmod>
@@ -47,13 +47,15 @@ app.MapFeed(posts, async (post, ct) =>
     });
 app.MapSitemap();
 
-return await app.RunAsync(); // build (default) | dev [--port <n>] | preview [--port <n>]
+return await app.RunAsync(); // build (default) | dev [--port <n>] | preview [--port <n>] | clean
 ```
 
 - `dotnet run` — builds the site into `dist` incrementally (`--force` for a full
   rebuild, `--verbose` for per-file output)
 - `dotnet run dev` — on-demand dev server with live reload; when run under `dotnet watch`, Kiji emits watch-style logs for content/static reload activity
 - `dotnet run preview` — serves the built `dist` output
+- `dotnet run clean` — deletes `dist` and the `.kiji` cache; the next build is a
+  full rebuild
 
 Add `dist/` and `.kiji/` (the build cache) to your site's `.gitignore`.
 
@@ -70,8 +72,9 @@ Add `dist/` and `.kiji/` (the build cache) to your site's `.gitignore`.
   Pages in another assembly register via `MapPages(assembly)`.
 - **Content collections**: `builder.AddContentSource(...)` /
   `AddMarkdownContent<TFrontMatter>()` declare lazily materialized collections,
-  consumable from components via `@inject` and from route mappings via
-  `MapContent` / `MapRoutes`.
+  consumable from components via `@inject` and from route mappings via the
+  `MapRoutes` overloads. The returned `ContentCollection` is the single handle
+  shared by route mappings, feeds (`MapFeed`), and component injection.
 - **Page-bundle images**: local images referenced from markdown are optimized to
   responsive WebP variants written next to the page's `index.html` and referenced
   with `./`-relative URLs, so sites work at any base path. Encoded variants are
@@ -115,20 +118,20 @@ the site's project file typically speeds up full builds:
 ```
 
 Measurement infrastructure lives in the repo: `src/Kiji.Benchmarks`
-(BenchmarkDotNet microbenchmarks) and `tools/Kiji.SyntheticSite` (an end-to-end
+(BenchmarkDotNet microbenchmarks) and `src/Kiji.SyntheticSite` (an end-to-end
 harness that generates an N-page site and measures full, no-change, and
 one-post-edited builds):
 
 ```powershell
-dotnet run -c Release --project tools/Kiji.SyntheticSite -- --pages 1000 --runs 3
+dotnet run -c Release --project src/Kiji.SyntheticSite -- --pages 1000 --runs 3
 ```
 
 ## Repository layout
 
 - `src/Kiji`: the framework — routing, rendering, markdown, images, feeds, sitemaps, dev server
-- `src/Kiji.Tests`: unit and integration tests
+- `src/Kiji.Tests`: unit and integration tests; its `TestSite/` is the correctness fixture and evolves freely with the tests
 - `src/Kiji.Benchmarks`: BenchmarkDotNet microbenchmarks for the hot paths
-- `tools/Kiji.SyntheticSite`: end-to-end build performance harness
+- `src/Kiji.SyntheticSite`: end-to-end build performance harness; its site definition is a frozen, representative workload kept deliberately separate from the test fixture so measurements stay comparable over time
 
 An architecture and design document (in Japanese) lives at
 [docs/design.md](docs/design.md).

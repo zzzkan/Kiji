@@ -94,7 +94,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         var sitemapXml = await File.ReadAllTextAsync(Path.Combine(_outputDir, "sitemap.xml"));
         Assert.Contains("https://example.com/blog/hello-world/", sitemapXml, StringComparison.Ordinal);
         Assert.DoesNotContain("404.html", sitemapXml, StringComparison.Ordinal);
-        // lastmod flows from the MapContent lastModified selector (UpdatedAt of hello-world).
+        // lastmod flows from the MapRoutes lastModified selector (UpdatedAt of hello-world).
         Assert.Contains("<lastmod>2026-03-19T00:00:00Z</lastmod>", sitemapXml, StringComparison.Ordinal);
 
         var feedXml = await File.ReadAllTextAsync(Path.Combine(_outputDir, "feed.xml"));
@@ -139,7 +139,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
 
         await using var app = builder.Build();
         TestArticleContents.MapSite(app, posts);
-        app.MapContent<MarkdownPostTestPage, MarkdownContent<FrontMatter>>(
+        app.MapRoutes<MarkdownPostTestPage, MarkdownContent<FrontMatter>>(
             markdownPosts,
             static post => new { Slug = post.FileInfo.FileNameWithoutExtension });
 

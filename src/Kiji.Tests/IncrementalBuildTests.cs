@@ -182,7 +182,7 @@ public sealed class IncrementalBuildTests : IDisposable
 
         await using var app = builder.Build();
         TestArticleContents.MapSite(app, posts);
-        app.MapContent<MarkdownPostTestPage, MarkdownContent<FrontMatter>>(
+        app.MapRoutes<MarkdownPostTestPage, MarkdownContent<FrontMatter>>(
             markdownPosts,
             static post => new { Slug = post.FileInfo.FileNameWithoutExtension });
 

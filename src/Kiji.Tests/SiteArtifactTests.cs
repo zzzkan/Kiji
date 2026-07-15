@@ -124,7 +124,7 @@ public sealed class SiteArtifactTests : IDisposable
             staticPath: null,
             configure: static (targetApp, posts) =>
             {
-                targetApp.MapContent<MirrorPostPage, Post>(posts, static post => new { post.Slug });
+                targetApp.MapRoutes<MirrorPostPage, Post>(posts, static post => new { post.Slug });
             });
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => app.BuildSiteAsync());

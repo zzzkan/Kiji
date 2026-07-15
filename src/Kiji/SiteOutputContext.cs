@@ -52,7 +52,7 @@ public sealed class SiteOutputContext
 
     /// <summary>
     /// Resolves the route of a content item by its collection key
-    /// (see <see cref="ContentCollection{T}.WithKey"/> and <see cref="KijiApp.MapContent{TPage, TContent}"/>).
+    /// (see <see cref="ContentCollection{T}.WithKey"/> and <see cref="KijiApp.MapRoutes{TPage, TContent}"/>).
     /// A keyed content item must be associated with exactly one generated page.
     /// </summary>
     public bool TryResolveRoute(string contentIdentity, [NotNullWhen(true)] out string? routePath)

@@ -61,7 +61,7 @@ public sealed class PageDiscoveryTests
         // Under the MTP runner the test project is its own executable, so the
         // entry assembly is Kiji.Tests itself.
         app.MapPages();
-        app.MapContent<PostPage, Post>(posts, static post => new { post.Slug });
+        app.MapRoutes<PostPage, Post>(posts, static post => new { post.Slug });
         app.MapRoutes<TagsPage>(static () => []);
         app.MapRoutes<MarkdownPostTestPage>(static () => []);
         app.MapRoutes<MirrorPostPage>(static () => []);
@@ -190,7 +190,7 @@ public sealed class PageDiscoveryTests
         app.MapDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(app);
         app.MapNotFound<NotFoundPage>();
-        app.MapContent<PostPage, Post>(posts, static post => new { post.Slug });
+        app.MapRoutes<PostPage, Post>(posts, static post => new { post.Slug });
         // No mapping for the dynamic /tags/{TagSlug}/ template.
 
         var exception = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());
@@ -288,7 +288,7 @@ public sealed class PageDiscoveryTests
         app.MapDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(app);
         app.MapNotFound<NotFoundPage>();
-        app.MapContent<PostPage, Post>(posts, static post => new { post.Slug });
+        app.MapRoutes<PostPage, Post>(posts, static post => new { post.Slug });
         app.MapRoutes<TagsPage>(tagRoutes);
         return (app, posts);
     }

@@ -8,5 +8,6 @@ internal enum KijiCommandKind
     Build,
     Dev,
     Preview,
+    Clean,
     Unknown,
 }

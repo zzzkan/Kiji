@@ -67,7 +67,7 @@ internal static class TestArticleContents
         MapTestAssemblyPages(app);
         app.MapNotFound<NotFoundPage>();
 
-        app.MapContent<PostPage, Post>(
+        app.MapRoutes<PostPage, Post>(
             posts,
             static post => new { post.Slug },
             static post => post.UpdatedAt ?? post.CreatedAt);

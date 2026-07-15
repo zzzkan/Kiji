@@ -30,7 +30,7 @@ app.MapDefaultLayout<MainLayout>(); // default layout for every page (pages may 
 app.MapPages(); // every public component with an @page route template in the entry assembly
 app.MapNotFound<NotFound>(); // rendered as 404.html
 
-return await app.RunAsync(); // build (default) | dev [--port <n>] | preview [--port <n>]
+return await app.RunAsync(); // build (default) | dev [--port <n>] | preview [--port <n>] | clean
 ```
 
 Kiji renders the document shell itself — the HTML5 doctype, `<html lang>` from
@@ -41,7 +41,9 @@ component.
 Run `dotnet run` to build the site into `dist` (incremental — unchanged pages
 are skipped; pass `--force` for a full rebuild), `dotnet run dev` for the
 live-reloading dev server, or `dotnet run preview` to serve the built output.
-Add `dist/` and `.kiji/` (the build cache) to your site's `.gitignore`.
+`dotnet run clean` deletes `dist` and the `.kiji` cache, so the next build is a
+full rebuild. Add `dist/` and `.kiji/` (the build cache) to your site's
+`.gitignore`.
 
 Markdown content (`builder.AddMarkdownContent<TFrontMatter>()`), responsive
 image optimization, RSS feeds (`app.MapFeed(...)`), and sitemaps

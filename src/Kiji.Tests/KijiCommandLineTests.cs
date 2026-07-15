@@ -60,9 +60,19 @@ public sealed class KijiCommandLineTests
     }
 
     [Theory]
+    [InlineData("clean")]
+    [InlineData("CLEAN")]
+    [InlineData("Clean")]
+    public void Parse_CleanCommand_IsCaseInsensitive(string arg)
+    {
+        var command = KijiCommandLine.Parse([arg]);
+
+        Assert.Equal(KijiCommandKind.Clean, command.Kind);
+    }
+
+    [Theory]
     [InlineData("deploy")]
     [InlineData("serve")]
-    [InlineData("clean")]
     public void Parse_UnknownCommand_ReportsRawCommand(string arg)
     {
         var command = KijiCommandLine.Parse([arg]);

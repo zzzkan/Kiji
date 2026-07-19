@@ -1,4 +1,5 @@
 using System.Reflection.Metadata;
+using Kiji.Components;
 using Kiji.Hosting;
 using Kiji.Routing;
 
@@ -21,6 +22,7 @@ internal static class HotReloadHandler
     {
         _ = updatedTypes;
         PageDiscovery.ClearCache();
+        PageView.ClearCache();
     }
 
     /// <summary>

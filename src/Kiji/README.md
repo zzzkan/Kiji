@@ -35,7 +35,7 @@ return await app.RunAsync(); // build (default) | dev [--port <n>] | preview [--
 
 Kiji renders the document shell itself — the HTML5 doctype, `<html lang>` from
 `SiteInfo.Language`, `<head>`, and `<body>`. Pages contribute head content
-(charset meta, `<title>`, metas, links) through the `Kiji.Components.Head`
+(charset meta, `<title>`, metas, links) through the `Kiji.Components.HeadContent`
 component.
 
 Run `dotnet run` to build the site into `dist` (incremental — unchanged pages

@@ -1,7 +1,6 @@
 using BenchmarkDotNet.Attributes;
 using Kiji.Components;
 using Kiji.Rendering;
-using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -41,7 +40,8 @@ public class ComponentRendererBenchmarks
 
         _rootParameters = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            [nameof(KijiRoot.RouteData)] = new RouteData(typeof(BenchPage), new Dictionary<string, object?>(StringComparer.Ordinal)),
+            [nameof(KijiRoot.PageType)] = typeof(BenchPage),
+            [nameof(KijiRoot.PageParameters)] = new Dictionary<string, object?>(StringComparer.Ordinal),
             [nameof(KijiRoot.DefaultLayout)] = null,
         };
         _pageUri = new Uri("https://bench.example.com/bench/");

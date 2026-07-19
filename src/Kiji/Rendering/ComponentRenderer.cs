@@ -51,7 +51,7 @@ public sealed class ComponentRenderer : IAsyncDisposable
 
     /// <summary>
     /// Registers the services component rendering depends on: logging, HTML encoding,
-    /// and the per-render scoped navigation manager.
+    /// the per-render scoped navigation manager, and the per-render head registry.
     /// </summary>
     internal static void AddComponentRenderingServices(IServiceCollection services)
     {
@@ -62,6 +62,7 @@ public sealed class ComponentRenderer : IAsyncDisposable
         services.AddSingleton(_ => HtmlEncoder.Create(UnicodeRanges.All));
         services.AddScoped<StaticNavigationManager>();
         services.AddScoped<NavigationManager>(static provider => provider.GetRequiredService<StaticNavigationManager>());
+        services.AddScoped<HeadContentRegistry>();
     }
 
     /// <summary>
@@ -146,11 +147,14 @@ public sealed class ComponentRenderer : IAsyncDisposable
             scope.ServiceProvider,
             scope.ServiceProvider.GetRequiredService<ILoggerFactory>());
 
-        // HeadOutlet keeps subscriptions on the renderer, so each page needs its own renderer instance
-        // to keep head state isolated across renders. Pooling was evaluated and rejected: scope +
-        // HtmlRenderer construction measures ~6% of a representative page render (Kiji.Benchmarks
-        // ComponentRendererBenchmarks), and resetting the internal SectionRegistry would require
-        // reflection into ASP.NET Core internals.
+        // A fresh HtmlRenderer per page: reuse was evaluated and rejected because (1) HtmlRenderer
+        // accumulates root component state per RenderComponentAsync with no public removal/reset
+        // API, so reuse leaks prior pages' component state; (2) the renderer captures its service
+        // provider at construction, so per-page scoped services (the initialize-once
+        // StaticNavigationManager, HeadContentRegistry) cannot be refreshed on a reused instance;
+        // (3) scope + HtmlRenderer construction measures only ~10% of a representative page render
+        // (Kiji.Benchmarks ComponentRendererBenchmarks), and the parallel build loop would need a
+        // pool of renderers anyway since one renderer's dispatcher renders one page at a time.
         await renderer.Dispatcher.InvokeAsync(async () =>
         {
             var document = await renderer.RenderComponentAsync(componentType, CreateParameterView(parameters));

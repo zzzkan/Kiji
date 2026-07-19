@@ -25,7 +25,7 @@ public sealed class ComponentRendererTests
     }
 
     [Fact]
-    public async Task RenderComponentAsync_RendersKijiRootWithRouteData()
+    public async Task RenderComponentAsync_RendersKijiRootWithPageType()
     {
         var siteInfo = TestArticleContents.CreateSiteInfo();
 
@@ -50,7 +50,7 @@ public sealed class ComponentRendererTests
         await using var renderer = CreateRenderer(siteInfo);
 
         var html = await renderer.RenderComponentAsync<KijiRoot>(
-            CreateRootParameters(new RouteData(typeof(HomePage), new Dictionary<string, object?>()), defaultLayout: null),
+            CreateRootParameters(typeof(HomePage), new Dictionary<string, object?>(), defaultLayout: null),
             new Uri("https://example.com/"));
 
         Assert.Contains("<h1>Home</h1>", html, StringComparison.Ordinal);
@@ -139,23 +139,23 @@ public sealed class ComponentRendererTests
 
     private static Dictionary<string, object?> CreateRootParameters(Type pageType)
     {
-        var routeData = new RouteData(pageType, new Dictionary<string, object?>());
-
-        return CreateRootParameters(routeData, typeof(MainLayout));
+        return CreateRootParameters(pageType, new Dictionary<string, object?>(), typeof(MainLayout));
     }
 
     private static Dictionary<string, object?> CreateRootParameters(PageRenderRequest pageRequest)
     {
-        var routeData = new RouteData(pageRequest.ComponentType, pageRequest.Parameters);
-
-        return CreateRootParameters(routeData, typeof(MainLayout));
+        return CreateRootParameters(pageRequest.ComponentType, pageRequest.Parameters, typeof(MainLayout));
     }
 
-    private static Dictionary<string, object?> CreateRootParameters(RouteData routeData, Type? defaultLayout)
+    private static Dictionary<string, object?> CreateRootParameters(
+        Type pageType,
+        IReadOnlyDictionary<string, object?> pageParameters,
+        Type? defaultLayout)
     {
         return new Dictionary<string, object?>
         {
-            [nameof(KijiRoot.RouteData)] = routeData,
+            [nameof(KijiRoot.PageType)] = pageType,
+            [nameof(KijiRoot.PageParameters)] = pageParameters,
             [nameof(KijiRoot.DefaultLayout)] = defaultLayout,
         };
     }

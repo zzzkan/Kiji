@@ -667,7 +667,8 @@ public sealed class KijiApp : IAsyncDisposable
     {
         return new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            [nameof(KijiRoot.RouteData)] = new RouteData(request.ComponentType, request.Parameters),
+            [nameof(KijiRoot.PageType)] = request.ComponentType,
+            [nameof(KijiRoot.PageParameters)] = request.Parameters,
             [nameof(KijiRoot.DefaultLayout)] = _defaultLayoutType,
         };
     }

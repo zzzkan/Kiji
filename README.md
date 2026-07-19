@@ -64,7 +64,7 @@ Add `dist/` and `.kiji/` (the build cache) to your site's `.gitignore`.
 - **Built-in document shell**: Kiji renders the document itself — the HTML5
   doctype, `<html lang>` from `SiteInfo.Language`, `<head>`, and `<body>`.
   Pages contribute head content (charset meta, `<title>`, metas, links) through
-  the `Kiji.Components.Head` component, and `MapDefaultLayout<TLayout>()` sets
+  the `Kiji.Components.HeadContent` component, and `MapDefaultLayout<TLayout>()` sets
   the layout applied to every page (optional; pages may override via `@layout`).
 - **Route-declared pages**: `MapPages()` discovers every public component with a
   `@page` route template in the entry assembly — the .NET equivalent of

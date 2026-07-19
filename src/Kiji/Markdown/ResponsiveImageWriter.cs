@@ -1,7 +1,6 @@
 using Markdig.Renderers;
 using Markdig.Renderers.Html.Inlines;
 using Markdig.Syntax.Inlines;
-using Kiji.Assets;
 
 namespace Kiji.Markdown;
 

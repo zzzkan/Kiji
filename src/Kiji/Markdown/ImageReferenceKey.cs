@@ -1,4 +1,4 @@
-namespace Kiji.Assets;
+namespace Kiji.Markdown;
 
 /// <summary>
 /// Normalizes markdown image URLs into canonical lookup keys: the referenced path

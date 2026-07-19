@@ -117,14 +117,31 @@ ContentRuntime          CreateSnapshot()
 ### レンダリング（`src/Kiji/Rendering` / `src/Kiji/Components`）
 
 - **組み込みドキュメントシェル `KijiRoot`**: doctype、`SiteInfo.Language` による
-  `<html lang>`、`<head>`（`SectionOutlet`）、`<body>`（`RouteView` + 既定レイアウト）を
-  フレームワーク側が描画する。ページは `Kiji.Components.Head` コンポーネント経由で
-  `<head>` に寄与する（`SectionContent` ベース）。
+  `<html lang>`、`<head>`（Kiji 独自の `HeadOutlet`）、`<body>`（Kiji 独自の `PageView` +
+  既定レイアウト）をフレームワーク側が描画する。ページは `Kiji.Components.HeadContent`
+  コンポーネント経由で `<head>` に寄与する。
+- **`HeadContent` / `HeadOutlet` / `HeadContentRegistry`**: Blazor 標準の
+  `SectionContent`/`SectionOutlet` の置き換え。ページ描画スコープの
+  `HeadContentRegistry` を介して `HeadContent`（プロバイダ）が `HeadOutlet`（`<head>` 内）
+  へ内容を publish する。outlet は本文より先に（空で）描画され、通知でキューされた
+  再レンダーが quiescence 前に処理される — 標準 `SectionRegistry` と同一の
+  Dispatcher 拘束メカニズム。意味論は「1 ページ 1 つ、最後にレンダーされたものが勝つ」
+  （標準とパリティ）。標準実装と違い状態がレンダラーではなく DI スコープに載る。
+- **`PageView`**: Blazor 標準の `RouteView` + `LayoutView` の置き換え。ページ型の
+  `LayoutAttribute`（`@layout`）?? 既定レイアウトを解決し、レイアウト型の
+  `LayoutAttribute` で入れ子に展開する（循環は例外、標準にない改善）。
+  なお .NET 8+ の `[SupplyParameterFromQuery]` カスケードは `Router` コンポーネントが
+  担うため、`Router` を使わない Kiji では標準 `RouteView` でも元々機能していなかった
+  （SSG では非目標）。
 - **`ComponentRenderer`**: ページごとに DI スコープと `HtmlRenderer` を生成して描画する。
-  `HeadOutlet`/`SectionOutlet` の購読状態がレンダラーインスタンスに紐づくため、
-  レンダラーの再利用はページ間で `<head>` が漏れる。プーリングは実測
-  （スコープ + レンダラー生成 ≒ ページ描画コストの 6%、`Kiji.Benchmarks`）に基づき
-  採用しない。これは Blazor SSR がリクエストごとにレンダラーを作るのと同型の設計。
+  再利用（プーリング）は評価のうえ不採用: (1) `HtmlRenderer` は描画ごとにルート
+  コンポーネント状態を蓄積し、公開 API に除去・リセットが存在しない、(2) レンダラーは
+  構築時にサービスプロバイダを捕捉するため、ページ毎スコープのサービス
+  （initialize-once な `StaticNavigationManager`、`HeadContentRegistry`）を差し替え
+  られない、(3) スコープ + レンダラー生成はページ描画コストの実測 ~10%
+  （`Kiji.Benchmarks`）に過ぎず、並列ビルドは 1 レンダラー = 1 Dispatcher の制約から
+  どのみち CPU 数規模のプールを要する。これは Blazor SSR がリクエストごとに
+  レンダラーを作るのと同型の設計。
 - **`PooledUtf8TextWriter`**: ビルド時のページ書き込みは `TextWriter` を継承した
   専用ライターが受ける。UTF-16 の書き込みを `Utf8.FromUtf16` で `ArrayPool<byte>` の
   バッファへ直接トランスコードし（サロゲートペアの分割書き込みにも対応）、描画完了後に
@@ -256,7 +273,8 @@ Kiji が観測できない入力を使うサイトは、`KijiBuilder.AddBuildInp
 |---|---|
 | Native AOT / トリミング対応 | Blazor `HtmlRenderer` と `ParameterView` のパラメータ設定、YamlDotNet がリフレクション前提で full-AOT は公式サポート外。SSG はスループットバウンドで、AOT の利点（起動時間・バイナリサイズ）が問題に刺さらない。 |
 | ページ発見のソースジェネレーター化 | 1 アセンブリのスキャン + キャッシュで ms オーダー。ビルド複雑性とデバッグ性のコストが利益を桁で上回る。 |
-| `HtmlRenderer` のプーリング | `SectionRegistry`（internal）の状態分離が公開 API で解決できず、実測でセットアップはページコストの約 6% に過ぎない。 |
+| `HtmlRenderer` のプーリング | ルートコンポーネント状態の除去・リセットが公開 API に存在せず再利用は状態リーク、ページ毎スコープのサービス（`StaticNavigationManager`/`HeadContentRegistry`）は構築時捕捉で差し替え不能。実測でセットアップはページコストの約 10% に過ぎず、並列描画には結局 CPU 数規模のプールが要る。 |
+| Blazor 標準コンポーネントの継続利用（`SectionOutlet`/`RouteView`） | `SectionRegistry` の状態がレンダラーに紐づき Kiji から制御不能。.NET 10 の `RouteView` はレイアウト解決以外に Kiji が使う機能を持たない（クエリカスケードは `Router` 必須で元々不動作）。独自の `HeadOutlet`/`HeadContentRegistry`/`PageView` に置き換え、状態を DI スコープへ移した。 |
 | `IBufferWriter<byte>` への直接レンダリング | `HtmlRootComponent` の公開 API が `WriteHtmlTo(TextWriter)` のみ。`PooledUtf8TextWriter` による TextWriter 層でのトランスコードが到達可能な上限。 |
 | 型単位のコンポーネント変更検出 | レンダリングで実際に使われた型グラフを取得する公開手段がなく、static/定数の変更は型グラフでも捕捉不能。MVID によるアセンブリ単位の無効化が正しさを保てる最小粒度。 |
 | 画像の中央 content-addressed 配置（`/_assets/{hash}`） | ページバンドル（記事と画像が同じディレクトリ）のレイアウトと `./` 相対参照を壊す。画像は既に content-hash キャッシュ済みで再エンコードは発生しない。 |

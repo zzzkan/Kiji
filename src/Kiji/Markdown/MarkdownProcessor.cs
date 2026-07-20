@@ -1,8 +1,8 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.IO.Hashing;
 using System.Text;
 using Markdig;
-using Markdig.Renderers;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
 using Kiji.Assets;
@@ -18,6 +18,7 @@ namespace Kiji.Markdown;
 public sealed class MarkdownProcessor
 {
     private readonly MarkdownPipeline _pipeline;
+    private readonly ConcurrentBag<PooledMarkdigRenderer> _rendererPool = [];
     private readonly IImageAssetProcessor _imageAssetProcessor;
     private readonly IReadOnlyList<Func<string, string>> _htmlPostProcessors;
     private readonly string _outputPath;
@@ -54,10 +55,27 @@ public sealed class MarkdownProcessor
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        PageRenderContext.Current?.Dependencies?.AddFile(Path.GetFullPath(filePath));
-
         var content = await File.ReadAllTextAsync(filePath, cancellationToken);
         var markdownBody = MarkdownFrontMatterParser.RemoveFrontMatter(content);
+        return await ProcessBodyAsync(filePath, markdownBody, cancellationToken);
+    }
+
+    /// <summary>
+    /// Processes an already-read markdown body for the given source file, skipping the
+    /// file read. <paramref name="filePath"/> still identifies the source for image
+    /// resolution and dependency tracking.
+    /// </summary>
+    /// <param name="filePath">Path to the markdown file the body came from.</param>
+    /// <param name="markdownBody">The markdown body with front matter already removed.</param>
+    public async Task<string> ProcessBodyAsync(string filePath, string markdownBody, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        ArgumentNullException.ThrowIfNull(markdownBody);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        PageRenderContext.Current?.Dependencies?.AddFile(Path.GetFullPath(filePath));
+
         var document = global::Markdig.Markdown.Parse(markdownBody, _pipeline);
 
         var imageInfoLookup = await MaterializeReferencedImagesAsync(filePath, document, cancellationToken);
@@ -169,15 +187,18 @@ public sealed class MarkdownProcessor
 
     private string Render(MarkdownDocument document, ResponsiveImageContext imageContext)
     {
-        var writer = new StringWriter();
-        var renderer = new HtmlRenderer(writer);
-        _pipeline.Setup(renderer);
+        // Renderers are pooled per processor: setup costs ~3x the render itself.
+        // Pool size is bounded by concurrent renders (≤ CPU count); an entry is
+        // dropped instead of returned if its render threw, so a renderer left in an
+        // unknown state is never reused.
+        if (!_rendererPool.TryTake(out var pooled))
+        {
+            pooled = PooledMarkdigRenderer.Create(_pipeline);
+        }
 
-        ResponsiveImageWriter.Attach(renderer, imageContext);
-
-        renderer.Render(document);
-        writer.Flush();
-        return writer.ToString();
+        var html = pooled.Render(document, imageContext);
+        _rendererPool.Add(pooled);
+        return html;
     }
 
     private static MarkdownPipeline BuildPipeline(MarkdownContentOptions? contentOptions)

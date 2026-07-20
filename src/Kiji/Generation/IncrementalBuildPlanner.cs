@@ -18,7 +18,8 @@ internal sealed class IncrementalBuildPlanner(
     string rootPath,
     string cacheDirectory,
     SiteInfo site,
-    IReadOnlyList<KijiBuildInput> buildInputs)
+    IReadOnlyList<KijiBuildInput> buildInputs,
+    ContentFileHashRegistry? hashRegistry = null)
 {
     private readonly string _rootPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
     private readonly string _manifestPath = Path.Combine(cacheDirectory, "build-manifest.json");
@@ -95,9 +96,12 @@ internal sealed class IncrementalBuildPlanner(
         }
 
         // The existing output (and everything the page materialized beside it) must
-        // still be exactly what the previous build wrote.
+        // still be exactly what the previous build wrote. A matching stamp
+        // (length + last write time) lets the recorded hash be trusted without
+        // re-reading the file; on any stamp mismatch the hash is recomputed.
         var outputPath = Path.Combine(options.OutputPath, oldPage.OutputRelativePath);
-        if (!string.Equals(HashFileCached(outputPath), oldPage.OutputHash, StringComparison.Ordinal))
+        if (!StampMatches(outputPath, oldPage.OutputLength, oldPage.OutputLastWriteTimeUtc)
+            && !string.Equals(HashFileCached(outputPath), oldPage.OutputHash, StringComparison.Ordinal))
         {
             return false;
         }
@@ -112,20 +116,53 @@ internal sealed class IncrementalBuildPlanner(
 
         foreach (var dependency in oldPage.Dependencies)
         {
-            var currentFingerprint = dependency.Kind switch
+            switch (dependency.Kind)
             {
-                BuildManifestDependency.FileKind => HashFileCached(ResolveDependencyPath(dependency.Key)),
-                BuildManifestDependency.ContentSetKind => contentSetFingerprint,
-                _ => BuildFingerprint.Missing, // Unknown kind from a newer schema: re-render.
-            };
+                case BuildManifestDependency.FileKind:
+                    var dependencyPath = ResolveDependencyPath(dependency.Key);
+                    if (StampMatches(dependencyPath, dependency.Length, dependency.LastWriteTimeUtc))
+                    {
+                        continue;
+                    }
 
-            if (!string.Equals(currentFingerprint, dependency.Fingerprint, StringComparison.Ordinal))
-            {
-                return false;
+                    if (!string.Equals(HashFileCached(dependencyPath), dependency.Fingerprint, StringComparison.Ordinal))
+                    {
+                        return false;
+                    }
+
+                    break;
+
+                case BuildManifestDependency.ContentSetKind:
+                    if (!string.Equals(contentSetFingerprint, dependency.Fingerprint, StringComparison.Ordinal))
+                    {
+                        return false;
+                    }
+
+                    break;
+
+                default:
+                    return false; // Unknown kind from a newer schema: re-render.
             }
         }
 
         return true;
+    }
+
+    private static bool StampMatches(string path, long? length, DateTime? lastWriteTimeUtc)
+    {
+        if (length is null || lastWriteTimeUtc is null)
+        {
+            return false;
+        }
+
+        var info = new FileInfo(path);
+        return info.Exists && info.Length == length && info.LastWriteTimeUtc == lastWriteTimeUtc;
+    }
+
+    private static (long Length, DateTime LastWriteTimeUtc)? ReadStamp(string path)
+    {
+        var info = new FileInfo(path);
+        return info.Exists ? (info.Length, info.LastWriteTimeUtc) : null;
     }
 
     internal BuildManifestPage CreatePageEntry(
@@ -137,10 +174,13 @@ internal sealed class IncrementalBuildPlanner(
         var dependencies = new List<BuildManifestDependency>();
         foreach (var file in recorder.Files.OrderBy(static path => path, StringComparer.OrdinalIgnoreCase))
         {
+            var stamp = ReadStamp(file);
             dependencies.Add(new BuildManifestDependency(
                 BuildManifestDependency.FileKind,
                 ToDependencyKey(file),
-                HashFileCached(file)));
+                HashFileCached(file),
+                stamp?.Length,
+                stamp?.LastWriteTimeUtc));
         }
 
         if (recorder.DependsOnContentSet)
@@ -156,13 +196,16 @@ internal sealed class IncrementalBuildPlanner(
             .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
+        var outputStamp = ReadStamp(Path.Combine(options.OutputPath, request.OutputRelativePath));
         return new BuildManifestPage(
             request.OutputRelativePath,
             request.RoutePath,
             BuildFingerprint.HashParameters(request.Parameters),
             outputHash,
             dependencies,
-            additionalOutputs);
+            additionalOutputs,
+            outputStamp?.Length,
+            outputStamp?.LastWriteTimeUtc);
     }
 
     /// <summary>
@@ -461,7 +504,11 @@ internal sealed class IncrementalBuildPlanner(
 
     internal string HashFileCached(string path)
     {
-        return _fileFingerprints.GetOrAdd(Path.GetFullPath(path), static fullPath => BuildFingerprint.HashFile(fullPath));
+        // Content files parsed during materialization already carry a stamp-validated
+        // hash in the registry; only files nobody read yet are hashed from disk.
+        return _fileFingerprints.GetOrAdd(
+            Path.GetFullPath(path),
+            fullPath => hashRegistry?.GetValidatedHash(fullPath) ?? BuildFingerprint.HashFile(fullPath));
     }
 
     private string ToDependencyKey(string absolutePath)

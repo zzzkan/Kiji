@@ -217,7 +217,7 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
             Path.Combine(_contentsDir, "changing.md"),
             CreateValidMarkdown("Changing", new DateTime(2024, 1, 15)));
 
-        var cache = new MarkdownFrontMatterCache<FrontMatter>();
+        var cache = new MarkdownSourceCache<FrontMatter>();
         var builder = new MarkdownContentsBuilder<FrontMatter>(
             _contentsDir,
             RenderAsync,

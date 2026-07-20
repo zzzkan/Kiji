@@ -44,7 +44,7 @@ public sealed record HarnessOptions
                     options = options with { OutJsonPath = RequireValue(args, ref i) };
                     break;
                 default:
-                    throw new ArgumentException($"Unknown option '{args[i]}'. Usage: [--pages N] [--runs N] [--images] [--root <dir>] [--out <json>]");
+                    throw new ArgumentException($"Unknown option '{args[i]}'. Usage: [--pages N] [--runs N] [--images] [--full] [--root <dir>] [--out <json>]");
             }
         }
 

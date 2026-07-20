@@ -24,7 +24,11 @@ public sealed class ResponsiveImageExtensionTests
         var writer = new StringWriter();
         var renderer = new HtmlRenderer(writer);
         Pipeline.Setup(renderer);
-        ResponsiveImageWriter.Attach(renderer, new ResponsiveImageContext(imageInfoLookup, imageCssClass));
+        var contextHolder = new ResponsiveImageContextHolder
+        {
+            Current = new ResponsiveImageContext(imageInfoLookup, imageCssClass),
+        };
+        ResponsiveImageWriter.Attach(renderer, contextHolder);
         renderer.Render(document);
         writer.Flush();
         return writer.ToString();

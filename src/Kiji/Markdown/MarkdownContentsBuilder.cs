@@ -1,4 +1,5 @@
 using System.Runtime.ExceptionServices;
+using Kiji.Generation;
 using YamlDotNet.Serialization;
 
 namespace Kiji.Markdown;
@@ -12,16 +13,19 @@ public sealed class MarkdownContentsBuilder<TFrontMatter>(
     private readonly Func<MarkdownContent<TFrontMatter>, CancellationToken, Task<string>> _renderAsync = renderAsync;
     private readonly Func<IDeserializer> _frontMatterDeserializerFactory =
         frontMatterDeserializerFactory ?? (static () => MarkdownFrontMatterParser.DefaultDeserializer);
-    private readonly MarkdownFrontMatterCache<TFrontMatter>? _frontMatterCache;
+    private readonly MarkdownSourceCache<TFrontMatter>? _sourceCache;
+    private readonly ContentFileHashRegistry? _hashRegistry;
 
     internal MarkdownContentsBuilder(
         string contentsDirectory,
         Func<MarkdownContent<TFrontMatter>, CancellationToken, Task<string>> renderAsync,
         Func<IDeserializer> frontMatterDeserializerFactory,
-        MarkdownFrontMatterCache<TFrontMatter> frontMatterCache)
+        MarkdownSourceCache<TFrontMatter> sourceCache,
+        ContentFileHashRegistry? hashRegistry = null)
         : this(contentsDirectory, renderAsync, frontMatterDeserializerFactory)
     {
-        _frontMatterCache = frontMatterCache;
+        _sourceCache = sourceCache;
+        _hashRegistry = hashRegistry;
     }
 
     public IReadOnlyList<MarkdownContent<TFrontMatter>> Build()
@@ -39,6 +43,8 @@ public sealed class MarkdownContentsBuilder<TFrontMatter>(
         // Files are read and parsed in parallel; results land at their enumeration
         // index so the collection order stays deterministic. YamlDotNet deserializers
         // are not documented as thread-safe, so each worker uses its own instance.
+        // Each file is read exactly once: the same read yields front matter, the body
+        // used for rendering, and the content hash the incremental planner needs.
         var items = new MarkdownContent<TFrontMatter>[markdownFiles.Length];
         var errors = new Exception?[markdownFiles.Length];
         using var deserializers = new ThreadLocal<IDeserializer>(_frontMatterDeserializerFactory);
@@ -49,10 +55,11 @@ public sealed class MarkdownContentsBuilder<TFrontMatter>(
             {
                 var markdownFile = markdownFiles[index];
                 var fileInfo = MarkdownFileInfo.Create(_contentsDirectory, markdownFile);
-                var frontMatter = _frontMatterCache is not null
-                    ? _frontMatterCache.GetOrParse(markdownFile, deserializers.Value!)
-                    : MarkdownFrontMatterParser.Parse<TFrontMatter>(markdownFile, deserializers.Value!);
-                items[index] = new MarkdownContent<TFrontMatter>(fileInfo, frontMatter, _renderAsync);
+                var source = _sourceCache is not null
+                    ? _sourceCache.GetOrRead(markdownFile, deserializers.Value!)
+                    : MarkdownSourceReader.Read<TFrontMatter>(markdownFile, deserializers.Value!);
+                items[index] = new MarkdownContent<TFrontMatter>(fileInfo, source.FrontMatter, source.Body, _renderAsync);
+                _hashRegistry?.Record(markdownFile, source.Length, source.LastWriteTimeUtc, source.ContentHash);
             }
             catch (Exception exception)
             {
@@ -68,7 +75,7 @@ public sealed class MarkdownContentsBuilder<TFrontMatter>(
             ExceptionDispatchInfo.Capture(firstError).Throw();
         }
 
-        _frontMatterCache?.Prune(markdownFiles.ToHashSet(StringComparer.OrdinalIgnoreCase));
+        _sourceCache?.Prune(markdownFiles.ToHashSet(StringComparer.OrdinalIgnoreCase));
 
         return items;
     }

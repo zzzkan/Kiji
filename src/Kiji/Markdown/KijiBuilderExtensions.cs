@@ -1,4 +1,5 @@
 using Kiji.Assets;
+using Kiji.Generation;
 using Microsoft.Extensions.DependencyInjection;
 using YamlDotNet.Serialization;
 
@@ -38,8 +39,8 @@ public static class KijiBuilderExtensions
         }
 
         // Created once per registration so it survives content re-materializations
-        // in the dev server; a file save re-parses only the files that changed.
-        var frontMatterCache = new MarkdownFrontMatterCache<TFrontMatter>();
+        // in the dev server; a file save re-reads only the files that changed.
+        var sourceCache = new MarkdownSourceCache<TFrontMatter>();
 
         return builder.AddContentSource(services =>
         {
@@ -49,9 +50,12 @@ public static class KijiBuilderExtensions
 
             return new MarkdownContentsBuilder<TFrontMatter>(
                 options.ContentsPath,
-                (content, cancellationToken) => markdownProcessor.ProcessAsync(content.FileInfo.FilePath, cancellationToken),
+                (content, cancellationToken) => content.Body is { } body
+                    ? markdownProcessor.ProcessBodyAsync(content.FileInfo.FilePath, body, cancellationToken)
+                    : markdownProcessor.ProcessAsync(content.FileInfo.FilePath, cancellationToken),
                 CreateFrontMatterDeserializer,
-                frontMatterCache)
+                sourceCache,
+                services.GetService<ContentFileHashRegistry>())
                 .Build();
         });
     }

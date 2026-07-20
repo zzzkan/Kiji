@@ -12,16 +12,17 @@ namespace Kiji.Markdown;
 /// </summary>
 internal static class ResponsiveImageWriter
 {
-    public static void Attach(HtmlRenderer renderer, ResponsiveImageContext context)
+    public static void Attach(HtmlRenderer renderer, ResponsiveImageContextHolder contextHolder)
     {
         var linkRenderer = renderer.ObjectRenderers.FindExact<LinkInlineRenderer>();
-        linkRenderer?.TryWriters.Add((r, link) => TryWriteResponsiveImage(r, link, context));
+        linkRenderer?.TryWriters.Add((r, link) => TryWriteResponsiveImage(r, link, contextHolder.Current));
     }
 
-    private static bool TryWriteResponsiveImage(HtmlRenderer renderer, LinkInline link, ResponsiveImageContext context)
+    private static bool TryWriteResponsiveImage(HtmlRenderer renderer, LinkInline link, ResponsiveImageContext? context)
     {
-        // Only handle images
-        if (!link.IsImage)
+        // Only handle images rendered with a current context (i.e. through the
+        // markdown processor); otherwise fall back to Markdig's default writer.
+        if (context is null || !link.IsImage)
         {
             return false;
         }

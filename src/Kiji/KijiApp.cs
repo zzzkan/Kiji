@@ -266,7 +266,8 @@ public sealed class KijiApp : IAsyncDisposable
             _builder.Paths.Root,
             _builder.Paths.ResolveCachePath(),
             Site,
-            _builder.BuildInputs);
+            _builder.BuildInputs,
+            _services!.GetService<ContentFileHashRegistry>());
 
         var plan = await planner.CreatePlanAsync(
             snapshot.Pages,
@@ -774,6 +775,7 @@ public sealed class KijiApp : IAsyncDisposable
         }
 
         services.TryAddSingleton<IImageAssetProcessor>(static _ => new ImageProcessor());
+        services.AddSingleton<ContentFileHashRegistry>();
 
         _services = services.BuildServiceProvider();
         _builder.Runtime.Attach(_services);

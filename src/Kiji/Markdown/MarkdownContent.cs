@@ -25,7 +25,24 @@ public sealed class MarkdownContent<TFrontMatter> : IContentSourceFile
         _renderAsync = renderAsync;
     }
 
+    internal MarkdownContent(
+        MarkdownFileInfo fileInfo,
+        TFrontMatter frontMatter,
+        string body,
+        Func<MarkdownContent<TFrontMatter>, CancellationToken, Task<string>> renderAsync)
+        : this(fileInfo, frontMatter, renderAsync)
+    {
+        Body = body;
+    }
+
     public MarkdownFileInfo FileInfo { get; }
+
+    /// <summary>
+    /// The markdown body (front matter stripped) captured when the file was read for
+    /// parsing, so rendering does not read the file again. Null when constructed via
+    /// the public constructor; renderers must then read the file themselves.
+    /// </summary>
+    internal string? Body { get; }
 
     public TFrontMatter FrontMatter
     {

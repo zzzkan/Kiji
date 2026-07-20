@@ -1,0 +1,46 @@
+name: Benchmarks
+
+# Runs the Kiji.Benchmarks microbenchmarks (BenchmarkDotNet). Deliberately kept
+# out of the PR-blocking CI pipeline: a full run warms up and iterates every
+# benchmark and can take a long time. Trigger it manually, or let the weekly
+# schedule catch drift on main.
+on:
+  workflow_dispatch:
+    inputs:
+      filter:
+        description: "BenchmarkDotNet filter (e.g. *MarkdownRenderBenchmarks*)"
+        required: false
+        default: "*"
+  schedule:
+    - cron: "0 3 * * 1" # Mondays 03:00 UTC, main branch
+
+permissions:
+  contents: read
+
+jobs:
+  microbenchmarks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Run Kiji.Benchmarks
+        run: >
+          dotnet run -c Release --project src/Kiji.Benchmarks --
+          --filter "${{ github.event.inputs.filter || '*' }}"
+          --exporters json
+
+      - name: Publish run summary
+        if: always()
+        run: cat BenchmarkDotNet.Artifacts/results/*-report-github.md >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: BenchmarkDotNet.Artifacts/results/

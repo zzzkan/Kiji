@@ -120,11 +120,15 @@ the site's project file typically speeds up full builds:
 Measurement infrastructure lives in the repo: `src/Kiji.Benchmarks`
 (BenchmarkDotNet microbenchmarks) and `src/Kiji.SyntheticSite` (an end-to-end
 harness that generates an N-page site and measures full, no-change, and
-one-post-edited builds):
+one-post-edited builds — see [docs/benchmarks.md](docs/benchmarks.md)):
 
 ```powershell
 dotnet run -c Release --project src/Kiji.SyntheticSite -- --pages 1000 --runs 3
 ```
+
+The microbenchmarks also run in CI via a dedicated, non-blocking workflow
+(manual trigger + weekly schedule), since a full BenchmarkDotNet run takes
+significant time.
 
 ## Repository layout
 

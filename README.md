@@ -130,7 +130,7 @@ the site's project file typically speeds up full builds:
 Measurement infrastructure lives in the repo: `src/Kiji.Benchmarks`
 (BenchmarkDotNet microbenchmarks) and `src/Kiji.SyntheticSite` (an end-to-end
 harness that generates an N-page site and measures full, no-change, and
-one-post-edited builds — see [docs/benchmarks.md](docs/benchmarks.md)):
+one-post-edited builds):
 
 ```powershell
 dotnet run -c Release --project src/Kiji.SyntheticSite -- --pages 1000 --runs 3
@@ -146,9 +146,10 @@ significant time.
 - `src/Kiji.Tests`: unit and integration tests; its `TestSite/` is the correctness fixture and evolves freely with the tests
 - `src/Kiji.Benchmarks`: BenchmarkDotNet microbenchmarks for the hot paths
 - `src/Kiji.SyntheticSite`: end-to-end build performance harness; its site definition is a frozen, representative workload kept deliberately separate from the test fixture so measurements stay comparable over time
+- `docs`: the documentation site, built with Kiji and deployed to GitHub Pages; it is also the repository's only `.razor` consumer, so CI builds it as a smoke test
 
-An architecture and design document (in Japanese) lives at
-[docs/design.md](docs/design.md).
+Design constraints, rejected alternatives, and conventions are recorded in
+[AGENTS.md](AGENTS.md).
 
 ## Build
 

@@ -1,0 +1,26 @@
+@page "/docs/{Slug}/"
+@inject ContentCollection<MarkdownContent<DocFrontMatter>> Docs
+
+@if (_doc is not null)
+{
+    <PageHead Title="@(_doc.FrontMatter.Title ?? string.Empty)"
+              Description="@(_doc.FrontMatter.Description ?? string.Empty)" />
+
+    <article class="doc">
+        <h1>@_doc.FrontMatter.Title</h1>
+        <div class="doc-content">@((MarkupString)_html)</div>
+    </article>
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = string.Empty;
+
+    private MarkdownContent<DocFrontMatter>? _doc;
+    private string _html = string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _doc = Docs.GetRequired(Slug);
+        _html = await _doc.RenderAsync();
+    }
+}

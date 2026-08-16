@@ -1,0 +1,41 @@
+@inherits LayoutComponentBase
+@inject SiteInfo Site
+@inject ContentCollection<MarkdownContent<DocFrontMatter>> Docs
+
+<a class="skip-link" href="#main-content">Skip to content</a>
+
+<header class="site-header">
+    <div class="bar">
+        <a class="site-title" href="@Site.Path("/")">@Site.Name</a>
+        <nav aria-label="Main">
+            <a href="@Site.Path("docs/")">Docs</a>
+            <a href="https://github.com/zzzkan/kiji">GitHub</a>
+            <a href="https://www.nuget.org/packages/Kiji">NuGet</a>
+        </nav>
+    </div>
+</header>
+
+<div class="shell">
+    <nav class="side-nav" aria-label="Documentation">
+        <p class="side-nav-title">Documentation</p>
+        <ul>
+            @foreach (var doc in Docs)
+            {
+                <li>
+                    <a href="@Site.Path($"docs/{doc.FileInfo.RelativeDirectoryPath}/")">
+                        @doc.FrontMatter.Title
+                    </a>
+                </li>
+            }
+        </ul>
+    </nav>
+
+    <main id="main-content">@Body</main>
+</div>
+
+<footer class="site-footer">
+    <p>
+        Kiji is MIT licensed. This site is
+        <a href="https://github.com/zzzkan/kiji/tree/main/src/Kiji.Docs">built with Kiji</a>.
+    </p>
+</footer>

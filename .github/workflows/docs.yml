@@ -1,0 +1,48 @@
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'src/Kiji/**'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; a superseded run has nothing worth finishing.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # SiteInfo.BaseUrl carries the /kiji/ project-site path, so the generated links
+      # already resolve under it. Nothing here needs to know the base path.
+      - name: Build site
+        run: dotnet run --project docs -c Release -- build
+
+      - uses: actions/configure-pages@v5
+
+      # Deploying through Actions does not run Jekyll, so no .nojekyll is needed.
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/dist
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

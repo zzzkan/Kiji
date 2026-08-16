@@ -1,0 +1,19 @@
+@page "/docs/"
+@inject SiteInfo Site
+@inject ContentCollection<MarkdownContent<DocFrontMatter>> Docs
+
+<PageHead Title="Documentation" Description="Guides for building a site with Kiji." />
+
+<h1>Documentation</h1>
+
+<ul class="doc-list">
+    @foreach (var doc in Docs)
+    {
+        <li>
+            <a href="@Site.Path($"docs/{doc.FileInfo.RelativeDirectoryPath}/")">
+                @doc.FrontMatter.Title
+            </a>
+            <p>@doc.FrontMatter.Description</p>
+        </li>
+    }
+</ul>

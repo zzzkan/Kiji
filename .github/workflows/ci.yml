@@ -29,9 +29,8 @@ jobs:
       - name: Test
         run: dotnet test -c Release --no-build
 
-  # Packs both packages, scaffolds a site from the template against a local feed, and
-  # builds and generates it. A scaffolded site references the Kiji version being built,
-  # so this cannot run as a unit test.
+  # A scaffolded site references the Kiji version being built, which is not on nuget.org,
+  # so this cannot be a unit test: it has to pack first and restore from a local feed.
   verify-template:
     runs-on: ubuntu-latest
     steps:
@@ -41,6 +40,35 @@ jobs:
         with:
           global-json-file: global.json
 
-      - name: Verify template
-        shell: pwsh
-        run: ./eng/verify-template.ps1
+      - name: Pack
+        run: dotnet pack -c Release -o artifacts
+
+      - name: Scaffold a site
+        run: |
+          dotnet new install artifacts/Kiji.Templates.*.nupkg
+          dotnet new kiji -o /tmp/Sample --siteName 'Sample Site' --baseUrl 'https://example.com/sample/'
+
+      # Proves the packed version substitution, the CPM stoppers, and that .razor
+      # compiles against Kiji as a package rather than a project reference.
+      - name: Build and generate it
+        run: |
+          dotnet restore /tmp/Sample -s "$GITHUB_WORKSPACE/artifacts" -s https://api.nuget.org/v3/index.json
+          dotnet build /tmp/Sample -c Release --no-restore
+          dotnet run --project /tmp/Sample -c Release --no-build -- build
+
+      - name: Check the generated site
+        run: |
+          for file in index.html hello-world/index.html 404.html sitemap.xml css/app.css; do
+            test -f "/tmp/Sample/dist/$file" || { echo "missing: dist/$file"; exit 1; }
+          done
+          # --baseUrl has to reach the markup, and no <base> element may appear:
+          # it would re-root the document-relative page-bundle image URLs.
+          grep -q 'href="/sample/css/app.css"' /tmp/Sample/dist/index.html
+          ! grep -q '<base' /tmp/Sample/dist/index.html
+
+      # The defaults are what most users get, so check they substitute too.
+      - name: Scaffold with defaults
+        run: |
+          dotnet new kiji -o /tmp/Defaults
+          test -f /tmp/Defaults/Defaults.csproj || { echo "project was not renamed"; exit 1; }
+          ! grep -qE 'SITE_NAME|SITE_BASE_URL' /tmp/Defaults/Program.cs

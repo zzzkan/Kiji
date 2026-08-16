@@ -88,4 +88,6 @@ before working in that area:
 - `docs` — the documentation site, built with Kiji and deployed to GitHub Pages
 - `templates` — the `dotnet new kiji` template package. It sits outside `src/` because the
   scaffolded site references `Kiji` from NuGet, not from this tree, so it has no build-time
-  dependency on the framework. `eng/verify-template.ps1` packs, scaffolds, and builds it
+  dependency on the framework. `dotnet test` covers its content; the packing and
+  scaffolding path is checked by the `verify-template` job in CI, which has to pack first
+  and restore from a local feed

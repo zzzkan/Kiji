@@ -1,18 +1,26 @@
 # Kiji
 
-Kiji is a static site generator framework for .NET. Pages are Razor components
-rendered to static HTML via `HtmlRenderer`, assembled with a minimal-API style
-builder. Includes a markdown content pipeline with YAML front matter, responsive
-WebP image optimization, RSS feed and sitemap artifacts, and a live-reloading
-on-demand dev server.
+A static site generator framework for .NET. Write pages as Razor components, ship static
+HTML. Markdown with your own YAML front matter shape, responsive WebP image optimization,
+RSS feeds, sitemaps, and a live-reloading dev server are all in this one package.
 
-## Install
+## Quick start
+
+```powershell
+dotnet new install Kiji.Templates
+dotnet new kiji -o MySite
+cd MySite
+dotnet run dev
+```
+
+That is a working site on <http://localhost:8080> with live reload. `dotnet run` builds it
+into `dist/`, which any static host will serve.
+
+## Or add it to an existing project
 
 ```powershell
 dotnet add package Kiji
 ```
-
-## Getting started
 
 ```csharp
 using Kiji;
@@ -20,32 +28,34 @@ using Kiji;
 var builder = KijiApp.CreateBuilder(args);
 builder.Site = new SiteInfo
 {
-    BaseUrl = new Uri("https://example.com"),
+    BaseUrl = new Uri("https://example.com/"),
     Name = "My Site",
 };
 
 await using var app = builder.Build();
 
-app.MapDefaultLayout<MainLayout>(); // default layout for every page (pages may override via @layout)
-app.MapPages(); // every public component with an @page route template in the entry assembly
-app.MapNotFound<NotFound>(); // rendered as 404.html
+app.MapDefaultLayout<MainLayout>(); // applied to every page; pages may override via @layout
+app.MapPages();                     // every component with an @page route in this assembly
+app.MapNotFound<NotFoundPage>();    // rendered as 404.html
 
 return await app.RunAsync(); // build (default) | dev [--port <n>] | preview [--port <n>] | clean
 ```
 
-Kiji renders the document shell itself — the HTML5 doctype, `<html lang>` from
-`SiteInfo.Language`, `<head>`, and `<body>`. Pages contribute head content
-(charset meta, `<title>`, metas, links) through the `Kiji.Components.HeadContent`
-component.
+A page is any component with a route:
 
-Run `dotnet run` to build the site into `dist` (incremental — unchanged pages
-are skipped; pass `--force` for a full rebuild), `dotnet run dev` for the
-live-reloading dev server, or `dotnet run preview` to serve the built output.
-`dotnet run clean` deletes `dist` and the `.kiji` cache, so the next build is a
-full rebuild. Add `dist/` and `.kiji/` (the build cache) to your site's
-`.gitignore`.
+```razor
+@page "/"
 
-Markdown content (`builder.AddMarkdownContent<TFrontMatter>()`), responsive
-image optimization, RSS feeds (`app.MapFeed(...)`), and sitemaps
-(`app.MapSitemap()`) are all included — see the
-[project README](https://github.com/zzzkan/kiji) for the full walkthrough.
+<h1>Hello</h1>
+```
+
+Kiji renders the document shell itself — the doctype, `<html lang>` from
+`SiteInfo.Language`, `<head>`, and `<body>`. Pages contribute head content through the
+`Kiji.Components.HeadContent` component.
+
+Add `dist/` and `.kiji/` to your `.gitignore`.
+
+## Documentation
+
+<https://zzzkan.github.io/kiji/> — getting started, concepts, markdown and images,
+deployment, and performance. The site is itself built with Kiji.

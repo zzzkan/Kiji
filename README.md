@@ -3,185 +3,95 @@
 [![CI](https://github.com/zzzkan/kiji/actions/workflows/ci.yml/badge.svg)](https://github.com/zzzkan/kiji/actions/workflows/ci.yml)
 [![NuGet](https://img.shields.io/nuget/v/Kiji.svg)](https://www.nuget.org/packages/Kiji)
 
-Kiji is a static site generator framework for .NET. Pages are Razor components
-rendered to static HTML via `HtmlRenderer`, assembled with a minimal-API style
-builder. A single `Kiji` package includes the markdown content pipeline (YAML
-front matter), responsive WebP image optimization, RSS feed and sitemap
-artifacts, and a live-reloading on-demand dev server.
+A static site generator framework for .NET. Write pages as Razor components, ship static
+HTML.
 
-## Getting started
-
-```csharp
-using Kiji;
-using Kiji.Feeds;
-using Kiji.Markdown;
-using Kiji.Sitemaps;
-
-var builder = KijiApp.CreateBuilder(args);
-builder.Site = new SiteInfo
-{
-    BaseUrl = new Uri("https://example.com"),
-    Name = "My Site",
-};
-
-// Front matter is site-defined: declare your own shape.
-var posts = builder.AddMarkdownContent<PostFrontMatter>()
-    .WithKey(post => post.FileInfo.FileNameWithoutExtension)
-    .OrderByDescending(post => post.FrontMatter.CreatedAt);
-
-await using var app = builder.Build();
-
-app.MapDefaultLayout<MainLayout>(); // default layout for every page (pages may override via @layout)
-app.MapPages(); // every public component with an @page route template in the entry assembly
-app.MapNotFound<NotFound>(); // rendered as 404.html
-
-app.MapRoutes<PostPage, MarkdownContent<PostFrontMatter>>(
-    posts,
-    post => new { Slug = post.FileInfo.FileNameWithoutExtension },
-    post => post.FrontMatter.UpdatedAt); // optional: sitemap <lastmod>
-
-app.MapFeed(posts, async (post, ct) =>
-    new FeedItem(post.FrontMatter.Title!, post.FrontMatter.Description!, post.FrontMatter.CreatedAt!.Value)
-    {
-        ContentHtml = await post.RenderAsync(ct), // optional: <content:encoded>
-    });
-app.MapSitemap();
-
-return await app.RunAsync(); // build (default) | dev [--port <n>] | preview [--port <n>] | clean
-```
-
-- `dotnet run` — builds the site into `dist` incrementally (`--force` for a full
-  rebuild, `--verbose` for per-file output)
-- `dotnet run dev` — on-demand dev server with live reload; when run under `dotnet watch`, Kiji emits watch-style logs for content/static reload activity
-- `dotnet run preview` — serves the built `dist` output
-- `dotnet run clean` — deletes `dist` and the `.kiji` cache; the next build is a
-  full rebuild
-
-Add `dist/` and `.kiji/` (the build cache) to your site's `.gitignore`.
-
-## Concepts
-
-- **Built-in document shell**: Kiji renders the document itself — the HTML5
-  doctype, `<html lang>` from `SiteInfo.Language`, `<head>`, and `<body>`.
-  Pages contribute head content (charset meta, `<title>`, metas, links) through
-  the `Kiji.Components.HeadContent` component, and `MapDefaultLayout<TLayout>()` sets
-  the layout applied to every page (optional; pages may override via `@layout`).
-- **Route-declared pages**: `MapPages()` discovers every public component with a
-  `@page` route template in the entry assembly — the .NET equivalent of
-  file-based routing, since writing `@page` is what makes a component a page.
-  Pages in another assembly register via `MapPages(assembly)`.
-- **Content collections**: `builder.AddContentSource(...)` /
-  `AddMarkdownContent<TFrontMatter>()` declare lazily materialized collections,
-  consumable from components via `@inject` and from route mappings via the
-  `MapRoutes` overloads. The returned `ContentCollection` is the single handle
-  shared by route mappings, feeds (`MapFeed`), and component injection.
-- **Page-bundle images**: local images referenced from markdown are optimized to
-  responsive WebP variants written next to the page's `index.html` and referenced
-  with `./`-relative URLs, so sites work at any base path. Encoded variants are
-  cached under `.kiji/cache` so unchanged images are never re-encoded. Replace the
-  backend by registering your own `IImageAssetProcessor` in `builder.Services`.
-- **Trailing slashes**: pages are generated as `route/index.html`; the dev and
-  preview servers resolve `/route` and `/route/` to the same page without
-  redirecting. Canonical URLs use the trailing-slash form.
-- **Base paths**: `SiteInfo.BaseUrl` may include a path segment, for sites published
-  under a sub-path such as a GitHub Pages project site
-  (`https://user.github.io/my-site/`). Write your own links through
-  `Site.Path("css/app.css")`, which resolves to `/my-site/css/app.css` there and to
-  `/css/app.css` at the domain root. Canonical, feed, and sitemap URLs already carry
-  the prefix, and markdown page-bundle images are document-relative, so neither needs
-  it. Kiji never emits a `<base>` element — it would re-root those image URLs. The base
-  path is a deployment location only; it never changes the `dist/` layout. `dev` and
-  `preview` serve under the same prefix and deliberately return 404 outside it, so a link
-  that forgets `Site.Path` fails locally instead of only after deployment.
-- **Artifacts**: RSS feeds and sitemaps are opt-in via `app.MapFeed(...)` /
-  `app.MapSitemap()`. Custom site-wide outputs implement `ISiteArtifact` and
-  register via `app.MapArtifact(...)`.
-- **Markdown pipeline**: customize Markdig, front matter deserialization, and
-  HTML post-processing (e.g. heading anchors) via `AddMarkdownContent(options => ...)`.
-- **Incremental builds**: `build` records what every page read (content files,
-  the content set, options, your site's assemblies) in
-  `.kiji/cache/build-manifest.json` and skips pages whose inputs are unchanged —
-  editing one post re-renders that post, list pages, and artifacts instead of the
-  whole site. Any ambiguity (no manifest, unknown files in `dist`, recompiled
-  assemblies, tampered outputs) falls back to a full rebuild; stale output is
-  never acceptable. Two assumptions to know about:
-  - Renders must be deterministic in their inputs. If a page reads data Kiji
-    cannot see (a data file consumed by a custom content loader, an HTTP call),
-    declare it with `builder.AddBuildInput("path/to/data")` or
-    `builder.AddBuildInput("key", versionValue)` so changes trigger a rebuild —
-    or run `dotnet run -- build --force`.
-  - Framework (`System.*`/`Microsoft.*`) assemblies are excluded from the change
-    fingerprint; after an SDK update, use `--force` if you want to be certain.
-
-## Performance
-
-Pages render in parallel (one `HtmlRenderer`/DI scope per page) straight into
-pooled UTF-8 buffers written with a single preallocated write per file, markdown
-front matter parses in parallel, and incremental builds skip unchanged pages
-entirely. For large sites built in-process (CI, scripts), enabling server GC in
-the site's project file typically speeds up full builds:
-
-```xml
-<PropertyGroup>
-  <ServerGarbageCollection>true</ServerGarbageCollection>
-</PropertyGroup>
-```
-
-Measurement infrastructure lives in the repo: `src/Kiji.Benchmarks`
-(BenchmarkDotNet microbenchmarks) and `src/Kiji.SyntheticSite` (an end-to-end
-harness that generates an N-page site and measures full, no-change, and
-one-post-edited builds):
+## Quick start
 
 ```powershell
-dotnet run -c Release --project src/Kiji.SyntheticSite -- --pages 1000 --runs 3
+dotnet new install Kiji.Templates
+dotnet new kiji -o MySite
+cd MySite
+dotnet run dev
 ```
 
-The microbenchmarks also run in CI via a dedicated, non-blocking workflow
-(manual trigger + weekly schedule), since a full BenchmarkDotNet run takes
-significant time.
+That is a working site on <http://localhost:8080> with live reload. `dotnet run` builds it
+into `dist/`, which any static host will serve.
 
-## Repository layout
+The scaffold is deliberately minimal — a home page, a markdown post, a 404 page, and a
+sitemap. Feeds, tag pages, and image optimization are all supported and left out of the
+starting point; the generated README says where to find each.
 
-- `src/Kiji`: the framework — routing, rendering, markdown, images, feeds, sitemaps, dev server
-- `src/Kiji.Templates`: the `dotnet new kiji` template package; `eng/verify-template.ps1` scaffolds and builds a site from it
-- `src/Kiji.Tests`: unit and integration tests; its `TestSite/` is the correctness fixture and evolves freely with the tests
-- `src/Kiji.Benchmarks`: BenchmarkDotNet microbenchmarks for the hot paths
-- `src/Kiji.SyntheticSite`: end-to-end build performance harness; its site definition is a frozen, representative workload kept deliberately separate from the test fixture so measurements stay comparable over time
-- `docs`: the documentation site, built with Kiji and deployed to GitHub Pages; it is also the repository's only `.razor` consumer, so CI builds it as a smoke test
+## Why Kiji
 
-Design constraints, rejected alternatives, and conventions are recorded in
-[AGENTS.md](AGENTS.md).
+**Razor components, not a new template language.** Pages are components with an `@page`
+route, rendered through Blazor's `HtmlRenderer`. Layouts, injection, and parameters work
+the way you already know. Markdown with your own YAML front matter shape, responsive WebP
+image optimization, RSS feeds, sitemaps, and a live-reloading dev server are all in the
+one `Kiji` package — there is no set of extension packages to assemble.
 
-## Build
+**Builds are fast, and rebuilds are much faster.** Pages render in parallel, one
+`HtmlRenderer` and DI scope each, straight into pooled UTF-8 buffers written with a single
+preallocated write per file. Builds are incremental by default: each page records what it
+read, so editing one post re-renders that post, the pages that list it, and the artifacts
+— not the site.
+
+| pages | full build | no change | one post edited |
+| ---: | ---: | ---: | ---: |
+| 1,000 | 1.68 s | 0.25 s | 0.26 s |
+| 5,000 | 10.8 s | 1.07 s | 1.05 s |
+
+<sub>AMD Ryzen 7 5700G, 16 logical cores, .NET 10, workstation GC. Reproduce with
+`dotnet run -c Release --project src/Kiji.SyntheticSite -- --pages 5000 --runs 3`. The full
+build runs in a cold process, so it includes JIT warm-up.</sub>
+
+**The dev loop ignores how big your site is.** `dotnet run dev` pre-generates nothing. It
+renders the page you asked for, through the same code path the build uses, so what you see
+is what gets deployed — and a site with five thousand posts reloads as fast as one with
+five.
+
+**Correctness is the constraint, not an afterthought.** Duplicate routes, output path
+collisions, missing route values, and paths escaping the output directory all fail while
+planning, before a single file is written. Incremental builds re-render unless they can
+prove the previous output is still valid, and anything ambiguous falls back to a full
+rebuild.
+
+**One thing it does not do: interactivity.** Rendering is one-shot and static, so
+`@onclick` and `OnAfterRenderAsync` do not survive into the output. The generated site is
+plain HTML with no Blazor runtime. Bring your own JavaScript, or reach for Blazor
+WebAssembly instead.
+
+## Documentation
+
+**<https://zzzkan.github.io/kiji/>** — getting started, concepts, markdown and images,
+deployment, and performance.
+
+The site is itself built with Kiji and lives in [`docs/`](docs), so it doubles as a worked
+example.
+
+## Contributing
 
 ```powershell
-dotnet build
+dotnet build -c Release
+dotnet test -c Release
 ```
 
-## Test
+Both operate on the whole solution. Pass no extra flags to `dotnet test` — unrecognized
+ones reach the Microsoft.Testing.Platform runner, which prints help and exits non-zero.
+
+Design constraints, alternatives already evaluated and rejected, conventions, and gotchas
+are recorded in [AGENTS.md](AGENTS.md). Read it before changing the rendering, generation,
+or incremental build paths.
+
+Releases are versioned by [MinVer](https://github.com/adamralph/minver) from git tags. Tag
+a release commit and push the tag; the
+[release workflow](.github/workflows/release.yml) builds, tests, packs, and pushes `Kiji`
+and `Kiji.Templates` to NuGet.org.
 
 ```powershell
-dotnet test
+git tag v0.1.0
+git push origin v0.1.0
 ```
-
-## Release
-
-Releases are versioned with [MinVer](https://github.com/adamralph/minver) from
-git tags and published to NuGet.org by GitHub Actions:
-
-1. Ensure `main` is green and the `NUGET_API_KEY` repository secret is set.
-2. Tag the release commit and push the tag:
-
-   ```powershell
-   git tag v0.1.0
-   git push origin v0.1.0
-   ```
-
-3. The [release workflow](.github/workflows/release.yml) builds, tests, packs,
-   and pushes the package (with symbol package) to NuGet.org.
-
-For a dry run, tag a prerelease first (e.g. `v0.1.0-preview.1`) and confirm the
-listing on NuGet.org before tagging the final version.
 
 ## License
 

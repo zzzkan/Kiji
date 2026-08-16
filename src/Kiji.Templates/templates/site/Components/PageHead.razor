@@ -1,0 +1,23 @@
+@inject NavigationManager NavigationManager
+@inject SiteInfo Site
+
+@* Contributes into the <head> of the document Kiji renders. Render at most one per page.
+   Site.Path keeps asset links working if the site is published under a sub-path;
+   NavigationManager.Uri is already the absolute canonical URL. *@
+<Kiji.Components.HeadContent>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@PageTitle</title>
+    <meta name="description" content="@Description" />
+    <link rel="canonical" href="@NavigationManager.Uri" />
+    <link rel="stylesheet" href="@Site.Path("css/app.css")" />
+</Kiji.Components.HeadContent>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string Description { get; set; } = string.Empty;
+
+    private string PageTitle =>
+        string.IsNullOrWhiteSpace(Title) ? Site.Name : $"{Title} - {Site.Name}";
+}

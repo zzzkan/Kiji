@@ -1,0 +1,26 @@
+@page "/{Slug}/"
+@inject ContentCollection<MarkdownContent<PostFrontMatter>> Posts
+
+@if (_post is not null)
+{
+    <PageHead Title="@(_post.FrontMatter.Title ?? string.Empty)"
+              Description="@(_post.FrontMatter.Description ?? string.Empty)" />
+
+    <article>
+        <h1>@_post.FrontMatter.Title</h1>
+        <div>@((MarkupString)_html)</div>
+    </article>
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = string.Empty;
+
+    private MarkdownContent<PostFrontMatter>? _post;
+    private string _html = string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _post = Posts.GetRequired(Slug);
+        _html = await _post.RenderAsync();
+    }
+}

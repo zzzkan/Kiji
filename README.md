@@ -143,6 +143,7 @@ significant time.
 ## Repository layout
 
 - `src/Kiji`: the framework — routing, rendering, markdown, images, feeds, sitemaps, dev server
+- `src/Kiji.Templates`: the `dotnet new kiji` template package; `eng/verify-template.ps1` scaffolds and builds a site from it
 - `src/Kiji.Tests`: unit and integration tests; its `TestSite/` is the correctness fixture and evolves freely with the tests
 - `src/Kiji.Benchmarks`: BenchmarkDotNet microbenchmarks for the hot paths
 - `src/Kiji.SyntheticSite`: end-to-end build performance harness; its site definition is a frozen, representative workload kept deliberately separate from the test fixture so measurements stay comparable over time

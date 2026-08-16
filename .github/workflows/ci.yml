@@ -28,3 +28,19 @@ jobs:
 
       - name: Test
         run: dotnet test -c Release --no-build
+
+  # Packs both packages, scaffolds a site from the template against a local feed, and
+  # builds and generates it. A scaffolded site references the Kiji version being built,
+  # so this cannot run as a unit test.
+  verify-template:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Verify template
+        shell: pwsh
+        run: ./eng/verify-template.ps1

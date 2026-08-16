@@ -1,0 +1,18 @@
+/* Just enough to be readable. Replace it with your own. */
+
+body {
+    max-width: 40rem;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    font-family: system-ui, sans-serif;
+    line-height: 1.7;
+}
+
+pre {
+    overflow-x: auto;
+}
+
+img {
+    max-width: 100%;
+    height: auto;
+}

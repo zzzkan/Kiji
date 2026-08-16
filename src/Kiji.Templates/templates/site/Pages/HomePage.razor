@@ -1,0 +1,17 @@
+@page "/"
+@inject SiteInfo Site
+@inject ContentCollection<MarkdownContent<PostFrontMatter>> Posts
+
+<PageHead Title="" Description="@Site.Description" />
+
+<h1>@Site.Name</h1>
+<p>@Site.Description</p>
+
+<ul>
+    @foreach (var post in Posts)
+    {
+        <li>
+            <a href="@Site.Path($"{post.FileInfo.RelativeDirectoryPath}/")">@post.FrontMatter.Title</a>
+        </li>
+    }
+</ul>

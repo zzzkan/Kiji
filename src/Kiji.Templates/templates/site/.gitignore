@@ -1,0 +1,6 @@
+bin/
+obj/
+
+# Generated site output and Kiji's build cache.
+dist/
+.kiji/

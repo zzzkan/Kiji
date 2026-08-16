@@ -1,0 +1,8 @@
+@inherits LayoutComponentBase
+@inject SiteInfo Site
+
+<header>
+    <a href="@Site.Path("/")">@Site.Name</a>
+</header>
+
+<main>@Body</main>

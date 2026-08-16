@@ -1,0 +1,10 @@
+<!--
+  Stops central package management inheritance. The Kiji reference in the project file
+  carries its own Version, which a parent repository using CPM would reject (NU1008).
+  Delete this file to inherit from parent directories again.
+-->
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+</Project>

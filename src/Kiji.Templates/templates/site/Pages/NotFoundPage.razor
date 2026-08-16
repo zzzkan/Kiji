@@ -1,0 +1,9 @@
+@* Rendered to 404.html by app.MapNotFound<NotFoundPage>(). A component is only a page if
+   it declares a route, so this one needs its own even though nothing links to it. *@
+@page "/not-found/"
+@inject SiteInfo Site
+
+<PageHead Title="Not found" Description="This page does not exist." />
+
+<h1>Not found</h1>
+<p><a href="@Site.Path("/")">Go home</a>.</p>

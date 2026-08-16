@@ -86,3 +86,6 @@ before working in that area:
 - `src/Kiji.Benchmarks` — BenchmarkDotNet microbenchmarks
 - `src/Kiji.SyntheticSite` — end-to-end build performance harness
 - `docs` — the documentation site, built with Kiji and deployed to GitHub Pages
+- `templates` — the `dotnet new kiji` template package. It sits outside `src/` because the
+  scaffolded site references `Kiji` from NuGet, not from this tree, so it has no build-time
+  dependency on the framework. `eng/verify-template.ps1` packs, scaffolds, and builds it

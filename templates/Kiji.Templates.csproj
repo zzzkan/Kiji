@@ -24,9 +24,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="templates/**"
-             Exclude="templates/site/KijiSite.csproj;templates/**/bin/**;templates/**/obj/**;templates/**/dist/**;templates/**/.kiji/**"
-             PackagePath="content/%(RecursiveDir)%(Filename)%(Extension)" />
+    <Content Include="site/**"
+             Exclude="site/KijiSite.csproj;site/**/bin/**;site/**/obj/**;site/**/dist/**;site/**/.kiji/**"
+             PackagePath="content/site/%(RecursiveDir)%(Filename)%(Extension)" />
     <!-- Staged copy with the Kiji version substituted; see StageSiteProject below. -->
     <Content Include="$(IntermediateOutputPath)template/KijiSite.csproj"
              PackagePath="content/site/KijiSite.csproj" />
@@ -42,7 +42,7 @@
           DependsOnTargets="MinVer"
           BeforeTargets="PrepareForBuild;_GetPackageFiles;GenerateNuspec">
     <PropertyGroup>
-      <_SiteProjectSource>$(MSBuildProjectDirectory)/templates/site/KijiSite.csproj</_SiteProjectSource>
+      <_SiteProjectSource>$(MSBuildProjectDirectory)/site/KijiSite.csproj</_SiteProjectSource>
       <_SiteProjectStaged>$(IntermediateOutputPath)template/KijiSite.csproj</_SiteProjectStaged>
     </PropertyGroup>
     <Copy SourceFiles="$(_SiteProjectSource)" DestinationFiles="$(_SiteProjectStaged)" />

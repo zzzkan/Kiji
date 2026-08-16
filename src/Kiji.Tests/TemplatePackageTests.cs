@@ -137,6 +137,6 @@ public sealed class TemplatePackageTests
         }
 
         Assert.True(directory is not null, "Could not locate the repository root from the test assembly.");
-        return Path.Combine(directory!.FullName, "src", "Kiji.Templates", "templates", "site");
+        return Path.Combine(directory!.FullName, "templates", "site");
     }
 }

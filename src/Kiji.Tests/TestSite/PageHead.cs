@@ -71,12 +71,12 @@ public sealed class PageHead : ComponentBase
 
         builder.OpenElement(21, "link");
         builder.AddAttribute(22, "rel", "stylesheet");
-        builder.AddAttribute(23, "href", "/css/app.css");
+        builder.AddAttribute(23, "href", Site.Path("css/app.css"));
         builder.CloseElement();
 
         builder.OpenElement(24, "link");
         builder.AddAttribute(25, "rel", "icon");
-        builder.AddAttribute(26, "href", "/icon.svg");
+        builder.AddAttribute(26, "href", Site.Path("icon.svg"));
         builder.AddAttribute(27, "type", "image/svg+xml");
         builder.CloseElement();
     }

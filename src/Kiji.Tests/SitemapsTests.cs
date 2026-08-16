@@ -9,11 +9,11 @@ namespace Kiji.Tests;
 /// </summary>
 public sealed class SitemapsTests
 {
-    private static SiteOutputContext CreateContext(IReadOnlyList<SitePageInfo> pages)
+    private static SiteOutputContext CreateContext(IReadOnlyList<SitePageInfo> pages, string baseUrl = "https://example.com")
     {
         var site = new SiteInfo
         {
-            BaseUrl = new Uri("https://example.com"),
+            BaseUrl = new Uri(baseUrl),
             Name = "Example Site",
         };
 
@@ -54,6 +54,37 @@ public sealed class SitemapsTests
             ],
             locs);
         Assert.DoesNotContain("https://example.com/404.html", locs);
+    }
+
+    /// <summary>
+    /// Sitemap URLs derive from <see cref="SiteInfo.BaseUrl"/>, so a site published under
+    /// a sub-path needs no special handling. This pins that down.
+    /// </summary>
+    [Fact]
+    public async Task WriteAsync_WithBasePath_IncludesThePrefixInEveryLocation()
+    {
+        var context = CreateContext(
+            [
+                new SitePageInfo("/", "index.html", false, null),
+                new SitePageInfo("/blog/alpha/", "blog/alpha/index.html", false, null),
+            ],
+            "https://example.com/kiji/");
+        var artifact = new SitemapArtifact();
+
+        var document = await WriteSitemapAsync(artifact, context);
+
+        XNamespace ns = "http://www.sitemaps.org/schemas/sitemap/0.9";
+        var locs = document.Root!
+            .Elements(ns + "url")
+            .Select(static url => url.Elements().First().Value)
+            .ToArray();
+
+        Assert.Equal(
+            [
+                "https://example.com/kiji/",
+                "https://example.com/kiji/blog/alpha/",
+            ],
+            locs);
     }
 
     [Fact]

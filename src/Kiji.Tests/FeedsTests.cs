@@ -14,11 +14,12 @@ public sealed class FeedsTests
     private static SiteOutputContext CreateContext(
         IReadOnlyList<SitePageInfo> pages,
         string siteName = "Example Site",
-        string siteDescription = "An example site")
+        string siteDescription = "An example site",
+        string baseUrl = "https://example.com")
     {
         var site = new SiteInfo
         {
-            BaseUrl = new Uri("https://example.com"),
+            BaseUrl = new Uri(baseUrl),
             Name = siteName,
             Description = siteDescription,
             Language = "ja",
@@ -209,5 +210,34 @@ public sealed class FeedsTests
         XNamespace atom = "http://www.w3.org/2005/Atom";
         var selfLink = document.Root!.Element("channel")!.Element(atom + "link")!;
         Assert.Equal("https://example.com/rss/all.xml", selfLink.Attribute("href")!.Value);
+    }
+
+    /// <summary>
+    /// Feed URLs derive from <see cref="SiteInfo.BaseUrl"/>, so a site published under a
+    /// sub-path needs no special handling. This pins that down.
+    /// </summary>
+    [Fact]
+    public async Task WriteAsync_WithBasePath_IncludesThePrefixInChannelAndItemLinks()
+    {
+        var entries = Content.FromItems<Entry>([
+            new("hello", "Hello World", "First post", new DateTimeOffset(2026, 3, 18, 0, 0, 0, TimeSpan.Zero)),
+        ]).WithKey(static entry => entry.Slug);
+        var context = CreateContext(
+            [new SitePageInfo("/blog/hello/", "blog/hello/index.html", false, "hello")],
+            baseUrl: "https://example.com/kiji/");
+        var artifact = new RssFeedArtifact<Entry>(entries, static entry => new FeedItem(entry.Title, entry.Description, entry.PublishedAt));
+
+        var document = XDocument.Parse(await WriteFeedAsync(artifact, context));
+        var channel = document.Root!.Element("channel")!;
+
+        Assert.Equal("https://example.com/kiji/", channel.Element("link")!.Value);
+
+        XNamespace atom = "http://www.w3.org/2005/Atom";
+        Assert.Equal(
+            "https://example.com/kiji/feed.xml",
+            channel.Element(atom + "link")!.Attribute("href")!.Value);
+        Assert.Equal(
+            "https://example.com/kiji/blog/hello/",
+            channel.Element("item")!.Element("link")!.Value);
     }
 }

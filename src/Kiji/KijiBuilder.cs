@@ -92,15 +92,58 @@ public sealed class KijiBuilder
         return new KijiApp(this);
     }
 
+    /// <summary>
+    /// Resolves the default site root: the site's own project directory when there is
+    /// one, then the nearest repository root, then the current directory.
+    /// </summary>
+    /// <remarks>
+    /// The project probe comes first because a site living inside a larger repository
+    /// (docs alongside a library, one site among several) is its own root — resolving to
+    /// the repository root would look for <c>contents/</c> in the wrong place. For a
+    /// repository that is just one site, both probes land on the same directory.
+    /// </remarks>
     private static string ResolveDefaultRoot()
     {
+        return ResolveDefaultRoot(AppContext.BaseDirectory, Directory.GetCurrentDirectory());
+    }
+
+    internal static string ResolveDefaultRoot(string appBaseDirectory, string currentDirectory)
+    {
+        var projectRoot = FindNearestProjectDirectory(appBaseDirectory)
+            ?? FindNearestProjectDirectory(currentDirectory);
+        if (projectRoot is not null)
+        {
+            return projectRoot;
+        }
+
         try
         {
-            return SsgPathResolver.ResolveRepositoryRoot(AppContext.BaseDirectory, Directory.GetCurrentDirectory());
+            return SsgPathResolver.ResolveRepositoryRoot(appBaseDirectory, currentDirectory);
         }
         catch (DirectoryNotFoundException)
         {
-            return Directory.GetCurrentDirectory();
+            return currentDirectory;
         }
+    }
+
+    private static string? FindNearestProjectDirectory(string startPath)
+    {
+        if (string.IsNullOrWhiteSpace(startPath))
+        {
+            return null;
+        }
+
+        var directory = new DirectoryInfo(Path.GetFullPath(startPath));
+        while (directory is not null)
+        {
+            if (directory.EnumerateFiles("*.csproj").Any() || directory.EnumerateFiles("*.fsproj").Any())
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        return null;
     }
 }

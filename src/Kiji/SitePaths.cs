@@ -11,7 +11,10 @@ public sealed class SitePaths
     }
 
     /// <summary>
-    /// The site root directory. Defaults to the nearest ancestor directory containing <c>.git</c>.
+    /// The site root directory, which <see cref="Content"/>, <see cref="Static"/>, and
+    /// <see cref="Output"/> resolve against. Defaults to the site's own project directory
+    /// (the nearest ancestor containing a project file), falling back to the nearest
+    /// ancestor containing <c>.git</c> and then to the current directory.
     /// </summary>
     public string Root { get; set; }
 

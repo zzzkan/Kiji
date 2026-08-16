@@ -83,6 +83,16 @@ Add `dist/` and `.kiji/` (the build cache) to your site's `.gitignore`.
 - **Trailing slashes**: pages are generated as `route/index.html`; the dev and
   preview servers resolve `/route` and `/route/` to the same page without
   redirecting. Canonical URLs use the trailing-slash form.
+- **Base paths**: `SiteInfo.BaseUrl` may include a path segment, for sites published
+  under a sub-path such as a GitHub Pages project site
+  (`https://user.github.io/my-site/`). Write your own links through
+  `Site.Path("css/app.css")`, which resolves to `/my-site/css/app.css` there and to
+  `/css/app.css` at the domain root. Canonical, feed, and sitemap URLs already carry
+  the prefix, and markdown page-bundle images are document-relative, so neither needs
+  it. Kiji never emits a `<base>` element — it would re-root those image URLs. The base
+  path is a deployment location only; it never changes the `dist/` layout. `dev` and
+  `preview` serve under the same prefix and deliberately return 404 outside it, so a link
+  that forgets `Site.Path` fails locally instead of only after deployment.
 - **Artifacts**: RSS feeds and sitemaps are opt-in via `app.MapFeed(...)` /
   `app.MapSitemap()`. Custom site-wide outputs implement `ISiteArtifact` and
   register via `app.MapArtifact(...)`.

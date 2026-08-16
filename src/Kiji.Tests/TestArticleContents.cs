@@ -9,9 +9,24 @@ internal static class TestArticleContents
 {
     public static SiteInfo CreateSiteInfo()
     {
+        return CreateSiteInfo(new Uri("https://example.com"));
+    }
+
+    /// <summary>
+    /// The same site metadata published under a sub-path, for exercising base-path
+    /// behavior. Kept separate from <see cref="CreateSiteInfo()"/> because most tests
+    /// assert against the domain-root URLs.
+    /// </summary>
+    public static SiteInfo CreateSiteInfoWithBasePath()
+    {
+        return CreateSiteInfo(new Uri("https://example.com/kiji/"));
+    }
+
+    private static SiteInfo CreateSiteInfo(Uri baseUrl)
+    {
         return new SiteInfo
         {
-            BaseUrl = new Uri("https://example.com"),
+            BaseUrl = baseUrl,
             Name = "zzzkan.me",
             Description = "zzzkan.meです。",
             Language = "ja",

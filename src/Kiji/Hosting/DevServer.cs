@@ -13,7 +13,6 @@ namespace Kiji.Hosting;
 /// </summary>
 internal sealed class DevServer(KijiApp app) : IAsyncDisposable
 {
-    private const string LiveReloadScriptTag = """<script src="/_kiji/livereload.js" defer></script>""";
     private const int DebounceMilliseconds = 250;
 
     // Servers currently accepting live-reload clients; hot reload notifications
@@ -45,6 +44,13 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
         builder.WebHost.UseUrls($"http://127.0.0.1:{port}");
 
         var web = builder.Build();
+
+        // Must run before route matching, so the /_kiji/* endpoints below match a
+        // prefixed request. WebApplication auto-inserts UseRouting ahead of all user
+        // middleware when endpoints exist, unless the app calls UseRouting itself.
+        web.UseSiteBasePath(app.Site.BasePath);
+        web.UseRouting();
+
         web.UseWebSockets();
 
         web.Map("/_kiji/reload", async context =>
@@ -93,7 +99,10 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
         await web.StartAsync(cancellationToken);
         _webApplication = web;
         ActiveServers.TryAdd(this, 0);
-        _reporter.DevServerStarted(new Uri(web.Urls.First()), options.ContentsPath, Directory.Exists(options.StaticPath) ? options.StaticPath : null);
+        _reporter.DevServerStarted(
+            new Uri(new Uri(web.Urls.First()), app.Site.BasePath),
+            options.ContentsPath,
+            Directory.Exists(options.StaticPath) ? options.StaticPath : null);
 
         // Warm the snapshot (page discovery + content materialization) in the
         // background so the first request doesn't pay for it. Failures are ignored
@@ -196,7 +205,7 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
     private async Task WritePageAsync(HttpContext context, Rendering.PageRenderRequest page, int statusCode)
     {
         var html = await app.RenderPageAsync(page, context.RequestAborted);
-        html = InjectLiveReloadScript(html);
+        html = InjectLiveReloadScript(html, context.Request.PathBase);
 
         context.Response.StatusCode = statusCode;
         context.Response.ContentType = "text/html; charset=utf-8";
@@ -204,12 +213,16 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
         await context.Response.WriteAsync(html, context.RequestAborted);
     }
 
-    private static string InjectLiveReloadScript(string html)
+    // PathBase carries the site's base path, so the script resolves under the prefix.
+    // With no prefix its Value is null and the tag is byte-identical to a plain
+    // "/_kiji/livereload.js" reference.
+    private static string InjectLiveReloadScript(string html, PathString pathBase)
     {
+        var tag = $"""<script src="{pathBase.Value}/_kiji/livereload.js" defer></script>""";
         var bodyCloseIndex = html.LastIndexOf("</body>", StringComparison.OrdinalIgnoreCase);
         return bodyCloseIndex >= 0
-            ? html.Insert(bodyCloseIndex, LiveReloadScriptTag)
-            : html + LiveReloadScriptTag;
+            ? html.Insert(bodyCloseIndex, tag)
+            : html + tag;
     }
 
     private SiteSnapshot GetSnapshot()

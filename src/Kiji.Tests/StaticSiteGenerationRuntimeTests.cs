@@ -160,6 +160,99 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         Assert.NotEmpty(Directory.GetFiles(imageCacheDir, "*.webp", SearchOption.AllDirectories));
     }
 
+    /// <summary>
+    /// A base path must not change how page-bundle images are referenced. Their <c>./</c>
+    /// URLs resolve against the containing page, which is what makes them work at any
+    /// base path — emitting a <c>&lt;base&gt;</c> element would re-root them and break it.
+    /// </summary>
+    [Fact]
+    public async Task BuildSiteAsync_WithBasePath_KeepsImagesDocumentRelativeAndEmitsNoBaseElement()
+    {
+        var postDir = Path.Combine(_contentsDir, "hello");
+        Directory.CreateDirectory(postDir);
+        await File.WriteAllTextAsync(
+            Path.Combine(postDir, "hello-world.md"),
+            """
+            ---
+            title: Hello World
+            createdAt: 2026-03-18
+            ---
+
+            ![Beside](photo.png)
+            """);
+        await CreateTestImageAsync(Path.Combine(postDir, "photo.png"), 800, 600);
+
+        var rootOutputDir = Path.Combine(_testDir, "output-root");
+        var prefixedOutputDir = Path.Combine(_testDir, "output-prefixed");
+
+        await BuildMarkdownSiteAsync(TestArticleContents.CreateSiteInfo(), rootOutputDir);
+        await BuildMarkdownSiteAsync(TestArticleContents.CreateSiteInfoWithBasePath(), prefixedOutputDir);
+
+        var rootHtml = await File.ReadAllTextAsync(Path.Combine(rootOutputDir, "md", "hello-world", "index.html"));
+        var prefixedHtml = await File.ReadAllTextAsync(Path.Combine(prefixedOutputDir, "md", "hello-world", "index.html"));
+
+        // The framework must never emit <base>: it would re-root every ./ image URL.
+        Assert.DoesNotContain("<base", rootHtml, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<base", prefixedHtml, StringComparison.OrdinalIgnoreCase);
+
+        // Image markup is identical with and without a base path.
+        Assert.Equal(ExtractImageMarkup(rootHtml), ExtractImageMarkup(prefixedHtml));
+        Assert.Contains("src=\"./photo.png.", prefixedHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("src=\"/kiji/photo.png.", prefixedHtml, StringComparison.Ordinal);
+
+        // Author-written links go through SiteInfo.Path and do carry the prefix. The
+        // markdown test page contributes no head, so assert on a page that does.
+        var rootHome = await File.ReadAllTextAsync(Path.Combine(rootOutputDir, "index.html"));
+        var prefixedHome = await File.ReadAllTextAsync(Path.Combine(prefixedOutputDir, "index.html"));
+
+        Assert.Contains("href=\"/css/app.css\"", rootHome, StringComparison.Ordinal);
+        Assert.Contains("href=\"/kiji/css/app.css\"", prefixedHome, StringComparison.Ordinal);
+        Assert.Contains("href=\"/icon.svg\"", rootHome, StringComparison.Ordinal);
+        Assert.Contains("href=\"/kiji/icon.svg\"", prefixedHome, StringComparison.Ordinal);
+
+        // Canonical and feed URLs derive from BaseUrl and already carry the prefix.
+        Assert.Contains("href=\"https://example.com/\"", rootHome, StringComparison.Ordinal);
+        Assert.Contains("href=\"https://example.com/kiji/\"", prefixedHome, StringComparison.Ordinal);
+        Assert.Contains("href=\"https://example.com/feed.xml\"", rootHome, StringComparison.Ordinal);
+        Assert.Contains("href=\"https://example.com/kiji/feed.xml\"", prefixedHome, StringComparison.Ordinal);
+    }
+
+    private async Task BuildMarkdownSiteAsync(SiteInfo site, string outputDir)
+    {
+        var builder = KijiApp.CreateBuilder([]);
+        builder.Site = site;
+        builder.Paths.Root = _testDir;
+        builder.Paths.Content = _contentsDir;
+        builder.Paths.Static = GetStaticDirectory();
+        builder.Paths.Output = outputDir;
+
+        var markdownPosts = builder.AddMarkdownContent<FrontMatter>()
+            .WithKey(static post => post.FileInfo.FileNameWithoutExtension);
+        var posts = builder.AddContentSource<Post>(static _ => [])
+            .WithKey(static post => post.Slug);
+
+        await using var app = builder.Build();
+        TestArticleContents.MapSite(app, posts);
+        app.MapRoutes<MarkdownPostTestPage, MarkdownContent<FrontMatter>>(
+            markdownPosts,
+            static post => new { Slug = post.FileInfo.FileNameWithoutExtension });
+
+        await app.BuildSiteAsync();
+    }
+
+    private static string ExtractImageMarkup(string html)
+    {
+        var start = html.IndexOf("<picture", StringComparison.Ordinal);
+        if (start < 0)
+        {
+            start = html.IndexOf("<img", StringComparison.Ordinal);
+        }
+
+        Assert.True(start >= 0, "The rendered page contained no image markup.");
+        var end = html.IndexOf("</p>", start, StringComparison.Ordinal);
+        return end < 0 ? html[start..] : html[start..end];
+    }
+
     private static async Task CreateTestImageAsync(string path, int width, int height)
     {
         using var image = new Image<Rgba32>(width, height);

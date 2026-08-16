@@ -208,6 +208,94 @@ public sealed class DevServerTests : IAsyncDisposable
         Assert.Equal(new Kiji.Hosting.WatchedChange(Kiji.Hosting.WatchedPathSource.Static, WatcherChangeTypes.Changed, "site.css"), deduplicated[1]);
     }
 
+    /// <summary>
+    /// A site published under a sub-path must be browsable at that sub-path locally,
+    /// and must serve nothing outside it — otherwise a link that forgets
+    /// <see cref="SiteInfo.Path(string)"/> works in dev and 404s only once deployed.
+    /// </summary>
+    [Fact]
+    public async Task Serve_WithBasePath_ServesUnderThePrefixAndRejectsOutsideIt()
+    {
+        using var logs = new StringWriter();
+        var (baseAddress, devServer) = await StartServerAsync(logs, TestArticleContents.CreateSiteInfoWithBasePath());
+        await using (devServer)
+        {
+            using var client = CreateClient();
+
+            var home = await client.GetAsync(new Uri(baseAddress, "/kiji/"));
+            Assert.Equal(HttpStatusCode.OK, home.StatusCode);
+            Assert.Contains(
+                "<title>Home - zzzkan.me</title>",
+                await home.Content.ReadAsStringAsync(),
+                StringComparison.Ordinal);
+
+            // The prefix without a trailing slash resolves to the same page.
+            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(new Uri(baseAddress, "/kiji"))).StatusCode);
+
+            var post = await client.GetAsync(new Uri(baseAddress, "/kiji/blog/hello-world/"));
+            Assert.Equal(HttpStatusCode.OK, post.StatusCode);
+            Assert.Contains(
+                "<h1>Hello World</h1>",
+                await post.Content.ReadAsStringAsync(),
+                StringComparison.Ordinal);
+
+            // Trailing-slash resolution still works underneath the prefix.
+            Assert.Equal(
+                HttpStatusCode.OK,
+                (await client.GetAsync(new Uri(baseAddress, "/kiji/blog/hello-world"))).StatusCode);
+
+            // The server root redirects rather than 404s, so the developer lands somewhere useful.
+            var root = await client.GetAsync(new Uri(baseAddress, "/"));
+            Assert.Equal(HttpStatusCode.Found, root.StatusCode);
+            Assert.Equal("/kiji/", root.Headers.Location!.ToString());
+
+            // Static assets resolve under the prefix, which is where Site.Path points them.
+            await File.WriteAllTextAsync(Path.Combine(_staticDir, "site.css"), "body{}");
+            Assert.Equal(
+                HttpStatusCode.OK,
+                (await client.GetAsync(new Uri(baseAddress, "/kiji/site.css"))).StatusCode);
+
+            // Anything else outside the prefix is a 404, exactly as after deployment.
+            Assert.Equal(
+                HttpStatusCode.NotFound,
+                (await client.GetAsync(new Uri(baseAddress, "/blog/hello-world/"))).StatusCode);
+            Assert.Equal(
+                HttpStatusCode.NotFound,
+                (await client.GetAsync(new Uri(baseAddress, "/site.css"))).StatusCode);
+
+            Assert.Contains(
+                $"Started Kiji dev server at {new Uri(baseAddress, "/kiji/")}",
+                logs.ToString(),
+                StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// The live-reload endpoints are routed, so they only match under the prefix if the
+    /// base path is applied before route matching.
+    /// </summary>
+    [Fact]
+    public async Task Serve_WithBasePath_ServesLiveReloadEndpointsUnderThePrefix()
+    {
+        var (baseAddress, devServer) = await StartServerAsync(
+            new StringWriter(),
+            TestArticleContents.CreateSiteInfoWithBasePath());
+        await using (devServer)
+        {
+            using var client = CreateClient();
+
+            var script = await client.GetAsync(new Uri(baseAddress, "/kiji/_kiji/livereload.js"));
+            Assert.Equal(HttpStatusCode.OK, script.StatusCode);
+            Assert.Contains("WebSocket", await script.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+            var html = await (await client.GetAsync(new Uri(baseAddress, "/kiji/"))).Content.ReadAsStringAsync();
+            Assert.Contains(
+                """<script src="/kiji/_kiji/livereload.js" defer></script>""",
+                html,
+                StringComparison.Ordinal);
+        }
+    }
+
     private static HttpClient CreateClient()
     {
         return new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
@@ -218,12 +306,14 @@ public sealed class DevServerTests : IAsyncDisposable
         return StartServerAsync(new StringWriter());
     }
 
-    private async Task<(Uri BaseAddress, IAsyncDisposable DevServer)> StartServerAsync(StringWriter logs)
+    private async Task<(Uri BaseAddress, IAsyncDisposable DevServer)> StartServerAsync(
+        StringWriter logs,
+        SiteInfo? site = null)
     {
         await File.WriteAllTextAsync(Path.Combine(_contentsDir, "hello-world.txt"), "Hello World");
 
         var builder = KijiApp.CreateBuilder([]);
-        builder.Site = TestArticleContents.CreateSiteInfo();
+        builder.Site = site ?? TestArticleContents.CreateSiteInfo();
         builder.Paths.Root = _testDir;
         builder.Paths.Content = _contentsDir;
         builder.Paths.Static = _staticDir;

@@ -347,6 +347,12 @@ public sealed class KijiApp : IAsyncDisposable
     /// </summary>
     public async Task PreviewAsync(int port = 8080, CancellationToken cancellationToken = default)
     {
+        await using var web = await StartPreviewServerAsync(port, cancellationToken);
+        await web.WaitForShutdownAsync(cancellationToken);
+    }
+
+    internal async Task<WebApplication> StartPreviewServerAsync(int port, CancellationToken cancellationToken)
+    {
         var outputPath = _builder.Paths.ResolveOutputPath();
         if (!Directory.Exists(outputPath))
         {
@@ -358,9 +364,13 @@ public sealed class KijiApp : IAsyncDisposable
         builder.Logging.SetMinimumLevel(LogLevel.Warning);
         builder.WebHost.UseUrls($"http://127.0.0.1:{port}");
 
-        await using var web = builder.Build();
+        var web = builder.Build();
 
         var fileProvider = new PhysicalFileProvider(outputPath);
+
+        // Mount under the site's base path first, so every downstream middleware sees
+        // prefix-stripped paths and production-equivalent 404s outside it.
+        web.UseSiteBasePath(Site.BasePath);
 
         web.Use(async (context, next) =>
         {
@@ -392,9 +402,18 @@ public sealed class KijiApp : IAsyncDisposable
             }
         });
 
-        await web.StartAsync(cancellationToken);
-        Console.WriteLine($"Kiji preview server: {web.Urls.First()}");
-        await web.WaitForShutdownAsync(cancellationToken);
+        try
+        {
+            await web.StartAsync(cancellationToken);
+        }
+        catch
+        {
+            await web.DisposeAsync();
+            throw;
+        }
+
+        Console.WriteLine($"Kiji preview server: {new Uri(new Uri(web.Urls.First()), Site.BasePath)}");
+        return web;
     }
 
     /// <summary>

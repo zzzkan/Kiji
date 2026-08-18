@@ -21,8 +21,7 @@ public sealed class StaticPagePlannerTests
                     new Dictionary<string, string>(StringComparer.Ordinal)
                     {
                         ["Slug"] = "hello-world",
-                    },
-                    AssociatedContentIdentity: "hello-world"),
+                    }),
             ],
             ["/tags/{TagSlug}/"] =
             [
@@ -48,12 +47,10 @@ public sealed class StaticPagePlannerTests
         Assert.Equal("hello-world", blogRequest.Parameters["Slug"]);
         Assert.Equal("/blog/hello-world/", blogRequest.RoutePath);
         Assert.Equal(Path.Combine("blog", "hello-world", "index.html"), blogRequest.OutputRelativePath);
-        Assert.Equal("hello-world", blogRequest.AssociatedContentIdentity);
 
         Assert.Equal("c-sharp-basics", tagRequest.Parameters["TagSlug"]);
         Assert.Equal("/tags/c-sharp-basics/", tagRequest.RoutePath);
         Assert.Equal(Path.Combine("tags", "c-sharp-basics", "index.html"), tagRequest.OutputRelativePath);
-        Assert.Null(tagRequest.AssociatedContentIdentity);
     }
 
     [Fact]

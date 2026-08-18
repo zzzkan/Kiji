@@ -319,7 +319,7 @@ public sealed class DevServerTests : IAsyncDisposable
         builder.Paths.Static = _staticDir;
 
         var contentsDir = _contentsDir;
-        var posts = builder.AddContentSource<Post>(_ =>
+        builder.AddContentSource<Post>(_ =>
                 [.. Directory.EnumerateFiles(contentsDir, "*.txt")
                     .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
                     .Select(static file => TestArticleContents.CreatePost(
@@ -328,11 +328,11 @@ public sealed class DevServerTests : IAsyncDisposable
                         "desc",
                         new DateOnly(2026, 1, 1),
                         null,
-                        "Testing"))])
-            .WithKey(static post => post.Slug);
+                        "Testing"))],
+            key: static post => post.Slug);
 
         _app = builder.Build();
-        TestArticleContents.MapSite(_app, posts);
+        TestArticleContents.MapSite(_app);
 
         var reporter = new Kiji.Hosting.DevServerStatusReporter(logs, prefix: "kiji dev", useEmoji: true);
         var (devServer, web) = await _app.StartDevServerAsync(port: 0, CancellationToken.None, reporter);

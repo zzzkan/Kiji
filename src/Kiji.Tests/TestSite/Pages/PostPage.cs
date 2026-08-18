@@ -7,17 +7,20 @@ namespace Kiji.Tests.TestSite.Pages;
 public sealed class PostPage : ComponentBase
 {
     [Inject]
-    public ContentCollection<Post> Posts { get; set; } = default!;
+    public ContentDictionary<Post> Posts { get; set; } = default!;
 
     [Parameter]
     public string Slug { get; set; } = string.Empty;
+
+    [Parameter]
+    public string ContentKey { get; set; } = string.Empty;
 
     private Post? _post;
     private string _htmlContent = string.Empty;
 
     protected override async Task OnParametersSetAsync()
     {
-        _post = Posts.GetRequired(Slug);
+        _post = Posts[ContentKey];
         _htmlContent = await _post.RenderAsync();
     }
 

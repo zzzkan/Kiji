@@ -7,8 +7,8 @@ using YamlDotNet.Serialization.NamingConventions;
 namespace Kiji.Tests;
 
 /// <summary>
-/// Unit tests for <see cref="MarkdownContentOptions"/> driving <see cref="MarkdownProcessor"/>
-/// and front matter deserialization.
+/// Unit tests for <see cref="MarkdownProcessingOptions"/> driving <see cref="MarkdownProcessor"/>
+/// and for front matter deserialization configured on <see cref="MarkdownContentOptions{TModel}"/>.
 /// </summary>
 public sealed class MarkdownContentOptionsTests : IDisposable
 {
@@ -74,9 +74,11 @@ public sealed class MarkdownContentOptionsTests : IDisposable
     public async Task AddHtmlPostProcessor_RunsInRegistrationOrder()
     {
         var mdPath = CreateMarkdownFile("order.md", "Body.");
-        var processor = CreateProcessor(static options => options
-            .AddHtmlPostProcessor(static html => html + "<!--first-->")
-            .AddHtmlPostProcessor(static html => html + "<!--second-->"));
+        var processor = CreateProcessor(static options =>
+        {
+            options.AddHtmlPostProcessor(static html => html + "<!--first-->");
+            options.AddHtmlPostProcessor(static html => html + "<!--second-->");
+        });
 
         var html = await processor.ProcessAsync(mdPath);
 
@@ -101,8 +103,8 @@ public sealed class MarkdownContentOptionsTests : IDisposable
     [Fact]
     public void ConfigureFrontMatter_CustomNamingConvention_IsApplied()
     {
-        var options = new MarkdownContentOptions()
-            .ConfigureFrontMatter(static builder => builder.WithNamingConvention(UnderscoredNamingConvention.Instance));
+        var options = new MarkdownContentOptions<MarkdownContent<FrontMatter>>();
+        options.ConfigureFrontMatter(static builder => builder.WithNamingConvention(UnderscoredNamingConvention.Instance));
         var deserializer = MarkdownFrontMatterParser.CreateDeserializer(options.FrontMatterConfigurations);
         var mdPath = CreateMarkdownFile(
             "underscored.md",
@@ -139,9 +141,9 @@ public sealed class MarkdownContentOptionsTests : IDisposable
         }
     }
 
-    private MarkdownProcessor CreateProcessor(Action<MarkdownContentOptions>? configure = null)
+    private MarkdownProcessor CreateProcessor(Action<MarkdownProcessingOptions>? configure = null)
     {
-        var contentOptions = new MarkdownContentOptions();
+        var contentOptions = new MarkdownProcessingOptions();
         configure?.Invoke(contentOptions);
 
         return new MarkdownProcessor(

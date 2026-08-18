@@ -6,9 +6,7 @@ public sealed record PageRenderRequest(
     IReadOnlyDictionary<string, object?> Parameters,
     string RoutePath,
     string OutputRelativePath,
-    string? AssociatedContentIdentity = null,
-    bool ExcludeFromSitemap = false,
-    DateTimeOffset? LastModified = null)
+    bool ExcludeFromSitemap = false)
 {
     /// <summary>
     /// Root component parameters precomputed at snapshot time, so repeated renders

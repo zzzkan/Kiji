@@ -1,16 +1,19 @@
 namespace Kiji.Feeds;
 
 /// <summary>
-/// Feed metadata for a single content item. The item's route is resolved
-/// automatically from the content-to-page mapping.
+/// A single feed entry.
 /// </summary>
 /// <param name="Title">The entry title.</param>
 /// <param name="Description">The entry description.</param>
 /// <param name="PublishedAt">The publication timestamp.</param>
-public sealed record FeedItem(string Title, string Description, DateTimeOffset PublishedAt)
-{
-    /// <summary>
-    /// Optional full entry HTML, emitted as <c>content:encoded</c> when set.
-    /// </summary>
-    public string? ContentHtml { get; init; }
-}
+/// <param name="RoutePath">
+/// The entry's site-relative route, e.g. <c>blog/my-post/</c>. Combined with
+/// <see cref="SiteInfo.BaseUrl"/> to form the entry's link, so it carries any base path
+/// automatically. Kiji does not derive it from the page mapping: the route is the site's
+/// to decide, the same way index page links are.
+/// </param>
+public sealed record FeedItem(
+    string Title,
+    string Description,
+    DateTimeOffset PublishedAt,
+    string RoutePath);

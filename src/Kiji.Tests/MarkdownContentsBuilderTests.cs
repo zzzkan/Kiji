@@ -110,7 +110,7 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
     }
 
     [Fact]
-    public async Task ContentCollection_CanonicalSlugCollision_ThrowsBeforeWritingOutputs()
+    public async Task ContentDictionary_CanonicalSlugCollision_ThrowsBeforeWritingOutputs()
     {
         var firstDirectory = Path.Combine(_contentsDir, "2024");
         var secondDirectory = Path.Combine(_contentsDir, "2025");
@@ -123,8 +123,9 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
         await File.WriteAllTextAsync(secondPath, CreateValidMarkdown("Second Post", new DateTime(2024, 2, 15)));
 
         var contents = CreateBuilder().Build();
-        var posts = Content.FromItems([.. contents.Select(Post.Create)]).WithKey(static post => post.Slug);
-        var exception = Assert.Throws<InvalidOperationException>(() => posts.Items);
+        var posts = Content.FromItems([.. contents.Select(Post.Create)], key: static post => post.Slug);
+        // Duplicate keys surface on materialization, which the first enumeration triggers.
+        var exception = Assert.Throws<InvalidOperationException>(() => posts.Count);
 
         Assert.Contains("hello-world", exception.Message, StringComparison.Ordinal);
         Assert.Contains("duplicate key", exception.Message, StringComparison.Ordinal);

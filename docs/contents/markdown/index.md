@@ -29,6 +29,26 @@ tags: [dotnet, kiji]
 Body text.
 ```
 
+## Choosing the files
+
+By default every `*.md` under the content directory belongs to the source. Point
+`Directory` at a subdirectory to keep markdown with different front matter in separate
+collections, and use `Where` to skip files:
+
+```csharp
+builder.AddMarkdownContent<PostFrontMatter>(
+    key: post => post.FileInfo.Slug,
+    configure: options =>
+    {
+        options.Directory = "posts";                   // contents/posts/**/*.md
+        options.Where = file => !file.FileNameWithoutExtension.StartsWith('_');
+    });
+```
+
+Scoping also narrows what an index page depends on: a page that enumerates this
+collection re-renders when something under `contents/posts/` changes, not when any
+markdown anywhere changes.
+
 ## Rendering
 
 `MarkdownContent<T>` gives you the parsed front matter immediately and the body on
@@ -38,7 +58,7 @@ demand:
 @code {
     protected override async Task OnParametersSetAsync()
     {
-        _post = Posts.GetRequired(Slug);
+        _post = Posts[ContentKey];
         _html = await _post.RenderAsync();
     }
 }
@@ -48,15 +68,19 @@ demand:
 <div>@((MarkupString)_html)</div>
 ```
 
+`ContentKey` is the dictionary key the route mapping supplied. `MarkdownFileInfo.Slug` is
+the usual thing to key on: the directory name for an `index.md`, otherwise the file name
+without its extension. So `contents/posts/hello/index.md` and `contents/posts/hello.md`
+are both the page `hello`.
+
 The body goes through Markdig with the advanced extensions enabled, plus link hardening
 that adds `target="_blank" rel="noopener noreferrer"` to external links. Customize the
 pipeline, the deserializer, or add HTML post-processing when you register the source:
 
 ```csharp
-builder.AddMarkdownContent<PostFrontMatter>(options =>
-{
-    options.PipelineConfigurations.Add(pipeline => pipeline.UseEmojiAndSmiley());
-});
+builder.AddMarkdownContent<PostFrontMatter>(
+    key: post => post.FileInfo.Slug,
+    configure: options => options.ConfigurePipeline(pipeline => pipeline.UseEmojiAndSmiley()));
 ```
 
 ## Page-bundle images

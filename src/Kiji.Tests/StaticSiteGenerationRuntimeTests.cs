@@ -2,8 +2,9 @@ using Kiji.Feeds;
 using Kiji.Markdown;
 using Kiji.Sitemaps;
 using Kiji.Tests.TestSite;
-using SixLabors.ImageSharp;
+using Microsoft.Extensions.DependencyInjection;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp;
 using Xunit;
 
 namespace Kiji.Tests;
@@ -60,13 +61,15 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
                 null,
                 "DotNet"),
         ];
-        var posts = builder.AddContentSource<Post>(_ => items)
-            .WithKey(static post => post.Slug)
-            .OrderByDescending(static post => post.CreatedAt);
+        builder.AddContentSource(_ => items, key: static post => post.Slug);
 
         await using var app = builder.Build();
-        TestArticleContents.MapSite(app, posts);
-        app.MapFeed(posts, static post => new FeedItem(post.Title, post.Description, post.CreatedAt));
+        TestArticleContents.MapSite(app);
+
+        app.MapFeed(static services => services.GetRequiredService<ContentDictionary<Post>>().Values
+            .OrderByDescending(static post => post.CreatedAt)
+            .Select(static post => new FeedItem(
+                post.Title, post.Description, post.CreatedAt, RoutePath: $"blog/{post.Slug}/")));
         app.MapSitemap();
 
         await app.BuildSiteAsync();
@@ -94,13 +97,11 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         var sitemapXml = await File.ReadAllTextAsync(Path.Combine(_outputDir, "sitemap.xml"));
         Assert.Contains("https://example.com/blog/hello-world/", sitemapXml, StringComparison.Ordinal);
         Assert.DoesNotContain("404.html", sitemapXml, StringComparison.Ordinal);
-        // lastmod flows from the MapRoutes lastModified selector (UpdatedAt of hello-world).
-        Assert.Contains("<lastmod>2026-03-19T00:00:00Z</lastmod>", sitemapXml, StringComparison.Ordinal);
 
         var feedXml = await File.ReadAllTextAsync(Path.Combine(_outputDir, "feed.xml"));
         Assert.Contains("<title>Hello World</title>", feedXml, StringComparison.Ordinal);
         Assert.Contains("https://example.com/blog/hello-world/", feedXml, StringComparison.Ordinal);
-        // Feed entries follow collection order (newest first).
+        // Feed entries appear in the order MapFeed produced them (newest first).
         Assert.True(
             feedXml.IndexOf("Hello World", StringComparison.Ordinal) < feedXml.IndexOf("Other Post", StringComparison.Ordinal));
     }
@@ -132,16 +133,14 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         builder.Paths.Static = GetStaticDirectory();
         builder.Paths.Output = _outputDir;
 
-        var markdownPosts = builder.AddMarkdownContent<FrontMatter>()
-            .WithKey(static post => post.FileInfo.FileNameWithoutExtension);
-        var posts = builder.AddContentSource<Post>(static _ => [])
-            .WithKey(static post => post.Slug);
+        builder.AddMarkdownContent<FrontMatter>(key: static post => post.FileInfo.Slug);
+        builder.AddContentSource<Post>(static _ => [], static post => post.Slug);
 
         await using var app = builder.Build();
-        TestArticleContents.MapSite(app, posts);
-        app.MapRoutes<MarkdownPostTestPage, MarkdownContent<FrontMatter>>(
-            markdownPosts,
-            static post => new { Slug = post.FileInfo.FileNameWithoutExtension });
+        TestArticleContents.MapSite(app);
+        app.MapRoutes<MarkdownPostTestPage>(static services => services
+            .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
+            .Select(static post => new { Slug = post.Key, ContentKey = post.Key }));
 
         await app.BuildSiteAsync();
 
@@ -226,16 +225,14 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         builder.Paths.Static = GetStaticDirectory();
         builder.Paths.Output = outputDir;
 
-        var markdownPosts = builder.AddMarkdownContent<FrontMatter>()
-            .WithKey(static post => post.FileInfo.FileNameWithoutExtension);
-        var posts = builder.AddContentSource<Post>(static _ => [])
-            .WithKey(static post => post.Slug);
+        builder.AddMarkdownContent<FrontMatter>(key: static post => post.FileInfo.Slug);
+        builder.AddContentSource<Post>(static _ => [], static post => post.Slug);
 
         await using var app = builder.Build();
-        TestArticleContents.MapSite(app, posts);
-        app.MapRoutes<MarkdownPostTestPage, MarkdownContent<FrontMatter>>(
-            markdownPosts,
-            static post => new { Slug = post.FileInfo.FileNameWithoutExtension });
+        TestArticleContents.MapSite(app);
+        app.MapRoutes<MarkdownPostTestPage>(static services => services
+            .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
+            .Select(static post => new { Slug = post.Key, ContentKey = post.Key }));
 
         await app.BuildSiteAsync();
     }

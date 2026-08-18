@@ -29,6 +29,7 @@ Then switch the project to the Razor SDK so you can write pages as `.razor` file
 using Kiji;
 using Kiji.Markdown;
 using Kiji.Sitemaps;
+using Microsoft.Extensions.DependencyInjection;
 
 var builder = KijiApp.CreateBuilder(args);
 builder.Site = new SiteInfo
@@ -38,9 +39,7 @@ builder.Site = new SiteInfo
 };
 
 // The front matter shape is yours; Kiji does not define one.
-var posts = builder.AddMarkdownContent<PostFrontMatter>()
-    .WithKey(post => post.FileInfo.RelativeDirectoryPath)
-    .OrderByDescending(post => post.FrontMatter.CreatedAt);
+builder.AddMarkdownContent<PostFrontMatter>(key: post => post.FileInfo.Slug);
 
 await using var app = builder.Build();
 
@@ -48,9 +47,9 @@ app.MapDefaultLayout<MainLayout>();
 app.MapPages();
 app.MapNotFound<NotFoundPage>();
 
-app.MapRoutes<PostPage, MarkdownContent<PostFrontMatter>>(
-    posts,
-    post => new { Slug = post.FileInfo.RelativeDirectoryPath });
+app.MapRoutes<PostPage>(services => services
+    .GetRequiredService<ContentDictionary<MarkdownContent<PostFrontMatter>>>()
+    .Select(post => new { Slug = post.Key, ContentKey = post.Key }));
 
 app.MapSitemap();
 

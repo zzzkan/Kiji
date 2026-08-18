@@ -31,7 +31,7 @@ public sealed class MarkdownProcessor
     public MarkdownProcessor(
         SsgOptions options,
         IImageAssetProcessor imageAssetProcessor,
-        MarkdownContentOptions? contentOptions = null)
+        MarkdownProcessingOptions? contentOptions = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(imageAssetProcessor);
@@ -201,7 +201,7 @@ public sealed class MarkdownProcessor
         return html;
     }
 
-    private static MarkdownPipeline BuildPipeline(MarkdownContentOptions? contentOptions)
+    private static MarkdownPipeline BuildPipeline(MarkdownProcessingOptions? contentOptions)
     {
         var builder = new MarkdownPipelineBuilder()
             .UseAdvancedExtensions()

@@ -40,6 +40,11 @@ static HTML via Blazor's `HtmlRenderer`, assembled with a minimal-API style buil
 | Rendering to `IBufferWriter<byte>` | `HtmlRootComponent` only exposes `WriteHtmlTo(TextWriter)` |
 | Content-addressed image output | Breaks the page-bundle layout and `./` references |
 | Incremental RSS/sitemap | They depend on all page metadata and are cheap to regenerate |
+| Two content dictionaries of the same element type (keyed DI) | A dictionary is identified by its element type; declare a distinct model instead |
+| Passing the content item to its page as a parameter | The key is enough, and it is a string — an arbitrary object in the parameter set would destabilize `ParametersHash` |
+| A declared order on a content dictionary | Order is a view concern; pages sort at render time, and a fixed key order keeps rebuilds byte-identical |
+| Lazy transform operators for derived data (`Select`/`Transform` over a deferred handle) | Computing in the page covers it, and enumeration there records the dependency automatically — no provenance-propagation rules to explain |
+| `Map*` methods bound to a content-dictionary type | `MapRoutes` supplies page parameters, `MapFeed` supplies entries; a content dictionary is just one thing you might project from |
 
 ## Conventions
 
@@ -66,6 +71,15 @@ static HTML via Blazor's `HtmlRenderer`, assembled with a minimal-API style buil
   purpose — a link that forgot `Site.Path` should fail locally, not after deploy.
 - Framework (`System.*`/`Microsoft.*`) assemblies are excluded from the incremental build
   fingerprint. After an SDK update, use `--force` to be certain.
+- The object `MapRoutes` yields is the page's whole parameter set, not just route values.
+  Names matching the route template bind the URL; the rest must be declared `[Parameter]`
+  properties on the component, or planning fails naming them.
+- The `IServiceProvider` handed to a route factory, a feed factory, a content loader, or
+  a site artifact is the earliest point content can be reached. `KijiApp` exposes neither
+  a dictionary nor a provider on purpose: loading content resolves `SsgOptions`, a singleton
+  the running command settles, so an earlier read would pin `build` paths onto `dev`.
+- Derived data registered in `builder.Services` must be `AddScoped`, not `AddSingleton`:
+  the dev server rebuilds content dictionaries on change but leaves user singletons alone.
 
 ## Skills
 

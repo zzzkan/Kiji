@@ -1,5 +1,6 @@
-using System.Xml.Linq;
 using Kiji.Sitemaps;
+using Microsoft.Extensions.DependencyInjection;
+using System.Xml.Linq;
 using Xunit;
 
 namespace Kiji.Tests;
@@ -17,7 +18,7 @@ public sealed class SitemapsTests
             Name = "Example Site",
         };
 
-        return new SiteOutputContext(site, pages);
+        return new SiteOutputContext(site, pages, new ServiceCollection().BuildServiceProvider());
     }
 
     private static async Task<XDocument> WriteSitemapAsync(SitemapArtifact artifact, SiteOutputContext context)
@@ -31,10 +32,10 @@ public sealed class SitemapsTests
     public async Task WriteAsync_ListsPagesSorted_AndExcludesOptedOutPages()
     {
         var context = CreateContext([
-            new SitePageInfo("/blog/zebra/", "blog/zebra/index.html", false, null),
-            new SitePageInfo("/", "index.html", false, null),
-            new SitePageInfo("/404.html", "404.html", true, null),
-            new SitePageInfo("/blog/alpha/", "blog/alpha/index.html", false, null),
+            new SitePageInfo("/blog/zebra/", "blog/zebra/index.html", false),
+            new SitePageInfo("/", "index.html", false),
+            new SitePageInfo("/404.html", "404.html", true),
+            new SitePageInfo("/blog/alpha/", "blog/alpha/index.html", false),
         ]);
         var artifact = new SitemapArtifact();
 
@@ -65,8 +66,8 @@ public sealed class SitemapsTests
     {
         var context = CreateContext(
             [
-                new SitePageInfo("/", "index.html", false, null),
-                new SitePageInfo("/blog/alpha/", "blog/alpha/index.html", false, null),
+                new SitePageInfo("/", "index.html", false),
+                new SitePageInfo("/blog/alpha/", "blog/alpha/index.html", false),
             ],
             "https://example.com/kiji/");
         var artifact = new SitemapArtifact();
@@ -91,7 +92,7 @@ public sealed class SitemapsTests
     public async Task WriteAsync_RouteWithSpecialCharacters_ProducesWellFormedXml()
     {
         var context = CreateContext([
-            new SitePageInfo("/tags/c-and-cpp/?x=1&y=2", "tags/c-and-cpp/index.html", false, null),
+            new SitePageInfo("/tags/c-and-cpp/?x=1&y=2", "tags/c-and-cpp/index.html", false),
         ]);
         var artifact = new SitemapArtifact();
 
@@ -103,29 +104,24 @@ public sealed class SitemapsTests
         Assert.Contains("x=1&y=2", loc, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The sitemap carries locations only. <c>lastmod</c> was dropped along with the
+    /// per-page timestamp that fed it.
+    /// </summary>
     [Fact]
-    public async Task WriteAsync_PageWithLastModified_EmitsLastmodInUtc()
+    public async Task WriteAsync_EmitsLocationsOnly()
     {
         var context = CreateContext([
-            new SitePageInfo(
-                "/blog/dated/",
-                "blog/dated/index.html",
-                false,
-                null,
-                new DateTimeOffset(2026, 3, 18, 9, 30, 0, TimeSpan.FromMinutes(330))),
-            new SitePageInfo("/blog/undated/", "blog/undated/index.html", false, null),
+            new SitePageInfo("/blog/hello/", "blog/hello/index.html", false),
         ]);
         var artifact = new SitemapArtifact();
 
         var document = await WriteSitemapAsync(artifact, context);
 
         XNamespace ns = "http://www.sitemaps.org/schemas/sitemap/0.9";
-        var urls = document.Root!.Elements(ns + "url").ToArray();
-        var dated = Assert.Single(urls, url => url.Element(ns + "loc")!.Value.Contains("/dated/", StringComparison.Ordinal));
-        var undated = Assert.Single(urls, url => url.Element(ns + "loc")!.Value.Contains("/undated/", StringComparison.Ordinal));
-
-        Assert.Equal("2026-03-18T04:00:00Z", dated.Element(ns + "lastmod")!.Value);
-        Assert.Null(undated.Element(ns + "lastmod"));
+        var url = Assert.Single(document.Root!.Elements(ns + "url"));
+        Assert.Equal("https://example.com/blog/hello/", url.Element(ns + "loc")!.Value);
+        Assert.Null(url.Element(ns + "lastmod"));
     }
 
     [Fact]

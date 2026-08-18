@@ -66,16 +66,50 @@ public sealed class KijiBuilder
     }
 
     /// <summary>
-    /// Registers a content source and returns its typed collection handle.
-    /// Extension packages (e.g. markdown support) build on this method.
+    /// Registers a content source. The resulting <see cref="ContentDictionary{T}"/> is
+    /// resolved by its element type, so there is no handle to pass around: components
+    /// inject it, and route and feed factories resolve it from the services they are
+    /// handed. Extension packages (e.g. markdown support) build on this method.
     /// </summary>
-    /// <param name="loader">Loads the source items; invoked lazily once per site snapshot.</param>
-    public ContentCollection<T> AddContentSource<T>(Func<IServiceProvider, IReadOnlyList<T>> loader)
+    /// <param name="loader">
+    /// Loads the source items; invoked lazily once per site snapshot. It receives the
+    /// app's services, so a dictionary can be derived from another one — resolve
+    /// <see cref="ContentDictionary{T}"/> of the source type inside it.
+    /// </param>
+    /// <param name="key">Identifies each item. Keys must be non-empty and unique.</param>
+    /// <param name="configure">Declares the dictionary's validation.</param>
+    public KijiBuilder AddContentSource<T>(
+        Func<IServiceProvider, IReadOnlyList<T>> loader,
+        Func<T, string> key,
+        Action<ContentSourceOptions<T>>? configure = null)
         where T : class
     {
         ArgumentNullException.ThrowIfNull(loader);
+        ArgumentNullException.ThrowIfNull(key);
 
-        return new ContentCollection<T>(Runtime, loader);
+        var options = new ContentSourceOptions<T>();
+        configure?.Invoke(options);
+
+        return AddContentSource(
+            services => new ContentSourceItems<T>(loader(services), Provenance: null),
+            key,
+            options);
+    }
+
+    /// <summary>
+    /// The provenance-carrying form of <see cref="AddContentSource{T}(Func{IServiceProvider, IReadOnlyList{T}}, Func{T, string}, Action{ContentSourceOptions{T}})"/>,
+    /// for loaders that project items into a model no longer implementing
+    /// <see cref="IContentSourceFile"/> and must state the source file themselves.
+    /// </summary>
+    internal KijiBuilder AddContentSource<T>(
+        Func<IServiceProvider, ContentSourceItems<T>> loader,
+        Func<T, string> key,
+        ContentSourceOptions<T> options,
+        string contentSetScope = "")
+        where T : class
+    {
+        Runtime.Register(new ContentDictionary<T>(Runtime, loader, key, options, contentSetScope));
+        return this;
     }
 
     /// <summary>

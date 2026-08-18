@@ -4,6 +4,7 @@ using Kiji.Docs.Components;
 using Kiji.Docs.Pages;
 using Kiji.Markdown;
 using Kiji.Sitemaps;
+using Microsoft.Extensions.DependencyInjection;
 
 var builder = KijiApp.CreateBuilder(args);
 builder.Site = new SiteInfo
@@ -19,9 +20,8 @@ builder.Site = new SiteInfo
 };
 
 // Docs live at contents/<slug>/index.md, so images can sit beside the page using them.
-var docs = builder.AddMarkdownContent<DocFrontMatter>()
-    .WithKey(static doc => doc.FileInfo.RelativeDirectoryPath)
-    .OrderBy(static doc => doc.FrontMatter.Order);
+// The directory name becomes FileInfo.Slug, which this source uses as its key.
+builder.AddMarkdownContent<DocFrontMatter>(key: static doc => doc.FileInfo.Slug);
 
 await using var app = builder.Build();
 
@@ -29,9 +29,11 @@ app.MapDefaultLayout<MainLayout>();
 app.MapPages();
 app.MapNotFound<NotFoundPage>();
 
-app.MapRoutes<DocPage, MarkdownContent<DocFrontMatter>>(
-    docs,
-    static doc => new { Slug = doc.FileInfo.RelativeDirectoryPath });
+// Slug is the page's route segment; ContentKey is how the page finds itself in the
+// dictionary. They happen to be the same value here, but they are different things.
+app.MapRoutes<DocPage>(static services => services
+    .GetRequiredService<ContentDictionary<MarkdownContent<DocFrontMatter>>>()
+    .Select(static doc => new { Slug = doc.Key, ContentKey = doc.Key }));
 
 app.MapSitemap();
 

@@ -1,6 +1,6 @@
 @page "/"
 @inject SiteInfo Site
-@inject ContentCollection<MarkdownContent<PostFrontMatter>> Posts
+@inject ContentDictionary<MarkdownContent<PostFrontMatter>> Posts
 
 <PageHead Title="" Description="@Site.Description" />
 
@@ -8,10 +8,10 @@
 <p>@Site.Description</p>
 
 <ul>
-    @foreach (var post in Posts)
+    @foreach (var (slug, post) in Posts.OrderByDescending(entry => entry.Value.FrontMatter.CreatedAt))
     {
         <li>
-            <a href="@Site.Path($"{post.FileInfo.RelativeDirectoryPath}/")">@post.FrontMatter.Title</a>
+            <a href="@Site.Path($"{slug}/")">@post.FrontMatter.Title</a>
         </li>
     }
 </ul>

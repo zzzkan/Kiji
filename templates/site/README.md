@@ -33,10 +33,10 @@ because they are hard.
 
 | | How to add it |
 | --- | --- |
-| RSS feed | `app.MapFeed(posts, …)` — [Concepts](https://zzzkan.github.io/kiji/docs/concepts/) |
+| RSS feed | `app.MapFeed(services => …)` — [Concepts](https://zzzkan.github.io/kiji/docs/concepts/) |
 | Tag or archive pages | Another `MapRoutes` over the values you want — [Concepts](https://zzzkan.github.io/kiji/docs/concepts/) |
 | Responsive images | Already works; just reference an image from markdown — [Markdown and images](https://zzzkan.github.io/kiji/docs/markdown/) |
-| A custom markdown pipeline | `AddMarkdownContent(options => …)` — [Markdown and images](https://zzzkan.github.io/kiji/docs/markdown/) |
+| A custom markdown pipeline | `AddMarkdownContent(key: …, configure: …)` — [Markdown and images](https://zzzkan.github.io/kiji/docs/markdown/) |
 | Publishing under a sub-path | Put the path in `SiteInfo.BaseUrl` — [Deployment](https://zzzkan.github.io/kiji/docs/deployment/) |
 
 ## Linking

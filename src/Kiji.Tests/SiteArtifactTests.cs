@@ -1,5 +1,6 @@
-using System.Text;
 using Kiji.Tests.TestSite;
+using Microsoft.Extensions.DependencyInjection;
+using System.Text;
 using Xunit;
 
 namespace Kiji.Tests;
@@ -60,9 +61,6 @@ public sealed class SiteArtifactTests : IDisposable
         Assert.Contains(context.Pages, static page => page.RoutePath == "/blog/hello-world/");
         Assert.Contains(context.Pages, static page => page is { RoutePath: "/404.html", ExcludeFromSitemap: true });
 
-        Assert.True(context.TryResolveRoute("hello-world", out var routePath));
-        Assert.Equal("/blog/hello-world/", routePath);
-        Assert.False(context.TryResolveRoute("no-such-content", out _));
     }
 
     [Fact]
@@ -115,8 +113,12 @@ public sealed class SiteArtifactTests : IDisposable
         Assert.Contains("collides with another artifact output path", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// One content item may back several pages: nothing correlates a page back to the
+    /// item it came from any more, so a mirror route is simply two pages.
+    /// </summary>
     [Fact]
-    public async Task BuildSiteAsync_ContentIdentityMappedToMultiplePages_ThrowsInformativeException()
+    public async Task BuildSiteAsync_SameContentMappedToMultiplePages_GeneratesBoth()
     {
         var artifact = new RecordingArtifact(Path.Combine("meta", "info.txt"));
         await using var app = await CreateAppAsync(
@@ -124,14 +126,16 @@ public sealed class SiteArtifactTests : IDisposable
             staticPath: null,
             configure: static (targetApp, posts) =>
             {
-                targetApp.MapRoutes<MirrorPostPage, Post>(posts, static post => new { post.Slug });
+                targetApp.MapRoutes<MirrorPostPage>(static services => services
+                    .GetRequiredService<ContentDictionary<Post>>()
+                    .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
             });
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => app.BuildSiteAsync());
+        await app.BuildSiteAsync();
 
-        Assert.Contains("Content identity 'hello-world' is associated with multiple generated pages", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("'/blog/hello-world/'", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("'/mirror/hello-world/'", exception.Message, StringComparison.Ordinal);
+        var routes = artifact.ObservedContext!.Pages.Select(static page => page.RoutePath).ToArray();
+        Assert.Contains("/blog/hello-world/", routes);
+        Assert.Contains("/mirror/hello-world/", routes);
     }
 
     private async Task<KijiApp> CreateAppAsync(ISiteArtifact artifact)
@@ -147,7 +151,7 @@ public sealed class SiteArtifactTests : IDisposable
     private async Task<KijiApp> CreateAppAsync(
         IReadOnlyList<ISiteArtifact> artifacts,
         string? staticPath,
-        Action<KijiApp, ContentCollection<Post>>? configure)
+        Action<KijiApp, ContentDictionary<Post>>? configure)
     {
         var builder = KijiApp.CreateBuilder([]);
         builder.Site = TestArticleContents.CreateSiteInfo();
@@ -166,12 +170,11 @@ public sealed class SiteArtifactTests : IDisposable
                 null,
                 "Testing"),
         ];
-        var posts = builder.AddContentSource<Post>(_ => items)
-            .WithKey(static post => post.Slug);
+        builder.AddContentSource<Post>(_ => items, static post => post.Slug);
 
         var app = builder.Build();
-        TestArticleContents.MapSite(app, posts);
-        configure?.Invoke(app, posts);
+        TestArticleContents.MapSite(app);
+        configure?.Invoke(app, app.Services.GetRequiredService<ContentDictionary<Post>>());
         foreach (var artifact in artifacts)
         {
             app.MapArtifact(artifact);

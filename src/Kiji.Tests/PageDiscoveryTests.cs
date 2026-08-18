@@ -1,7 +1,8 @@
-using Microsoft.AspNetCore.Components;
-using Xunit;
-using Kiji.Tests.TestSite;
 using Kiji.Tests.TestSite.Pages;
+using Kiji.Tests.TestSite;
+using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace Kiji.Tests;
 
@@ -38,7 +39,7 @@ public sealed class PageDiscoveryTests
     {
         var discovered = Kiji.Routing.PageDiscovery.FromAssembly(typeof(PageDiscoveryTests).Assembly);
 
-        Type[] expectedTypes = [typeof(MarkdownPostTestPage), typeof(MirrorPostPage), .. TestSitePages.All];
+        Type[] expectedTypes = [typeof(MarkdownPostTestPage), typeof(MirrorPostPage), typeof(ScopedNotesIndexPage), typeof(RelatedPostsTestPage), .. TestSitePages.All];
         string[] expected = [.. expectedTypes
             .Select(static type => type.FullName!)
             .Order(StringComparer.Ordinal)];
@@ -55,16 +56,19 @@ public sealed class PageDiscoveryTests
     {
         var builder = KijiApp.CreateBuilder([]);
         builder.Site = TestArticleContents.CreateSiteInfo();
-        var posts = builder.AddContentSource<Post>(static _ => []).WithKey(static post => post.Slug);
+        builder.AddContentSource<Post>(static _ => [], static post => post.Slug);
 
         var app = builder.Build();
         // Under the MTP runner the test project is its own executable, so the
         // entry assembly is Kiji.Tests itself.
         app.MapPages();
-        app.MapRoutes<PostPage, Post>(posts, static post => new { post.Slug });
-        app.MapRoutes<TagsPage>(static () => []);
-        app.MapRoutes<MarkdownPostTestPage>(static () => []);
-        app.MapRoutes<MirrorPostPage>(static () => []);
+        app.MapRoutes<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
+            .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
+        app.MapRoutes<TagsPage>(static _ => []);
+        app.MapRoutes<MarkdownPostTestPage>(static _ => []);
+        app.MapRoutes<MirrorPostPage>(static _ => []);
+        app.MapRoutes<ScopedNotesIndexPage>(static _ => []);
+        app.MapRoutes<RelatedPostsTestPage>(static _ => []);
 
         var requests = app.CreateSnapshot().Pages;
 
@@ -159,7 +163,6 @@ public sealed class PageDiscoveryTests
         Assert.Equal("hello-world", blogRequest.Parameters["Slug"]);
         Assert.Equal("/blog/hello-world/", blogRequest.RoutePath);
         Assert.Equal(Path.Combine("blog", "hello-world", "index.html"), blogRequest.OutputRelativePath);
-        Assert.Equal("hello-world", blogRequest.AssociatedContentIdentity);
 
         Assert.Equal("c-sharp-basics", tagRequest.Parameters["TagSlug"]);
         Assert.Equal("/tags/c-sharp-basics/", tagRequest.RoutePath);
@@ -184,13 +187,14 @@ public sealed class PageDiscoveryTests
     {
         var builder = KijiApp.CreateBuilder([]);
         builder.Site = TestArticleContents.CreateSiteInfo();
-        var posts = builder.AddContentSource<Post>(static _ => []).WithKey(static post => post.Slug);
+        builder.AddContentSource<Post>(static _ => [], static post => post.Slug);
 
         var app = builder.Build();
         app.MapDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(app);
         app.MapNotFound<NotFoundPage>();
-        app.MapRoutes<PostPage, Post>(posts, static post => new { post.Slug });
+        app.MapRoutes<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
+            .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
         // No mapping for the dynamic /tags/{TagSlug}/ template.
 
         var exception = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());
@@ -199,14 +203,19 @@ public sealed class PageDiscoveryTests
         Assert.Contains("/tags/{TagSlug}/", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A mapping may supply values beyond the route template — they reach the component
+    /// as ordinary parameters — but a name the component does not declare is a typo, and
+    /// saying so at plan time beats a render-time failure with no mapping named.
+    /// </summary>
     [Fact]
-    public void CreateSnapshot_MappingWithUnexpectedParameter_ThrowsInformativeException()
+    public void CreateSnapshot_MappingWithUndeclaredParameter_ThrowsInformativeException()
     {
         var (app, _) = CreateAppWithTagRoutes(static () => [new { TagSlug = "x", Wrong = "value" }]);
 
         var exception = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());
 
-        Assert.Contains("route values not declared", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("neither route parameters nor declared", exception.Message, StringComparison.Ordinal);
         Assert.Contains("'Wrong'", exception.Message, StringComparison.Ordinal);
         Assert.Contains("/tags/{TagSlug}/", exception.Message, StringComparison.Ordinal);
     }
@@ -255,7 +264,7 @@ public sealed class PageDiscoveryTests
         var app = builder.Build();
         app.MapDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(app);
-        app.MapRoutes<HomePage>(static () => [new { Slug = "x" }]);
+        app.MapRoutes<HomePage>(static _ => [new { Slug = "x" }]);
 
         var exception = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());
 
@@ -278,18 +287,19 @@ public sealed class PageDiscoveryTests
         Assert.Contains("does not declare a '@page' route template", exception.Message, StringComparison.Ordinal);
     }
 
-    private static (KijiApp App, ContentCollection<Post> Posts) CreateAppWithTagRoutes(Func<IEnumerable<object>> tagRoutes)
+    private static (KijiApp App, ContentDictionary<Post> Posts) CreateAppWithTagRoutes(Func<IEnumerable<object>> tagRoutes)
     {
         var builder = KijiApp.CreateBuilder([]);
         builder.Site = TestArticleContents.CreateSiteInfo();
-        var posts = builder.AddContentSource<Post>(static _ => []).WithKey(static post => post.Slug);
+        builder.AddContentSource<Post>(static _ => [], static post => post.Slug);
 
         var app = builder.Build();
         app.MapDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(app);
         app.MapNotFound<NotFoundPage>();
-        app.MapRoutes<PostPage, Post>(posts, static post => new { post.Slug });
-        app.MapRoutes<TagsPage>(tagRoutes);
-        return (app, posts);
+        app.MapRoutes<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
+            .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
+        app.MapRoutes<TagsPage>(_ => tagRoutes());
+        return (app, app.Services.GetRequiredService<ContentDictionary<Post>>());
     }
 }

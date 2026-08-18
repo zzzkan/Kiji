@@ -2,8 +2,9 @@ namespace Kiji;
 
 /// <summary>
 /// Implemented by content items backed by a single source file, letting the
-/// incremental build attribute item-level dependencies (and propagate them through
-/// <see cref="ContentCollection{T}.Map{TResult}"/> projections) to that file.
+/// incremental build attribute item-level dependencies to that file. Optional: items
+/// without a source file simply omit it, and their lookups fall back to a dependency
+/// on the whole content set.
 /// </summary>
 internal interface IContentSourceFile
 {

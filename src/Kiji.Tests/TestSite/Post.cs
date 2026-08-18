@@ -26,6 +26,9 @@ public sealed class Post
         Tags = tags;
     }
 
+    /// <summary>The slug is what routes and feeds correlate on, so it is the key.</summary>
+    public string Key => Slug;
+
     public string Slug { get; }
 
     public string SlugUrlEncoded { get; }
@@ -85,15 +88,11 @@ public sealed class Post
     {
         ArgumentNullException.ThrowIfNull(fileInfo);
 
-        var slugSource = string.Equals(fileInfo.FileNameWithoutExtension, "index", StringComparison.OrdinalIgnoreCase)
-            ? Path.GetFileName(fileInfo.RelativeDirectoryPath)
-            : fileInfo.FileNameWithoutExtension;
-
-        if (string.IsNullOrWhiteSpace(slugSource))
+        if (string.IsNullOrWhiteSpace(fileInfo.Slug))
         {
             throw new InvalidOperationException($"Cannot determine slug for markdown file: {fileInfo.FilePath}");
         }
 
-        return global::Kiji.Slug.Normalize(slugSource);
+        return global::Kiji.Slug.Normalize(fileInfo.Slug);
     }
 }

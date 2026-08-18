@@ -3,12 +3,9 @@ namespace Kiji.Routing;
 /// <summary>
 /// A single expansion of a dynamic route template.
 /// </summary>
-/// <param name="RouteValues">Values bound to the template's route parameters.</param>
-/// <param name="AssociatedContentIdentity">Optional identity linking the page to a content item (used by feeds).</param>
-/// <param name="ExcludeFromSitemap">Whether the page is omitted from the sitemap.</param>
-/// <param name="LastModified">Optional last-modification timestamp, emitted as the sitemap <c>lastmod</c>.</param>
+/// <param name="RouteValues">
+/// The page's parameter values. Names matching the route template bind the URL; the
+/// rest are passed through to the component.
+/// </param>
 public sealed record StaticPageRouteEntry(
-    IReadOnlyDictionary<string, string> RouteValues,
-    string? AssociatedContentIdentity = null,
-    bool ExcludeFromSitemap = false,
-    DateTimeOffset? LastModified = null);
+    IReadOnlyDictionary<string, string> RouteValues);

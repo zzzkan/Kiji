@@ -4,58 +4,95 @@ using YamlDotNet.Serialization;
 namespace Kiji.Markdown;
 
 /// <summary>
-/// Configures markdown content processing: the Markdig pipeline, transforms over the
-/// rendered HTML, and front matter deserialization. Passed to
+/// Configures a markdown content source: which files it reads, how its items are
+/// ordered and validated, the Markdig pipeline, transforms over the rendered HTML, and
+/// front matter deserialization. Passed to
 /// <see cref="KijiBuilderExtensions.AddMarkdownContent{TFrontMatter}"/>.
 /// </summary>
-public sealed class MarkdownContentOptions
+public sealed class MarkdownContentOptions<TModel> : ContentSourceOptions<TModel>
+    where TModel : class
 {
-    internal List<Action<MarkdownPipelineBuilder>> PipelineConfigurations { get; } = [];
-
-    internal List<Func<string, string>> HtmlPostProcessors { get; } = [];
+    internal MarkdownProcessingOptions Processing { get; } = new();
 
     internal List<Action<DeserializerBuilder>> FrontMatterConfigurations { get; } = [];
 
     /// <summary>
+    /// The directory this source reads, relative to the content directory. Every
+    /// <c>*.md</c> beneath it is discovered recursively. Default: the content directory
+    /// itself. Set it to keep markdown with different front matter in separate
+    /// collections, e.g. <c>"posts"</c> for <c>contents/posts/</c>.
+    /// </summary>
+    public string? Directory { get; set; }
+
+    /// <summary>
+    /// Optional filter over the discovered files; only those it accepts are loaded.
+    /// Default: every file.
+    /// </summary>
+    public Func<MarkdownFileInfo, bool>? Where { get; set; }
+
+    /// <summary>
     /// Optional CSS class applied to images rendered from markdown. Default: none.
     /// </summary>
-    public string? ImageCssClass { get; set; }
-
-    /// <summary>
-    /// Configures the shared Markdig pipeline. Runs after the built-in defaults
-    /// (advanced extensions and <see cref="SecureLinkExtension"/>), so built-ins can be
-    /// removed here, e.g.
-    /// <c>options.ConfigurePipeline(b => b.Extensions.TryRemove&lt;SecureLinkExtension&gt;())</c>.
-    /// </summary>
-    public MarkdownContentOptions ConfigurePipeline(Action<MarkdownPipelineBuilder> configure)
+    public string? ImageCssClass
     {
-        ArgumentNullException.ThrowIfNull(configure);
-
-        PipelineConfigurations.Add(configure);
-        return this;
+        get => Processing.ImageCssClass;
+        set => Processing.ImageCssClass = value;
     }
 
-    /// <summary>
-    /// Appends a transform applied to the final rendered HTML of each markdown file.
-    /// Processors run in registration order, each receiving the previous output.
-    /// </summary>
-    public MarkdownContentOptions AddHtmlPostProcessor(Func<string, string> postProcessor)
+    /// <inheritdoc cref="MarkdownProcessingOptions.ConfigurePipeline"/>
+    public void ConfigurePipeline(Action<MarkdownPipelineBuilder> configure)
     {
-        ArgumentNullException.ThrowIfNull(postProcessor);
+        Processing.ConfigurePipeline(configure);
+    }
 
-        HtmlPostProcessors.Add(postProcessor);
-        return this;
+    /// <inheritdoc cref="MarkdownProcessingOptions.AddHtmlPostProcessor"/>
+    public void AddHtmlPostProcessor(Func<string, string> postProcessor)
+    {
+        Processing.AddHtmlPostProcessor(postProcessor);
     }
 
     /// <summary>
     /// Configures the YAML deserializer used for front matter. Runs after the built-in
     /// defaults (camelCase naming convention, unmatched properties ignored).
     /// </summary>
-    public MarkdownContentOptions ConfigureFrontMatter(Action<DeserializerBuilder> configure)
+    public void ConfigureFrontMatter(Action<DeserializerBuilder> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
 
         FrontMatterConfigurations.Add(configure);
-        return this;
+    }
+
+    /// <summary>
+    /// Resolves <see cref="Directory"/> against the content directory, rejecting a path
+    /// that would escape it.
+    /// </summary>
+    internal string ResolveContentsDirectory(string contentsPath)
+    {
+        if (string.IsNullOrWhiteSpace(Directory))
+        {
+            return contentsPath;
+        }
+
+        var resolved = Path.GetFullPath(Path.Combine(contentsPath, Directory));
+        if (!resolved.StartsWith(contentsPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(resolved, contentsPath, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Markdown content directory '{Directory}' resolves outside the content directory '{contentsPath}'.");
+        }
+
+        return resolved;
+    }
+
+    /// <summary>
+    /// <see cref="Directory"/> normalized into a content-set scope key: forward slashes,
+    /// no leading or trailing separator, empty for the whole content directory. The key
+    /// lands in the build manifest, so it must not depend on the host's separator.
+    /// </summary>
+    internal string ResolveContentSetScope()
+    {
+        return string.IsNullOrWhiteSpace(Directory)
+            ? string.Empty
+            : Directory.Replace('\\', '/').Trim('/');
     }
 }

@@ -16,26 +16,41 @@ public sealed class MarkdownContentsBuilder<TFrontMatter>(
     private readonly MarkdownSourceCache<TFrontMatter>? _sourceCache;
     private readonly ContentFileHashRegistry? _hashRegistry;
 
+    /// <summary>
+    /// The directory actually scanned. Defaults to the content directory; a source
+    /// reading a subdirectory narrows it. Paths on <see cref="MarkdownFileInfo"/> stay
+    /// relative to <see cref="_contentsDirectory"/> either way, so narrowing the scan
+    /// never changes what an item reports about itself.
+    /// </summary>
+    private readonly string? _scanDirectory;
+
+    private readonly Func<MarkdownFileInfo, bool>? _filter;
+
     internal MarkdownContentsBuilder(
         string contentsDirectory,
         Func<MarkdownContent<TFrontMatter>, CancellationToken, Task<string>> renderAsync,
         Func<IDeserializer> frontMatterDeserializerFactory,
         MarkdownSourceCache<TFrontMatter> sourceCache,
-        ContentFileHashRegistry? hashRegistry = null)
+        ContentFileHashRegistry? hashRegistry = null,
+        string? scanDirectory = null,
+        Func<MarkdownFileInfo, bool>? filter = null)
         : this(contentsDirectory, renderAsync, frontMatterDeserializerFactory)
     {
         _sourceCache = sourceCache;
         _hashRegistry = hashRegistry;
+        _scanDirectory = scanDirectory;
+        _filter = filter;
     }
 
     public IReadOnlyList<MarkdownContent<TFrontMatter>> Build()
     {
-        if (!Directory.Exists(_contentsDirectory))
+        var scanDirectory = _scanDirectory ?? _contentsDirectory;
+        if (!Directory.Exists(scanDirectory))
         {
-            throw new DirectoryNotFoundException($"Contents directory not found: {_contentsDirectory}");
+            throw new DirectoryNotFoundException($"Contents directory not found: {scanDirectory}");
         }
 
-        var markdownFiles = Directory.EnumerateFiles(_contentsDirectory, "*.md", SearchOption.AllDirectories)
+        var markdownFiles = Directory.EnumerateFiles(scanDirectory, "*.md", SearchOption.AllDirectories)
             .Select(Path.GetFullPath)
             .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -47,6 +62,8 @@ public sealed class MarkdownContentsBuilder<TFrontMatter>(
         // used for rendering, and the content hash the incremental planner needs.
         var items = new MarkdownContent<TFrontMatter>[markdownFiles.Length];
         var errors = new Exception?[markdownFiles.Length];
+        // Only allocated when filtering, so the common path keeps the array as-is.
+        var included = _filter is null ? null : new bool[markdownFiles.Length];
         using var deserializers = new ThreadLocal<IDeserializer>(_frontMatterDeserializerFactory);
 
         Parallel.For(0, markdownFiles.Length, index =>
@@ -55,6 +72,16 @@ public sealed class MarkdownContentsBuilder<TFrontMatter>(
             {
                 var markdownFile = markdownFiles[index];
                 var fileInfo = MarkdownFileInfo.Create(_contentsDirectory, markdownFile);
+                if (_filter is not null)
+                {
+                    if (!_filter(fileInfo))
+                    {
+                        return;
+                    }
+
+                    included![index] = true;
+                }
+
                 var source = _sourceCache is not null
                     ? _sourceCache.GetOrRead(markdownFile, deserializers.Value!)
                     : MarkdownSourceReader.Read<TFrontMatter>(markdownFile, deserializers.Value!);
@@ -77,6 +104,9 @@ public sealed class MarkdownContentsBuilder<TFrontMatter>(
 
         _sourceCache?.Prune(markdownFiles.ToHashSet(StringComparer.OrdinalIgnoreCase));
 
-        return items;
+        // Filtered-out slots were never assigned; compacting keeps the order above.
+        return included is null
+            ? items
+            : [.. items.Where((_, index) => included[index])];
     }
 }

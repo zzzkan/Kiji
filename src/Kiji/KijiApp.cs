@@ -50,6 +50,23 @@ public sealed class KijiApp : IAsyncDisposable
     public SiteInfo Site { get; }
 
     /// <summary>
+    /// The app's services. Deliberately not public: content must not be reachable while
+    /// the site is still being declared, because loading it resolves <see cref="SsgOptions"/>
+    /// — a singleton — and the running command is what decides those paths. Everything
+    /// that legitimately needs services is handed a provider at a point where the command
+    /// has already started: route and feed factories, content loaders, and
+    /// <see cref="SiteOutputContext.Services"/> for artifacts.
+    /// </summary>
+    internal IServiceProvider Services
+    {
+        get
+        {
+            EnsureServices();
+            return _services!;
+        }
+    }
+
+    /// <summary>
     /// Creates a new <see cref="KijiBuilder"/>.
     /// </summary>
     /// <param name="args">Command line arguments; forwarded to <see cref="RunAsync"/> for command dispatch.</param>
@@ -123,56 +140,27 @@ public sealed class KijiApp : IAsyncDisposable
     }
 
     /// <summary>
-    /// Maps every item of a content collection to a page rendered by <typeparamref name="TPage"/>.
-    /// The route values object's property names must match the page's route parameters.
-    /// When the collection has a key, each page is associated with its content item,
-    /// which enables artifacts to resolve generated page metadata via
-    /// <see cref="SiteOutputContext.TryResolvePage"/> and <see cref="SiteOutputContext.TryResolveRoute"/>.
-    /// Each keyed content item must resolve to at most one generated page.
-    /// For routes not backed by a content item, use <see cref="MapRoutes{TPage}"/>.
+    /// Supplies the parameter sets for a page declaring a dynamic route template: one
+    /// generated page per object returned. Each object's property names are the page's
+    /// <c>[Parameter]</c> names — those that also appear in the route template bind the
+    /// URL, and the rest are passed through to the component. The factory is
+    /// re-evaluated for every site snapshot.
     /// </summary>
-    /// <param name="collection">The content collection to expand into pages.</param>
-    /// <param name="routeValues">Projects a content item into its route values.</param>
-    /// <param name="lastModified">
-    /// Optional last-modification timestamp per item, emitted as the sitemap <c>lastmod</c>.
-    /// </param>
-    public KijiApp MapRoutes<TPage, TContent>(
-        ContentCollection<TContent> collection,
-        Func<TContent, object> routeValues,
-        Func<TContent, DateTimeOffset?>? lastModified = null)
+    /// <remarks>
+    /// This says nothing about content. The factory receives the app's services, so
+    /// project content by resolving a <see cref="ContentDictionary{T}"/> here — which is
+    /// also the earliest point content can be read at all, since the running command has
+    /// settled the site's paths by then.
+    /// </remarks>
+    public KijiApp MapRoutes<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)
         where TPage : IComponent
-        where TContent : class
     {
-        ArgumentNullException.ThrowIfNull(collection);
-        ArgumentNullException.ThrowIfNull(routeValues);
+        ArgumentNullException.ThrowIfNull(parameters);
 
         _routeRegistrations.Add(new RouteRegistration(
             typeof(TPage),
-            () => [.. collection.Items.Select(item => new StaticPageRouteEntry(
-                RouteValues.ToDictionary(routeValues(item)),
-                AssociatedContentIdentity: collection.HasKey ? collection.GetKey(item) : null,
-                LastModified: lastModified?.Invoke(item)))]));
-        return this;
-    }
-
-    /// <summary>
-    /// Maps arbitrary dynamic routes to a page rendered by <typeparamref name="TPage"/>.
-    /// The factory is re-evaluated for every site snapshot.
-    /// Use this overload for routes not backed by a content item (e.g. taxonomy pages
-    /// computed from a collection); such pages carry no content association and no
-    /// sitemap <c>lastmod</c>. For pages backed by a content collection, use
-    /// <see cref="MapRoutes{TPage, TContent}"/>.
-    /// </summary>
-    public KijiApp MapRoutes<TPage>(Func<IEnumerable<object>> routeValues, bool excludeFromSitemap = false)
-        where TPage : IComponent
-    {
-        ArgumentNullException.ThrowIfNull(routeValues);
-
-        _routeRegistrations.Add(new RouteRegistration(
-            typeof(TPage),
-            () => [.. routeValues().Select(values => new StaticPageRouteEntry(
-                RouteValues.ToDictionary(values),
-                ExcludeFromSitemap: excludeFromSitemap))]));
+            () => [.. parameters(Services).Select(static values => new StaticPageRouteEntry(
+                RouteValues.ToDictionary(values)))]));
         return this;
     }
 
@@ -253,7 +241,7 @@ public sealed class KijiApp : IAsyncDisposable
     public async Task BuildSiteAsync(CancellationToken cancellationToken = default)
     {
         var options = _builder.Paths.ResolveForBuild();
-        _activeOptions ??= options;
+        UseOptions(options);
 
         var stopwatch = Stopwatch.StartNew();
         var snapshot = CreateSnapshot();
@@ -306,8 +294,7 @@ public sealed class KijiApp : IAsyncDisposable
             pageEntries.Add(planner.CreatePageEntry(
                 page.Request,
                 page.OutputHash,
-                recorders[page.Request.OutputRelativePath],
-                plan.ContentSetFingerprint));
+                recorders[page.Request.OutputRelativePath]));
         }
 
         var manifest = new BuildManifest
@@ -457,11 +444,11 @@ public sealed class KijiApp : IAsyncDisposable
         CancellationToken cancellationToken,
         DevServerStatusReporter? reporter = null)
     {
-        _activeOptions = _builder.Paths.ResolveForServe();
+        var options = UseOptions(_builder.Paths.ResolveForServe());
         EnsureServices();
 
         var devServer = new DevServer(this, reporter);
-        var web = await devServer.StartAsync(_activeOptions, port, cancellationToken);
+        var web = await devServer.StartAsync(options, port, cancellationToken);
         return (devServer, web);
     }
 
@@ -477,6 +464,9 @@ public sealed class KijiApp : IAsyncDisposable
 
     internal SiteSnapshot CreateSnapshot()
     {
+        // Planning expands route factories, which read content. If no command has
+        // settled the options yet, this is a build.
+        UseOptions(_builder.Paths.ResolveForBuild());
         EnsureServices();
 
         if (_pageAssemblies.Count == 0)
@@ -533,9 +523,7 @@ public sealed class KijiApp : IAsyncDisposable
             parameters,
             planned.RoutePath,
             planned.OutputRelativePath,
-            AssociatedContentIdentity: planned.AssociatedContentIdentity,
-            ExcludeFromSitemap: planned.ExcludeFromSitemap,
-            LastModified: planned.LastModified);
+            ExcludeFromSitemap: planned.ExcludeFromSitemap);
 
         return request with { RootParameters = CreateRootParameters(request) };
     }
@@ -562,13 +550,19 @@ public sealed class KijiApp : IAsyncDisposable
         PageDiscovery.DiscoveredPage page,
         IReadOnlyList<StaticPageRouteEntry> entries)
     {
-        var expectedParameterNames = page.PageDefinition.ParameterNames.ToHashSet(StringComparer.Ordinal);
+        // Values naming a route-template parameter bind the URL and must be a single
+        // usable segment. Everything else is an ordinary component parameter: it never
+        // reaches the path, so segment rules do not apply — but it does have to name a
+        // real [Parameter], or the component rejects it at render time with no hint of
+        // which mapping produced it.
+        var routeParameterNames = page.PageDefinition.ParameterNames.ToHashSet(StringComparer.Ordinal);
+        var declaredParameterNames = PageDiscovery.ParameterNames(page.ComponentType);
 
         foreach (var entry in entries)
         {
-            var routeKeys = entry.RouteValues.Keys.ToHashSet(StringComparer.Ordinal);
-            var missing = expectedParameterNames
-                .Where(name => !routeKeys.Contains(name))
+            var suppliedNames = entry.RouteValues.Keys.ToHashSet(StringComparer.Ordinal);
+            var missing = routeParameterNames
+                .Where(name => !suppliedNames.Contains(name))
                 .OrderBy(static name => name, StringComparer.Ordinal)
                 .ToArray();
             if (missing.Length > 0)
@@ -579,17 +573,20 @@ public sealed class KijiApp : IAsyncDisposable
 
             foreach (var (name, value) in entry.RouteValues)
             {
-                ValidateRouteValue(page, name, value);
+                if (routeParameterNames.Contains(name))
+                {
+                    ValidateRouteValue(page, name, value);
+                }
             }
 
-            var extra = routeKeys
-                .Where(name => !expectedParameterNames.Contains(name))
+            var undeclared = suppliedNames
+                .Where(name => !routeParameterNames.Contains(name) && !declaredParameterNames.Contains(name))
                 .OrderBy(static name => name, StringComparer.Ordinal)
                 .ToArray();
-            if (extra.Length > 0)
+            if (undeclared.Length > 0)
             {
                 throw new InvalidOperationException(
-                    $"Route mapping for '{page.ComponentType.FullName}' supplied route values not declared by '{page.SourceIdentifier}': {string.Join(", ", extra.Select(static name => $"'{name}'"))}.");
+                    $"Route mapping for '{page.ComponentType.FullName}' ('{page.SourceIdentifier}') supplied values that are neither route parameters nor declared '[Parameter]' properties: {string.Join(", ", undeclared.Select(static name => $"'{name}'"))}.");
             }
         }
     }
@@ -700,9 +697,8 @@ public sealed class KijiApp : IAsyncDisposable
             [.. snapshot.Pages.Select(static page => new SitePageInfo(
                 page.RoutePath,
                 page.OutputRelativePath,
-                page.ExcludeFromSitemap,
-                page.AssociatedContentIdentity,
-                page.LastModified))]);
+                page.ExcludeFromSitemap))],
+            Services);
     }
 
     private async Task<IReadOnlyList<string>> GenerateArtifactsAsync(SsgOptions options, SiteSnapshot snapshot, CancellationToken cancellationToken)
@@ -775,6 +771,26 @@ public sealed class KijiApp : IAsyncDisposable
         return fullPath;
     }
 
+    /// <summary>
+    /// Settles the paths the running command works against. First caller wins:
+    /// <see cref="SsgOptions"/> is a singleton, so what is fixed here is what every
+    /// loader and renderer sees for the rest of the process.
+    /// </summary>
+    private SsgOptions UseOptions(SsgOptions options)
+    {
+        _activeOptions ??= options;
+        return _activeOptions;
+    }
+
+    /// <summary>
+    /// Settles on build paths without running a build. For tests that load content
+    /// directly; a real site reaches this through one of the commands.
+    /// </summary>
+    internal void UseBuildOptions()
+    {
+        UseOptions(_builder.Paths.ResolveForBuild());
+    }
+
     private void EnsureServices()
     {
         if (_services is not null)
@@ -785,7 +801,13 @@ public sealed class KijiApp : IAsyncDisposable
         var services = new ServiceCollection();
         ComponentRenderer.AddComponentRenderingServices(services);
         services.AddSingleton(Site);
-        services.AddSingleton(_ => _activeOptions ?? _builder.Paths.ResolveForBuild());
+        // Deliberately not defaulted: the command decides these paths (build writes to
+        // the output directory, dev to its own mirror) and, as a singleton, the first
+        // resolution wins for the whole process. No public API hands out a provider
+        // before a command starts, so this is an invariant rather than a user-facing
+        // error — but a default here would silently pin build paths onto dev.
+        services.AddSingleton(_ => _activeOptions ?? throw new InvalidOperationException(
+            "SsgOptions was resolved before a command settled the site's paths."));
         _builder.Runtime.ApplyRegistrations(services);
 
         foreach (var descriptor in _builder.Services)

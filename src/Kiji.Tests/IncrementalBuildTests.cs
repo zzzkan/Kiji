@@ -1,5 +1,7 @@
 using Kiji.Markdown;
+using Kiji.Tests.TestSite.Pages;
 using Kiji.Tests.TestSite;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Kiji.Tests;
@@ -141,6 +143,149 @@ public sealed class IncrementalBuildTests : IDisposable
         Assert.True(File.Exists(Path.Combine(root, "dist", "extra.txt")));
     }
 
+    [Fact]
+    public async Task IncrementalBuild_EditInOneContentDirectory_SkipsPagesReadingAnother()
+    {
+        var root = Path.Combine(_testDir, "scoped");
+        Directory.CreateDirectory(Path.Combine(root, "contents", "posts"));
+        Directory.CreateDirectory(Path.Combine(root, "contents", "notes"));
+        Directory.CreateDirectory(Path.Combine(root, "static"));
+
+        await WriteMarkdownAsync(root, Path.Combine("posts", "first"), "First Post", "Post body.");
+        await WriteMarkdownAsync(root, Path.Combine("notes", "alpha"), "Alpha Note", "Note body.");
+
+        await BuildScopedAsync(root);
+
+        var notesIndex = Path.Combine(root, "dist", "notes", "all", "index.html");
+        var postPage = Path.Combine(root, "dist", "md", "first", "index.html");
+        var notesStampBefore = File.GetLastWriteTimeUtc(notesIndex);
+
+        // Touch content in posts/ only. The notes index enumerates its own collection,
+        // so its content-set dependency is scoped to notes/ and still holds.
+        await WriteMarkdownAsync(root, Path.Combine("posts", "first"), "First Post", "Edited post body.");
+        await BuildScopedAsync(root);
+
+        Assert.Contains("Edited post body.", await File.ReadAllTextAsync(postPage), StringComparison.Ordinal);
+        Assert.Equal(notesStampBefore, File.GetLastWriteTimeUtc(notesIndex));
+
+        // Editing notes/ must still re-render it, or the scoping would be unsound.
+        await WriteMarkdownAsync(root, Path.Combine("notes", "beta"), "Beta Note", "Second note.");
+        await BuildScopedAsync(root);
+
+        Assert.Contains("beta: Beta Note", await File.ReadAllTextAsync(notesIndex), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A page that computes derived data by enumerating the dictionary (related posts, a tag
+    /// list) depends on the whole content set by construction. Editing a *different* post
+    /// must therefore re-render it — this is the guarantee that makes "just compute it in
+    /// the page" the recommended shape for derived data.
+    /// </summary>
+    [Fact]
+    public async Task IncrementalBuild_PageEnumeratingTheDictionary_ReRendersWhenAnotherPostChanges()
+    {
+        var root = CreateSiteRoot("related");
+        await BuildRelatedAsync(root);
+
+        var relatedPage = Path.Combine(root, "dist", "related", "stable", "index.html");
+        var detailPage = Path.Combine(root, "dist", "md", "stable", "index.html");
+        var relatedStampBefore = File.GetLastWriteTimeUtc(relatedPage);
+        var detailStampBefore = File.GetLastWriteTimeUtc(detailPage);
+
+        // Edit a different post than the one these pages are for.
+        await WritePostAsync(root, "changing", "Changing Renamed", "Body.");
+        await BuildRelatedAsync(root);
+
+        // The related list names every other post, so it must reflect the rename.
+        Assert.Contains("Changing Renamed", await File.ReadAllTextAsync(relatedPage), StringComparison.Ordinal);
+        Assert.NotEqual(relatedStampBefore, File.GetLastWriteTimeUtc(relatedPage));
+
+        // The plain detail page reads only its own file, so it is still skipped.
+        Assert.Equal(detailStampBefore, File.GetLastWriteTimeUtc(detailPage));
+    }
+
+    private static async Task BuildRelatedAsync(string root)
+    {
+        var builder = KijiApp.CreateBuilder([]);
+        builder.Site = TestArticleContents.CreateSiteInfo();
+        builder.Paths.Root = root;
+        builder.Paths.Content = "contents";
+        builder.Paths.Static = "static";
+        builder.Paths.Output = "dist";
+
+        builder.AddMarkdownContent<FrontMatter>(key: static post => post.FileInfo.Slug);
+        builder.AddContentSource<Post>(static _ => [], static post => post.Slug);
+
+        await using var app = builder.Build();
+        app.MapDefaultLayout<MainLayout>();
+        app.MapPages(typeof(TestArticleContents).Assembly);
+        app.MapNotFound<NotFoundPage>();
+
+        app.MapRoutes<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
+            .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
+        app.MapRoutes<TagsPage>(static _ => []);
+        app.MapRoutes<MirrorPostPage>(static _ => []);
+        app.MapRoutes<ScopedNotesIndexPage>(static _ => []);
+
+        app.MapRoutes<MarkdownPostTestPage>(static services => services
+            .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
+            .Select(static post => new { Slug = post.Key, ContentKey = post.Key }));
+        app.MapRoutes<RelatedPostsTestPage>(static services => services
+            .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
+            .Select(static post => new { Slug = post.Key, ContentKey = post.Key }));
+
+        await app.BuildSiteAsync();
+    }
+
+    private static async Task BuildScopedAsync(string root)
+    {
+        var builder = KijiApp.CreateBuilder([]);
+        builder.Site = TestArticleContents.CreateSiteInfo();
+        builder.Paths.Root = root;
+        builder.Paths.Content = "contents";
+        builder.Paths.Static = "static";
+        builder.Paths.Output = "dist";
+
+        builder.AddMarkdownContent<FrontMatter>(
+            key: static post => post.FileInfo.Slug,
+            configure: static options => options.Directory = "posts");
+        builder.AddMarkdownContent<FrontMatter, ScopedNote>(
+            select: ScopedNote.Create,
+            key: static note => note.Key,
+            configure: static options => options.Directory = "notes");
+        builder.AddContentSource<Post>(static _ => [], static post => post.Slug);
+
+        await using var app = builder.Build();
+        app.MapDefaultLayout<MainLayout>();
+        app.MapPages(typeof(TestArticleContents).Assembly);
+        app.MapNotFound<NotFoundPage>();
+        app.MapRoutes<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
+            .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
+        app.MapRoutes<TagsPage>(static _ => []);
+        app.MapRoutes<MirrorPostPage>(static _ => []);
+        app.MapRoutes<MarkdownPostTestPage>(static services => services
+            .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
+            .Select(static post => new { Slug = post.Key, ContentKey = post.Key }));
+        app.MapRoutes<ScopedNotesIndexPage>(static _ => [new { Kind = "all" }]);
+        app.MapRoutes<RelatedPostsTestPage>(static _ => []);
+
+        await app.BuildSiteAsync();
+    }
+
+    private static async Task WriteMarkdownAsync(string root, string relativePath, string title, string body)
+    {
+        await File.WriteAllTextAsync(
+            Path.Combine(root, "contents", $"{relativePath}.md"),
+            $"""
+            ---
+            title: {title}
+            createdAt: 2026-03-18
+            ---
+
+            {body}
+            """);
+    }
+
     private string CreateSiteRoot(string name)
     {
         var root = Path.Combine(_testDir, name);
@@ -176,15 +321,14 @@ public sealed class IncrementalBuildTests : IDisposable
         builder.Paths.Static = "static";
         builder.Paths.Output = "dist";
 
-        var markdownPosts = builder.AddMarkdownContent<FrontMatter>()
-            .WithKey(static post => post.FileInfo.FileNameWithoutExtension);
-        var posts = builder.AddContentSource<Post>(static _ => []).WithKey(static post => post.Slug);
+        builder.AddMarkdownContent<FrontMatter>(key: static post => post.FileInfo.Slug);
+        builder.AddContentSource<Post>(static _ => [], static post => post.Slug);
 
         await using var app = builder.Build();
-        TestArticleContents.MapSite(app, posts);
-        app.MapRoutes<MarkdownPostTestPage, MarkdownContent<FrontMatter>>(
-            markdownPosts,
-            static post => new { Slug = post.FileInfo.FileNameWithoutExtension });
+        TestArticleContents.MapSite(app);
+        app.MapRoutes<MarkdownPostTestPage>(static services => services
+            .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
+            .Select(static post => new { Slug = post.Key, ContentKey = post.Key }));
 
         await app.BuildSiteAsync();
     }

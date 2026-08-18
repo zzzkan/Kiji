@@ -4,19 +4,39 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Kiji.Hosting;
 
 /// <summary>
-/// Owns the materialized state of all content collections for the current site snapshot.
+/// Owns the materialized state of all content dictionaries for the current site snapshot.
 /// Swapping snapshots (e.g. when content changes during development) simply clears the
-/// materialization cache; collections re-materialize lazily on next access.
+/// materialization cache; they re-materialize lazily on next access.
 /// </summary>
 internal sealed class ContentRuntime
 {
     private readonly List<Action<IServiceCollection>> _registrations = [];
+    private readonly HashSet<Type> _registeredElementTypes = [];
     private readonly ConcurrentDictionary<object, object> _materialized = new();
     private IServiceProvider? _services;
 
-    internal void AddRegistration(Action<IServiceCollection> registration)
+    // A loader may resolve another dictionary (a tag list derived from posts, say),
+    // so materialization nests. Tracking the chain turns a cycle into a named error
+    // instead of unbounded recursion. Per-thread because a materialization runs to
+    // completion on the thread that started it.
+    [ThreadStatic]
+    private static List<string>? _materializing;
+
+    /// <summary>
+    /// Registers a dictionary for injection. The element type is its identity —
+    /// resolving is by type, so a second one of the same type would silently
+    /// displace the first rather than coexist with it.
+    /// </summary>
+    internal void Register<T>(ContentDictionary<T> dictionary)
+        where T : class
     {
-        _registrations.Add(registration);
+        if (!_registeredElementTypes.Add(typeof(T)))
+        {
+            throw new InvalidOperationException(
+                $"A content dictionary of type '{typeof(T).Name}' is already registered. Each one is identified by its element type, so declare a distinct model type per source.");
+        }
+
+        _registrations.Add(services => services.AddSingleton(dictionary));
     }
 
     internal void ApplyRegistrations(IServiceCollection services)
@@ -47,8 +67,35 @@ internal sealed class ContentRuntime
 
         var services = _services
             ?? throw new InvalidOperationException(
-                "Content collections cannot be materialized before the app is built. Call KijiBuilder.Build() first.");
+                "Content cannot be materialized before the app is built. Call KijiBuilder.Build() first.");
 
-        return (TMaterialized)_materialized.GetOrAdd(handle, _ => factory(services));
+        var name = DescribeHandle(handle);
+        var chain = _materializing ??= [];
+        if (chain.Contains(name, StringComparer.Ordinal))
+        {
+            // Thrown before pushing, so the outer frames' finally blocks unwind the
+            // chain as this propagates. Clearing it here would leave them popping an
+            // empty list.
+            throw new InvalidOperationException(
+                $"Content dictionaries form a cycle: {string.Join(" → ", chain.Append(name))}. A loader cannot depend, directly or indirectly, on the dictionary it is building.");
+        }
+
+        chain.Add(name);
+        try
+        {
+            return (TMaterialized)_materialized.GetOrAdd(handle, _ => factory(services));
+        }
+        finally
+        {
+            chain.RemoveAt(chain.Count - 1);
+        }
+    }
+
+    private static string DescribeHandle(object handle)
+    {
+        var type = handle.GetType();
+        return type.IsGenericType
+            ? $"ContentDictionary<{type.GetGenericArguments()[0].Name}>"
+            : type.Name;
     }
 }

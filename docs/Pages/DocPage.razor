@@ -1,5 +1,5 @@
 @page "/docs/{Slug}/"
-@inject ContentCollection<MarkdownContent<DocFrontMatter>> Docs
+@inject ContentDictionary<MarkdownContent<DocFrontMatter>> Docs
 
 @if (_doc is not null)
 {
@@ -14,13 +14,14 @@
 
 @code {
     [Parameter] public string Slug { get; set; } = string.Empty;
+    [Parameter] public string ContentKey { get; set; } = string.Empty;
 
     private MarkdownContent<DocFrontMatter>? _doc;
     private string _html = string.Empty;
 
     protected override async Task OnParametersSetAsync()
     {
-        _doc = Docs.GetRequired(Slug);
+        _doc = Docs[ContentKey];
         _html = await _doc.RenderAsync();
     }
 }

@@ -1,16 +1,16 @@
 @page "/docs/"
 @inject SiteInfo Site
-@inject ContentCollection<MarkdownContent<DocFrontMatter>> Docs
+@inject ContentDictionary<MarkdownContent<DocFrontMatter>> Docs
 
 <PageHead Title="Documentation" Description="Guides for building a site with Kiji." />
 
 <h1>Documentation</h1>
 
 <ul class="doc-list">
-    @foreach (var doc in Docs)
+    @foreach (var (slug, doc) in Docs.OrderBy(entry => entry.Value.FrontMatter.Order))
     {
         <li>
-            <a href="@Site.Path($"docs/{doc.FileInfo.RelativeDirectoryPath}/")">
+            <a href="@Site.Path($"docs/{slug}/")">
                 @doc.FrontMatter.Title
             </a>
             <p>@doc.FrontMatter.Description</p>

@@ -24,6 +24,10 @@ internal sealed class IncrementalBuildPlanner(
     private readonly string _rootPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
     private readonly string _manifestPath = Path.Combine(cacheDirectory, "build-manifest.json");
     private readonly ConcurrentDictionary<string, string> _fileFingerprints = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, string> _contentSetFingerprints = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The scope key written by builds predating per-directory content sets.</summary>
+    private const string LegacyWholeTreeScope = "contents";
 
     internal async Task<IncrementalBuildPlan> CreatePlanAsync(
         IReadOnlyList<PageRenderRequest> pages,
@@ -33,7 +37,6 @@ internal sealed class IncrementalBuildPlanner(
     {
         var optionsHash = ComputeOptionsHash();
         var assemblyMvids = CollectAssemblyMvids(assemblies);
-        var contentSetFingerprint = ComputeContentSetFingerprint();
 
         var oldManifest = force ? null : await LoadManifestAsync(cancellationToken);
 
@@ -52,7 +55,7 @@ internal sealed class IncrementalBuildPlanner(
 
         if (renderAll)
         {
-            return new IncrementalBuildPlan(fullClean, pages, [], oldManifest, optionsHash, assemblyMvids, contentSetFingerprint);
+            return new IncrementalBuildPlan(fullClean, pages, [], oldManifest, optionsHash, assemblyMvids);
         }
 
         var oldPages = oldManifest!.Pages.ToDictionary(
@@ -64,7 +67,7 @@ internal sealed class IncrementalBuildPlanner(
         {
             var request = pages[index];
             decisions[index] = oldPages.TryGetValue(request.OutputRelativePath, out var oldPage)
-                && CanSkip(request, oldPage, contentSetFingerprint)
+                && CanSkip(request, oldPage)
                     ? (null, oldPage)
                     : (request, null);
         });
@@ -84,10 +87,10 @@ internal sealed class IncrementalBuildPlanner(
         }
 
         return new IncrementalBuildPlan(
-            FullClean: false, pagesToRender, carriedPages, oldManifest, optionsHash, assemblyMvids, contentSetFingerprint);
+            FullClean: false, pagesToRender, carriedPages, oldManifest, optionsHash, assemblyMvids);
     }
 
-    private bool CanSkip(PageRenderRequest request, BuildManifestPage oldPage, string contentSetFingerprint)
+    private bool CanSkip(PageRenderRequest request, BuildManifestPage oldPage)
     {
         if (!string.Equals(oldPage.RoutePath, request.RoutePath, StringComparison.Ordinal)
             || !string.Equals(oldPage.ParametersHash, BuildFingerprint.HashParameters(request.Parameters), StringComparison.Ordinal))
@@ -133,7 +136,7 @@ internal sealed class IncrementalBuildPlanner(
                     break;
 
                 case BuildManifestDependency.ContentSetKind:
-                    if (!string.Equals(contentSetFingerprint, dependency.Fingerprint, StringComparison.Ordinal))
+                    if (!string.Equals(ContentSetFingerprint(dependency.Key), dependency.Fingerprint, StringComparison.Ordinal))
                     {
                         return false;
                     }
@@ -168,8 +171,7 @@ internal sealed class IncrementalBuildPlanner(
     internal BuildManifestPage CreatePageEntry(
         PageRenderRequest request,
         string outputHash,
-        BuildDependencyRecorder recorder,
-        string contentSetFingerprint)
+        BuildDependencyRecorder recorder)
     {
         var dependencies = new List<BuildManifestDependency>();
         foreach (var file in recorder.Files.OrderBy(static path => path, StringComparer.OrdinalIgnoreCase))
@@ -183,12 +185,12 @@ internal sealed class IncrementalBuildPlanner(
                 stamp?.LastWriteTimeUtc));
         }
 
-        if (recorder.DependsOnContentSet)
+        foreach (var scope in recorder.ContentSetScopes.OrderBy(static scope => scope, StringComparer.OrdinalIgnoreCase))
         {
             dependencies.Add(new BuildManifestDependency(
                 BuildManifestDependency.ContentSetKind,
-                "contents",
-                contentSetFingerprint));
+                scope,
+                ContentSetFingerprint(scope)));
         }
 
         var additionalOutputs = recorder.AdditionalOutputs
@@ -338,14 +340,33 @@ internal sealed class IncrementalBuildPlanner(
         }
     }
 
-    internal string ComputeContentSetFingerprint()
+    /// <summary>
+    /// The digest of every <c>*.md</c> under a content-set scope — a contents-relative
+    /// directory, or empty for the whole tree. Computed once per scope per build.
+    /// </summary>
+    /// <remarks>
+    /// <c>"contents"</c> is how builds before scoping keyed the whole-tree dependency,
+    /// so it is still read that way. A site that really does have a
+    /// <c>contents/contents/</c> directory therefore gets the whole-tree digest for it:
+    /// a superset, so the page can only re-render more often, never go stale.
+    /// </remarks>
+    internal string ContentSetFingerprint(string scope)
     {
-        if (!Directory.Exists(options.ContentsPath))
+        return _contentSetFingerprints.GetOrAdd(scope, static (key, self) => self.ComputeContentSetFingerprint(key), this);
+    }
+
+    internal string ComputeContentSetFingerprint(string scope = "")
+    {
+        var scopePath = scope.Length == 0 || string.Equals(scope, LegacyWholeTreeScope, StringComparison.OrdinalIgnoreCase)
+            ? options.ContentsPath
+            : Path.GetFullPath(Path.Combine(options.ContentsPath, scope));
+
+        if (!Directory.Exists(scopePath))
         {
             return BuildFingerprint.Missing;
         }
 
-        var files = Directory.EnumerateFiles(options.ContentsPath, "*.md", SearchOption.AllDirectories)
+        var files = Directory.EnumerateFiles(scopePath, "*.md", SearchOption.AllDirectories)
             .Select(Path.GetFullPath)
             .ToArray();
 

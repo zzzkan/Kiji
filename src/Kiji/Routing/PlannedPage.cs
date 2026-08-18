@@ -16,20 +16,12 @@ namespace Kiji.Routing;
 /// <param name="OutputRelativePath">
 /// The relative path of the generated file within the output directory.
 /// </param>
-/// <param name="AssociatedContentIdentity">
-/// An optional markdown content identity associated with this page, if any.
-/// </param>
 /// <param name="ExcludeFromSitemap">
 /// Indicates whether this page should be excluded from the generated sitemap.
-/// </param>
-/// <param name="LastModified">
-/// Optional last-modification timestamp, emitted as the sitemap <c>lastmod</c>.
 /// </param>
 public sealed record PlannedPage(
     string SourceIdentifier,
     IReadOnlyDictionary<string, string> Parameters,
     string RoutePath,
     string OutputRelativePath,
-    string? AssociatedContentIdentity = null,
-    bool ExcludeFromSitemap = false,
-    DateTimeOffset? LastModified = null);
+    bool ExcludeFromSitemap = false);

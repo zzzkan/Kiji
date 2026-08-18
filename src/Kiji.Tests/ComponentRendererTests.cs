@@ -83,7 +83,7 @@ public sealed class ComponentRendererTests
     {
         var siteInfo = TestArticleContents.CreateSiteInfo();
         var contents = CreateContents();
-        var posts = TestArticleContents.CreateCatalog(contents);
+        var posts = TestArticleContents.CreateContentDictionary(contents);
         var pageRequest = GetDiscoveredRequest(contents, "/blog/{Slug}/", "Slug", "hello-world");
 
         await using var renderer = CreateRenderer(posts, siteInfo);
@@ -103,7 +103,7 @@ public sealed class ComponentRendererTests
     {
         var siteInfo = TestArticleContents.CreateSiteInfo();
         var contents = CreateContents();
-        var posts = TestArticleContents.CreateCatalog(contents);
+        var posts = TestArticleContents.CreateContentDictionary(contents);
         var pageRequest = GetDiscoveredRequest(contents, "/tags/{TagSlug}/", "TagSlug", "c-sharp-basics");
 
         await using var renderer = CreateRenderer(posts, siteInfo);
@@ -126,7 +126,7 @@ public sealed class ComponentRendererTests
             siteInfo.BaseUrl);
     }
 
-    private static ComponentRenderer CreateRenderer(ContentCollection<Post> posts, SiteInfo siteInfo)
+    private static ComponentRenderer CreateRenderer(ContentDictionary<Post> posts, SiteInfo siteInfo)
     {
         return ComponentRenderer.Create(
             services =>

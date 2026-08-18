@@ -20,6 +20,7 @@ public sealed class ModelTests
                 "newer-post.md",
                 string.Empty,
                 "newer-post",
+                "newer-post",
                 new DateTime(2024, 2, 20, 0, 0, 0, DateTimeKind.Utc)),
             "Newer",
             (_, _) =>
@@ -40,11 +41,11 @@ public sealed class ModelTests
     public void MarkdownContents_PreservesItemOrder()
     {
         var first = new MarkdownContent<string>(
-            new MarkdownFileInfo(@"C:\test-contents", @"C:\test-contents\first.md", "first.md", string.Empty, "first", DateTime.UtcNow),
+            new MarkdownFileInfo(@"C:\test-contents", @"C:\test-contents\first.md", "first.md", string.Empty, "first", "first", DateTime.UtcNow),
             "First",
             static (_, _) => Task.FromResult("first"));
         var second = new MarkdownContent<string>(
-            new MarkdownFileInfo(@"C:\test-contents", @"C:\test-contents\second.md", "second.md", string.Empty, "second", DateTime.UtcNow),
+            new MarkdownFileInfo(@"C:\test-contents", @"C:\test-contents\second.md", "second.md", string.Empty, "second", "second", DateTime.UtcNow),
             "Second",
             static (_, _) => Task.FromResult("second"));
         IReadOnlyList<MarkdownContent<string>> contents = [first, second];

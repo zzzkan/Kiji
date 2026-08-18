@@ -1,7 +1,8 @@
 using Kiji.Markdown;
 using Kiji.Rendering;
-using Kiji.Tests.TestSite;
 using Kiji.Tests.TestSite.Pages;
+using Kiji.Tests.TestSite;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Kiji.Tests;
 
@@ -34,33 +35,33 @@ internal static class TestArticleContents
         };
     }
 
-    public static ContentCollection<Post> CreateCatalog(params (Post Metadata, string Html)[] entries)
+    public static ContentDictionary<Post> CreateContentDictionary(params (Post Metadata, string Html)[] entries)
     {
-        return ContentCollectionFromItems([.. entries.Select(static entry => ClonePost(entry.Metadata, entry.Html))]);
+        return ContentDictionaryFromItems([.. entries.Select(static entry => ClonePost(entry.Metadata, entry.Html))]);
     }
 
-    public static ContentCollection<Post> CreateCatalog(IEnumerable<Post> posts)
+    public static ContentDictionary<Post> CreateContentDictionary(IEnumerable<Post> posts)
     {
         ArgumentNullException.ThrowIfNull(posts);
 
-        return ContentCollectionFromItems([.. posts.Select(static post => ClonePost(post, $"<p>{post.Title}</p>"))]);
+        return ContentDictionaryFromItems([.. posts.Select(static post => ClonePost(post, $"<p>{post.Title}</p>"))]);
     }
 
     /// <summary>
     /// Creates a KijiApp wired exactly like the real site (pages, not-found, content
     /// and tag route mappings) over the given posts.
     /// </summary>
-    public static (KijiApp App, ContentCollection<Post> Posts) CreateApp(params (Post Metadata, string Html)[] entries)
+    public static (KijiApp App, ContentDictionary<Post> Posts) CreateApp(params (Post Metadata, string Html)[] entries)
     {
         var builder = KijiApp.CreateBuilder([]);
         builder.Site = CreateSiteInfo();
 
         IReadOnlyList<Post> items = [.. entries.Select(static entry => ClonePost(entry.Metadata, entry.Html))];
-        var posts = builder.AddContentSource<Post>(_ => items).WithKey(static post => post.Slug);
+        builder.AddContentSource(_ => items, key: static post => post.Slug);
 
         var app = builder.Build();
-        MapSite(app, posts);
-        return (app, posts);
+        MapSite(app);
+        return (app, app.Services.GetRequiredService<ContentDictionary<Post>>());
     }
 
     /// <summary>
@@ -71,23 +72,26 @@ internal static class TestArticleContents
     public static KijiApp MapTestAssemblyPages(KijiApp app)
     {
         app.MapPages(typeof(TestArticleContents).Assembly);
-        app.MapRoutes<MarkdownPostTestPage>(static () => []);
-        app.MapRoutes<MirrorPostPage>(static () => []);
+        app.MapRoutes<MarkdownPostTestPage>(static _ => []);
+        app.MapRoutes<MirrorPostPage>(static _ => []);
+        app.MapRoutes<ScopedNotesIndexPage>(static _ => []);
+        app.MapRoutes<RelatedPostsTestPage>(static _ => []);
         return app;
     }
 
-    public static KijiApp MapSite(KijiApp app, ContentCollection<Post> posts)
+    public static KijiApp MapSite(KijiApp app)
     {
+        ArgumentNullException.ThrowIfNull(app);
+
         app.MapDefaultLayout<MainLayout>();
         MapTestAssemblyPages(app);
         app.MapNotFound<NotFoundPage>();
 
-        app.MapRoutes<PostPage, Post>(
-            posts,
-            static post => new { post.Slug },
-            static post => post.UpdatedAt ?? post.CreatedAt);
-        app.MapRoutes<TagsPage>(() => CreateTagNameMap(
-                posts.Items.SelectMany(static post => post.Tags.Select(static tag => tag.Name)))
+        app.MapRoutes<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
+            .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
+        app.MapRoutes<TagsPage>(static services => CreateTagNameMap(
+                services.GetRequiredService<ContentDictionary<Post>>().Values
+                    .SelectMany(static post => post.Tags.Select(static tag => tag.Name)))
             .OrderBy(static pair => pair.Value, StringComparer.OrdinalIgnoreCase)
             .Select(static pair => new { TagSlug = pair.Key }));
 
@@ -138,9 +142,9 @@ internal static class TestArticleContents
         return Post.Create(CreateMarkdownContent(slug, title, description, ToDateTimeOffset(createdAt), updatedAt.HasValue ? ToDateTimeOffset(updatedAt.Value) : null, $"<p>{title}</p>", tags));
     }
 
-    private static ContentCollection<Post> ContentCollectionFromItems(IReadOnlyList<Post> posts)
+    private static ContentDictionary<Post> ContentDictionaryFromItems(IReadOnlyList<Post> posts)
     {
-        return Content.FromItems(posts).WithKey(static post => post.Slug);
+        return Content.FromItems(posts, key: static post => post.Slug);
     }
 
     private static Post ClonePost(Post post, string html)
@@ -181,6 +185,7 @@ internal static class TestArticleContents
                 Path.Combine(@"C:\test-contents", slug + ".md"),
                 slug + ".md",
                 string.Empty,
+                slug,
                 slug,
                 new DateTime(2026, 3, 20, 0, 0, 0, DateTimeKind.Utc)),
             frontMatter,

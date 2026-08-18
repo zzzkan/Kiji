@@ -3,6 +3,7 @@ using Kiji.Feeds;
 using Kiji.Markdown;
 using Kiji.Sitemaps;
 using Kiji.SyntheticSite.Pages;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Kiji.SyntheticSite;
 
@@ -54,22 +55,24 @@ public static class BuildRunner
         };
         builder.Paths.Root = root;
 
-        var posts = builder.AddMarkdownContent<PostFrontMatter>()
-            .WithKey(static post => PostSlug.From(post.FileInfo))
-            .OrderByDescending(static post => post.FrontMatter.CreatedAt);
+        builder.AddMarkdownContent<PostFrontMatter>(key: static post => PostSlug.From(post.FileInfo));
 
         await using var app = builder.Build();
         app.MapDefaultLayout<MainLayout>();
         app.MapPages(typeof(BuildRunner).Assembly);
         app.MapNotFound<NotFoundPage>();
-        app.MapRoutes<PostPage, MarkdownContent<PostFrontMatter>>(
-            posts,
-            static post => new { Slug = PostSlug.From(post.FileInfo) },
-            static post => post.FrontMatter.CreatedAt);
-        app.MapFeed(posts, static post => new FeedItem(
-            post.FrontMatter.Title ?? string.Empty,
-            post.FrontMatter.Description ?? string.Empty,
-            post.FrontMatter.CreatedAt ?? DateTimeOffset.UnixEpoch));
+
+        app.MapRoutes<PostPage>(static services => services
+            .GetRequiredService<ContentDictionary<MarkdownContent<PostFrontMatter>>>()
+            .Select(static post => new { Slug = post.Key, ContentKey = post.Key }));
+        app.MapFeed(static services => services
+            .GetRequiredService<ContentDictionary<MarkdownContent<PostFrontMatter>>>()
+            .OrderByDescending(static post => post.Value.FrontMatter.CreatedAt)
+            .Select(static post => new FeedItem(
+                post.Value.FrontMatter.Title ?? string.Empty,
+                post.Value.FrontMatter.Description ?? string.Empty,
+                post.Value.FrontMatter.CreatedAt ?? DateTimeOffset.UnixEpoch,
+                RoutePath: $"blog/{post.Key}/")));
         app.MapSitemap();
 
         await app.BuildSiteAsync();

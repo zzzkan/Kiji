@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Collections.Frozen;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using Microsoft.AspNetCore.Components;
@@ -12,6 +13,7 @@ namespace Kiji.Routing;
 public static class PageDiscovery
 {
     private static readonly ConcurrentDictionary<Assembly, IReadOnlyList<DiscoveredPage>> AssemblyCache = new();
+    private static readonly ConcurrentDictionary<Type, FrozenSet<string>> ParameterNameCache = new();
 
     /// <summary>
     /// A component resolved from its <c>@page</c> route template.
@@ -34,9 +36,27 @@ public static class PageDiscovery
         return AssemblyCache.GetOrAdd(assembly, static assembly => ScanAssembly(assembly));
     }
 
+    /// <summary>
+    /// The <c>[Parameter]</c> property names a component declares. Route mappings may
+    /// supply values beyond the route template's own parameters; those must name a real
+    /// parameter, or the component would reject them at render time with no indication
+    /// of which mapping was at fault.
+    /// </summary>
+    internal static FrozenSet<string> ParameterNames(Type componentType)
+    {
+        return ParameterNameCache.GetOrAdd(
+            componentType,
+            static type => type
+                .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(static property => property.IsDefined(typeof(ParameterAttribute), inherit: true))
+                .Select(static property => property.Name)
+                .ToFrozenSet(StringComparer.Ordinal));
+    }
+
     internal static void ClearCache()
     {
         AssemblyCache.Clear();
+        ParameterNameCache.Clear();
     }
 
     private static IReadOnlyList<DiscoveredPage> ScanAssembly(Assembly assembly)

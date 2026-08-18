@@ -131,10 +131,10 @@ public sealed class PreviewServerTests : IAsyncDisposable
                 null,
                 "Testing"),
         ];
-        var posts = builder.AddContentSource<Post>(_ => items).WithKey(static post => post.Slug);
+        builder.AddContentSource<Post>(_ => items, static post => post.Slug);
 
         _app = builder.Build();
-        TestArticleContents.MapSite(_app, posts);
+        TestArticleContents.MapSite(_app);
         await _app.BuildSiteAsync();
 
         var web = await _app.StartPreviewServerAsync(port: 0, CancellationToken.None);

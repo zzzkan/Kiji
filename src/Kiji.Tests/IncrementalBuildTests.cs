@@ -97,11 +97,19 @@ public sealed class IncrementalBuildTests : IDisposable
         Assert.True(File.Exists(Path.Combine(root, "dist", "md", "stable", "index.html")));
     }
 
+    /// <summary>
+    /// A file no build produced is something to delete, not a reason to redo the work.
+    /// The output directory is reconciled against what the build produced, so the stray
+    /// file goes and every page that could be proven unchanged still gets skipped.
+    /// </summary>
     [Fact]
-    public async Task IncrementalBuild_UnknownFileInOutput_FallsBackToFullRebuild()
+    public async Task IncrementalBuild_UnknownFileInOutput_RemovesItWithoutReRenderingPages()
     {
         var root = CreateSiteRoot("site");
         await BuildAsync(root);
+
+        var page = Path.Combine(root, "dist", "md", "stable", "index.html");
+        var pageStampBefore = File.GetLastWriteTimeUtc(page);
 
         var strayPath = Path.Combine(root, "dist", "manually-added.txt");
         await File.WriteAllTextAsync(strayPath, "not produced by the build");
@@ -109,7 +117,29 @@ public sealed class IncrementalBuildTests : IDisposable
         await BuildAsync(root);
 
         Assert.False(File.Exists(strayPath));
-        Assert.True(File.Exists(Path.Combine(root, "dist", "md", "stable", "index.html")));
+        Assert.True(File.Exists(page));
+        Assert.Equal(pageStampBefore, File.GetLastWriteTimeUtc(page));
+    }
+
+    /// <summary>
+    /// A stray file sitting where a real page belongs is not left alone: the page's
+    /// recorded output hash no longer matches, so the page re-renders over it.
+    /// </summary>
+    [Fact]
+    public async Task IncrementalBuild_StrayFileCollidingWithAPageOutput_IsOverwritten()
+    {
+        var root = CreateSiteRoot("site");
+        await BuildAsync(root);
+
+        var page = Path.Combine(root, "dist", "md", "stable", "index.html");
+        var original = await File.ReadAllBytesAsync(page);
+
+        // Same length as a real output would never be; content certainly is not.
+        await File.WriteAllTextAsync(page, "stray");
+
+        await BuildAsync(root);
+
+        Assert.Equal(original, await File.ReadAllBytesAsync(page));
     }
 
     [Fact]

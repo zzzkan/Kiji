@@ -104,7 +104,7 @@ public static class KijiBuilderExtensions
                         : markdownProcessor.ProcessAsync(content.FileInfo.FilePath, cancellationToken),
                     CreateFrontMatterDeserializer,
                     sourceCache,
-                    services.GetService<ContentFileHashRegistry>(),
+                    services.GetService<ContentFileRegistry>(),
                     contentOptions.ResolveContentsDirectory(options.ContentsPath),
                     contentOptions.Where)
                     .Build();

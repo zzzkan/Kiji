@@ -17,6 +17,16 @@ Writing is deliberately blunt: each page renders straight into a pooled UTF-8 bu
 preallocated write. The output hash is computed from that same buffer, so a page is never
 read back to fingerprint it.
 
+Having to re-render a page does not mean rewriting it. Kiji compares the hash of what it
+just rendered against what the last build recorded, and leaves the file alone while its
+size and modification time still match — so editing a layout re-renders the whole site
+but rewrites only the pages whose markup actually changed.
+
+The output directory is never wiped. Once the build is done, Kiji walks it and deletes
+whatever this build did not produce, which is both a stronger guarantee than deleting and
+rewriting — it checks the directory rather than the last manifest's account of it — and
+much cheaper.
+
 For large sites built in-process, turning on server GC in your project file usually helps:
 
 ```xml
@@ -36,7 +46,7 @@ During a render, Kiji records what the page actually read:
 | --- | --- |
 | Read a markdown file's front matter, or rendered it | that file |
 | Referenced a local image | that image, plus the variants it produced |
-| Enumerated a content collection | the whole content set |
+| Enumerated a content dictionary | the whole content set |
 | Looked up an item by key | that item's file, if known; otherwise the content set |
 
 So a post page depends on its own markdown file, while an index page that lists
@@ -53,8 +63,9 @@ size and modification time, and while those match, the recorded hash is trusted 
 file is never opened. That turns a no-change rebuild from *read everything* into *stat
 everything*.
 
-Anything ambiguous falls back to a full rebuild — a missing or corrupt manifest, a
-schema change, an unknown file in the output directory, or `--force`.
+Anything ambiguous falls back to re-rendering every page — a missing or corrupt manifest,
+a schema change, or `--force`. A file in the output directory that no build produced is
+not ambiguous: the reconciliation pass simply deletes it.
 
 ### Inputs Kiji cannot see
 
@@ -82,7 +93,14 @@ the browser reloads over a WebSocket, debounced at 250 ms with duplicate events 
 
 Kiji ships its own measurement rather than adjectives.
 [`src/Kiji.Benchmarks`](https://github.com/zzzkan/kiji/tree/main/src/Kiji.Benchmarks) is
-BenchmarkDotNet over the hot paths.
+BenchmarkDotNet over the hot paths, including `SiteBuildBenchmarks`, which builds whole
+200- and 1000-page sites across the four cases a site author actually waits on — a full
+rebuild, no change at all, one post edited, and the site's own code changed:
+
+```powershell
+dotnet run -c Release --project src/Kiji.Benchmarks -- --filter "*SiteBuildBenchmarks*"
+```
+
 [`src/Kiji.SyntheticSite`](https://github.com/zzzkan/kiji/tree/main/src/Kiji.SyntheticSite)
 generates an N-page site and measures full, no-change, and one-post-edited builds:
 

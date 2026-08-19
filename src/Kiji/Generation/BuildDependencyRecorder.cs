@@ -36,9 +36,40 @@ internal sealed class BuildDependencyRecorder
         _contentSetScopes.TryAdd(scope, 0);
     }
 
-    internal IReadOnlyCollection<string> ContentSetScopes => (IReadOnlyCollection<string>)_contentSetScopes.Keys;
+    /// <summary>
+    /// The recorded content-set scopes, in a stable order. Most pages record none — a
+    /// keyed lookup depends on one file, not the set — so the empty case allocates
+    /// nothing at all.
+    /// </summary>
+    /// <remarks>
+    /// These return sorted arrays rather than the underlying keys because
+    /// <see cref="ConcurrentDictionary{TKey, TValue}.Keys"/> copies into a new list on
+    /// every access, and the manifest needs a deterministic order anyway. Sorting here
+    /// keeps that from becoming a LINQ chain per page in the manifest pass.
+    /// </remarks>
+    internal string[] ContentSetScopes => Snapshot(_contentSetScopes, StringComparer.OrdinalIgnoreCase);
 
-    internal IReadOnlyCollection<string> Files => (IReadOnlyCollection<string>)_files.Keys;
+    internal string[] Files => Snapshot(_files, StringComparer.OrdinalIgnoreCase);
 
-    internal IReadOnlyCollection<string> AdditionalOutputs => (IReadOnlyCollection<string>)_additionalOutputs.Keys;
+    internal string[] AdditionalOutputs => Snapshot(_additionalOutputs, StringComparer.OrdinalIgnoreCase);
+
+    private static string[] Snapshot(ConcurrentDictionary<string, byte> source, StringComparer comparer)
+    {
+        if (source.IsEmpty)
+        {
+            return [];
+        }
+
+        // Enumerating the dictionary itself avoids the copy Keys makes; the recorder is
+        // only read once its page has finished rendering, so nothing is being added.
+        var values = new List<string>(source.Count);
+        foreach (var pair in source)
+        {
+            values.Add(pair.Key);
+        }
+
+        var snapshot = values.ToArray();
+        Array.Sort(snapshot, comparer);
+        return snapshot;
+    }
 }

@@ -18,6 +18,9 @@
 
   <ItemGroup>
     <ProjectReference Include="../Kiji/Kiji.csproj" />
+    <!-- The synthetic site's definition is the frozen benchmark workload; referencing
+         it keeps the end-to-end benchmark measuring the same site as the harness. -->
+    <ProjectReference Include="../Kiji.SyntheticSite/Kiji.SyntheticSite.csproj" />
   </ItemGroup>
 
 </Project>

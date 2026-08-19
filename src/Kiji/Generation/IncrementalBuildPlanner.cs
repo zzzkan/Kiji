@@ -9,9 +9,9 @@ namespace Kiji.Generation;
 /// <summary>
 /// Drives the incremental build: loads the previous manifest, fingerprints the
 /// current inputs (options, assemblies, content files), decides per page whether the
-/// existing output is still valid, syncs static files by stamp, removes orphaned
-/// outputs, and writes the new manifest. Every ambiguous situation falls back to a
-/// full rebuild — a stale output is never acceptable.
+/// existing output is still valid, syncs static files by stamp, reconciles the output
+/// directory against what the build produced, and writes the new manifest. Every
+/// ambiguous situation falls back to re-rendering — a stale output is never acceptable.
 /// </summary>
 internal sealed class IncrementalBuildPlanner(
     SsgOptions options,
@@ -19,7 +19,7 @@ internal sealed class IncrementalBuildPlanner(
     string cacheDirectory,
     SiteInfo site,
     IReadOnlyList<KijiBuildInput> buildInputs,
-    ContentFileHashRegistry? hashRegistry = null)
+    ContentFileRegistry? hashRegistry = null)
 {
     private readonly string _rootPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
     private readonly string _manifestPath = Path.Combine(cacheDirectory, "build-manifest.json");
@@ -40,25 +40,18 @@ internal sealed class IncrementalBuildPlanner(
 
         var oldManifest = force ? null : await LoadManifestAsync(cancellationToken);
 
-        // No usable manifest means the output directory's contents are unknown:
-        // rebuild from a clean slate. Same when files appeared that no build produced.
-        var fullClean = oldManifest is null;
-        if (!fullClean && HasUnknownOutputs(oldManifest!))
+        // Without a manifest nothing about the previous build can be proven, so every
+        // page renders. Unrecognized files in the output directory are not a reason to
+        // re-render anything: the reconciliation pass at the end of the build deletes
+        // whatever this build did not produce.
+        if (oldManifest is null
+            || oldManifest.OptionsHash != optionsHash
+            || !oldManifest.AssemblyMvids.SequenceEqual(assemblyMvids, StringComparer.Ordinal))
         {
-            fullClean = true;
-            oldManifest = null;
+            return new IncrementalBuildPlan(pages, [], oldManifest, optionsHash, assemblyMvids);
         }
 
-        var renderAll = fullClean
-            || oldManifest!.OptionsHash != optionsHash
-            || !oldManifest.AssemblyMvids.SequenceEqual(assemblyMvids, StringComparer.Ordinal);
-
-        if (renderAll)
-        {
-            return new IncrementalBuildPlan(fullClean, pages, [], oldManifest, optionsHash, assemblyMvids);
-        }
-
-        var oldPages = oldManifest!.Pages.ToDictionary(
+        var oldPages = oldManifest.Pages.ToDictionary(
             static page => page.OutputRelativePath,
             StringComparer.OrdinalIgnoreCase);
 
@@ -86,8 +79,7 @@ internal sealed class IncrementalBuildPlanner(
             }
         }
 
-        return new IncrementalBuildPlan(
-            FullClean: false, pagesToRender, carriedPages, oldManifest, optionsHash, assemblyMvids);
+        return new IncrementalBuildPlan(pagesToRender, carriedPages, oldManifest, optionsHash, assemblyMvids);
     }
 
     private bool CanSkip(PageRenderRequest request, BuildManifestPage oldPage)
@@ -173,19 +165,24 @@ internal sealed class IncrementalBuildPlanner(
         string outputHash,
         BuildDependencyRecorder recorder)
     {
-        var dependencies = new List<BuildManifestDependency>();
-        foreach (var file in recorder.Files.OrderBy(static path => path, StringComparer.OrdinalIgnoreCase))
+        // The recorder hands back sorted snapshots, so the manifest's order is settled
+        // without a LINQ chain per page.
+        var files = recorder.Files;
+        var scopes = recorder.ContentSetScopes;
+        var dependencies = new List<BuildManifestDependency>(files.Length + scopes.Length);
+
+        foreach (var file in files)
         {
             var stamp = ReadStamp(file);
             dependencies.Add(new BuildManifestDependency(
                 BuildManifestDependency.FileKind,
                 ToDependencyKey(file),
-                HashFileCached(file),
+                HashFileCached(file, stamp),
                 stamp?.Length,
                 stamp?.LastWriteTimeUtc));
         }
 
-        foreach (var scope in recorder.ContentSetScopes.OrderBy(static scope => scope, StringComparer.OrdinalIgnoreCase))
+        foreach (var scope in scopes)
         {
             dependencies.Add(new BuildManifestDependency(
                 BuildManifestDependency.ContentSetKind,
@@ -193,10 +190,13 @@ internal sealed class IncrementalBuildPlanner(
                 ContentSetFingerprint(scope)));
         }
 
-        var additionalOutputs = recorder.AdditionalOutputs
-            .Select(path => Path.GetRelativePath(options.OutputPath, path))
-            .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        var additionalOutputs = recorder.AdditionalOutputs;
+        for (var i = 0; i < additionalOutputs.Length; i++)
+        {
+            additionalOutputs[i] = Path.GetRelativePath(options.OutputPath, additionalOutputs[i]);
+        }
+
+        Array.Sort(additionalOutputs, StringComparer.OrdinalIgnoreCase);
 
         var outputStamp = ReadStamp(Path.Combine(options.OutputPath, request.OutputRelativePath));
         return new BuildManifestPage(
@@ -224,7 +224,7 @@ internal sealed class IncrementalBuildPlanner(
         var oldEntries = (plan.OldManifest?.StaticFiles ?? [])
             .ToDictionary(static entry => entry.RelativePath, StringComparer.OrdinalIgnoreCase);
 
-        var files = Directory.EnumerateFiles(options.StaticPath, "*", SearchOption.AllDirectories).ToArray();
+        var files = new DirectoryInfo(options.StaticPath).EnumerateFiles("*", SearchOption.AllDirectories).ToArray();
         var entries = new BuildManifestStaticFile[files.Length];
         var copied = 0;
 
@@ -233,12 +233,11 @@ internal sealed class IncrementalBuildPlanner(
             new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
             (index, _) =>
             {
-                var source = new FileInfo(files[index]);
+                var source = files[index];
                 var relativePath = Path.GetRelativePath(options.StaticPath, source.FullName);
                 var destinationPath = Path.Combine(options.OutputPath, relativePath);
 
-                if (!plan.FullClean
-                    && oldEntries.TryGetValue(relativePath, out var oldEntry)
+                if (oldEntries.TryGetValue(relativePath, out var oldEntry)
                     && oldEntry.SourceLength == source.Length
                     && oldEntry.SourceLastWriteTimeUtc == source.LastWriteTimeUtc)
                 {
@@ -275,46 +274,60 @@ internal sealed class IncrementalBuildPlanner(
     }
 
     /// <summary>
-    /// Deletes files the previous build produced that no current output claims, then
-    /// prunes directories left empty.
+    /// Makes the output directory hold exactly what this build produced: every file it
+    /// does not claim is deleted, and directories left empty are pruned.
     /// </summary>
-    internal void RemoveOrphans(BuildManifest? oldManifest, BuildManifest newManifest)
+    /// <remarks>
+    /// This is the guarantee that used to come from deleting the whole directory and
+    /// writing it again, and it is a stronger one — it is checked against what is
+    /// actually on disk rather than against the previous manifest's account of it, so a
+    /// file no build produced is cleaned up either way. It is also far cheaper: deleting
+    /// and recreating a 1000-page tree measures ~527 ms against ~64 ms to walk it and
+    /// delete the difference (<c>Kiji.Benchmarks OutputCleanBenchmarks</c>).
+    /// </remarks>
+    internal void ReconcileOutputs(BuildManifest manifest)
     {
-        if (oldManifest is null)
+        if (!Directory.Exists(options.OutputPath))
         {
             return;
         }
 
-        var expected = CollectOutputRelativePaths(newManifest);
+        var expected = CollectOutputRelativePaths(manifest);
         var removed = 0;
 
-        foreach (var oldOutput in CollectOutputRelativePaths(oldManifest))
+        foreach (var file in Directory.EnumerateFiles(options.OutputPath, "*", SearchOption.AllDirectories))
         {
-            if (expected.Contains(oldOutput))
+            if (expected.Contains(Path.GetRelativePath(options.OutputPath, file)))
             {
                 continue;
             }
 
-            var fullPath = Path.Combine(options.OutputPath, oldOutput);
-            if (File.Exists(fullPath))
-            {
-                File.Delete(fullPath);
-                removed++;
-            }
+            File.Delete(file);
+            removed++;
         }
 
         if (removed > 0)
         {
             PruneEmptyDirectories(options.OutputPath);
-            BuildOutput.Info($"Removed {removed} stale output file(s).");
+            BuildOutput.Info($"Removed {removed} file(s) the build did not produce.");
         }
     }
 
     internal async Task SaveManifestAsync(BuildManifest manifest, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(_manifestPath)!);
-        var json = JsonSerializer.Serialize(manifest, BuildManifestJsonContext.Default.BuildManifest);
-        await File.WriteAllTextAsync(_manifestPath, json, cancellationToken);
+
+        // Straight to the file: a thousand-page manifest serialized to a string first
+        // would be half a megabyte of UTF-16 that then has to be transcoded on the way out.
+        var stream = new FileStream(_manifestPath, FileMode.Create, FileAccess.Write, FileShare.None);
+        await using (stream)
+        {
+            await JsonSerializer.SerializeAsync(
+                stream,
+                manifest,
+                BuildManifestJsonContext.Default.BuildManifest,
+                cancellationToken);
+        }
     }
 
     internal async Task<BuildManifest?> LoadManifestAsync(CancellationToken cancellationToken)
@@ -366,40 +379,39 @@ internal sealed class IncrementalBuildPlanner(
             return BuildFingerprint.Missing;
         }
 
-        var files = Directory.EnumerateFiles(scopePath, "*.md", SearchOption.AllDirectories)
-            .Select(Path.GetFullPath)
-            .ToArray();
+        var files = ScanContentFiles(scopePath);
 
-        var hashed = new (string RelativePath, string ContentHash)[files.Length];
-        Parallel.For(0, files.Length, index =>
+        var hashed = new (string RelativePath, string ContentHash)[files.Count];
+        Parallel.For(0, files.Count, index =>
         {
+            var file = files[index];
             hashed[index] = (
-                Path.GetRelativePath(options.ContentsPath, files[index]!),
-                HashFileCached(files[index]!));
+                Path.GetRelativePath(options.ContentsPath, file.FullPath),
+                HashFileCached(file.FullPath, (file.Length, file.LastWriteTimeUtc)));
         });
 
         return BuildFingerprint.HashFileSet(hashed);
     }
 
-    private bool HasUnknownOutputs(BuildManifest oldManifest)
+    /// <summary>
+    /// The markdown files under a directory. Reuses the listing the content pass
+    /// already walked when it covered exactly this directory; otherwise walks it.
+    /// Enumerating <see cref="FileInfo"/> carries each stamp out of the walk, so the
+    /// registry can validate its recorded hash without going back to disk.
+    /// </summary>
+    private IReadOnlyList<ScannedFile> ScanContentFiles(string directory)
     {
-        if (!Directory.Exists(options.OutputPath))
+        if (hashRegistry?.GetScan(directory) is { } scanned)
         {
-            return false;
+            return scanned;
         }
 
-        var expected = CollectOutputRelativePaths(oldManifest);
-        foreach (var file in Directory.EnumerateFiles(options.OutputPath, "*", SearchOption.AllDirectories))
-        {
-            var relativePath = Path.GetRelativePath(options.OutputPath, file);
-            if (!expected.Contains(relativePath))
-            {
-                BuildOutput.Info($"Unexpected file in output directory ('{relativePath}'); rebuilding from scratch.");
-                return true;
-            }
-        }
-
-        return false;
+        return
+        [
+            .. new DirectoryInfo(directory)
+                .EnumerateFiles("*.md", SearchOption.AllDirectories)
+                .Select(static file => new ScannedFile(file.FullName, file.Length, file.LastWriteTimeUtc)),
+        ];
     }
 
     private static HashSet<string> CollectOutputRelativePaths(BuildManifest manifest)
@@ -523,13 +535,19 @@ internal sealed class IncrementalBuildPlanner(
             || name is "System" or "mscorlib" or "netstandard" or "WindowsBase";
     }
 
-    internal string HashFileCached(string path)
+    /// <param name="stamp">
+    /// The file's size and last write time when the caller already has them, so the
+    /// registry can validate its recorded hash without a filesystem round trip.
+    /// </param>
+    internal string HashFileCached(string path, (long Length, DateTime LastWriteTimeUtc)? stamp = null)
     {
         // Content files parsed during materialization already carry a stamp-validated
         // hash in the registry; only files nobody read yet are hashed from disk.
         return _fileFingerprints.GetOrAdd(
             Path.GetFullPath(path),
-            fullPath => hashRegistry?.GetValidatedHash(fullPath) ?? BuildFingerprint.HashFile(fullPath));
+            static (fullPath, state) =>
+                state.Registry?.GetValidatedHash(fullPath, state.Stamp) ?? BuildFingerprint.HashFile(fullPath),
+            (Registry: hashRegistry, Stamp: stamp));
     }
 
     private string ToDependencyKey(string absolutePath)

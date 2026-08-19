@@ -21,15 +21,21 @@ public static class StaticSiteGenerator
 
         await StaticFileCopier.CopyAsync(options.StaticPath, options.OutputPath);
 
-        await RenderPagesAsync(options, pageRequests, renderPageAsync, cancellationToken);
+        await RenderPagesAsync(options, pageRequests, renderPageAsync, previousOutputs: null, cancellationToken);
 
         BuildOutput.Info($"Generated {pageRequests.Count} pages in {stopwatch.ElapsedMilliseconds} ms.");
     }
 
+    /// <param name="previousOutputs">
+    /// What the last build recorded about each output path, keyed by relative path.
+    /// Lets a page whose render produced the bytes already on disk skip the write.
+    /// Null when nothing may be assumed about the output directory.
+    /// </param>
     internal static async Task<IReadOnlyList<RenderedPage>> RenderPagesAsync(
         SsgOptions options,
         IReadOnlyList<PageRenderRequest> pageRequests,
         Func<PageRenderRequest, TextWriter, CancellationToken, Task> renderPageAsync,
+        IReadOnlyDictionary<string, BuildManifestPage>? previousOutputs,
         CancellationToken cancellationToken)
     {
         // Resolve every output path once and create the directory set up front, so
@@ -62,7 +68,11 @@ public static class StaticSiteGenerator
             async (index, ct) =>
             {
                 var (request, fullPath) = resolvedPages[index];
-                rendered[index] = await WritePageAsync(request, fullPath, renderPageAsync, ct);
+                var previous = previousOutputs is not null
+                    && previousOutputs.TryGetValue(request.OutputRelativePath, out var recorded)
+                        ? recorded
+                        : null;
+                rendered[index] = await WritePageAsync(request, fullPath, renderPageAsync, previous, ct);
             });
 
         return rendered;
@@ -72,6 +82,7 @@ public static class StaticSiteGenerator
         PageRenderRequest pageRequest,
         string fullPath,
         Func<PageRenderRequest, TextWriter, CancellationToken, Task> renderPageAsync,
+        BuildManifestPage? previous,
         CancellationToken cancellationToken)
     {
         // Render into a pooled UTF-8 buffer, then persist with one preallocated write:
@@ -79,10 +90,39 @@ public static class StaticSiteGenerator
         using var writer = new PooledUtf8TextWriter();
         await renderPageAsync(pageRequest, writer, cancellationToken);
         var outputHash = writer.GetContentHash();
-        writer.WriteToFile(fullPath);
 
-        BuildOutput.Detail($"Generated: {fullPath}");
-        return new RenderedPage(pageRequest, outputHash);
+        // Having to re-render a page does not mean its output changed — an edit that
+        // never reaches the markup, or a code change that touches other pages, produces
+        // the same document. Creating the file again is ~14x the cost of the stat that
+        // rules it out (Kiji.Benchmarks OutputWriteSkipBenchmarks).
+        var written = !AlreadyOnDisk(fullPath, previous, outputHash);
+        if (written)
+        {
+            writer.WriteToFile(fullPath);
+        }
+
+        BuildOutput.Detail($"{(written ? "Generated" : "Unchanged")}: {fullPath}");
+        return new RenderedPage(pageRequest, outputHash, written);
+    }
+
+    /// <summary>
+    /// Whether the file already holds the bytes just rendered. The previous build's
+    /// recorded hash is trusted only while the file's stamp (length and last write
+    /// time) still matches what was recorded with it — the same short-circuit the skip
+    /// checks use, so this reads no files.
+    /// </summary>
+    private static bool AlreadyOnDisk(string fullPath, BuildManifestPage? previous, string outputHash)
+    {
+        if (previous is null
+            || !string.Equals(previous.OutputHash, outputHash, StringComparison.Ordinal)
+            || previous.OutputLength is not { } length
+            || previous.OutputLastWriteTimeUtc is not { } lastWriteTimeUtc)
+        {
+            return false;
+        }
+
+        var info = new FileInfo(fullPath);
+        return info.Exists && info.Length == length && info.LastWriteTimeUtc == lastWriteTimeUtc;
     }
 
     internal static void ValidateNoStaticFileCollisions(SsgOptions options, IReadOnlyList<PageRenderRequest> pageRequests)

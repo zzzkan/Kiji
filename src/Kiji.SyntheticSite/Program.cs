@@ -32,7 +32,7 @@ try
             }
         }
 
-        var result = await BuildRunner.RunOnceAsync(root, run);
+        var result = await BuildRunner.RunOnceAsync(root, run, options.Phases);
         runs.Add(result);
         Report($"run {run} ({(options.FullEachRun || run == 1 ? "full" : "no-change")})", result);
     }
@@ -40,7 +40,7 @@ try
     // One-post-touched rebuild: the headline incremental metric.
     var mutatedPost = Path.Combine(root, "contents", "post-00000", "index.md");
     await File.AppendAllTextAsync(mutatedPost, $"\n\nEdited at {DateTimeOffset.UtcNow:O}.\n");
-    var mutationRun = await BuildRunner.RunOnceAsync(root, options.Runs + 1);
+    var mutationRun = await BuildRunner.RunOnceAsync(root, options.Runs + 1, options.Phases);
     Report("rebuild after editing 1 post", mutationRun);
 
     static void Report(string label, RunResult result)
@@ -48,6 +48,19 @@ try
         Console.WriteLine(string.Create(
             CultureInfo.InvariantCulture,
             $"{label,-32}: {result.ElapsedMs,9:F1} ms | alloc {result.AllocatedBytes / (1024.0 * 1024.0),8:F1} MB | GC {result.Gen0Collections}/{result.Gen1Collections}/{result.Gen2Collections} | peak WS {result.PeakWorkingSetBytes / (1024.0 * 1024.0),7:F1} MB"));
+
+        if (result.Phases is not { Count: > 0 } phases)
+        {
+            return;
+        }
+
+        // Phases are reported on one line so a run stays greppable as a unit.
+        var breakdown = string.Join(
+            " ",
+            phases.Select(static phase => string.Create(CultureInfo.InvariantCulture, $"{phase.Phase}={phase.ElapsedMs:F0}")));
+        Console.WriteLine(string.Create(
+            CultureInfo.InvariantCulture,
+            $"{"  phases",-32}: {breakdown} | sum {phases.Sum(static phase => phase.ElapsedMs):F0} ms"));
     }
 
     var sortedElapsed = runs.Select(static r => r.ElapsedMs).Order().ToArray();

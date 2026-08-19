@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Kiji.Feeds;
+using Kiji.Generation;
 using Kiji.Markdown;
 using Kiji.Sitemaps;
 using Kiji.SyntheticSite.Pages;
@@ -14,11 +15,18 @@ namespace Kiji.SyntheticSite;
 /// </summary>
 public static class BuildRunner
 {
-    public static async Task<RunResult> RunOnceAsync(string root, int run)
+    public static async Task<RunResult> RunOnceAsync(string root, int run, bool collectPhases = false)
     {
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
+
+        List<PhaseTiming>? phases = null;
+        if (collectPhases)
+        {
+            phases = [];
+            BuildPhaseTimer.Observer = (phase, elapsed) => phases.Add(new PhaseTiming(phase, elapsed.TotalMilliseconds));
+        }
 
         var gen0Before = GC.CollectionCount(0);
         var gen1Before = GC.CollectionCount(1);
@@ -26,7 +34,14 @@ public static class BuildRunner
         var allocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
         var stopwatch = Stopwatch.StartNew();
 
-        await BuildSiteAsync(root);
+        try
+        {
+            await BuildSiteAsync(root);
+        }
+        finally
+        {
+            BuildPhaseTimer.Observer = null;
+        }
 
         stopwatch.Stop();
         var allocatedAfter = GC.GetTotalAllocatedBytes(precise: true);
@@ -39,10 +54,17 @@ public static class BuildRunner
             GC.CollectionCount(0) - gen0Before,
             GC.CollectionCount(1) - gen1Before,
             GC.CollectionCount(2) - gen2Before,
-            process.PeakWorkingSet64);
+            process.PeakWorkingSet64,
+            phases);
     }
 
-    private static async Task BuildSiteAsync(string root)
+    /// <summary>
+    /// The frozen benchmark site definition, built once. Public so
+    /// <c>Kiji.Benchmarks</c> can measure the same workload under BenchmarkDotNet
+    /// rather than keep a second copy of it — the definition is what makes numbers
+    /// comparable across commits, so there is exactly one.
+    /// </summary>
+    public static async Task BuildSiteAsync(string root)
     {
         var builder = KijiApp.CreateBuilder([]);
         builder.Site = new SiteInfo

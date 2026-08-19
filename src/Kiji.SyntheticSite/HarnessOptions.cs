@@ -17,6 +17,12 @@ public sealed record HarnessOptions
 
     public bool FullEachRun { get; init; }
 
+    /// <summary>
+    /// Reports how long each build stage took, per run. A total that moved is not an
+    /// explanation until a phase can be pinned on it.
+    /// </summary>
+    public bool Phases { get; init; }
+
     public static HarnessOptions Parse(string[] args)
     {
         var options = new HarnessOptions();
@@ -37,6 +43,9 @@ public sealed record HarnessOptions
                 case "--full":
                     options = options with { FullEachRun = true };
                     break;
+                case "--phases":
+                    options = options with { Phases = true };
+                    break;
                 case "--root":
                     options = options with { Root = RequireValue(args, ref i) };
                     break;
@@ -44,7 +53,7 @@ public sealed record HarnessOptions
                     options = options with { OutJsonPath = RequireValue(args, ref i) };
                     break;
                 default:
-                    throw new ArgumentException($"Unknown option '{args[i]}'. Usage: [--pages N] [--runs N] [--images] [--full] [--root <dir>] [--out <json>]");
+                    throw new ArgumentException($"Unknown option '{args[i]}'. Usage: [--pages N] [--runs N] [--images] [--full] [--phases] [--root <dir>] [--out <json>]");
             }
         }
 

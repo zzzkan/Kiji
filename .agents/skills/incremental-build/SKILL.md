@@ -84,18 +84,28 @@ metadata and are cheap. Do not make them incremental.
 **A new site option.** Add it to the options hash in `ComputeOptionsHash`, or changing it
 silently keeps stale output.
 
-**A new kind of output.** Register it as an additional output on the page, or the orphan
+**A new kind of output.** Register it as an additional output on the page, or the reconciliation
 sweep deletes it and check 4 never notices.
 
 ## Fallbacks are the safety net, not a failure
 
-A full rebuild happens on a missing, corrupt, or schema-mismatched manifest, an unknown
-file in the output directory, or `--force`. When a new situation is ambiguous, **fall back
-to a full rebuild rather than reasoning about whether it is probably fine.**
+Every page re-renders on a missing, corrupt, or schema-mismatched manifest, on a changed
+options hash or assembly MVID, or on `--force`. When a new situation is ambiguous, **fall
+back to re-rendering rather than reasoning about whether it is probably fine.**
 
-The output directory is never wholesale deleted: skipped pages' outputs are preserved,
-files in the previous manifest but not the current output set are removed as orphans, and
-empty directories are reclaimed.
+**The output directory is never wholesale deleted.** After the build, `ReconcileOutputs`
+walks it and deletes every file the new manifest does not claim, then reclaims empty
+directories. That is why an unknown file in the output directory is *not* a reason to
+re-render anything — it is simply removed. Reconciliation checks the directory itself
+rather than the previous manifest's account of it, so it is both stronger and cheaper
+than deleting and rewriting (~64 ms against ~527 ms on a 1000-page tree,
+`Kiji.Benchmarks OutputCleanBenchmarks`).
+
+**Re-rendering a page does not mean rewriting it.** `WritePageAsync` compares the hash of
+what it just rendered against the previous manifest entry, and skips the write while the
+output file's stamp still matches what was recorded with that hash. Editing a layout
+re-renders every page but rewrites only the ones whose markup actually changed. `--force`
+loads no manifest, so it always writes — that is what it is for.
 
 ## The test that matters
 

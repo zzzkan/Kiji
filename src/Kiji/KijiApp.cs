@@ -244,10 +244,12 @@ public sealed class KijiApp : IAsyncDisposable
         UseOptions(options);
 
         var stopwatch = Stopwatch.StartNew();
+        var phases = new BuildPhaseTimer();
         var snapshot = CreateSnapshot();
         var renderer = GetRenderer();
 
         StaticSiteGenerator.ValidateNoStaticFileCollisions(options, snapshot.Pages);
+        phases.Mark(BuildPhaseTimer.Snapshot);
 
         var planner = new IncrementalBuildPlanner(
             options,
@@ -255,25 +257,28 @@ public sealed class KijiApp : IAsyncDisposable
             _builder.Paths.ResolveCachePath(),
             Site,
             _builder.BuildInputs,
-            _services!.GetService<ContentFileHashRegistry>());
+            _services!.GetService<ContentFileRegistry>());
 
         var plan = await planner.CreatePlanAsync(
             snapshot.Pages,
             [.. _pageAssemblies, typeof(KijiApp).Assembly],
             _forceFullBuild,
             cancellationToken);
+        phases.Mark(BuildPhaseTimer.Plan);
 
-        if (plan.FullClean && Directory.Exists(options.OutputPath))
-        {
-            Directory.Delete(options.OutputPath, recursive: true);
-        }
-
+        // The output directory is kept, never wiped: whatever this build does not
+        // produce is deleted by the reconciliation pass below, which is both cheaper
+        // than a delete-and-rewrite and checked against the directory itself.
         Directory.CreateDirectory(options.OutputPath);
+        phases.Mark(BuildPhaseTimer.Clean);
 
         var staticFiles = await planner.SyncStaticFilesAsync(plan);
+        phases.Mark(BuildPhaseTimer.Static);
 
         // Render only the pages the plan could not prove unchanged, recording what
-        // each render reads and writes for the next build's skip checks.
+        // each render reads and writes for the next build's skip checks. The previous
+        // manifest comes along so a render that reproduces the bytes already on disk
+        // skips the write; with --force there is no manifest and everything is written.
         var recorders = new ConcurrentDictionary<string, BuildDependencyRecorder>(StringComparer.OrdinalIgnoreCase);
         var rendered = await StaticSiteGenerator.RenderPagesAsync(
             options,
@@ -283,19 +288,33 @@ public sealed class KijiApp : IAsyncDisposable
                 var recorder = recorders.GetOrAdd(request.OutputRelativePath, static _ => new BuildDependencyRecorder());
                 return RenderPageAsync(renderer, request, output, recorder, ct);
             },
+            plan.OldManifest?.Pages.ToDictionary(
+                static page => page.OutputRelativePath,
+                StringComparer.OrdinalIgnoreCase),
             cancellationToken);
+        phases.Mark(BuildPhaseTimer.Render);
 
         var artifacts = await GenerateArtifactsAsync(options, snapshot, cancellationToken);
+        phases.Mark(BuildPhaseTimer.Artifacts);
+
+        // One entry per rendered page, each stat-ing its own dependencies: independent
+        // work, so it runs in parallel and lands at its own index to keep the manifest
+        // order deterministic.
+        var renderedEntries = new BuildManifestPage[rendered.Count];
+        Parallel.For(0, rendered.Count, index =>
+        {
+            var page = rendered[index];
+            renderedEntries[index] = planner.CreatePageEntry(
+                page.Request,
+                page.OutputHash,
+                recorders[page.Request.OutputRelativePath]);
+        });
 
         var pageEntries = new List<BuildManifestPage>(plan.CarriedPages.Count + rendered.Count);
         pageEntries.AddRange(plan.CarriedPages);
-        foreach (var page in rendered)
-        {
-            pageEntries.Add(planner.CreatePageEntry(
-                page.Request,
-                page.OutputHash,
-                recorders[page.Request.OutputRelativePath]));
-        }
+        pageEntries.AddRange(renderedEntries);
+
+        phases.Mark(BuildPhaseTimer.Entries);
 
         var manifest = new BuildManifest
         {
@@ -307,11 +326,17 @@ public sealed class KijiApp : IAsyncDisposable
             Artifacts = artifacts,
         };
 
-        planner.RemoveOrphans(plan.OldManifest, manifest);
-        await planner.SaveManifestAsync(manifest, cancellationToken);
+        planner.ReconcileOutputs(manifest);
+        phases.Mark(BuildPhaseTimer.Reconcile);
 
+        await planner.SaveManifestAsync(manifest, cancellationToken);
+        phases.Mark(BuildPhaseTimer.Manifest);
+
+        var written = rendered.Count(static page => page.Written);
+        var reproduced = rendered.Count - written;
+        var reproducedNote = reproduced > 0 ? $", {reproduced} re-rendered but unchanged" : string.Empty;
         BuildOutput.Info(
-            $"Generated {rendered.Count} pages ({plan.CarriedPages.Count} unchanged, skipped) in {stopwatch.ElapsedMilliseconds} ms.");
+            $"Generated {written} pages ({plan.CarriedPages.Count} unchanged, skipped{reproducedNote}) in {stopwatch.ElapsedMilliseconds} ms.");
     }
 
     /// <summary>
@@ -474,6 +499,7 @@ public sealed class KijiApp : IAsyncDisposable
             throw new InvalidOperationException("No pages are mapped. Call MapPages(...) first.");
         }
 
+        var snapshotPhases = new BuildPhaseTimer();
         var scanned = new List<PageDiscovery.DiscoveredPage>();
         foreach (var assembly in _pageAssemblies)
         {
@@ -489,17 +515,25 @@ public sealed class KijiApp : IAsyncDisposable
             pagesByComponent.Add(page.SourceIdentifier, page);
         }
 
+        snapshotPhases.Mark(BuildPhaseTimer.Discovery);
+
         var dynamicRoutes = new Dictionary<string, IReadOnlyList<StaticPageRouteEntry>>(StringComparer.OrdinalIgnoreCase);
         foreach (var registration in _routeRegistrations)
         {
             var page = FindDynamicPage(discovered, registration.ComponentType);
             var entries = registration.CreateEntries();
+            snapshotPhases.Mark(BuildPhaseTimer.RouteEntries);
             ValidateRouteEntries(page, entries);
+            snapshotPhases.Mark(BuildPhaseTimer.RouteValidation);
 
             dynamicRoutes[page.SourceIdentifier] = dynamicRoutes.TryGetValue(page.SourceIdentifier, out var existing)
                 ? [.. existing, .. entries]
                 : entries;
         }
+
+        // Expanding a route factory is where content is first read, so this is where
+        // loading and parsing every markdown file lands.
+        snapshotPhases.Mark(BuildPhaseTimer.Routes);
 
         var plannedPages = StaticPagePlanner.PlanPages(
             [.. discovered.Select(static page => page.PageDefinition)],
@@ -508,6 +542,8 @@ public sealed class KijiApp : IAsyncDisposable
         var requests = plannedPages
             .Select(planned => CreatePageRenderRequest(pagesByComponent[planned.SourceIdentifier], planned))
             .ToList();
+
+        snapshotPhases.Mark(BuildPhaseTimer.Planning);
 
         return new SiteSnapshot(requests);
     }
@@ -816,7 +852,7 @@ public sealed class KijiApp : IAsyncDisposable
         }
 
         services.TryAddSingleton<IImageAssetProcessor>(static _ => new ImageProcessor());
-        services.AddSingleton<ContentFileHashRegistry>();
+        services.AddSingleton<ContentFileRegistry>();
 
         _services = services.BuildServiceProvider();
         _builder.Runtime.Attach(_services);

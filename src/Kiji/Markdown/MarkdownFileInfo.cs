@@ -14,7 +14,21 @@ public sealed record MarkdownFileInfo(
     string Slug,
     DateTime SourceLastWriteTimeUtc)
 {
+    /// <summary>
+    /// Describes a file whose stamp the caller already has — from the directory walk
+    /// that found it — so nothing is asked of the filesystem here.
+    /// </summary>
+    internal static MarkdownFileInfo Create(string contentsDirectory, string filePath, MarkdownFileStamp stamp)
+    {
+        return Create(contentsDirectory, filePath, stamp.LastWriteTimeUtc);
+    }
+
     public static MarkdownFileInfo Create(string contentsDirectory, string filePath)
+    {
+        return Create(contentsDirectory, filePath, lastWriteTimeUtc: null);
+    }
+
+    private static MarkdownFileInfo Create(string contentsDirectory, string filePath, DateTime? lastWriteTimeUtc)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(contentsDirectory);
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
@@ -32,7 +46,7 @@ public sealed record MarkdownFileInfo(
             relativeDirectoryPath,
             fileNameWithoutExtension,
             CreateSlug(relativeDirectoryPath, fileNameWithoutExtension),
-            File.GetLastWriteTimeUtc(normalizedFilePath));
+            lastWriteTimeUtc ?? File.GetLastWriteTimeUtc(normalizedFilePath));
     }
 
     /// <summary>

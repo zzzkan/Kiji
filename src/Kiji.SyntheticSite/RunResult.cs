@@ -10,4 +10,5 @@ public sealed record RunResult(
     int Gen0Collections,
     int Gen1Collections,
     int Gen2Collections,
-    long PeakWorkingSetBytes);
+    long PeakWorkingSetBytes,
+    IReadOnlyList<PhaseTiming>? Phases = null);

@@ -14,11 +14,11 @@ dotnet new install Kiji.Templates
 ```powershell
 dotnet new kiji -o MySite
 cd MySite
-dotnet run dev
+dotnet watch
 ```
 
 That scaffolds a working site and starts the dev server with live reload at
-<http://localhost:8080>. `dotnet run` builds it into `dist`.
+<http://localhost:8080>. `dotnet publish -c Release -o dist` generates it into `dist`.
 
 The scaffold is deliberately minimal: a home page listing your posts, a post page, a 404
 page, one markdown post, and a sitemap. Feeds, tag pages, and image optimization are all
@@ -39,7 +39,7 @@ it in the base URL:
 dotnet new kiji -o MySite --baseUrl https://your-name.github.io/my-site/
 ```
 
-Kiji then serves `dev` and `preview` under that same prefix, so what you browse locally
+Kiji then serves the dev server under that same prefix, so what you browse locally
 matches what you deploy. Write your own links through `Site.Path("css/app.css")`, which
 resolves under the prefix.
 

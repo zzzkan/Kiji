@@ -3,10 +3,9 @@
 A static site built with [Kiji](https://github.com/zzzkan/kiji).
 
 ```powershell
-dotnet run dev       # dev server with live reload at http://localhost:8080
-dotnet run           # build the site into dist/
-dotnet run preview   # serve dist/ the way a static host would
-dotnet run clean     # delete dist/ and the build cache
+dotnet watch                         # dev server with live reload at http://localhost:8080
+dotnet publish -c Release -o dist    # generate the site into dist/
+dotnet clean                         # delete the build cache
 ```
 
 ## What is here
@@ -47,8 +46,8 @@ Write links through `Site.Path(...)` rather than hard-coding a leading slash:
 <a href="@Site.Path("hello-world/")">A post</a>
 ```
 
-That keeps them correct if you publish under a sub-path. `dev` and `preview` serve under
-the same prefix, so a link that forgets it fails locally rather than after you deploy.
+That keeps them correct if you publish under a sub-path. The dev server serves under the
+same prefix, so a link that forgets it fails locally rather than after you deploy.
 
 ## A note on the two props files
 

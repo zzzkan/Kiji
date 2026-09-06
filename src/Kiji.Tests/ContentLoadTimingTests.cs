@@ -38,7 +38,6 @@ public sealed class ContentLoadTimingTests : IDisposable
         builder.Site = TestArticleContents.CreateSiteInfo();
         builder.Paths.Root = _testDir;
         builder.Paths.Content = "contents";
-        builder.Paths.Output = "dist";
         builder.AddMarkdownContent<FrontMatter>(key: static post => post.FileInfo.Slug);
         return builder.Build();
     }
@@ -95,7 +94,7 @@ public sealed class ContentLoadTimingTests : IDisposable
     {
         await using var app = CreateApp();
 
-        var (devServer, web) = await app.StartDevServerAsync(port: 0, CancellationToken.None);
+        var (devServer, web) = await app.StartDevServerAsync(TestUrls.EphemeralPort, CancellationToken.None);
         await using (devServer)
         {
             var options = app.Services.GetRequiredService<SsgOptions>();

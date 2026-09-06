@@ -64,7 +64,7 @@ file is never opened. That turns a no-change rebuild from *read everything* into
 everything*.
 
 Anything ambiguous falls back to re-rendering every page — a missing or corrupt manifest,
-a schema change, or `--force`. A file in the output directory that no build produced is
+a schema change, or `-p:KijiForce=true`. A file in the output directory that no build produced is
 not ambiguous: the reconciliation pass simply deletes it.
 
 ### Inputs Kiji cannot see
@@ -77,9 +77,9 @@ builder.AddBuildInput("data/authors.json");
 builder.AddBuildInput("api-version", "2026-01");
 ```
 
-Otherwise use `--force`. In-memory data derived from code is already covered, since
+Otherwise use `-p:KijiForce=true`. In-memory data derived from code is already covered, since
 assembly module version IDs are part of the fingerprint. Framework assemblies are
-excluded from that fingerprint, so after an SDK update use `--force` if you want
+excluded from that fingerprint, so after an SDK update use `-p:KijiForce=true` if you want
 certainty.
 
 ## The dev server does less

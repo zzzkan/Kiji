@@ -95,7 +95,7 @@ public sealed class MarkdownContentSourceTests : IDisposable
             key: static note => note.Key);
 
         var app = builder.Build();
-        app.UseBuildOptions();
+        app.UsePlanningOptions();
         var notes = app.Services.GetRequiredService<ContentDictionary<ScopedNote>>();
 
         Assert.Equal(["first", "second"], notes.Keys);
@@ -131,7 +131,6 @@ public sealed class MarkdownContentSourceTests : IDisposable
         builder.Site = TestArticleContents.CreateSiteInfo();
         builder.Paths.Root = _testDir;
         builder.Paths.Content = "contents";
-        builder.Paths.Output = "dist";
         return builder;
     }
 
@@ -141,7 +140,7 @@ public sealed class MarkdownContentSourceTests : IDisposable
         builder.AddMarkdownContent<FrontMatter>(key: static content => content.FileInfo.Slug, configure: configure);
 
         var app = builder.Build();
-        app.UseBuildOptions();
+        app.UsePlanningOptions();
         return [.. app.Services.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>().Keys];
     }
 }

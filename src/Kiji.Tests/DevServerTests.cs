@@ -335,7 +335,7 @@ public sealed class DevServerTests : IAsyncDisposable
         TestArticleContents.MapSite(_app);
 
         var reporter = new Kiji.Hosting.DevServerStatusReporter(logs, prefix: "kiji dev", useEmoji: true);
-        var (devServer, web) = await _app.StartDevServerAsync(port: 0, CancellationToken.None, reporter);
+        var (devServer, web) = await _app.StartDevServerAsync(TestUrls.EphemeralPort, CancellationToken.None, reporter);
         return (new Uri(web.Urls.First()), devServer);
     }
 }

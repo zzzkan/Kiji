@@ -11,19 +11,22 @@ using Kiji.Routing;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 
 namespace Kiji;
 
 /// <summary>
 /// A Kiji static site application. Created via <see cref="KijiBuilder.Build"/>;
-/// declare page mappings with the <c>Map*</c> methods, then dispatch commands
-/// (<c>build</c>, <c>dev</c>, <c>preview</c>, <c>clean</c>) with <see cref="RunAsync"/>.
+/// declare page mappings with the <c>Map*</c> methods, then hand control to
+/// <see cref="RunAsync(CancellationToken)"/>.
+///
+/// <para>
+/// There are no commands. <c>dotnet run</c> and <c>dotnet watch</c> start the dev server;
+/// <c>dotnet publish</c> generates the site, because Kiji's MSBuild targets run this same
+/// app with <c>KIJI_OUTPUT</c> set to the publish directory.
+/// </para>
 /// </summary>
 public sealed class KijiApp : IAsyncDisposable
 {
@@ -33,6 +36,15 @@ public sealed class KijiApp : IAsyncDisposable
     private readonly List<Assembly> _pageAssemblies = [];
     private Type? _defaultLayoutType;
     private Type? _notFoundComponentType;
+    /// <summary>Where to generate the site. Set by Kiji's MSBuild targets on publish.</summary>
+    private const string OutputPathVariable = "KIJI_OUTPUT";
+
+    /// <summary>Skip the incremental plan and rebuild everything. <c>-p:KijiForce=true</c>.</summary>
+    private const string ForceVariable = "KIJI_FORCE";
+
+    /// <summary>Report per-file output. <c>-p:KijiVerbose=true</c>.</summary>
+    private const string VerboseVariable = "KIJI_VERBOSE";
+
     private ServiceProvider? _services;
     private ComponentRenderer? _renderer;
     private SsgOptions? _activeOptions;
@@ -69,7 +81,7 @@ public sealed class KijiApp : IAsyncDisposable
     /// <summary>
     /// Creates a new <see cref="KijiBuilder"/>.
     /// </summary>
-    /// <param name="args">Command line arguments; forwarded to <see cref="RunAsync"/> for command dispatch.</param>
+    /// <param name="args">Command line arguments; forwarded to <see cref="RunAsync(CancellationToken)"/> for command dispatch.</param>
     public static KijiBuilder CreateBuilder(string[] args)
     {
         ArgumentNullException.ThrowIfNull(args);
@@ -177,11 +189,35 @@ public sealed class KijiApp : IAsyncDisposable
     }
 
     /// <summary>
-    /// Dispatches the command line: <c>build</c> (default), <c>dev</c>, <c>preview</c>, or <c>clean</c>.
+    /// Runs the site: generates it when the build host asked for that, otherwise starts
+    /// the dev server.
     /// </summary>
+    /// <remarks>
+    /// The only signal is <c>KIJI_OUTPUT</c>, the directory to generate into. Kiji's
+    /// MSBuild targets set it during <c>dotnet publish</c>; nothing sets it under
+    /// <c>dotnet run</c> or <c>dotnet watch</c>, so those get the dev server. The value
+    /// doubles as the mode, which is why there is no separate command to name.
+    /// <para>
+    /// A site whose entry point never reaches this method generates nothing on publish —
+    /// this is the only place <c>KIJI_OUTPUT</c> is read.
+    /// </para>
+    /// </remarks>
     /// <returns>The process exit code.</returns>
-    public async Task<int> RunAsync(CancellationToken cancellationToken = default)
+    public Task<int> RunAsync(CancellationToken cancellationToken = default)
     {
+        return RunAsync(Environment.GetEnvironmentVariable, cancellationToken);
+    }
+
+    /// <param name="environment">
+    /// Reads an environment variable. Injected so tests can exercise both modes without
+    /// mutating the process environment, which parallel test classes share.
+    /// </param>
+    /// <param name="cancellationToken">Stops the dev server or the generation.</param>
+    /// <inheritdoc cref="RunAsync(CancellationToken)"/>
+    internal async Task<int> RunAsync(Func<string, string?> environment, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(environment);
+
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
         void HandleShutdownSignal(PosixSignalContext context)
@@ -193,54 +229,48 @@ public sealed class KijiApp : IAsyncDisposable
         using var sigInt = PosixSignalRegistration.Create(PosixSignal.SIGINT, HandleShutdownSignal);
         using var sigTerm = PosixSignalRegistration.Create(PosixSignal.SIGTERM, HandleShutdownSignal);
 
-        var command = KijiCommandLine.Parse(_builder.Args);
-        BuildOutput.Verbose = command.Verbose;
-        _forceFullBuild = command.Force;
+        var outputPath = environment(OutputPathVariable);
+        var publishing = !string.IsNullOrWhiteSpace(outputPath);
 
         try
         {
-            switch (command.Kind)
+            if (publishing)
             {
-                case KijiCommandKind.Build:
-                    await BuildSiteAsync(cts.Token);
-                    return 0;
-
-                case KijiCommandKind.Dev:
-                    await DevAsync(command.Port, cts.Token);
-                    return 0;
-
-                case KijiCommandKind.Preview:
-                    await PreviewAsync(command.Port, cts.Token);
-                    return 0;
-
-                case KijiCommandKind.Clean:
-                    Clean();
-                    return 0;
-
-                default:
-                    Console.Error.WriteLine($"Unknown command '{command.RawCommand}'.");
-                    Console.Error.WriteLine(KijiCommandLine.Usage);
-                    return 1;
+                BuildOutput.Verbose = EnvironmentValue.IsTruthy(environment(VerboseVariable));
+                _forceFullBuild = EnvironmentValue.IsTruthy(environment(ForceVariable));
+                await PublishSiteAsync(outputPath!, cts.Token);
+                return 0;
             }
+
+            await DevAsync(cts.Token);
+            return 0;
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
-            // Stopping a long-running server with Ctrl+C is a normal exit; an
-            // interrupted build left partial output and is reported as failure.
-            return command.Kind is KijiCommandKind.Dev or KijiCommandKind.Preview ? 0 : 1;
+            // Stopping the dev server with Ctrl+C is a normal exit; an interrupted
+            // generation left partial output and is reported as failure.
+            return publishing ? 1 : 0;
         }
     }
 
     /// <summary>
-    /// Generates the static site into the output directory incrementally: pages whose
-    /// inputs (content files, options, site assemblies) are unchanged since the last
-    /// build are skipped and their outputs kept. Any ambiguity — no manifest, unknown
-    /// files in the output directory, changed assemblies — falls back to a full
-    /// rebuild. Run the <c>build</c> command with <c>--force</c> to always rebuild.
+    /// Generates the static site into <paramref name="outputPath"/> incrementally: pages
+    /// whose inputs (content files, options, site assemblies) are unchanged since the last
+    /// run are skipped and their outputs kept. Any ambiguity — no manifest, unknown files
+    /// in the output directory, changed assemblies — falls back to a full rebuild.
+    /// Publish with <c>-p:KijiForce=true</c> to always rebuild.
     /// </summary>
-    public async Task BuildSiteAsync(CancellationToken cancellationToken = default)
+    /// <param name="outputPath">
+    /// Where to write the site. <c>dotnet publish</c> supplies this through
+    /// <c>KIJI_OUTPUT</c>; there is deliberately no default, because the publish
+    /// directory is the only thing that knows it.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the generation.</param>
+    public async Task PublishSiteAsync(string outputPath, CancellationToken cancellationToken = default)
     {
-        var options = _builder.Paths.ResolveForBuild();
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
+
+        var options = _builder.Paths.ResolveForPublish(outputPath);
         UseOptions(options);
 
         var stopwatch = Stopwatch.StartNew();
@@ -341,113 +371,22 @@ public sealed class KijiApp : IAsyncDisposable
 
     /// <summary>
     /// Starts the on-demand development server. Pages render per request through the
-    /// same pipeline as <see cref="BuildSiteAsync"/>, content changes reload the browser
-    /// automatically, and optimized images are cached under <c>.kiji/cache</c>.
+    /// same pipeline as <see cref="PublishSiteAsync"/>, content changes reload the browser
+    /// automatically, and optimized images are cached under <c>.kiji/cache</c>. Nothing
+    /// is written to a publish directory.
     /// </summary>
-    public async Task DevAsync(int port = 8080, CancellationToken cancellationToken = default)
+    /// <remarks>
+    /// The address comes from ASP.NET Core configuration — <c>ASPNETCORE_URLS</c>,
+    /// <c>--urls</c>, or <c>launchSettings.json</c> — and falls back to
+    /// <c>http://127.0.0.1:8080</c> when none of those set one.
+    /// </remarks>
+    public async Task DevAsync(CancellationToken cancellationToken = default)
     {
-        var (devServer, web) = await StartDevServerAsync(port, cancellationToken);
+        var (devServer, web) = await StartDevServerAsync(cancellationToken);
         await using (devServer)
         {
             await web.WaitForShutdownAsync(cancellationToken);
         }
-    }
-
-    /// <summary>
-    /// Serves the generated output directory as static files, mirroring production
-    /// trailing-slash and 404 handling. Run <c>build</c> first.
-    /// </summary>
-    public async Task PreviewAsync(int port = 8080, CancellationToken cancellationToken = default)
-    {
-        await using var web = await StartPreviewServerAsync(port, cancellationToken);
-        await web.WaitForShutdownAsync(cancellationToken);
-    }
-
-    internal async Task<WebApplication> StartPreviewServerAsync(int port, CancellationToken cancellationToken)
-    {
-        var outputPath = _builder.Paths.ResolveOutputPath();
-        if (!Directory.Exists(outputPath))
-        {
-            throw new DirectoryNotFoundException(
-                $"Output directory not found: {outputPath}. Run the 'build' command first.");
-        }
-
-        var builder = WebApplication.CreateSlimBuilder();
-        builder.Logging.SetMinimumLevel(LogLevel.Warning);
-        builder.WebHost.UseUrls($"http://127.0.0.1:{port}");
-
-        var web = builder.Build();
-
-        var fileProvider = new PhysicalFileProvider(outputPath);
-
-        // Mount under the site's base path first, so every downstream middleware sees
-        // prefix-stripped paths and production-equivalent 404s outside it.
-        web.UseSiteBasePath(Site.BasePath);
-
-        web.Use(async (context, next) =>
-        {
-            // Resolve /route and /route/ to the same page without redirecting,
-            // matching common static host behavior for directory-style output.
-            var path = context.Request.Path.Value ?? "/";
-            if (!path.EndsWith('/')
-                && !fileProvider.GetFileInfo(path).Exists
-                && fileProvider.GetFileInfo(path + "/index.html").Exists)
-            {
-                context.Request.Path = path + "/";
-            }
-
-            await next(context);
-        });
-        web.UseDefaultFiles(new DefaultFilesOptions { FileProvider = fileProvider });
-        web.UseStaticFiles(new StaticFileOptions { FileProvider = fileProvider, ServeUnknownFileTypes = true });
-
-        // Terminal 404 handler; endpoint routing is intentionally unused so the
-        // static-file middleware handles every path (including extensionless ones).
-        web.Run(async context =>
-        {
-            var notFoundPath = Path.Combine(outputPath, "404.html");
-            context.Response.StatusCode = StatusCodes.Status404NotFound;
-            if (File.Exists(notFoundPath))
-            {
-                context.Response.ContentType = "text/html; charset=utf-8";
-                await context.Response.SendFileAsync(notFoundPath, context.RequestAborted);
-            }
-        });
-
-        try
-        {
-            await web.StartAsync(cancellationToken);
-        }
-        catch
-        {
-            await web.DisposeAsync();
-            throw;
-        }
-
-        Console.WriteLine($"Kiji preview server: {new Uri(new Uri(web.Urls.First()), Site.BasePath)}");
-        return web;
-    }
-
-    /// <summary>
-    /// Deletes the build outputs: the output directory (default <c>dist</c>) and the
-    /// <c>.kiji</c> directory (build manifest, image cache, dev-server site mirror).
-    /// The next build is a full rebuild.
-    /// </summary>
-    public void Clean()
-    {
-        DeleteRecursively(_builder.Paths.ResolveOutputPath());
-        DeleteRecursively(_builder.Paths.ResolveKijiPath());
-    }
-
-    private static void DeleteRecursively(string path)
-    {
-        if (!Directory.Exists(path))
-        {
-            return;
-        }
-
-        Directory.Delete(path, recursive: true);
-        BuildOutput.Info($"Removed: {path}");
     }
 
     /// <inheritdoc/>
@@ -464,8 +403,21 @@ public sealed class KijiApp : IAsyncDisposable
         }
     }
 
+    internal Task<(DevServer DevServer, WebApplication WebApplication)> StartDevServerAsync(
+        CancellationToken cancellationToken)
+    {
+        return StartDevServerAsync(_builder.Args, cancellationToken);
+    }
+
+    /// <param name="args">
+    /// Forwarded to <c>WebApplication.CreateSlimBuilder</c>, so <c>--urls</c> works the
+    /// way it does for any ASP.NET Core app. Tests pass an explicit <c>--urls</c> with
+    /// port 0 rather than mutating process-wide state.
+    /// </param>
+    /// <param name="cancellationToken">Stops the server.</param>
+    /// <param name="reporter">Overrides the console reporter. For tests.</param>
     internal async Task<(DevServer DevServer, WebApplication WebApplication)> StartDevServerAsync(
-        int port,
+        string[] args,
         CancellationToken cancellationToken,
         DevServerStatusReporter? reporter = null)
     {
@@ -473,7 +425,7 @@ public sealed class KijiApp : IAsyncDisposable
         EnsureServices();
 
         var devServer = new DevServer(this, reporter);
-        var web = await devServer.StartAsync(options, port, cancellationToken);
+        var web = await devServer.StartAsync(options, args, cancellationToken);
         return (devServer, web);
     }
 
@@ -489,9 +441,9 @@ public sealed class KijiApp : IAsyncDisposable
 
     internal SiteSnapshot CreateSnapshot()
     {
-        // Planning expands route factories, which read content. If no command has
-        // settled the options yet, this is a build.
-        UseOptions(_builder.Paths.ResolveForBuild());
+        // Planning expands route factories, which read content. If nothing has settled
+        // the options yet, fall back to paths that cannot be mistaken for a deliverable.
+        UseOptions(_builder.Paths.ResolveForPlanning());
         EnsureServices();
 
         if (_pageAssemblies.Count == 0)
@@ -819,12 +771,12 @@ public sealed class KijiApp : IAsyncDisposable
     }
 
     /// <summary>
-    /// Settles on build paths without running a build. For tests that load content
-    /// directly; a real site reaches this through one of the commands.
+    /// Settles on planning paths without generating anything. For tests that load content
+    /// directly; a real site reaches this through <see cref="RunAsync(CancellationToken)"/>.
     /// </summary>
-    internal void UseBuildOptions()
+    internal void UsePlanningOptions()
     {
-        UseOptions(_builder.Paths.ResolveForBuild());
+        UseOptions(_builder.Paths.ResolveForPlanning());
     }
 
     private void EnsureServices()
@@ -837,11 +789,12 @@ public sealed class KijiApp : IAsyncDisposable
         var services = new ServiceCollection();
         ComponentRenderer.AddComponentRenderingServices(services);
         services.AddSingleton(Site);
-        // Deliberately not defaulted: the command decides these paths (build writes to
-        // the output directory, dev to its own mirror) and, as a singleton, the first
-        // resolution wins for the whole process. No public API hands out a provider
-        // before a command starts, so this is an invariant rather than a user-facing
-        // error — but a default here would silently pin build paths onto dev.
+        // Deliberately not defaulted: the run decides these paths (a publish writes to
+        // the directory dotnet publish chose, the dev server to its own mirror) and, as a
+        // singleton, the first resolution wins for the whole process. No public API hands
+        // out a provider before the run starts, so this is an invariant rather than a
+        // user-facing error — but a default here would silently pin publish paths onto
+        // the dev server.
         services.AddSingleton(_ => _activeOptions ?? throw new InvalidOperationException(
             "SsgOptions was resolved before a command settled the site's paths."));
         _builder.Runtime.ApplyRegistrations(services);

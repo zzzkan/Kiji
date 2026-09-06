@@ -23,6 +23,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- build/, not buildTransitive/: these targets turn a project's publish output into a
+         generated site, which is only ever right for a project that references Kiji directly.
+         buildTransitive would also reach whatever references that project — a site's own test
+         project first of all. The file name has to match the package id. -->
+    <None Update="MSBuild/Kiji.targets" Pack="true" PackagePath="build/Kiji.targets" />
+  </ItemGroup>
+
+  <ItemGroup>
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
       <_Parameter1>Kiji.Tests</_Parameter1>
     </AssemblyAttribute>

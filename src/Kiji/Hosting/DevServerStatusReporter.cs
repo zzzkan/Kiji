@@ -29,9 +29,9 @@ internal sealed class DevServerStatusReporter
 
     internal static DevServerStatusReporter CreateForCurrentProcess()
     {
-        var useEmoji = !IsTruthy(Environment.GetEnvironmentVariable("DOTNET_WATCH_SUPPRESS_EMOJIS"));
+        var useEmoji = !EnvironmentValue.IsTruthy(Environment.GetEnvironmentVariable("DOTNET_WATCH_SUPPRESS_EMOJIS"));
         var useAnsiColor = !Console.IsOutputRedirected &&
-            !IsTruthy(Environment.GetEnvironmentVariable("NO_COLOR")) &&
+            !EnvironmentValue.IsTruthy(Environment.GetEnvironmentVariable("NO_COLOR")) &&
             !string.Equals(Environment.GetEnvironmentVariable("TERM"), "dumb", StringComparison.OrdinalIgnoreCase);
 
         return new DevServerStatusReporter(Console.Out, KijiDevPrefix, useEmoji, useAnsiColor);
@@ -132,13 +132,6 @@ internal sealed class DevServerStatusReporter
             StatusKind.Warning => "[Warn]",
             _ => throw new InvalidOperationException($"Unknown status kind '{kind}'."),
         };
-    }
-
-    private static bool IsTruthy(string? value)
-    {
-        return value is not null &&
-            (string.Equals(value, "1", StringComparison.Ordinal) ||
-             string.Equals(value, "true", StringComparison.OrdinalIgnoreCase));
     }
 
     private enum StatusKind

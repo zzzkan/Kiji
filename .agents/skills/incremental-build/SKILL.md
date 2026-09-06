@@ -58,7 +58,7 @@ Checks 3 and 5 short-circuit through a **stamp gate**: the manifest also stores 
 file's `(length, lastWriteTimeUtc)`, and while those match, the recorded hash is trusted
 and the file is never opened. A no-change rebuild is therefore `O(stat)`, not
 `O(read everything)`. The documented hole is a rewrite preserving both size and mtime;
-`--force` recovers.
+`-p:KijiForce=true` recovers.
 
 ## Adding something new
 
@@ -90,7 +90,7 @@ sweep deletes it and check 4 never notices.
 ## Fallbacks are the safety net, not a failure
 
 Every page re-renders on a missing, corrupt, or schema-mismatched manifest, on a changed
-options hash or assembly MVID, or on `--force`. When a new situation is ambiguous, **fall
+options hash or assembly MVID, or on `-p:KijiForce=true`. When a new situation is ambiguous, **fall
 back to re-rendering rather than reasoning about whether it is probably fine.**
 
 **The output directory is never wholesale deleted.** After the build, `ReconcileOutputs`
@@ -104,7 +104,7 @@ than deleting and rewriting (~64 ms against ~527 ms on a 1000-page tree,
 **Re-rendering a page does not mean rewriting it.** `WritePageAsync` compares the hash of
 what it just rendered against the previous manifest entry, and skips the write while the
 output file's stamp still matches what was recorded with that hash. Editing a layout
-re-renders every page but rewrites only the ones whose markup actually changed. `--force`
+re-renders every page but rewrites only the ones whose markup actually changed. `-p:KijiForce=true`
 loads no manifest, so it always writes — that is what it is for.
 
 ## The test that matters

@@ -12,11 +12,11 @@ HTML.
 dotnet new install Kiji.Templates
 dotnet new kiji -o MySite
 cd MySite
-dotnet run dev
+dotnet watch
 ```
 
-That is a working site on <http://localhost:8080> with live reload. `dotnet run` builds it
-into `dist/`, which any static host will serve.
+That is a working site on <http://localhost:8080> with live reload. `dotnet publish -o dist`
+writes it to `dist/`, which any static host will serve.
 
 The scaffold is deliberately minimal — a home page, a markdown post, a 404 page, and a
 sitemap. Feeds, tag pages, and image optimization are all supported and left out of the
@@ -45,7 +45,7 @@ read, so editing one post re-renders that post, the pages that list it, and the 
 `dotnet run -c Release --project src/Kiji.SyntheticSite -- --pages 5000 --runs 3`. The full
 build runs in a cold process, so it includes JIT warm-up.</sub>
 
-**The dev loop ignores how big your site is.** `dotnet run dev` pre-generates nothing. It
+**The dev loop ignores how big your site is.** The dev server pre-generates nothing. It
 renders the page you asked for, through the same code path the build uses, so what you see
 is what gets deployed — and a site with five thousand posts reloads as fast as one with
 five.

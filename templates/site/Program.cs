@@ -37,5 +37,5 @@ app.MapRoutes<PostPage>(static services => services
 
 app.MapSitemap();
 
-// build (default) | dev [--port <n>] | preview [--port <n>] | clean
+// Starts the dev server, or generates the site when dotnet publish asks for it.
 return await app.RunAsync();

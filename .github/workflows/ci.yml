@@ -54,7 +54,7 @@ jobs:
         run: |
           dotnet restore /tmp/Sample -s "$GITHUB_WORKSPACE/artifacts" -s https://api.nuget.org/v3/index.json
           dotnet build /tmp/Sample -c Release --no-restore
-          dotnet run --project /tmp/Sample -c Release --no-build -- build
+          dotnet publish /tmp/Sample -c Release --no-build -o /tmp/Sample/dist
 
       - name: Check the generated site
         run: |
@@ -65,6 +65,24 @@ jobs:
           # it would re-root the document-relative page-bundle image URLs.
           grep -q 'href="/sample/css/app.css"' /tmp/Sample/dist/index.html
           ! grep -q '<base' /tmp/Sample/dist/index.html
+
+      # The point of publishing through MSBuild: what lands in the publish directory is the
+      # site, not the application that generated it.
+      - name: Check the application did not leak into the site
+        run: |
+          leaked=$(find /tmp/Sample/dist -maxdepth 1 -name '*.dll' -o -maxdepth 1 -name '*.deps.json' -o -maxdepth 1 -name '*.runtimeconfig.json' -o -maxdepth 1 -name '*.pdb')
+          if [ -n "$leaked" ]; then echo "application output in the site:"; echo "$leaked"; exit 1; fi
+          if [ -d /tmp/Sample/dist/wwwroot ]; then echo "static web assets staged a wwwroot/ subfolder"; exit 1; fi
+
+      # Both knobs ship in the package's targets, so a package consumer gets them without
+      # writing any MSBuild.
+      - name: Force a full rebuild through the MSBuild properties
+        run: dotnet publish /tmp/Sample -c Release --no-build -o /tmp/Sample/dist -p:KijiForce=true -p:KijiVerbose=true
+
+      - name: dotnet clean removes the build cache
+        run: |
+          dotnet clean /tmp/Sample -c Release
+          test ! -d /tmp/Sample/.kiji || { echo ".kiji/ survived dotnet clean"; exit 1; }
 
       # The defaults are what most users get, so check they substitute too.
       - name: Scaffold with defaults

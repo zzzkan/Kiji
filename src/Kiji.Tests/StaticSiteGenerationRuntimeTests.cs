@@ -34,14 +34,13 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
     }
 
     [Fact]
-    public async Task BuildSiteAsync_WritesDynamicBlogAndTagPagesAndFeed()
+    public async Task PublishSiteAsync_WritesDynamicBlogAndTagPagesAndFeed()
     {
         var builder = KijiApp.CreateBuilder([]);
         builder.Site = TestArticleContents.CreateSiteInfo();
         builder.Paths.Root = _testDir;
         builder.Paths.Content = _contentsDir;
         builder.Paths.Static = GetStaticDirectory();
-        builder.Paths.Output = _outputDir;
 
         IReadOnlyList<Post> items =
         [
@@ -72,7 +71,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
                 post.Title, post.Description, post.CreatedAt, RoutePath: $"blog/{post.Slug}/")));
         app.MapSitemap();
 
-        await app.BuildSiteAsync();
+        await app.PublishSiteAsync(_outputDir);
 
         var blogHtml = await File.ReadAllTextAsync(Path.Combine(_outputDir, "blog", "hello-world", "index.html"));
         Assert.StartsWith("<!doctype html>", blogHtml, StringComparison.Ordinal);
@@ -107,7 +106,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
     }
 
     [Fact]
-    public async Task BuildSiteAsync_MarkdownImages_BundledWithPageAndRelativelyReferenced()
+    public async Task PublishSiteAsync_MarkdownImages_BundledWithPageAndRelativelyReferenced()
     {
         var postDir = Path.Combine(_contentsDir, "hello");
         Directory.CreateDirectory(Path.Combine(postDir, "images"));
@@ -131,7 +130,6 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         builder.Paths.Root = _testDir;
         builder.Paths.Content = _contentsDir;
         builder.Paths.Static = GetStaticDirectory();
-        builder.Paths.Output = _outputDir;
 
         builder.AddMarkdownContent<FrontMatter>(key: static post => post.FileInfo.Slug);
         builder.AddContentSource<Post>(static _ => [], static post => post.Slug);
@@ -142,7 +140,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
             .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
             .Select(static post => new { Slug = post.Key, ContentKey = post.Key }));
 
-        await app.BuildSiteAsync();
+        await app.PublishSiteAsync(_outputDir);
 
         var pageDir = Path.Combine(_outputDir, "md", "hello-world");
         var html = await File.ReadAllTextAsync(Path.Combine(pageDir, "index.html"));
@@ -165,7 +163,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
     /// base path — emitting a <c>&lt;base&gt;</c> element would re-root them and break it.
     /// </summary>
     [Fact]
-    public async Task BuildSiteAsync_WithBasePath_KeepsImagesDocumentRelativeAndEmitsNoBaseElement()
+    public async Task PublishSiteAsync_WithBasePath_KeepsImagesDocumentRelativeAndEmitsNoBaseElement()
     {
         var postDir = Path.Combine(_contentsDir, "hello");
         Directory.CreateDirectory(postDir);
@@ -223,7 +221,6 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         builder.Paths.Root = _testDir;
         builder.Paths.Content = _contentsDir;
         builder.Paths.Static = GetStaticDirectory();
-        builder.Paths.Output = outputDir;
 
         builder.AddMarkdownContent<FrontMatter>(key: static post => post.FileInfo.Slug);
         builder.AddContentSource<Post>(static _ => [], static post => post.Slug);
@@ -234,7 +231,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
             .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
             .Select(static post => new { Slug = post.Key, ContentKey = post.Key }));
 
-        await app.BuildSiteAsync();
+        await app.PublishSiteAsync(outputDir);
     }
 
     private static string ExtractImageMarkup(string html)

@@ -11,7 +11,7 @@ builder.Site = new SiteInfo
 {
     // A GitHub Pages project site, so the base path is /kiji/. Every link written by
     // this site goes through Site.Path so it resolves under that prefix; dev and
-    // preview serve there too.
+    // the dev server serves there too.
     BaseUrl = new Uri("https://zzzkan.github.io/kiji/"),
     Name = "Kiji",
     Description = "A static site generator framework for .NET. Write pages as Razor components.",

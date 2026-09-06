@@ -4,7 +4,9 @@ description: Publishing to GitHub Pages and other static hosts, including sub-pa
 order: 40
 ---
 
-`dotnet run` writes a plain directory of files to `dist/`. Any static host will serve it.
+`dotnet publish -c Release -o dist` writes a plain directory of files to `dist/`. It holds
+the generated site alone — no assemblies, no `deps.json` — so any static host will serve it
+as-is.
 
 ## Set the published URL
 
@@ -45,7 +47,7 @@ What you do *not* have to touch:
 - **The output layout.** A base path is a deployment location; `dist/` never becomes
   `dist/my-site/`.
 
-`dev` and `preview` serve under the same prefix, and deliberately return 404 outside it.
+The dev server serves under the same prefix, and deliberately returns 404 outside it.
 That is on purpose: a link that forgets `Site.Path` fails while you are looking at it,
 instead of only after you deploy.
 
@@ -85,12 +87,12 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - run: dotnet run --project src/MySite -c Release -- build
+      - run: dotnet publish src/MySite -c Release -o dist
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: src/MySite/dist
+          path: dist
       - id: deployment
         uses: actions/deploy-pages@v4
 ```
@@ -99,15 +101,17 @@ Deploying through Actions does not run Jekyll, so no `.nojekyll` file is needed.
 
 ## Other hosts
 
-Netlify, Vercel, Cloudflare Pages, S3, and friends all take a directory. Build with
-`dotnet run -- build` and publish `dist/`.
+Netlify, Vercel, Cloudflare Pages, S3, and friends all take a directory. Generate with
+`dotnet publish -c Release -o dist` and upload `dist/`.
 
 Two things worth configuring on the host:
 
 - **404s.** `app.MapNotFound<NotFoundPage>()` writes `404.html` at the output root, which
   most hosts serve automatically for unmatched paths.
 - **Trailing slashes.** Pages are `route/index.html`. Hosts generally resolve `/route` to
-  it already; `preview` reproduces that behavior locally so you can check.
+  it already. To check before deploying, serve `dist/` with whatever your host provides
+  locally — `wrangler dev`, `netlify dev`, `npx serve` — since those reproduce the real
+  behavior more faithfully than an imitation of it would.
 
 ## Build caching in CI
 

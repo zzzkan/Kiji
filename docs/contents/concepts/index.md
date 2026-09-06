@@ -36,7 +36,7 @@ Parameterized routes need their values supplied by [`MapRoutes`](#routes), which
 the route set comes from. Catch-all routes, route constraints, optional parameters, and
 composite segments are rejected — a static site has to know every URL up front.
 
-Pages are written as `route/index.html`. `dev` and `preview` resolve `/route` and
+Pages are written as `route/index.html`. The dev server resolves `/route` and
 `/route/` to the same page without redirecting, matching how static hosts behave, and
 canonical URLs use the trailing-slash form.
 

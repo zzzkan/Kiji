@@ -97,6 +97,6 @@ public static class BuildRunner
                 RoutePath: $"blog/{post.Key}/")));
         app.MapSitemap();
 
-        await app.BuildSiteAsync();
+        await app.PublishSiteAsync(Path.Combine(root, "dist"));
     }
 }

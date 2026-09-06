@@ -114,7 +114,7 @@ public sealed class KijiBuilder
 
     /// <summary>
     /// Builds the <see cref="KijiApp"/>. Declare page mappings on the returned app,
-    /// then call <see cref="KijiApp.RunAsync"/>.
+    /// then call <see cref="KijiApp.RunAsync(CancellationToken)"/>.
     /// </summary>
     public KijiApp Build()
     {

@@ -10,10 +10,10 @@ RSS feeds, sitemaps, and a live-reloading dev server are all in this one package
 dotnet new install Kiji.Templates
 dotnet new kiji -o MySite
 cd MySite
-dotnet run dev
+dotnet watch
 ```
 
-That is a working site on <http://localhost:8080> with live reload. `dotnet run` builds it
+That is a working site on <http://localhost:8080> with live reload. `dotnet publish -o dist` writes it
 into `dist/`, which any static host will serve.
 
 ## Or add it to an existing project
@@ -38,7 +38,7 @@ app.MapDefaultLayout<MainLayout>(); // applied to every page; pages may override
 app.MapPages();                     // every component with an @page route in this assembly
 app.MapNotFound<NotFoundPage>();    // rendered as 404.html
 
-return await app.RunAsync(); // build (default) | dev [--port <n>] | preview [--port <n>] | clean
+return await app.RunAsync(); // dev server, or generate the site when dotnet publish asks
 ```
 
 A page is any component with a route:

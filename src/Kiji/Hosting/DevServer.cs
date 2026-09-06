@@ -13,6 +13,8 @@ namespace Kiji.Hosting;
 /// </summary>
 internal sealed class DevServer(KijiApp app) : IAsyncDisposable
 {
+    private const string DefaultUrl = "http://127.0.0.1:8080";
+
     private const int DebounceMilliseconds = 250;
 
     // Servers currently accepting live-reload clients; hot reload notifications
@@ -35,13 +37,21 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
         _reporter = reporter ?? DevServerStatusReporter.CreateForCurrentProcess();
     }
 
-    internal async Task<WebApplication> StartAsync(SsgOptions options, int port, CancellationToken cancellationToken)
+    internal async Task<WebApplication> StartAsync(SsgOptions options, string[] args, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(options.OutputPath);
 
-        var builder = WebApplication.CreateSlimBuilder();
+        var builder = WebApplication.CreateSlimBuilder(args);
         builder.Logging.SetMinimumLevel(LogLevel.Warning);
-        builder.WebHost.UseUrls($"http://127.0.0.1:{port}");
+
+        // Only fill in an address when nothing else supplied one, so ASPNETCORE_URLS,
+        // --urls, and launchSettings.json behave exactly as they do for any other
+        // ASP.NET Core app. Loopback rather than localhost: the dev server is not
+        // something to expose on the network.
+        if (string.IsNullOrEmpty(builder.Configuration["urls"]))
+        {
+            builder.WebHost.UseUrls(DefaultUrl);
+        }
 
         var web = builder.Build();
 

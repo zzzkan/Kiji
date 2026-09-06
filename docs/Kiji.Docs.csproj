@@ -9,4 +9,10 @@
     <ProjectReference Include="../src/Kiji/Kiji.csproj" />
   </ItemGroup>
 
+  <!-- A ProjectReference does not carry a package's build/ assets, so the targets that make
+       `dotnet publish` emit the site are imported by hand. Sites that reference the Kiji
+       package get them automatically and need nothing here. Must be last: the targets read
+       $(OutputType). -->
+  <Import Project="../src/Kiji/MSBuild/Kiji.targets" />
+
 </Project>

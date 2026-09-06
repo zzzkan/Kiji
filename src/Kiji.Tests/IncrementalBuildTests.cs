@@ -241,7 +241,6 @@ public sealed class IncrementalBuildTests : IDisposable
         builder.Paths.Root = root;
         builder.Paths.Content = "contents";
         builder.Paths.Static = "static";
-        builder.Paths.Output = "dist";
 
         builder.AddMarkdownContent<FrontMatter>(key: static post => post.FileInfo.Slug);
         builder.AddContentSource<Post>(static _ => [], static post => post.Slug);
@@ -264,7 +263,7 @@ public sealed class IncrementalBuildTests : IDisposable
             .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
             .Select(static post => new { Slug = post.Key, ContentKey = post.Key }));
 
-        await app.BuildSiteAsync();
+        await app.PublishSiteAsync(Path.Combine(root, "dist"));
     }
 
     private static async Task BuildScopedAsync(string root)
@@ -274,7 +273,6 @@ public sealed class IncrementalBuildTests : IDisposable
         builder.Paths.Root = root;
         builder.Paths.Content = "contents";
         builder.Paths.Static = "static";
-        builder.Paths.Output = "dist";
 
         builder.AddMarkdownContent<FrontMatter>(
             key: static post => post.FileInfo.Slug,
@@ -299,7 +297,7 @@ public sealed class IncrementalBuildTests : IDisposable
         app.MapRoutes<ScopedNotesIndexPage>(static _ => [new { Kind = "all" }]);
         app.MapRoutes<RelatedPostsTestPage>(static _ => []);
 
-        await app.BuildSiteAsync();
+        await app.PublishSiteAsync(Path.Combine(root, "dist"));
     }
 
     private static async Task WriteMarkdownAsync(string root, string relativePath, string title, string body)
@@ -349,7 +347,6 @@ public sealed class IncrementalBuildTests : IDisposable
         builder.Paths.Root = root;
         builder.Paths.Content = "contents";
         builder.Paths.Static = "static";
-        builder.Paths.Output = "dist";
 
         builder.AddMarkdownContent<FrontMatter>(key: static post => post.FileInfo.Slug);
         builder.AddContentSource<Post>(static _ => [], static post => post.Slug);
@@ -360,7 +357,7 @@ public sealed class IncrementalBuildTests : IDisposable
             .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
             .Select(static post => new { Slug = post.Key, ContentKey = post.Key }));
 
-        await app.BuildSiteAsync();
+        await app.PublishSiteAsync(Path.Combine(root, "dist"));
     }
 
     private static Dictionary<string, (byte[] Bytes, DateTime LastWriteTimeUtc)> SnapshotDirectory(string directory)

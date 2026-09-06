@@ -47,12 +47,12 @@ public sealed class SiteArtifactTests : IDisposable
     }
 
     [Fact]
-    public async Task BuildSiteAsync_WritesArtifact_AndExposesPagesAndRouteResolution()
+    public async Task PublishSiteAsync_WritesArtifact_AndExposesPagesAndRouteResolution()
     {
         var artifact = new RecordingArtifact("meta/info.txt");
         await using var app = await CreateAppAsync(artifact);
 
-        await app.BuildSiteAsync();
+        await app.PublishSiteAsync(_outputDir);
 
         var written = await File.ReadAllTextAsync(Path.Combine(_outputDir, "meta", "info.txt"));
         Assert.Equal("artifact from zzzkan.me", written);
@@ -64,30 +64,30 @@ public sealed class SiteArtifactTests : IDisposable
     }
 
     [Fact]
-    public async Task BuildSiteAsync_ArtifactPathEscapingOutputDirectory_Throws()
+    public async Task PublishSiteAsync_ArtifactPathEscapingOutputDirectory_Throws()
     {
         var artifact = new RecordingArtifact(Path.Combine("..", "evil.txt"));
         await using var app = await CreateAppAsync(artifact);
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => app.BuildSiteAsync());
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => app.PublishSiteAsync(_outputDir));
 
         Assert.Contains("escapes the output directory", exception.Message, StringComparison.Ordinal);
         Assert.False(File.Exists(Path.Combine(_testDir, "evil.txt")));
     }
 
     [Fact]
-    public async Task BuildSiteAsync_ArtifactPathCollidingWithGeneratedPage_Throws()
+    public async Task PublishSiteAsync_ArtifactPathCollidingWithGeneratedPage_Throws()
     {
         var artifact = new RecordingArtifact(Path.Combine("blog", "hello-world", "index.html"));
         await using var app = await CreateAppAsync(artifact);
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => app.BuildSiteAsync());
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => app.PublishSiteAsync(_outputDir));
 
         Assert.Contains("collides with a generated page output path", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task BuildSiteAsync_ArtifactPathCollidingWithStaticFile_Throws()
+    public async Task PublishSiteAsync_ArtifactPathCollidingWithStaticFile_Throws()
     {
         var staticDir = Path.Combine(_testDir, "static");
         Directory.CreateDirectory(staticDir);
@@ -96,19 +96,19 @@ public sealed class SiteArtifactTests : IDisposable
         var artifact = new RecordingArtifact("feed.xml");
         await using var app = await CreateAppAsync([artifact], staticDir);
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => app.BuildSiteAsync());
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => app.PublishSiteAsync(_outputDir));
 
         Assert.Contains("collides with a static file output path", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task BuildSiteAsync_DuplicateArtifactPath_Throws()
+    public async Task PublishSiteAsync_DuplicateArtifactPath_Throws()
     {
         var first = new RecordingArtifact(Path.Combine("meta", "info.txt"));
         var second = new RecordingArtifact(Path.Combine("meta", "info.txt"));
         await using var app = await CreateAppAsync([first, second], staticPath: null);
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => app.BuildSiteAsync());
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => app.PublishSiteAsync(_outputDir));
 
         Assert.Contains("collides with another artifact output path", exception.Message, StringComparison.Ordinal);
     }
@@ -118,7 +118,7 @@ public sealed class SiteArtifactTests : IDisposable
     /// item it came from any more, so a mirror route is simply two pages.
     /// </summary>
     [Fact]
-    public async Task BuildSiteAsync_SameContentMappedToMultiplePages_GeneratesBoth()
+    public async Task PublishSiteAsync_SameContentMappedToMultiplePages_GeneratesBoth()
     {
         var artifact = new RecordingArtifact(Path.Combine("meta", "info.txt"));
         await using var app = await CreateAppAsync(
@@ -131,7 +131,7 @@ public sealed class SiteArtifactTests : IDisposable
                     .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
             });
 
-        await app.BuildSiteAsync();
+        await app.PublishSiteAsync(_outputDir);
 
         var routes = artifact.ObservedContext!.Pages.Select(static page => page.RoutePath).ToArray();
         Assert.Contains("/blog/hello-world/", routes);
@@ -158,7 +158,6 @@ public sealed class SiteArtifactTests : IDisposable
         builder.Paths.Root = _testDir;
         builder.Paths.Content = _contentsDir;
         builder.Paths.Static = staticPath ?? TestSitePaths.StaticDirectory;
-        builder.Paths.Output = _outputDir;
 
         IReadOnlyList<Post> items =
         [

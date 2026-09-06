@@ -3,6 +3,11 @@ namespace Kiji;
 /// <summary>
 /// Configurable site directory layout. Relative paths are resolved against <see cref="Root"/>.
 /// </summary>
+/// <remarks>
+/// There is deliberately no output directory here. <c>dotnet publish</c> decides where the
+/// generated site goes, and Kiji's MSBuild targets hand that path to the app — so the
+/// publish directory is the single source of truth for it.
+/// </remarks>
 public sealed class SitePaths
 {
     internal SitePaths(string root)
@@ -11,10 +16,10 @@ public sealed class SitePaths
     }
 
     /// <summary>
-    /// The site root directory, which <see cref="Content"/>, <see cref="Static"/>, and
-    /// <see cref="Output"/> resolve against. Defaults to the site's own project directory
-    /// (the nearest ancestor containing a project file), falling back to the nearest
-    /// ancestor containing <c>.git</c> and then to the current directory.
+    /// The site root directory, which <see cref="Content"/> and <see cref="Static"/> resolve
+    /// against. Defaults to the site's own project directory (the nearest ancestor containing
+    /// a project file), falling back to the nearest ancestor containing <c>.git</c> and then
+    /// to the current directory.
     /// </summary>
     public string Root { get; set; }
 
@@ -29,16 +34,6 @@ public sealed class SitePaths
     /// </summary>
     public string? Static { get; set; }
 
-    /// <summary>
-    /// The output directory for the generated site. Defaults to <c>dist</c>.
-    /// </summary>
-    public string Output { get; set; } = "dist";
-
-    internal string ResolveOutputPath()
-    {
-        return ResolveAgainstRoot(Output);
-    }
-
     internal string ResolveKijiPath()
     {
         return Path.Combine(Path.GetFullPath(Root), ".kiji");
@@ -49,15 +44,43 @@ public sealed class SitePaths
         return Path.Combine(ResolveKijiPath(), "cache");
     }
 
-    internal SsgOptions ResolveForServe()
+    /// <summary>
+    /// Paths for a publish: the site is written to <paramref name="outputPath"/>, which
+    /// <c>dotnet publish</c> supplied.
+    /// </summary>
+    internal SsgOptions ResolveForPublish(string outputPath)
     {
-        var cachePath = ResolveCachePath();
-        var siteMirrorPath = Path.Combine(cachePath, "site");
-        Directory.CreateDirectory(siteMirrorPath);
-        return ResolveForBuild() with { OutputPath = siteMirrorPath };
+        return Resolve(ResolveAgainstRoot(outputPath));
     }
 
-    internal SsgOptions ResolveForBuild()
+    /// <summary>
+    /// Paths for the dev server: pages render on demand into a mirror under <c>.kiji</c>,
+    /// never into a publish directory.
+    /// </summary>
+    internal SsgOptions ResolveForServe()
+    {
+        var siteMirrorPath = ResolveSiteMirrorPath();
+        Directory.CreateDirectory(siteMirrorPath);
+        return Resolve(siteMirrorPath);
+    }
+
+    /// <summary>
+    /// Paths for expanding routes without producing anything — the fallback when page
+    /// planning runs before a command settled the options. Points at the same mirror as
+    /// <see cref="ResolveForServe"/> so nothing can be mistaken for a deliverable, and
+    /// creates no directories.
+    /// </summary>
+    internal SsgOptions ResolveForPlanning()
+    {
+        return Resolve(ResolveSiteMirrorPath());
+    }
+
+    private string ResolveSiteMirrorPath()
+    {
+        return Path.Combine(ResolveCachePath(), "site");
+    }
+
+    private SsgOptions Resolve(string outputPath)
     {
         var staticPath = Static is not null
             ? ResolveAgainstRoot(Static)
@@ -67,7 +90,7 @@ public sealed class SitePaths
         {
             ContentsPath = ResolveAgainstRoot(Content),
             StaticPath = staticPath,
-            OutputPath = ResolveOutputPath(),
+            OutputPath = outputPath,
             ImageCachePath = Path.Combine(ResolveCachePath(), "images"),
         };
     }

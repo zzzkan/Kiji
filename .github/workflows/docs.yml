@@ -35,7 +35,7 @@ jobs:
       # SiteInfo.BaseUrl carries the /kiji/ project-site path, so the generated links
       # already resolve under it. Nothing here needs to know the base path.
       - name: Build site
-        run: dotnet run --project docs -c Release -- build
+        run: dotnet publish docs -c Release -o docs/dist
 
       - uses: actions/configure-pages@v5
 

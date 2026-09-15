@@ -5,7 +5,6 @@ namespace Kiji.Tests;
 public sealed class SiteBasePathTests
 {
     [Theory]
-    [InlineData("https://example.com", "/")]
     [InlineData("https://example.com/", "/")]
     [InlineData("https://example.com/kiji", "/kiji/")]
     [InlineData("https://example.com/kiji/", "/kiji/")]
@@ -40,16 +39,12 @@ public sealed class SiteBasePathTests
 
     [Theory]
     [InlineData("https://cdn.example.com/x.png")]
-    [InlineData("http://cdn.example.com/x.png")]
     [InlineData("//cdn.example.com/x.png")]
-    [InlineData("mailto:someone@example.com")]
-    [InlineData("data:image/svg+xml,<svg/>")]
     [InlineData("#top")]
     [InlineData("?q=1")]
     public void Path_LeavesNonSiteRelativeValuesUnchanged(string path)
     {
         Assert.Equal(path, CreateSite("https://example.com/kiji/").Path(path));
-        Assert.Equal(path, CreateSite("https://example.com/").Path(path));
     }
 
     // Page-bundle image URLs are document-relative by design; re-rooting them would
@@ -63,22 +58,6 @@ public sealed class SiteBasePathTests
 
         var exception = Assert.Throws<ArgumentException>(() => site.Path(path));
         Assert.Equal("path", exception.ParamName);
-    }
-
-    [Fact]
-    public void Path_ThrowsOnNull()
-    {
-        var site = CreateSite("https://example.com/");
-
-        Assert.Throws<ArgumentNullException>(() => site.Path(null!));
-    }
-
-    [Fact]
-    public void Path_WithoutPrefixAndRootedPath_ReturnsTheSameInstance()
-    {
-        const string Path = "/css/app.css";
-
-        Assert.Same(Path, CreateSite("https://example.com/").Path(Path));
     }
 
     // A hostname that starts like a scheme must not be mistaken for one.

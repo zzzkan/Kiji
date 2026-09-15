@@ -1,25 +1,33 @@
-using System.Globalization;
 using System.IO.Hashing;
+using System.Text;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Formats.Webp;
 using SixLabors.ImageSharp.Processing;
 
 namespace Kiji.Assets;
 
-/// <summary>
-/// Default <see cref="IImageAssetProcessor"/>: generates responsive WebP variants.
-/// Variants are materialized once per source content hash; with a cache directory,
-/// unchanged images survive output cleans without re-encoding.
-/// </summary>
+/// <summary>Generates responsive WebP image variants.</summary>
+/// <param name="options">Image settings, or null to use the defaults.</param>
 public sealed class ImageProcessor(ImageOptions? options = null) : IImageAssetProcessor
 {
     /// <summary>
-    /// Caps total encode/resize concurrency across all pages, since pages themselves
-    /// render in parallel and nested parallelism would oversubscribe the CPU.
+    /// Caps the number of decoded images alive across pages. ImageSharp retains
+    /// its own default parallelism; changing it requires workload measurements.
     /// </summary>
     private static readonly SemaphoreSlim ConcurrencyGate = new(Environment.ProcessorCount);
 
     private readonly ImageOptions _options = options ?? new ImageOptions();
+    private readonly SemaphoreSlim _generationGate = ConcurrencyGate;
+    private readonly Configuration _configuration = Configuration.Default.Clone();
+    internal Func<string, CancellationToken, Task>? BeforeEncodeAsync { get; init; }
+
+    internal ImageProcessor(ImageOptions? options, SemaphoreSlim generationGate, int innerParallelism)
+        : this(options)
+    {
+        _generationGate = generationGate;
+        _configuration.MaxDegreeOfParallelism = innerParallelism;
+    }
 
     /// <inheritdoc/>
     public async Task<ProcessedImageInfo> ProcessImageAsync(
@@ -33,6 +41,15 @@ public sealed class ImageProcessor(ImageOptions? options = null) : IImageAssetPr
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        ArgumentNullException.ThrowIfNull(_options.Widths);
+        ArgumentOutOfRangeException.ThrowIfLessThan(_options.MaxSourceWidth, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(_options.Quality, 0);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(_options.Quality, 100);
+        foreach (var width in _options.Widths)
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(width, 1);
+        }
+
         var contentHash = await ComputeFileHashAsync(sourceFilePath, cancellationToken);
         var identity = await Image.IdentifyAsync(sourceFilePath, cancellationToken);
         var originalWidth = identity.Width;
@@ -41,7 +58,8 @@ public sealed class ImageProcessor(ImageOptions? options = null) : IImageAssetPr
         var fileNameBase = Path.GetFileName(sourceFilePath);
         var materializeDirectory = cacheDirectory ?? outputDirectory;
         Directory.CreateDirectory(materializeDirectory);
-        CleanupStaleVariants(materializeDirectory, fileNameBase, contentHash);
+        // Another page may still reference an older variant with this basename.
+        // Only output reconciliation knows which files are safe to remove.
 
         var targetWidths = _options.Widths
             .Where(width => width < originalWidth)
@@ -50,57 +68,73 @@ public sealed class ImageProcessor(ImageOptions? options = null) : IImageAssetPr
             .Order()
             .ToArray();
 
-        Image? image = null;
-        try
+        // Lock the materialized image family, not its source: differing requested
+        // width sets must still serialize overlapping variants. Acquire before a
+        // global slot so duplicate callers never hold scarce generation capacity.
+        var variants = new List<ImageVariant>(targetWidths.Length);
+        using (await ImageGenerationLock.AcquireAsync(
+            Path.Combine(materializeDirectory, $"{fileNameBase}.{contentHash}"), cancellationToken))
         {
-            var variants = new List<ImageVariant>(targetWidths.Length);
-            foreach (var targetWidth in targetWidths)
+            Image? image = null;
+            var ownsSlot = false;
+            try
             {
-                var fileName = $"{fileNameBase}.{contentHash}.{targetWidth}w.webp";
-                var materializedPath = Path.Combine(materializeDirectory, fileName);
-
-                if (!File.Exists(materializedPath))
+                foreach (var targetWidth in targetWidths)
                 {
-                    await ConcurrencyGate.WaitAsync(cancellationToken);
-                    try
+                    var fileName = $"{fileNameBase}.{contentHash}.{targetWidth}w.webp";
+                    var materializedPath = Path.Combine(materializeDirectory, fileName);
+
+                    if (!File.Exists(materializedPath))
                     {
+                        if (!ownsSlot)
+                        {
+                            await _generationGate.WaitAsync(cancellationToken);
+                            ownsSlot = true;
+                        }
                         if (!File.Exists(materializedPath))
                         {
                             image ??= await LoadImageWithoutMetadataAsync(sourceFilePath, cancellationToken);
+                            if (BeforeEncodeAsync is { } beforeEncode)
+                            {
+                                await beforeEncode(materializedPath, cancellationToken);
+                            }
                             await EncodeVariantAsync(image, originalWidth, originalHeight, targetWidth, materializedPath, cancellationToken);
                             BuildOutput.Detail($"Generated: {materializedPath} ({targetWidth}w)");
                         }
                     }
-                    finally
-                    {
-                        ConcurrencyGate.Release();
-                    }
+
+                    variants.Add(new ImageVariant(fileName, targetWidth));
                 }
 
-                if (cacheDirectory is not null)
-                {
-                    CopyIntoOutput(materializedPath, outputDirectory, fileName);
-                }
-
-                variants.Add(new ImageVariant(fileName, targetWidth));
             }
-
-            return new ProcessedImageInfo
+            finally
             {
-                OriginalWidth = originalWidth,
-                OriginalHeight = originalHeight,
-                Variants = variants,
-            };
+                image?.Dispose();
+                if (ownsSlot) { _generationGate.Release(); }
+            }
         }
-        finally
+
+        // The cached bytes are complete. Page-local copying neither holds the
+        // image-family lock nor keeps a decoded image/global slot alive.
+        if (cacheDirectory is not null)
         {
-            image?.Dispose();
+            foreach (var variant in variants)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                CopyIntoOutput(Path.Combine(materializeDirectory, variant.FileName), outputDirectory, variant.FileName);
+            }
         }
+        return new ProcessedImageInfo
+        {
+            OriginalWidth = originalWidth,
+            OriginalHeight = originalHeight,
+            Variants = variants,
+        };
     }
 
-    private static async Task<Image> LoadImageWithoutMetadataAsync(string sourceFilePath, CancellationToken cancellationToken)
+    private async Task<Image> LoadImageWithoutMetadataAsync(string sourceFilePath, CancellationToken cancellationToken)
     {
-        var image = await Image.LoadAsync(sourceFilePath, cancellationToken);
+        var image = await Image.LoadAsync(new DecoderOptions { Configuration = _configuration }, sourceFilePath, cancellationToken);
 
         // Remove metadata for privacy/security.
         image.Metadata.ExifProfile = null;
@@ -165,44 +199,27 @@ public sealed class ImageProcessor(ImageOptions? options = null) : IImageAssetPr
             return;
         }
 
+        var temporaryPath = $"{outputPath}.{Guid.NewGuid():N}.tmp";
         try
         {
-            File.Copy(materializedPath, outputPath, overwrite: false);
+            File.Copy(materializedPath, temporaryPath, overwrite: false);
+            try { File.Move(temporaryPath, outputPath, overwrite: false); }
+            catch (IOException) when (File.Exists(outputPath))
+            {
+                // The other caller published complete bytes, never a partial copy.
+            }
         }
-        catch (IOException) when (File.Exists(outputPath))
-        {
-            // A concurrent render copied the same variant first.
-        }
+        finally { File.Delete(temporaryPath); }
     }
 
-    private static async Task<string> ComputeFileHashAsync(string filePath, CancellationToken cancellationToken)
+    private async Task<string> ComputeFileHashAsync(string filePath, CancellationToken cancellationToken)
     {
         using var stream = File.OpenRead(filePath);
-        var hasher = new XxHash32();
+        var hasher = new XxHash128();
+        // Encoding settings and encoder upgrades must not reuse earlier bytes.
+        hasher.Append(Encoding.UTF8.GetBytes(FormattableString.Invariant(
+            $"webp-v1:{_options.Quality}:{typeof(WebpEncoder).Assembly.ManifestModule.ModuleVersionId:N}:")));
         await hasher.AppendAsync(stream, cancellationToken);
-        // Cache-busting hash, not a security boundary; 8 hex chars matches the variant file name format.
-        return hasher.GetCurrentHashAsUInt32().ToString("x8", CultureInfo.InvariantCulture);
-    }
-
-    private static void CleanupStaleVariants(string directory, string fileNameBase, string currentHash)
-    {
-        foreach (var file in Directory.GetFiles(directory, $"{fileNameBase}.*.webp"))
-        {
-            var fileName = Path.GetFileName(file);
-            if (fileName.Contains($".{currentHash}.", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            try
-            {
-                File.Delete(file);
-                Console.WriteLine($"Deleted stale variant: {fileName}");
-            }
-            catch (IOException)
-            {
-                // Still referenced by a concurrent render; it will be retried next build.
-            }
-        }
+        return Convert.ToHexStringLower(hasher.GetCurrentHash());
     }
 }

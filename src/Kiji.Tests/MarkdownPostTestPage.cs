@@ -6,7 +6,7 @@ namespace Kiji.Tests;
 
 /// <summary>
 /// Minimal markdown-backed page used to exercise the full markdown + image pipeline
-/// end to end through <see cref="KijiApp.PublishSiteAsync"/>.
+/// end to end through <see cref="StaticSite.PublishAsync"/>.
 /// </summary>
 [Route("/md/{Slug}/")]
 public sealed class MarkdownPostTestPage : ComponentBase

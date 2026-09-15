@@ -15,7 +15,7 @@ namespace Kiji.Markdown;
 /// local images are materialized into the output directory of the page being rendered
 /// (see <see cref="PageRenderContext"/>) and rewritten to <c>./</c>-relative URLs.
 /// </summary>
-public sealed class MarkdownProcessor
+internal sealed class MarkdownProcessor
 {
     private readonly MarkdownPipeline _pipeline;
     private readonly ConcurrentBag<PooledMarkdigRenderer> _rendererPool = [];
@@ -29,7 +29,7 @@ public sealed class MarkdownProcessor
     /// <param name="imageAssetProcessor">The image backend used to process referenced local images.</param>
     /// <param name="contentOptions">Optional pipeline and post-processing configuration.</param>
     public MarkdownProcessor(
-        SsgOptions options,
+        ResolvedSitePaths options,
         IImageAssetProcessor imageAssetProcessor,
         MarkdownProcessingOptions? contentOptions = null)
     {
@@ -37,8 +37,8 @@ public sealed class MarkdownProcessor
         ArgumentNullException.ThrowIfNull(imageAssetProcessor);
 
         _imageAssetProcessor = imageAssetProcessor;
-        _outputPath = options.OutputPath;
-        _imageCachePath = options.ImageCachePath;
+        _outputPath = options.OutputDirectory;
+        _imageCachePath = options.ImageCacheDirectory;
         _htmlPostProcessors = contentOptions is null ? [] : [.. contentOptions.HtmlPostProcessors];
         _imageCssClass = contentOptions?.ImageCssClass;
         _pipeline = BuildPipeline(contentOptions);
@@ -179,18 +179,14 @@ public sealed class MarkdownProcessor
 
     private static string CreateCacheKey(string sourceDirectory)
     {
-        // Groups cache entries per source directory so stale-variant cleanup for one
-        // post never touches another post's files. Not a security boundary.
+        // Groups cache entries per source directory. Not a security boundary.
         var hash = XxHash3.HashToUInt64(Encoding.UTF8.GetBytes(Path.GetFullPath(sourceDirectory).ToUpperInvariant()));
         return hash.ToString("x16", CultureInfo.InvariantCulture);
     }
 
     private string Render(MarkdownDocument document, ResponsiveImageContext imageContext)
     {
-        // Renderers are pooled per processor: setup costs ~3x the render itself.
-        // Pool size is bounded by concurrent renders (≤ CPU count); an entry is
-        // dropped instead of returned if its render threw, so a renderer left in an
-        // unknown state is never reused.
+        // A failed renderer may retain partial state; do not return it to the pool.
         if (!_rendererPool.TryTake(out var pooled))
         {
             pooled = PooledMarkdigRenderer.Create(_pipeline);

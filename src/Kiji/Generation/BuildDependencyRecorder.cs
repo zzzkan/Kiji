@@ -37,16 +37,8 @@ internal sealed class BuildDependencyRecorder
     }
 
     /// <summary>
-    /// The recorded content-set scopes, in a stable order. Most pages record none — a
-    /// keyed lookup depends on one file, not the set — so the empty case allocates
-    /// nothing at all.
+    /// The recorded content-set scopes in deterministic order.
     /// </summary>
-    /// <remarks>
-    /// These return sorted arrays rather than the underlying keys because
-    /// <see cref="ConcurrentDictionary{TKey, TValue}.Keys"/> copies into a new list on
-    /// every access, and the manifest needs a deterministic order anyway. Sorting here
-    /// keeps that from becoming a LINQ chain per page in the manifest pass.
-    /// </remarks>
     internal string[] ContentSetScopes => Snapshot(_contentSetScopes, StringComparer.OrdinalIgnoreCase);
 
     internal string[] Files => Snapshot(_files, StringComparer.OrdinalIgnoreCase);

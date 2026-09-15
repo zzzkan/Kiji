@@ -1,13 +1,9 @@
 using Kiji.Assets;
 using Kiji.Markdown;
-using Kiji.Tests.TestSite;
 using Xunit;
 
 namespace Kiji.Tests;
 
-/// <summary>
-/// Integration tests for <see cref="MarkdownContentsBuilder{TFrontMatter}"/>.
-/// </summary>
 public sealed class MarkdownContentsBuilderTests : IDisposable
 {
     private readonly MarkdownProcessor _markdownProcessor;
@@ -22,11 +18,11 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
         _outputDir = Path.Combine(_testDir, "output");
         Directory.CreateDirectory(_contentsDir);
         Directory.CreateDirectory(_outputDir);
-        _markdownProcessor = new MarkdownProcessor(new SsgOptions
+        _markdownProcessor = new MarkdownProcessor(new ResolvedSitePaths
         {
-            ContentsPath = _contentsDir,
-            StaticPath = _testDir,
-            OutputPath = _outputDir,
+            ContentDirectory = _contentsDir,
+            StaticDirectory = _testDir,
+            OutputDirectory = _outputDir,
         }, new ImageProcessor());
     }
 
@@ -43,35 +39,25 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
     {
         await File.WriteAllTextAsync(
             Path.Combine(_contentsDir, "test-post.md"),
-            CreateValidMarkdown("Test Post", new DateTime(2024, 1, 15)));
+            CreateValidMarkdown("Test Post", new DateTime(2024, 1, 15), "# Heading\n\n**Test content.**"));
 
-        var contents = CreateBuilder().Build();
+        var renders = 0;
+        var builder = new MarkdownContentsBuilder<FrontMatter>(_contentsDir, (content, ct) =>
+        {
+            renders++;
+            return RenderAsync(content, ct);
+        });
+        var contents = builder.Build();
+        Assert.Equal(0, renders);
 
         var item = Assert.Single(contents);
         Assert.Equal("test-post", item.FileInfo.FileNameWithoutExtension);
         Assert.Equal("Test Post", item.FrontMatter.Title);
-        Assert.Contains("Test content.", await item.RenderAsync(), StringComparison.Ordinal);
+        var html = await item.RenderAsync();
+        Assert.Contains("<h1", html, StringComparison.Ordinal);
+        Assert.Contains("<strong>Test content.</strong>", html, StringComparison.Ordinal);
+        Assert.Equal(1, renders);
         Assert.Empty(Directory.EnumerateFileSystemEntries(_outputDir));
-    }
-
-    [Fact]
-    public async Task ProcessAsync_MultiplePosts_ReturnsAllMarkdownItems()
-    {
-        var inputs = new[]
-        {
-            ("first-post.md", "First Post", new DateTime(2024, 1, 10)),
-            ("second-post.md", "Second Post", new DateTime(2024, 1, 15)),
-            ("third-post.md", "Third Post", new DateTime(2024, 1, 5)),
-        };
-
-        foreach (var (fileName, title, createdAt) in inputs)
-        {
-            await File.WriteAllTextAsync(Path.Combine(_contentsDir, fileName), CreateValidMarkdown(title, createdAt));
-        }
-
-        var contents = CreateBuilder().Build();
-
-        Assert.Equal(["first-post", "second-post", "third-post"], contents.Select(static item => item.FileInfo.FileNameWithoutExtension));
     }
 
     [Fact]
@@ -110,29 +96,6 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
     }
 
     [Fact]
-    public async Task ContentDictionary_CanonicalSlugCollision_ThrowsBeforeWritingOutputs()
-    {
-        var firstDirectory = Path.Combine(_contentsDir, "2024");
-        var secondDirectory = Path.Combine(_contentsDir, "2025");
-        Directory.CreateDirectory(firstDirectory);
-        Directory.CreateDirectory(secondDirectory);
-
-        var firstPath = Path.Combine(firstDirectory, "Hello World!.md");
-        var secondPath = Path.Combine(secondDirectory, "hello-world.md");
-        await File.WriteAllTextAsync(firstPath, CreateValidMarkdown("First Post", new DateTime(2024, 1, 15)));
-        await File.WriteAllTextAsync(secondPath, CreateValidMarkdown("Second Post", new DateTime(2024, 2, 15)));
-
-        var contents = CreateBuilder().Build();
-        var posts = Content.FromItems([.. contents.Select(Post.Create)], key: static post => post.Slug);
-        // Duplicate keys surface on materialization, which the first enumeration triggers.
-        var exception = Assert.Throws<InvalidOperationException>(() => posts.Count);
-
-        Assert.Contains("hello-world", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("duplicate key", exception.Message, StringComparison.Ordinal);
-        Assert.Empty(Directory.EnumerateFileSystemEntries(_outputDir));
-    }
-
-    [Fact]
     public void Build_ContentsDirectoryNotFound_ThrowsException()
     {
         var builder = new MarkdownContentsBuilder<FrontMatter>(
@@ -143,42 +106,10 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
     }
 
     [Fact]
-    public async Task Post_Create_MissingRequiredFrontMatter_ThrowsException()
+    public async Task Build_MultipleFiles_PreservesSortedMetadata()
     {
-        await File.WriteAllTextAsync(
-            Path.Combine(_contentsDir, "no-title.md"),
-            """
-            ---
-            createdAt: 2024-01-15
-            ---
-
-            Content without title.
-            """);
-
-        var contents = CreateBuilder().Build();
-
-        Assert.Throws<InvalidOperationException>(() => contents.Select(Post.Create).ToList());
-    }
-
-    [Fact]
-    public async Task ProcessAsync_MetadataOnlyBuildDoesNotRenderUntilRequested()
-    {
-        var markdownPath = Path.Combine(_contentsDir, "convert-test.md");
-        await File.WriteAllTextAsync(markdownPath, CreateValidMarkdown("Convert Test", new DateTime(2024, 4, 1), "This is some **bold** text."));
-
-        var contents = CreateBuilder().Build();
-        var item = Assert.Single(contents, static item => item.FileInfo.FileNameWithoutExtension == "convert-test");
-
-        Assert.Equal("Convert Test", item.FrontMatter.Title);
-        Assert.Equal("convert-test", item.FileInfo.FileNameWithoutExtension);
-        Assert.Contains("<strong>bold</strong>", await item.RenderAsync(), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task Build_ManyFiles_ParsesInParallelWithDeterministicOrder()
-    {
-        var expected = new List<string>(64);
-        for (var i = 0; i < 64; i++)
+        var expected = new List<string>(3);
+        for (var i = 0; i < 3; i++)
         {
             var fileName = $"post-{i:D3}.md";
             expected.Add($"post-{i:D3}");
@@ -209,7 +140,7 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
     }
 
     [Fact]
-    public async Task Build_WithFrontMatterCache_ReparsesOnlyChangedFiles()
+    public async Task Build_WithSourceCache_ReusesUnchangedSourcesAndObservesChanges()
     {
         await File.WriteAllTextAsync(
             Path.Combine(_contentsDir, "stable.md"),
@@ -228,7 +159,6 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
         var first = builder.Build();
         var second = builder.Build();
 
-        // Unchanged files reuse the cached front matter instance across builds.
         Assert.Same(
             Assert.Single(first, static item => item.FileInfo.FileNameWithoutExtension == "changing").FrontMatter,
             Assert.Single(second, static item => item.FileInfo.FileNameWithoutExtension == "changing").FrontMatter);

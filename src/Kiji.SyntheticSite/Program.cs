@@ -39,8 +39,17 @@ try
 
     // One-post-touched rebuild: the headline incremental metric.
     var mutatedPost = Path.Combine(root, "contents", "post-00000", "index.md");
-    await File.AppendAllTextAsync(mutatedPost, $"\n\nEdited at {DateTimeOffset.UtcNow:O}.\n");
-    var mutationRun = await BuildRunner.RunOnceAsync(root, options.Runs + 1, options.Phases);
+    var originalPost = await File.ReadAllTextAsync(mutatedPost);
+    RunResult mutationRun;
+    try
+    {
+        await File.WriteAllTextAsync(mutatedPost, originalPost + "\n\nEdited for the incremental measurement.\n");
+        mutationRun = await BuildRunner.RunOnceAsync(root, options.Runs + 1, options.Phases);
+    }
+    finally
+    {
+        await File.WriteAllTextAsync(mutatedPost, originalPost);
+    }
     Report("rebuild after editing 1 post", mutationRun);
 
     static void Report(string label, RunResult result)
@@ -60,7 +69,7 @@ try
             phases.Select(static phase => string.Create(CultureInfo.InvariantCulture, $"{phase.Phase}={phase.ElapsedMs:F0}")));
         Console.WriteLine(string.Create(
             CultureInfo.InvariantCulture,
-            $"{"  phases",-32}: {breakdown} | sum {phases.Sum(static phase => phase.ElapsedMs):F0} ms"));
+            $"{"  phases",-32}: {breakdown} | sum {phases.Where(static phase => !phase.Phase.Contains('.', StringComparison.Ordinal)).Sum(static phase => phase.ElapsedMs):F0} ms"));
     }
 
     var sortedElapsed = runs.Select(static r => r.ElapsedMs).Order().ToArray();

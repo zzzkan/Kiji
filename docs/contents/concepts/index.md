@@ -23,8 +23,8 @@ Render at most one per page — when several appear, the last one rendered wins.
 
 ## Route-declared pages
 
-`MapPages()` scans your assembly for public components carrying a route template and
-registers each as a page. Pages in another assembly register via `MapPages(assembly)`.
+`AddStaticPages()` scans your assembly for public components carrying a parameterless route and
+registers each as a page; parameterized routes are ignored. Use `AddStaticPages(assembly)` for other assemblies. Repeating an assembly registration has no effect, and an assembly with no fixed pages is allowed.
 
 Routes are static or take parameters:
 
@@ -32,17 +32,17 @@ Routes are static or take parameters:
 @page "/blog/{Slug}/"
 ```
 
-Parameterized routes need their values supplied by [`MapRoutes`](#routes), which is where
+Register parameterized pages directly with [`AddPages`](#routes); no assembly scan is required. The component must declare exactly one parameterized route, which is where
 the route set comes from. Catch-all routes, route constraints, optional parameters, and
 composite segments are rejected — a static site has to know every URL up front.
 
-Pages are written as `route/index.html`. The dev server resolves `/route` and
-`/route/` to the same page without redirecting, matching how static hosts behave, and
-canonical URLs use the trailing-slash form.
+Pages are written as `route/index.html`. The dev server redirects `/route` to
+`/route/`, preserving the query string, so document-relative images resolve beside
+the page. Canonical URLs use the trailing-slash form.
 
 ## Layouts
 
-`MapDefaultLayout<TLayout>()` applies a layout to every page. A page opts out or swaps
+`UseDefaultLayout<TLayout>()` applies a layout to every page. A page opts out or swaps
 with `@layout`, and layouts nest by declaring their own. A circular chain throws rather
 than hanging.
 
@@ -55,12 +55,12 @@ than hanging.
 
 ## Content dictionaries
 
-`AddMarkdownContent<TFrontMatter>(...)` and `AddContentSource<T>(...)` declare a
+`UseMarkdownContent<TFrontMatter>(...)` and `UseContentSource<T>(...)` declare a
 `ContentDictionary<T>`, which materializes lazily. It is keyed: every item has a
 non-empty, unique key, supplied where the source is declared.
 
 ```csharp
-builder.AddMarkdownContent<PostFrontMatter>(
+app.UseMarkdownContent<PostFrontMatter>(
     key: post => post.FileInfo.Slug,
     configure: options => options.Directory = "posts");
 ```
@@ -76,10 +76,7 @@ factory through the provider it is handed.
 Two dictionaries therefore need two element types. Declaring the same one twice is an error
 rather than a silent overwrite.
 
-It is an `IReadOnlyDictionary<string, T>`, and has **no declared order** —
-enumeration yields entries by ascending key, and pages sort as they see fit at render
-time. Ordering is a view concern, and a fixed enumeration order is what keeps generated
-output byte-identical across rebuilds.
+It is an `IReadOnlyDictionary<string, T>`. Sort explicitly for the display order you want:
 
 ```razor
 @foreach (var (slug, post) in Posts.OrderByDescending(entry => entry.Value.FrontMatter.CreatedAt))
@@ -99,17 +96,17 @@ Pass a projection to work with your own type instead of `MarkdownContent<T>`. Th
 projection is also where content that does not belong gets rejected:
 
 ```csharp
-builder.AddMarkdownContent<PostFrontMatter, Post>(
+app.UseMarkdownContent<PostFrontMatter, Post>(
     select: Post.Create,
     key: post => post.Slug,
     configure: options =>
     {
-        options.Where = file => !file.FileNameWithoutExtension.StartsWith('_');
-        options.Validate(post => post.Title.Length > 0, "title is required");
+        options.FileFilter = file => !file.FileNameWithoutExtension.StartsWith('_');
+        options.AddValidation(post => post.Title.Length > 0, "title is required");
     });
 ```
 
-`Validate` collects every failure and reports them together, each naming its source
+`AddValidation` collects every failure and reports them together, each naming its source
 file, so bad content is fixed in one pass rather than one rebuild at a time.
 
 The projection runs per item, so each model keeps the source file of the markdown it came
@@ -118,39 +115,49 @@ depend on other items.
 
 ### Derived data
 
-Tag lists, related posts, archives — anything computed from *all* the content — needs no
-special API. There are three places to put it:
+Tag lists, related posts and archives can share their definitions without sharing their
+computed results. Choose where the computation belongs:
 
-| Where | Recomputed | Use it when |
+| Where | What is shared | When computation runs |
 | --- | --- | --- |
-| In the page (inject the dictionary and enumerate) | per page | the default; display-time computation like related posts |
-| A scoped service (`builder.Services.AddScoped<T>`) | per page | several pages share the computation |
-| A derived dictionary (below) | once per build | the computation is expensive |
+| A static method | The definition | Each call |
+| A page service (`app.AddPageService<T>()`) | One instance within a page render | Each method call, unless the service caches within that render |
+| A derived content dictionary | The computed index across pages | First access, then first access after content invalidation |
 
-The first is the default for a reason: a page that enumerates a dictionary records a
-dependency on the whole content set by doing so, which is exactly right — a page showing
-related posts really does change when any post changes. Nothing to reason about.
+A method with only a few dependencies can stay static. Use a page service when constructor
+injection makes the dependencies easier to manage. The page, layout and child components
+share that instance; another page or another request gets a fresh one. Kiji disposes page
+services when rendering finishes, including asynchronous disposal and failed renders.
 
-A derived dictionary is an ordinary content source whose loader resolves another one:
+Register a helper with `app.AddPageService<RelatedPosts>()` and inject it into the
+page or layout. For an index shared across pages, register a separate element type with
+`UseContentSource<T>`; its factory can resolve the source dictionary from the supplied
+service provider. Keep each projection local to its source item and put computations
+spanning multiple items in a derived dictionary.
 
-```csharp
-builder.AddContentSource<Tag>(
-    services => Tag.CollectFrom(services.GetRequiredService<ContentDictionary<Post>>()),
-    key: tag => tag.Slug);
-```
+Markdown edits, additions and deletions detected by the dev server invalidate both source
+and derived dictionaries. Code hot reload also invalidates them. The next access rebuilds
+the index; previously returned objects are not updated in place. A publish invalidates
+content before planning its pages.
 
-> Register derived data as **scoped**, never as a singleton. The dev server rebuilds
-> content when it changes but leaves your singletons alone, so a singleton would
-> keep serving what it computed at startup.
+Reading a derived dictionary during rendering conservatively depends on the whole
+content tree, including when the index is already cached.
+
+Page services must be concrete types with public constructors. Duplicate registrations,
+replacement of Kiji-managed services, and registration after execution starts are rejected.
+Constructor dependencies can include other page services. Missing dependencies and cycles
+are errors. Content loaders, route/feed factories and artifacts cannot resolve page services;
+use content dictionaries or ordinary methods in those contexts. Service registration and
+constructor-shape changes may require restarting `dotnet watch`.
 
 ## Routes
 
-`MapRoutes<TPage>` supplies the parameter sets for a page with a dynamic route template —
+`AddPages<TPage>` supplies the parameter sets for a page with a dynamic route template —
 one generated page per object. Property names are the page's `[Parameter]` names; those
 that also appear in the route template bind the URL, and the rest are passed through.
 
 ```csharp
-app.MapRoutes<PostPage>(services => services
+app.AddPages<PostPage>(services => services
     .GetRequiredService<ContentDictionary<Post>>()
     .Select(post => new { Slug = post.Key, ContentKey = post.Key }));
 ```
@@ -160,7 +167,7 @@ dictionary is just one thing you might resolve from them. Tag pages come from pl
 over the same one:
 
 ```csharp
-app.MapRoutes<TagPage>(services => services
+app.AddPages<TagPage>(services => services
     .GetRequiredService<ContentDictionary<Post>>().Values
     .SelectMany(post => post.Tags).Distinct()
     .Select(tag => new { TagSlug = tag }));
@@ -180,11 +187,18 @@ in the dictionary. Declaring both keeps them free to diverge.
 }
 ```
 
-**The factory is the earliest place content exists.** That is not a convention to
-remember — there is deliberately no way to get a content dictionary, or a service provider, out of
-the app while you are declaring the site. Loading content resolves the site's output
-paths, and the command being run is what decides those (`dev` writes somewhere different
-than `build`), so content becomes reachable only once a command has started.
+Resolve content inside a loader, route/feed factory, artifact, or page. It is not
+available while declaring the site.
+
+`AddPages<TPage>` evaluates its parameter factory once per registration per snapshot, after
+execution paths are settled. Multiple registrations for the same type concatenate their
+results; an empty result is allowed. Invalid parameters and duplicate output paths fail
+during page planning.
+
+`UseNotFoundPage<TPage>()` registers the component directly, so it does not need an
+assembly scan either. It requires one route declaration and replaces any discovered
+route for that component with `404.html`, excluded from the sitemap. The same component
+cannot also be registered with `AddPages`.
 
 ## Artifacts
 
@@ -192,19 +206,19 @@ RSS feeds and sitemaps are opt-in. The feed takes the entries themselves, in the
 they should be read:
 
 ```csharp
-app.MapFeed(services => services
+app.AddRssFeed(services => services
     .GetRequiredService<ContentDictionary<Post>>().Values
     .OrderByDescending(post => post.CreatedAt)
     .Select(post => new FeedItem(post.Title, post.Description, post.CreatedAt, RoutePath: $"blog/{post.Slug}/")));
 
-app.MapSitemap();
+app.AddSitemap();
 ```
 
 `RoutePath` is combined with `SiteInfo.BaseUrl`, so it carries a base path automatically —
 write it prefix-free, the same as an index page link.
 
 Anything else site-wide implements `ISiteArtifact` and registers with
-`app.MapArtifact(...)`. Artifacts run after all pages and see every page's metadata.
+`app.AddArtifact(...)`. Artifacts run after all pages and see every page's metadata.
 
 ## Base paths
 

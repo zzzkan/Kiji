@@ -4,7 +4,7 @@ using YamlDotNet.Serialization;
 
 namespace Kiji.Markdown;
 
-public sealed class MarkdownContentsBuilder<TFrontMatter>(
+internal sealed class MarkdownContentsBuilder<TFrontMatter>(
     string contentsDirectory,
     Func<MarkdownContent<TFrontMatter>, CancellationToken, Task<string>> renderAsync,
     Func<IDeserializer>? frontMatterDeserializerFactory = null)
@@ -50,10 +50,7 @@ public sealed class MarkdownContentsBuilder<TFrontMatter>(
             throw new DirectoryNotFoundException($"Contents directory not found: {scanDirectory}");
         }
 
-        // Enumerating FileInfo rather than paths: the directory walk already carries
-        // each entry's size and last write time, so nothing here has to go back to the
-        // filesystem for them (28 ms against 54 ms over a thousand files,
-        // Kiji.Benchmarks DirectoryScanBenchmarks).
+        // Reuse the size and timestamp returned by directory enumeration.
         var markdownFiles = new DirectoryInfo(scanDirectory)
             .EnumerateFiles("*.md", SearchOption.AllDirectories)
             .OrderBy(static file => file.FullName, StringComparer.OrdinalIgnoreCase)

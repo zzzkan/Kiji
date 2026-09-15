@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Kiji.Assets;
 using Kiji.Markdown;
 using Xunit;
@@ -6,10 +5,6 @@ using YamlDotNet.Serialization.NamingConventions;
 
 namespace Kiji.Tests;
 
-/// <summary>
-/// Unit tests for <see cref="MarkdownProcessingOptions"/> driving <see cref="MarkdownProcessor"/>
-/// and for front matter deserialization configured on <see cref="MarkdownContentOptions{TModel}"/>.
-/// </summary>
 public sealed class MarkdownContentOptionsTests : IDisposable
 {
     private readonly string _testDir;
@@ -43,11 +38,11 @@ public sealed class MarkdownContentOptionsTests : IDisposable
     }
 
     [Fact]
-    public async Task ConfigurePipeline_CanRemoveSecureLinkExtension()
+    public async Task ConfigureMarkdig_CanRemoveSecureLinkExtension()
     {
         var mdPath = CreateMarkdownFile("insecure.md", "[External](https://example.com)");
         var processor = CreateProcessor(static options =>
-            options.ConfigurePipeline(static builder => builder.Extensions.TryRemove<SecureLinkExtension>()));
+            options.ConfigureMarkdig(static builder => builder.Extensions.TryRemove<SecureLinkExtension>()));
 
         var html = await processor.ProcessAsync(mdPath);
 
@@ -56,28 +51,13 @@ public sealed class MarkdownContentOptionsTests : IDisposable
     }
 
     [Fact]
-    public async Task AddHtmlPostProcessor_CanAddHeadingAnchors()
-    {
-        var mdPath = CreateMarkdownFile("anchors.md", "## Section Title");
-        var processor = CreateProcessor(static options =>
-            options.AddHtmlPostProcessor(static html => Regex.Replace(
-                html,
-                "<h([1-6]) id=\"([^\"]+)\">",
-                "<h$1 id=\"$2\"><a class=\"anchor\" href=\"#$2\"></a>")));
-
-        var html = await processor.ProcessAsync(mdPath);
-
-        Assert.Contains("<h2 id=\"section-title\"><a class=\"anchor\" href=\"#section-title\"></a>Section Title</h2>", html);
-    }
-
-    [Fact]
-    public async Task AddHtmlPostProcessor_RunsInRegistrationOrder()
+    public async Task AddHtmlTransform_RunsInRegistrationOrder()
     {
         var mdPath = CreateMarkdownFile("order.md", "Body.");
         var processor = CreateProcessor(static options =>
         {
-            options.AddHtmlPostProcessor(static html => html + "<!--first-->");
-            options.AddHtmlPostProcessor(static html => html + "<!--second-->");
+            options.AddHtmlTransform(static html => html + "<!--first-->");
+            options.AddHtmlTransform(static html => html + "<!--second-->");
         });
 
         var html = await processor.ProcessAsync(mdPath);
@@ -147,11 +127,11 @@ public sealed class MarkdownContentOptionsTests : IDisposable
         configure?.Invoke(contentOptions);
 
         return new MarkdownProcessor(
-            new SsgOptions
+            new ResolvedSitePaths
             {
-                ContentsPath = _testFilesDir,
-                StaticPath = _testDir,
-                OutputPath = _testDir,
+                ContentDirectory = _testFilesDir,
+                StaticDirectory = _testDir,
+                OutputDirectory = _testDir,
             },
             new ImageProcessor(),
             contentOptions);

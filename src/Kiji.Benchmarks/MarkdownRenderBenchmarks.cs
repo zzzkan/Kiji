@@ -5,13 +5,7 @@ using Markdig.Syntax;
 
 namespace Kiji.Benchmarks;
 
-/// <summary>
-/// Decides whether pooling Markdig's <see cref="HtmlRenderer"/> is worth it:
-/// compares the current per-body pattern (new StringWriter + new HtmlRenderer +
-/// pipeline.Setup per render) against reusing one renderer with a cleared
-/// StringBuilder. Adopt pooling in <c>MarkdownProcessor.Render</c> only if this
-/// shows a meaningful (≥5%) win on the render step.
-/// </summary>
+/// <summary>Compares constructing a Markdig renderer per body with reusing a renderer and writer.</summary>
 [MemoryDiagnoser]
 public class MarkdownRenderBenchmarks : IDisposable
 {

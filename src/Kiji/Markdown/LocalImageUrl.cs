@@ -11,14 +11,13 @@ internal static class LocalImageUrl
 
     public static bool IsLocalImage(string url)
     {
-        if (url.StartsWith('/') ||
-            url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-            url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        if (url.StartsWith('/') || url.StartsWith('#') ||
+            Uri.TryCreate(url, UriKind.Absolute, out _))
         {
             return false;
         }
 
-        var extension = Path.GetExtension(url.AsSpan());
+        var extension = Path.GetExtension(ImageReferenceKey.FromMarkdownUrl(url).AsSpan());
         foreach (var imageExtension in ImageExtensions)
         {
             if (extension.Equals(imageExtension, StringComparison.OrdinalIgnoreCase))

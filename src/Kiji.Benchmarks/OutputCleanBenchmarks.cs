@@ -3,11 +3,7 @@ using BenchmarkDotNet.Engines;
 
 namespace Kiji.Benchmarks;
 
-/// <summary>
-/// Decides how a build should guarantee that the output directory holds exactly what
-/// it produced. Today it deletes the tree and recreates every page directory; the
-/// alternative keeps the tree and deletes only what the new manifest does not claim.
-/// </summary>
+/// <summary>Compares recreating output with reconciling existing files.</summary>
 /// <remarks>
 /// Both strategies must leave the same directory set behind, so both include creating
 /// the page directories — real creates for the delete-first strategy, existence checks

@@ -8,10 +8,7 @@ using Kiji.SyntheticSite;
 namespace Kiji.Benchmarks;
 
 /// <summary>
-/// Measures a whole site build over the frozen synthetic workload. This is the
-/// authoritative end-to-end number: BenchmarkDotNet's warmup absorbs the JIT cost that
-/// makes a hand-rolled harness's first run 500 ms slower than its steady state, and it
-/// runs every case in one process under identical conditions.
+/// Measures whole-site builds over a frozen workload with warmup and isolated cases.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -21,9 +18,8 @@ namespace Kiji.Benchmarks;
 /// default, because absorbing the JIT is the whole reason this exists.
 /// </para>
 /// <para>
-/// The corpus is generated once per page count and reused across runs, matching the
-/// <c>--root</c> convention of <c>Kiji.SyntheticSite</c>: regenerating it would put
-/// content generation inside the comparison. It is left on disk deliberately.
+/// Each case owns a fresh deterministic corpus. Generation and cleanup are outside
+/// the measurement, and edits alternate between two equal-length bodies.
 /// </para>
 /// </remarks>
 [SimpleJob(RunStrategy.Monitoring, launchCount: 1, warmupCount: 2, iterationCount: 10, invocationCount: 1)]
@@ -35,6 +31,8 @@ public partial class SiteBuildBenchmarks
     private string _manifestPath = string.Empty;
     private string _editedPost = string.Empty;
     private int _builds;
+    private string _originalPost = string.Empty;
+    private bool _editToggle;
 
     [Params(200, 1000)]
     public int Pages { get; set; }
@@ -45,7 +43,7 @@ public partial class SiteBuildBenchmarks
     [GlobalSetup]
     public async Task SetupAsync()
     {
-        _root = Path.Combine(Path.GetTempPath(), $"kiji-bdn-corpus-{Pages}");
+        _root = Path.Combine(Path.GetTempPath(), $"kiji-bdn-{Pages}-{Scenario}-{Guid.NewGuid():N}");
         _editedPost = Path.Combine(_root, "contents", "post-00000", "index.md");
         _manifestPath = Path.Combine(_root, ".kiji", "cache", "build-manifest.json");
 
@@ -54,9 +52,17 @@ public partial class SiteBuildBenchmarks
             await SyntheticSiteWriter.WriteAsync(_root, Pages, includeImages: false);
         }
 
+        var actualPages = Directory.EnumerateFiles(Path.Combine(_root, "contents"), "*.md", SearchOption.AllDirectories).Count();
+        if (actualPages != Pages)
+        {
+            throw new InvalidOperationException(
+                $"Benchmark corpus '{_root}' contains {actualPages} posts; expected {Pages}. Use a fresh temporary directory or regenerate this corpus before measuring.");
+        }
+
         // Every scenario starts from a site that has already been built once: the
         // output directory populated and a manifest on disk.
         await BuildRunner.BuildSiteAsync(_root);
+        _originalPost = File.ReadAllText(_editedPost);
 
         // Phase attribution under the same conditions as the headline number. Warmup
         // and measured iterations are pooled, so read these as proportions, not as
@@ -71,6 +77,7 @@ public partial class SiteBuildBenchmarks
     public void Cleanup()
     {
         BuildPhaseTimer.Observer = null;
+        Directory.Delete(_root, recursive: true);
 
         if (_builds == 0)
         {
@@ -102,7 +109,8 @@ public partial class SiteBuildBenchmarks
                 break;
 
             case BuildScenario.OneEdited:
-                File.AppendAllText(_editedPost, $"\n\nEdited at {DateTimeOffset.UtcNow:O}.\n");
+                _editToggle = !_editToggle;
+                File.WriteAllText(_editedPost, _originalPost + (_editToggle ? "\n\nEdit A.\n" : "\n\nEdit B.\n"));
                 break;
 
             case BuildScenario.CodeChanged:

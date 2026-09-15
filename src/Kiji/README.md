@@ -22,36 +22,8 @@ into `dist/`, which any static host will serve.
 dotnet add package Kiji
 ```
 
-```csharp
-using Kiji;
-
-var builder = KijiApp.CreateBuilder(args);
-builder.Site = new SiteInfo
-{
-    BaseUrl = new Uri("https://example.com/"),
-    Name = "My Site",
-};
-
-await using var app = builder.Build();
-
-app.MapDefaultLayout<MainLayout>(); // applied to every page; pages may override via @layout
-app.MapPages();                     // every component with an @page route in this assembly
-app.MapNotFound<NotFoundPage>();    // rendered as 404.html
-
-return await app.RunAsync(); // dev server, or generate the site when dotnet publish asks
-```
-
-A page is any component with a route:
-
-```razor
-@page "/"
-
-<h1>Hello</h1>
-```
-
-Kiji renders the document shell itself — the doctype, `<html lang>` from
-`SiteInfo.Language`, `<head>`, and `<body>`. Pages contribute head content through the
-`Kiji.Components.HeadContent` component.
+Use the [getting-started guide](https://zzzkan.github.io/kiji/docs/getting-started/)
+for project configuration, pages, and the document shell.
 
 Add `dist/` and `.kiji/` to your `.gitignore`.
 

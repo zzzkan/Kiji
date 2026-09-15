@@ -1,11 +1,11 @@
 namespace Kiji.Rendering;
 
 /// <summary>
-/// Ambient context of the page render currently in progress. Set by <see cref="KijiApp"/>
+/// Ambient context of the page render currently in progress. Set by <see cref="StaticSite"/>
 /// around each page render and read by content renderers that emit page-relative output
 /// (e.g. markdown image materialization into the page's output directory).
 /// </summary>
-public sealed class PageRenderContext
+internal sealed class PageRenderContext
 {
     private static readonly AsyncLocal<PageRenderContext?> Ambient = new();
 

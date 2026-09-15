@@ -1,14 +1,6 @@
 namespace Kiji;
 
-/// <summary>
-/// Declares what makes a content source's items valid. Everything a dictionary needs is
-/// stated here, at the point of registration — they are immutable once built, so
-/// there is no configuring them afterwards.
-/// </summary>
-/// <remarks>
-/// There is deliberately no ordering here. A dictionary is keyed, not ordered: pages sort
-/// as they see fit at render time, which is where the choice belongs.
-/// </remarks>
+/// <summary>Registers validation rules for content items.</summary>
 public class ContentSourceOptions<T>
     where T : class
 {
@@ -16,13 +8,9 @@ public class ContentSourceOptions<T>
 
     internal IReadOnlyList<Action<T>> Validators => _validators;
 
-    /// <summary>
-    /// Requires <paramref name="predicate"/> to hold for every item. Failures are
-    /// reported together, each naming the item's source file.
-    /// </summary>
-    /// <param name="predicate">Returns <see langword="true"/> for a valid item.</param>
-    /// <param name="message">Describes what a failing item is missing.</param>
-    public void Validate(Func<T, bool> predicate, string message)
+    /// <summary>Registers a predicate that each loaded item must satisfy.</summary>
+    /// <param name="message">The error reported for a rejected item; validation failures are collected together.</param>
+    public void AddValidation(Func<T, bool> predicate, string message)
     {
         ArgumentNullException.ThrowIfNull(predicate);
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
@@ -36,11 +24,8 @@ public class ContentSourceOptions<T>
         });
     }
 
-    /// <summary>
-    /// Runs an arbitrary check over every item; throw to reject one. Failures are
-    /// reported together, each naming the item's source file.
-    /// </summary>
-    public void Validate(Action<T> validate)
+    /// <summary>Registers a check that throws to reject a loaded item, with failures collected together.</summary>
+    public void AddValidation(Action<T> validate)
     {
         ArgumentNullException.ThrowIfNull(validate);
 

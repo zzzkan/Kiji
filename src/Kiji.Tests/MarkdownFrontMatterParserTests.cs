@@ -22,13 +22,14 @@ public sealed class MarkdownFrontMatterParserTests : IDisposable
     }
 
     [Fact]
-    public void Parse_ConcreteFrontMatterType_ParsesYaml()
+    public void Parse_RequestedFrontMatterType_ParsesYaml()
     {
         var markdownPath = CreateMarkdownFile(
             "front-matter.md",
             """
             ---
             title: Test Post
+            description: A sample post
             createdAt: 2024-01-15
             tags:
               - test
@@ -41,32 +42,10 @@ public sealed class MarkdownFrontMatterParserTests : IDisposable
         var frontMatter = MarkdownFrontMatterParser.Parse<FrontMatter>(markdownPath);
 
         Assert.Equal("Test Post", frontMatter.Title);
+        Assert.Equal("A sample post", frontMatter.Description);
         Assert.True(frontMatter.CreatedAt.HasValue);
         Assert.Equal(new DateTime(2024, 1, 15), frontMatter.CreatedAt.Value.DateTime);
         Assert.Equal(["test", "sample"], frontMatter.Tags);
-    }
-
-    [Fact]
-    public void Parse_GenericType_ParsesYamlIntoRequestedType()
-    {
-        var markdownPath = CreateMarkdownFile(
-            "generic.md",
-            """
-            ---
-            title: Generic Post
-            createdAt: 2024-02-20
-            description: Example
-            ---
-
-            Body.
-            """);
-
-        var frontMatter = MarkdownFrontMatterParser.Parse<TestFrontMatter>(markdownPath);
-
-        Assert.Equal("Generic Post", frontMatter.Title);
-        Assert.True(frontMatter.CreatedAt.HasValue);
-        Assert.Equal(new DateTime(2024, 2, 20), frontMatter.CreatedAt.Value.DateTime);
-        Assert.Equal("Example", frontMatter.Description);
     }
 
     [Fact]
@@ -90,12 +69,4 @@ public sealed class MarkdownFrontMatterParserTests : IDisposable
         return path;
     }
 
-    private sealed class TestFrontMatter
-    {
-        public string? Title { get; init; }
-
-        public DateTimeOffset? CreatedAt { get; init; }
-
-        public string? Description { get; init; }
-    }
 }

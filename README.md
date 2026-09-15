@@ -30,25 +30,12 @@ the way you already know. Markdown with your own YAML front matter shape, respon
 image optimization, RSS feeds, sitemaps, and a live-reloading dev server are all in the
 one `Kiji` package — there is no set of extension packages to assemble.
 
-**Builds are fast, and rebuilds are much faster.** Pages render in parallel, one
-`HtmlRenderer` and DI scope each, straight into pooled UTF-8 buffers written with a single
-preallocated write per file. Builds are incremental by default: each page records what it
-read, so editing one post re-renders that post, the pages that list it, and the artifacts
-— not the site.
+**Incremental builds.** Editing a post re-renders the pages that depend on it.
+See the [performance guide](https://zzzkan.github.io/kiji/docs/performance/) for
+external inputs, forced rebuilds, and measurement commands.
 
-| pages | full build | no change | one post edited |
-| ---: | ---: | ---: | ---: |
-| 1,000 | 1.68 s | 0.25 s | 0.26 s |
-| 5,000 | 10.8 s | 1.07 s | 1.05 s |
-
-<sub>AMD Ryzen 7 5700G, 16 logical cores, .NET 10, workstation GC. Reproduce with
-`dotnet run -c Release --project src/Kiji.SyntheticSite -- --pages 5000 --runs 3`. The full
-build runs in a cold process, so it includes JIT warm-up.</sub>
-
-**The dev loop ignores how big your site is.** The dev server pre-generates nothing. It
-renders the page you asked for, through the same code path the build uses, so what you see
-is what gets deployed — and a site with five thousand posts reloads as fast as one with
-five.
+**Preview on demand.** The dev server renders the requested page through the same
+rendering path used by publish, and reloads the browser when content changes.
 
 **Correctness is the constraint, not an afterthought.** Duplicate routes, output path
 collisions, missing route values, and paths escaping the output directory all fail while

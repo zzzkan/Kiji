@@ -32,30 +32,32 @@ using Kiji.Markdown;
 using Kiji.Sitemaps;
 using Microsoft.Extensions.DependencyInjection;
 
-var builder = KijiApp.CreateBuilder(args);
-builder.Site = new SiteInfo
+await using var app = StaticSite.Create(args);
+app.Info = new SiteInfo
 {
     BaseUrl = new Uri("https://example.com/"),
     Name = "My Site",
 };
 
 // The front matter shape is yours; Kiji does not define one.
-builder.AddMarkdownContent<PostFrontMatter>(key: post => post.FileInfo.Slug);
+app.UseMarkdownContent<PostFrontMatter>(key: post => post.FileInfo.Slug);
 
-await using var app = builder.Build();
+app.UseDefaultLayout<MainLayout>();
+app.AddStaticPages();
+app.UseNotFoundPage<NotFoundPage>();
 
-app.MapDefaultLayout<MainLayout>();
-app.MapPages();
-app.MapNotFound<NotFoundPage>();
-
-app.MapRoutes<PostPage>(services => services
+app.AddPages<PostPage>(services => services
     .GetRequiredService<ContentDictionary<MarkdownContent<PostFrontMatter>>>()
     .Select(post => new { Slug = post.Key, ContentKey = post.Key }));
 
-app.MapSitemap();
+app.AddSitemap();
 
 return await app.RunAsync();
 ```
+
+Configure `app.Info`, `app.Paths`, and all `Add*` / `Use*` registrations
+before calling `RunAsync`. Starting the site makes those settings read-only; later
+changes throw. The dev server reloads changed content automatically.
 
 A page is any public component with a route:
 
@@ -65,8 +67,8 @@ A page is any public component with a route:
 <h1>Hello</h1>
 ```
 
-`MapPages()` finds every one of them in your assembly — writing `@page` is what makes a
-component a page, so there is no separate route table to maintain.
+`AddStaticPages()` finds parameterless routes in your assembly — writing `@page "/"` makes a
+component a fixed page. Register a parameterized page with `AddPages<TPage>`; it does not need assembly discovery.
 
 ## Run it
 
@@ -81,12 +83,15 @@ Publishing takes `-p:KijiForce=true` for a full rebuild and `-p:KijiVerbose=true
 per-file output. The dev server listens on <http://localhost:8080> unless
 `ASPNETCORE_URLS` or a `launchSettings.json` profile says otherwise.
 
-A publish directory holds the generated site and nothing else — no assemblies, no
-`deps.json`. That is Kiji's MSBuild targets replacing the publish output with what your
-site generated, so `dotnet publish -o dist` gives you a directory you can upload as-is.
+The development server also watches file and directory inputs declared with
+`app.AddBuildInput(path)`. Changes invalidate loaded content and reload connected
+browsers. Razor and C# changes require `dotnet watch`.
 
-Generating happens inside `KijiApp.RunAsync`, so a site whose entry point never awaits it
-will publish nothing.
+Upload the contents of `dist/` to your static host.
+
+For direct calls to `PublishAsync`, choose an output directory separate from source
+and cache directories. Repeated publishes to the same directory reload content. Create
+a new `StaticSite` to change output directories or switch between serving and publishing.
 
 ## Project layout
 
@@ -101,7 +106,7 @@ will publish nothing.
 Add `dist/` and `.kiji/` to your `.gitignore`.
 
 The site root — what those relative paths resolve against — defaults to your project
-directory. Override it with `builder.Paths.Root` if your layout differs.
+directory. Override it with `app.Paths.RootDirectory` if your layout differs.
 
 ## Next
 

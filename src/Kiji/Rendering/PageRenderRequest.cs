@@ -1,6 +1,6 @@
 namespace Kiji.Rendering;
 
-public sealed record PageRenderRequest(
+internal sealed record PageRenderRequest(
     string SourceIdentifier,
     Type ComponentType,
     IReadOnlyDictionary<string, object?> Parameters,

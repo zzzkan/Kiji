@@ -6,9 +6,7 @@
 <div class="hero">
     <h1>Write pages as Razor components. Ship static HTML.</h1>
     <p class="lede">
-        Kiji is a static site generator framework for .NET. Pages are Razor components
-        rendered through Blazor's <code>HtmlRenderer</code>, assembled with a
-        minimal-API style builder you already know from ASP.NET Core.
+        Kiji is a static site generator framework for .NET. Use Razor components to build pages, with Markdown, layouts, and static assets.
     </p>
     <p class="cta">
         <a class="button" href="@Site.Path("docs/getting-started/")">Get started</a>
@@ -29,21 +27,16 @@
     <article>
         <h2>Incremental by default</h2>
         <p>
-            Every build records what each page read — content files, the content set,
-            options, your assemblies — and skips pages whose inputs are unchanged.
-            Editing one post re-renders that post, the pages that list it, and the
-            artifacts. Anything ambiguous falls back to a full rebuild: stale output is
-            never acceptable.
+            Editing a post rebuilds the pages that depend on it. Kiji reuses unchanged output and rebuilds when its saved state is uncertain.
         </p>
     </article>
 
     <article>
-        <h2>A dev loop that ignores your site's size</h2>
+        <h2>Preview on demand</h2>
         <p>
             The dev server pre-generates nothing. It renders the page you
             requested, through the same code path the build uses, so what you see is
-            what gets deployed — and a site with five thousand posts reloads as fast as
-            one with five.
+            what gets deployed.
         </p>
     </article>
 

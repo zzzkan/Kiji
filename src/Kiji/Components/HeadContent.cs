@@ -3,13 +3,8 @@ using Microsoft.AspNetCore.Components;
 
 namespace Kiji.Components;
 
-/// <summary>
-/// Renders its child content into the document <c>&lt;head&gt;</c> emitted by the
-/// built-in root document; Kiji's JavaScript-free replacement for Blazor's
-/// <c>Microsoft.AspNetCore.Components.Web.HeadContent</c>. Render at most one per
-/// page: when several are rendered in the same page, only the most recently
-/// rendered one (last in document order) takes effect.
-/// </summary>
+/// <summary>Places child content in the generated document head.</summary>
+/// <remarks>When several instances render on one page, the most recently rendered instance takes effect.</remarks>
 public sealed class HeadContent : IComponent, IDisposable
 {
     [Inject]

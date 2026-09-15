@@ -5,11 +5,7 @@ using Kiji.Markdown;
 
 namespace Kiji.Benchmarks;
 
-/// <summary>
-/// Splits the single most expensive phase of an incremental build. Loading content is
-/// 86 of the 90 ms a 1000-page snapshot takes, and a snapshot happens on every build —
-/// including the ones where nothing changed and no page renders.
-/// </summary>
+/// <summary>Separately measures reading/parsing sources and constructing the content dictionary.</summary>
 /// <remarks>
 /// Reading and parsing the files is parallel; turning them into a keyed dictionary is
 /// not. This measures both so the next optimization goes where the time actually is
@@ -22,6 +18,7 @@ public class ContentLoadBenchmarks
     private const int Files = 1000;
 
     private string _contentsDirectory = string.Empty;
+    private IReadOnlyList<MarkdownContent<BenchFrontMatter>> _contents = [];
 
     [GlobalSetup]
     public void Setup()
@@ -46,6 +43,7 @@ public class ContentLoadBenchmarks
                 Body text with some *emphasis* and a [link](/). {new string('x', 2000)}
                 """);
         }
+        _contents = LoadContents();
     }
 
     [GlobalCleanup]
@@ -96,7 +94,14 @@ public class ContentLoadBenchmarks
     [Benchmark]
     public int ReadAndParseThenIndex()
     {
-        var contents = LoadContents();
+        return Index(LoadContents());
+    }
+
+    [Benchmark]
+    public int IndexOnly() => Index(_contents);
+
+    private static int Index(IReadOnlyList<MarkdownContent<BenchFrontMatter>> contents)
+    {
 
         var index = new Dictionary<string, MarkdownContent<BenchFrontMatter>>(contents.Count, StringComparer.OrdinalIgnoreCase);
         var provenance = new Dictionary<string, string?>(contents.Count, StringComparer.OrdinalIgnoreCase);

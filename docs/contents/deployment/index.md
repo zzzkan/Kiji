@@ -14,7 +14,7 @@ as-is.
 the feed — and, if it has a path segment, the base path.
 
 ```csharp
-builder.Site = new SiteInfo
+app.Info = new SiteInfo
 {
     BaseUrl = new Uri("https://example.com/"),
     Name = "My Site",
@@ -51,8 +51,7 @@ The dev server serves under the same prefix, and deliberately returns 404 outsid
 That is on purpose: a link that forgets `Site.Path` fails while you are looking at it,
 instead of only after you deploy.
 
-> Kiji never emits a `<base>` element. It would re-root the document-relative image URLs
-> above and break them.
+See [Markdown and images](../markdown/#page-bundle-images) for image URL rules.
 
 ## GitHub Pages with Actions
 
@@ -106,10 +105,11 @@ Netlify, Vercel, Cloudflare Pages, S3, and friends all take a directory. Generat
 
 Two things worth configuring on the host:
 
-- **404s.** `app.MapNotFound<NotFoundPage>()` writes `404.html` at the output root, which
+- **404s.** `app.UseNotFoundPage<NotFoundPage>()` writes `404.html` at the output root, which
   most hosts serve automatically for unmatched paths.
-- **Trailing slashes.** Pages are `route/index.html`. Hosts generally resolve `/route` to
-  it already. To check before deploying, serve `dist/` with whatever your host provides
+- **Trailing slashes.** Pages are `route/index.html`. Configure the host to redirect
+  `/route` to `/route/` so relative images resolve beside the page. To check before
+  deploying, serve `dist/` with whatever your host provides
   locally — `wrangler dev`, `netlify dev`, `npx serve` — since those reproduce the real
   behavior more faithfully than an imitation of it would.
 

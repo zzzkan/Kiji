@@ -34,21 +34,10 @@ public sealed class DefaultSiteRootTests : IDisposable
         var siteDir = CreateProject("repo", "site");
         var binDir = CreateDirectory("repo", "site", "bin", "Release", "net10.0");
 
-        var root = KijiBuilder.ResolveDefaultRoot(binDir, siteDir);
+        var root = SitePaths.ResolveDefaultRoot(binDir, siteDir);
 
         Assert.Equal(siteDir, root);
         Assert.NotEqual(repoDir, root);
-    }
-
-    [Fact]
-    public void ResolveDefaultRoot_ForSiteAtRepositoryRoot_IsTheRepositoryRoot()
-    {
-        // The common single-site layout: both probes agree, so behavior is unchanged.
-        var siteDir = CreateProject("solo");
-        CreateDirectory("solo", ".git");
-        var binDir = CreateDirectory("solo", "bin", "Release", "net10.0");
-
-        Assert.Equal(siteDir, KijiBuilder.ResolveDefaultRoot(binDir, siteDir));
     }
 
     [Fact]
@@ -59,7 +48,16 @@ public sealed class DefaultSiteRootTests : IDisposable
         CreateDirectory("published", ".git");
         var runDir = CreateDirectory("published", "app");
 
-        Assert.Equal(repoDir, KijiBuilder.ResolveDefaultRoot(runDir, runDir));
+        Assert.Equal(repoDir, SitePaths.ResolveDefaultRoot(runDir, runDir));
+    }
+
+    [Fact]
+    public void ResolveDefaultRoot_RecognizesGitWorktreeMarkerFile()
+    {
+        var repo = CreateDirectory("worktree");
+        File.WriteAllText(Path.Combine(repo, ".git"), "gitdir: ../repo/.git/worktrees/site");
+        var run = CreateDirectory("worktree", "app");
+        Assert.Equal(repo, SitePaths.ResolveDefaultRoot(run, run));
     }
 
     [Fact]
@@ -68,7 +66,7 @@ public sealed class DefaultSiteRootTests : IDisposable
         var runDir = CreateDirectory("bare", "app");
         var currentDir = CreateDirectory("bare", "cwd");
 
-        Assert.Equal(currentDir, KijiBuilder.ResolveDefaultRoot(runDir, currentDir));
+        Assert.Equal(currentDir, SitePaths.ResolveDefaultRoot(runDir, currentDir));
     }
 
     [Fact]
@@ -80,7 +78,7 @@ public sealed class DefaultSiteRootTests : IDisposable
         var binDir = CreateDirectory("app-side", "bin");
         var elsewhere = CreateProject("elsewhere");
 
-        Assert.Equal(siteDir, KijiBuilder.ResolveDefaultRoot(binDir, elsewhere));
+        Assert.Equal(siteDir, SitePaths.ResolveDefaultRoot(binDir, elsewhere));
     }
 
     private string CreateProject(params string[] segments)

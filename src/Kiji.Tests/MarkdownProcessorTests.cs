@@ -7,9 +7,6 @@ using Xunit;
 
 namespace Kiji.Tests;
 
-/// <summary>
-/// Unit tests for <see cref="MarkdownProcessor"/>.
-/// </summary>
 public sealed class MarkdownProcessorTests : IDisposable
 {
     private readonly string _testDir;
@@ -36,76 +33,18 @@ public sealed class MarkdownProcessorTests : IDisposable
     }
 
     [Fact]
-    public async Task ProcessAsync_ValidMarkdown_ConvertsToHtml()
+    public async Task SequentialDocuments_ResetImageLoadingState()
     {
-        var mdContent = """
-            ---
-            title: Test Post
-            createdAt: 2024-01-15
-            tags:
-              - test
-              - sample
-            ---
-
-            # Hello World
-
-            This is a test post.
-            """;
-
-        var mdPath = Path.Combine(_testFilesDir, "test.md");
-        File.WriteAllText(mdPath, mdContent);
-
-        var htmlContent = await CreateProcessor().ProcessAsync(mdPath);
-
-        Assert.Contains("<h1", htmlContent);
-        Assert.Contains("Hello World", htmlContent);
-        Assert.Contains("This is a test post.", htmlContent, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task ProcessAsync_NoFrontMatter_ThrowsInvalidOperationException()
-    {
-        var mdContent = """
-            # Hello World
-
-            This is a test post without front matter.
-            """;
-
-        var mdPath = Path.Combine(_testFilesDir, "no-frontmatter.md");
-        File.WriteAllText(mdPath, mdContent);
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() => CreateProcessor().ProcessAsync(mdPath));
-    }
-
-    [Fact]
-    public async Task ProcessAsync_MarkdownElements_ConvertsToHtml()
-    {
-        var mdContent = """
-            ---
-            title: Rich Content
-            createdAt: 2024-01-15
-            ---
-
-            **Bold** and *italic* text.
-
-            - Item 1
-            - Item 2
-
-            ```csharp
-            var x = 1;
-            ```
-            """;
-
-        var mdPath = Path.Combine(_testFilesDir, "rich.md");
-        File.WriteAllText(mdPath, mdContent);
-
-        var htmlContent = await CreateProcessor().ProcessAsync(mdPath);
-
-        Assert.Contains("<strong>Bold</strong>", htmlContent);
-        Assert.Contains("<em>italic</em>", htmlContent);
-        Assert.Contains("<ul>", htmlContent);
-        Assert.Contains("<li>Item 1</li>", htmlContent);
-        Assert.Contains("<pre><code class=\"language-csharp\">", htmlContent, StringComparison.Ordinal);
+        var processor = CreateProcessor();
+        var first = CreateMarkdownFile("first.md", "![First](a.png)\n\n![Second](a.png)");
+        var second = CreateMarkdownFile("second.md", "![Next](a.png)");
+        await CreateTestImageAsync(Path.Combine(_testFilesDir, "a.png"), 32, 32);
+        var firstHtml = await WithPageContextAsync("/first/", "first", () => processor.ProcessAsync(first));
+        var secondHtml = await WithPageContextAsync("/second/", "second", () => processor.ProcessAsync(second));
+        Assert.Contains("loading=\"eager\"", firstHtml, StringComparison.Ordinal);
+        Assert.Contains("loading=\"lazy\"", firstHtml, StringComparison.Ordinal);
+        Assert.Contains("loading=\"eager\"", secondHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("loading=\"lazy\"", secondHtml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -132,45 +71,14 @@ public sealed class MarkdownProcessorTests : IDisposable
     }
 
     [Fact]
-    public async Task ProcessAsync_ImageInSubdirectory_ResolvesAndKeepsRelativeStructure()
+    public async Task ProcessAsync_EncodedImageWithQueryAndFragment_IsBundled()
     {
-        Directory.CreateDirectory(Path.Combine(_testFilesDir, "images"));
-        var mdPath = CreateMarkdownFile("subdir.md", "![Photo](./images/photo.png)");
-        await CreateTestImageAsync(Path.Combine(_testFilesDir, "images", "photo.png"), 640, 480);
-
-        var htmlContent = await WithPageContextAsync(
-            "/blog/subdir/",
-            Path.Combine("blog", "subdir"),
-            () => CreateProcessor().ProcessAsync(mdPath));
-
-        var imageOutputDir = Path.Combine(_outputDir, "blog", "subdir", "images");
-        Assert.Contains("src=\"./images/photo.png.", htmlContent, StringComparison.Ordinal);
-        Assert.NotEmpty(Directory.GetFiles(imageOutputDir, "photo.png.*.webp"));
-    }
-
-    [Fact]
-    public async Task ProcessAsync_ImagesAreCachedAcrossOutputCleans()
-    {
-        var mdPath = CreateMarkdownFile("cached.md", "![Used](used.png)");
-        await CreateTestImageAsync(Path.Combine(_testFilesDir, "used.png"), 800, 600);
-
-        await WithPageContextAsync("/p/", "p", () => CreateProcessor().ProcessAsync(mdPath));
-
-        var cacheFiles = Directory.GetFiles(_cacheDir, "*.webp", SearchOption.AllDirectories);
-        Assert.NotEmpty(cacheFiles);
-        var cacheWriteTimes = cacheFiles.ToDictionary(static f => f, static f => File.GetLastWriteTimeUtc(f));
-
-        // Simulate a clean build: output wiped, cache survives, no re-encode.
-        Directory.Delete(_outputDir, recursive: true);
-        await Task.Delay(100);
-
-        await WithPageContextAsync("/p/", "p", () => CreateProcessor().ProcessAsync(mdPath));
-
-        Assert.NotEmpty(Directory.GetFiles(Path.Combine(_outputDir, "p"), "*.webp"));
-        foreach (var (file, writeTime) in cacheWriteTimes)
-        {
-            Assert.Equal(writeTime, File.GetLastWriteTimeUtc(file));
-        }
+        var mdPath = CreateMarkdownFile("encoded.md", "![Photo](my%20photo.png?v=1#preview)");
+        await CreateTestImageAsync(Path.Combine(_testFilesDir, "my photo.png"), 100, 60);
+        var html = await WithPageContextAsync("/encoded/", "encoded", () => CreateProcessor().ProcessAsync(mdPath));
+        Assert.Contains("src=\"./my%20photo.png.", html, StringComparison.Ordinal);
+        Assert.Contains("srcset=\"./my%20photo.png.", html, StringComparison.Ordinal);
+        Assert.NotEmpty(Directory.GetFiles(Path.Combine(_outputDir, "encoded"), "my photo.png.*.webp"));
     }
 
     [Fact]
@@ -211,12 +119,12 @@ public sealed class MarkdownProcessorTests : IDisposable
 
     private MarkdownProcessor CreateProcessor()
     {
-        return new MarkdownProcessor(new SsgOptions
+        return new MarkdownProcessor(new ResolvedSitePaths
         {
-            ContentsPath = _testFilesDir,
-            StaticPath = _testDir,
-            OutputPath = _outputDir,
-            ImageCachePath = _cacheDir,
+            ContentDirectory = _testFilesDir,
+            StaticDirectory = _testDir,
+            OutputDirectory = _outputDir,
+            ImageCacheDirectory = _cacheDir,
         }, new ImageProcessor());
     }
 

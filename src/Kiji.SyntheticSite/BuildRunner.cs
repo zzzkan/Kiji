@@ -10,7 +10,7 @@ namespace Kiji.SyntheticSite;
 
 /// <summary>
 /// Runs a full site build over the synthetic site and measures it. Each run uses a
-/// fresh <see cref="KijiApp"/> so content materialization stays cold, mirroring a
+/// fresh <see cref="StaticSite"/> so content materialization stays cold, mirroring a
 /// real <c>dotnet run</c> build (minus process startup).
 /// </summary>
 public static class BuildRunner
@@ -66,8 +66,8 @@ public static class BuildRunner
     /// </summary>
     public static async Task BuildSiteAsync(string root)
     {
-        var builder = KijiApp.CreateBuilder([]);
-        builder.Site = new SiteInfo
+        await using var app = StaticSite.Create([]);
+        app.Info = new SiteInfo
         {
             BaseUrl = new Uri("https://bench.example.com/"),
             Name = "Kiji Bench",
@@ -75,19 +75,17 @@ public static class BuildRunner
             Language = "en",
             Author = "bench",
         };
-        builder.Paths.Root = root;
+        app.Paths.RootDirectory = root;
 
-        builder.AddMarkdownContent<PostFrontMatter>(key: static post => PostSlug.From(post.FileInfo));
+        app.UseMarkdownContent<PostFrontMatter>(key: static post => PostSlug.From(post.FileInfo));
+        app.UseDefaultLayout<MainLayout>();
+        app.AddStaticPages(typeof(BuildRunner).Assembly);
+        app.UseNotFoundPage<NotFoundPage>();
 
-        await using var app = builder.Build();
-        app.MapDefaultLayout<MainLayout>();
-        app.MapPages(typeof(BuildRunner).Assembly);
-        app.MapNotFound<NotFoundPage>();
-
-        app.MapRoutes<PostPage>(static services => services
+        app.AddPages<PostPage>(static services => services
             .GetRequiredService<ContentDictionary<MarkdownContent<PostFrontMatter>>>()
             .Select(static post => new { Slug = post.Key, ContentKey = post.Key }));
-        app.MapFeed(static services => services
+        app.AddRssFeed(static services => services
             .GetRequiredService<ContentDictionary<MarkdownContent<PostFrontMatter>>>()
             .OrderByDescending(static post => post.Value.FrontMatter.CreatedAt)
             .Select(static post => new FeedItem(
@@ -95,8 +93,8 @@ public static class BuildRunner
                 post.Value.FrontMatter.Description ?? string.Empty,
                 post.Value.FrontMatter.CreatedAt ?? DateTimeOffset.UnixEpoch,
                 RoutePath: $"blog/{post.Key}/")));
-        app.MapSitemap();
+        app.AddSitemap();
 
-        await app.PublishSiteAsync(Path.Combine(root, "dist"));
+        await app.PublishAsync(Path.Combine(root, "dist"));
     }
 }

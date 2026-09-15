@@ -7,5 +7,5 @@ namespace Kiji.Routing;
 /// The page's parameter values. Names matching the route template bind the URL; the
 /// rest are passed through to the component.
 /// </param>
-public sealed record StaticPageRouteEntry(
+internal sealed record StaticPageRouteEntry(
     IReadOnlyDictionary<string, string> RouteValues);

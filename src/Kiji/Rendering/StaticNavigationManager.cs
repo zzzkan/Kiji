@@ -7,7 +7,7 @@ namespace Kiji.Rendering;
 /// Registered as a scoped service so each page render gets its own instance,
 /// which keeps concurrent renders isolated from each other.
 /// </summary>
-public sealed class StaticNavigationManager : NavigationManager
+internal sealed class StaticNavigationManager : NavigationManager
 {
     /// <summary>
     /// Initializes the navigation state for a single page render.

@@ -7,16 +7,7 @@ using Markdig.Syntax.Inlines;
 
 namespace Kiji.Markdown;
 
-/// <summary>
-/// Custom Markdig extension for secure external links.
-/// Adds target="_blank" and rel="noopener noreferrer" to external links.
-/// </summary>
-/// <remarks>
-/// Handles:
-/// - [text](url) syntax via LinkInlineRenderer.TryWriters
-/// - &lt;URL&gt; syntax via AutolinkInlineParser.Options and AutolinkInlineRenderer.Rel
-/// - bare URLs (https://...) via AutoLinkParser.Options
-/// </remarks>
+/// <summary>Adds <c>target="_blank"</c> and <c>rel="noopener noreferrer"</c> to external Markdown links.</summary>
 public sealed class SecureLinkExtension : IMarkdownExtension
 {
     /// <inheritdoc/>

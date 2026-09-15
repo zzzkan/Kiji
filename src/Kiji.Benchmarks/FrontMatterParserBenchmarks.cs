@@ -3,10 +3,7 @@ using Kiji.Markdown;
 
 namespace Kiji.Benchmarks;
 
-/// <summary>
-/// Measures front matter extraction and YAML deserialization over a representative
-/// markdown document (Phase 2-1 baseline).
-/// </summary>
+/// <summary>Compares front matter extraction and deserialization strategies.</summary>
 [MemoryDiagnoser]
 public class FrontMatterParserBenchmarks
 {

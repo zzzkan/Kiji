@@ -33,15 +33,15 @@ Body text.
 
 By default every `*.md` under the content directory belongs to the source. Point
 `Directory` at a subdirectory to keep markdown with different front matter in separate
-collections, and use `Where` to skip files:
+collections, and use `FileFilter` to skip files:
 
 ```csharp
-builder.AddMarkdownContent<PostFrontMatter>(
+app.UseMarkdownContent<PostFrontMatter>(
     key: post => post.FileInfo.Slug,
     configure: options =>
     {
         options.Directory = "posts";                   // contents/posts/**/*.md
-        options.Where = file => !file.FileNameWithoutExtension.StartsWith('_');
+        options.FileFilter = file => !file.FileNameWithoutExtension.StartsWith('_');
     });
 ```
 
@@ -75,13 +75,26 @@ are both the page `hello`.
 
 The body goes through Markdig with the advanced extensions enabled, plus link hardening
 that adds `target="_blank" rel="noopener noreferrer"` to external links. Customize the
-pipeline, the deserializer, or add HTML post-processing when you register the source:
+pipeline, the deserializer, or add HTML transformations when you register the source:
 
 ```csharp
-builder.AddMarkdownContent<PostFrontMatter>(
+app.UseMarkdownContent<PostFrontMatter>(
     key: post => post.FileInfo.Slug,
-    configure: options => options.ConfigurePipeline(pipeline => pipeline.UseEmojiAndSmiley()));
+    configure: options => options.ConfigureMarkdig(pipeline => pipeline.UseEmojiAndSmiley()));
 ```
+
+Use `ConfigureMarkdig` to customize Markdown parsing and rendering, such as adding
+syntax extensions or changing how a standalone link is rendered. Use
+`AddHtmlTransform` to modify the resulting HTML instead:
+
+```csharp
+app.UseMarkdownContent<PostFrontMatter>(
+    key: post => post.FileInfo.Slug,
+    configure: options => options.AddHtmlTransform(html => $"<div class=\"markdown-body\">{html}</div>"));
+```
+
+HTML transforms are synchronous and run in registration order, each receiving the
+previous transform's output.
 
 ## Page-bundle images
 
@@ -92,19 +105,36 @@ Put an image next to the markdown that uses it and reference it by name:
 ```
 
 Kiji encodes responsive WebP variants, writes them into the same output directory as the
-page's `index.html`, and emits a `<picture>` element with a `srcset`.
+page's `index.html`, and emits an `<img>` element with a `srcset`.
 
 The URLs it emits are document-relative — `./photo.jpg.<hash>.640w.webp` — which is why
 they keep working no matter what path the site is published under. This is also why Kiji
 never emits a `<base>` element: it would re-root exactly these URLs.
 
-Encoded variants are cached under `.kiji/cache`, keyed by content hash, so an unchanged
-image is never re-encoded even after you delete `dist/`. Image metadata (EXIF, IPTC, XMP)
-is stripped on the way out.
+Encoded variants are cached under `.kiji/cache`. Unchanged images reuse them after you delete
+`dist/`. Old cache variants remain available to other pages until `dotnet clean`;
+publishing removes unreferenced variants from the site output. Image metadata
+(EXIF, IPTC, XMP) is stripped on the way out.
+
+Percent-encoded filenames such as `my%20photo.jpg` are supported. Query strings and
+fragments on local image references are removed when resolving the source file.
 
 A site-root reference like `![](/img/logo.png)` is left alone and served from `wwwroot/`
 instead. Those are not base-path safe, so route them through `Site.Path` in markup rather
 than markdown if you publish under a sub-path.
 
-To replace the encoder entirely, register your own `IImageAssetProcessor` in
-`builder.Services`.
+To replace the encoder entirely, supply a factory for your `IImageAssetProcessor`:
+
+```csharp
+app.UseImageAssetProcessor(() => new CustomProcessor());
+```
+
+Kiji calls the factory lazily and shares the processor for the site's lifetime. The
+last registration wins; a null factory or result is rejected. Kiji disposes the processor
+when the site is disposed, including asynchronous disposal. Each factory must create
+an instance owned by that site.
+
+The processor must support concurrent calls and must not retain page or content state.
+Content changes and hot reload do not recreate it. Declare external encoder configuration
+with `AddBuildInput`; if your processor caches variants, include encoder settings and
+version in its cache identity. Changing captured settings requires recreating the site.

@@ -1,17 +1,14 @@
 using Kiji;
-using Kiji.Docs;
+using Kiji.Docs.Models;
 using Kiji.Docs.Components;
 using Kiji.Docs.Pages;
 using Kiji.Markdown;
 using Kiji.Sitemaps;
 using Microsoft.Extensions.DependencyInjection;
 
-var builder = KijiApp.CreateBuilder(args);
-builder.Site = new SiteInfo
+await using var site = StaticSite.Create(args);
+site.Info = new()
 {
-    // A GitHub Pages project site, so the base path is /kiji/. Every link written by
-    // this site goes through Site.Path so it resolves under that prefix; dev and
-    // the dev server serves there too.
     BaseUrl = new Uri("https://zzzkan.github.io/kiji/"),
     Name = "Kiji",
     Description = "A static site generator framework for .NET. Write pages as Razor components.",
@@ -19,22 +16,14 @@ builder.Site = new SiteInfo
     Author = "zzzkan",
 };
 
-// Docs live at contents/<slug>/index.md, so images can sit beside the page using them.
-// The directory name becomes FileInfo.Slug, which this source uses as its key.
-builder.AddMarkdownContent<DocFrontMatter>(key: static doc => doc.FileInfo.Slug);
+site.UseMarkdownContent<DocFrontMatter>(key: static doc => doc.FileInfo.Slug);
+site.UseDefaultLayout<MainLayout>();
+site.UseNotFoundPage<NotFoundPage>();
 
-await using var app = builder.Build();
-
-app.MapDefaultLayout<MainLayout>();
-app.MapPages();
-app.MapNotFound<NotFoundPage>();
-
-// Slug is the page's route segment; ContentKey is how the page finds itself in the
-// dictionary. They happen to be the same value here, but they are different things.
-app.MapRoutes<DocPage>(static services => services
+site.AddStaticPages();
+site.AddPages<DocPage>(static services => services
     .GetRequiredService<ContentDictionary<MarkdownContent<DocFrontMatter>>>()
     .Select(static doc => new { Slug = doc.Key, ContentKey = doc.Key }));
+site.AddSitemap();
 
-app.MapSitemap();
-
-return await app.RunAsync();
+return await site.RunAsync();

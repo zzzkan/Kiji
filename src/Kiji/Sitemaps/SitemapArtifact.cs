@@ -7,7 +7,7 @@ namespace Kiji.Sitemaps;
 /// Generates a sitemap from every generated page, excluding pages marked
 /// with <c>ExcludeFromSitemap</c>. URLs are sorted for deterministic output.
 /// </summary>
-public sealed class SitemapArtifact : ISiteArtifact
+internal sealed class SitemapArtifact : ISiteArtifact
 {
     private const string SitemapNamespace = "http://www.sitemaps.org/schemas/sitemap/0.9";
 

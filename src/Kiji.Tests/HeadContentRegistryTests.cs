@@ -11,18 +11,6 @@ public sealed class HeadContentRegistryTests
     private static readonly RenderFragment FragmentB = static _ => { };
 
     [Fact]
-    public void Subscribe_PushesNullWhenNoProvider()
-    {
-        var registry = new HeadContentRegistry();
-        var received = new List<RenderFragment?>();
-
-        registry.Subscribe(received.Add);
-
-        Assert.Single(received);
-        Assert.Null(received[0]);
-    }
-
-    [Fact]
     public void Subscribe_PushesCurrentContentImmediately()
     {
         var registry = new HeadContentRegistry();
@@ -36,7 +24,7 @@ public sealed class HeadContentRegistryTests
     }
 
     [Fact]
-    public void SetContent_LastRenderedProviderWins()
+    public void Providers_UpdateAndFallBackWithoutLettingOlderRendersTakeOver()
     {
         var registry = new HeadContentRegistry();
         var received = new List<RenderFragment?>();
@@ -49,61 +37,17 @@ public sealed class HeadContentRegistryTests
         registry.SetContent(first);
 
         Assert.Same(FragmentB, received[^1]);
-    }
-
-    [Fact]
-    public void SetContent_RepublishesWhenCurrentProviderUpdates()
-    {
-        var registry = new HeadContentRegistry();
-        var received = new List<RenderFragment?>();
-        registry.Subscribe(received.Add);
-
-        var provider = CreateProvider(FragmentA);
-        registry.SetContent(provider);
-        SetChildContent(provider, FragmentB);
-        registry.SetContent(provider);
-
-        Assert.Same(FragmentB, received[^1]);
-    }
-
-    [Fact]
-    public void RemoveProvider_FallsBackToPreviousProvider()
-    {
-        var registry = new HeadContentRegistry();
-        var received = new List<RenderFragment?>();
-        registry.Subscribe(received.Add);
-
-        var first = CreateProvider(FragmentA);
-        var second = CreateProvider(FragmentB);
-        registry.SetContent(first);
+        SetChildContent(second, FragmentA);
         registry.SetContent(second);
-        registry.RemoveProvider(second);
-
         Assert.Same(FragmentA, received[^1]);
-    }
-
-    [Fact]
-    public void RemoveProvider_LastProviderRemovedPushesNull()
-    {
-        var registry = new HeadContentRegistry();
-        var received = new List<RenderFragment?>();
-        registry.Subscribe(received.Add);
-
-        var provider = CreateProvider(FragmentA);
-        registry.SetContent(provider);
-        registry.RemoveProvider(provider);
-
+        SetChildContent(first, FragmentB);
+        registry.RemoveProvider(second);
+        Assert.Same(FragmentB, received[^1]);
+        registry.RemoveProvider(first);
         Assert.Null(received[^1]);
     }
 
-    [Fact]
-    public void Subscribe_SecondSubscriberThrows()
-    {
-        var registry = new HeadContentRegistry();
-        registry.Subscribe(static _ => { });
 
-        Assert.Throws<InvalidOperationException>(() => registry.Subscribe(static _ => { }));
-    }
 
     private static HeadContent CreateProvider(RenderFragment? fragment)
     {

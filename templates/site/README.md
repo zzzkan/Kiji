@@ -10,9 +10,6 @@ dotnet clean                         # delete the build cache
 
 ## What is here
 
-Deliberately almost nothing. Three pages, one markdown collection, a sitemap, and enough
-CSS to be readable.
-
 | Path | What it is |
 | --- | --- |
 | `Program.cs` | The whole site definition |
@@ -25,17 +22,14 @@ CSS to be readable.
 declares `@page "/{Slug}/"` and `Program.cs` supplies the slugs. Change that route
 template to `"/blog/{Slug}/"` and the posts move; nothing else needs to know.
 
-## What is deliberately left out
-
-Kiji supports all of these. They are absent so the starting point stays readable, not
-because they are hard.
+## Adding features
 
 | | How to add it |
 | --- | --- |
-| RSS feed | `app.MapFeed(services => …)` — [Concepts](https://zzzkan.github.io/kiji/docs/concepts/) |
-| Tag or archive pages | Another `MapRoutes` over the values you want — [Concepts](https://zzzkan.github.io/kiji/docs/concepts/) |
+| RSS feed | `app.AddRssFeed(services => …)` — [Concepts](https://zzzkan.github.io/kiji/docs/concepts/) |
+| Tag or archive pages | Another `AddPages` over the values you want — [Concepts](https://zzzkan.github.io/kiji/docs/concepts/) |
 | Responsive images | Already works; just reference an image from markdown — [Markdown and images](https://zzzkan.github.io/kiji/docs/markdown/) |
-| A custom markdown pipeline | `AddMarkdownContent(key: …, configure: …)` — [Markdown and images](https://zzzkan.github.io/kiji/docs/markdown/) |
+| A custom markdown pipeline | `UseMarkdownContent(key: …, configure: …)` — [Markdown and images](https://zzzkan.github.io/kiji/docs/markdown/) |
 | Publishing under a sub-path | Put the path in `SiteInfo.BaseUrl` — [Deployment](https://zzzkan.github.io/kiji/docs/deployment/) |
 
 ## Linking

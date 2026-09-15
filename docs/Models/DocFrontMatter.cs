@@ -1,4 +1,4 @@
-namespace Kiji.Docs;
+namespace Kiji.Docs.Models;
 
 /// <summary>
 /// Front matter for a documentation page. Kiji does not define this shape — the site

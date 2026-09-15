@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 using Kiji.Rendering;
+using Microsoft.AspNetCore.Http;
 
 namespace Kiji.Hosting;
 
@@ -15,7 +16,7 @@ internal sealed class SiteSnapshot
         // Ordinal (case-sensitive) so dev matches production static hosts, which
         // serve files case-sensitively.
         PagesByRoute = pages.ToFrozenDictionary(
-            static page => page.RoutePath,
+            static page => PathString.FromUriComponent(page.RoutePath).Value!,
             StringComparer.Ordinal);
     }
 

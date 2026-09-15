@@ -6,29 +6,8 @@ using Kiji.Rendering;
 
 namespace Kiji;
 
-/// <summary>
-/// A typed, lazily materialized, keyed view over site content. Declare one with
-/// <see cref="KijiBuilder.AddContentSource{T}(Func{IServiceProvider, IReadOnlyList{T}}, Func{T, string}, Action{ContentSourceOptions{T}})"/>
-/// (or <c>AddMarkdownContent</c>) and resolve it by its element type — from a component
-/// with <c>@inject ContentDictionary&lt;Post&gt; Posts</c>, or from the
-/// <see cref="IServiceProvider"/> handed to a route factory, a feed factory, a content
-/// loader, or a site artifact. There is deliberately no way to reach one while the site
-/// is still being declared: loading content resolves the site's paths, and the running
-/// command is what decides those.
-/// </summary>
-/// <remarks>
-/// <para>
-/// A content dictionary has no declared order: enumeration yields entries in ascending key order,
-/// and pages sort as they see fit. Ordering is a view concern, and a fixed enumeration
-/// order is what keeps generated output byte-identical across rebuilds.
-/// </para>
-/// <para>
-/// Look items up with <see cref="this[string]"/> or <see cref="TryGetValue"/> rather
-/// than scanning: an indexed lookup makes the page depend on that one source file,
-/// while enumerating makes it depend on the whole content set, so a linear search turns
-/// every detail page into a full-content dependency.
-/// </para>
-/// </remarks>
+/// <summary>A lazily loaded, case-insensitive dictionary of site content.</summary>
+/// <remarks>Resolve it through dependency injection; entries enumerate in ascending key order.</remarks>
 public sealed class ContentDictionary<T> : IReadOnlyDictionary<string, T>
     where T : class
 {

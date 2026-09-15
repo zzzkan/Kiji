@@ -13,6 +13,7 @@ internal sealed class ContentRuntime
     private readonly List<Action<IServiceCollection>> _registrations = [];
     private readonly HashSet<Type> _registeredElementTypes = [];
     private readonly ConcurrentDictionary<object, object> _materialized = new();
+    private readonly Lock _materializationLock = new();
     private IServiceProvider? _services;
 
     // A loader may resolve another dictionary (a tag list derived from posts, say),
@@ -54,7 +55,10 @@ internal sealed class ContentRuntime
 
     internal void Invalidate()
     {
-        _materialized.Clear();
+        lock (_materializationLock)
+        {
+            _materialized.Clear();
+        }
     }
 
     internal TMaterialized GetOrMaterialize<TMaterialized>(object handle, Func<IServiceProvider, TMaterialized> factory)
@@ -65,9 +69,26 @@ internal sealed class ContentRuntime
             return (TMaterialized)existing;
         }
 
+        // GetOrAdd alone may invoke the factory multiple times. Serialize first
+        // materialization (including nested loaders) and invalidation, so an old
+        // in-flight loader cannot repopulate the cache after a content change.
+        lock (_materializationLock)
+        {
+            return Materialize(handle, factory);
+        }
+    }
+
+    private TMaterialized Materialize<TMaterialized>(object handle, Func<IServiceProvider, TMaterialized> factory)
+        where TMaterialized : class
+    {
+        if (_materialized.TryGetValue(handle, out var existing))
+        {
+            return (TMaterialized)existing;
+        }
+
         var services = _services
             ?? throw new InvalidOperationException(
-                "Content cannot be materialized before the app is built. Call KijiBuilder.Build() first.");
+                "Content cannot be materialized before the site's services have been initialized.");
 
         var name = DescribeHandle(handle);
         var chain = _materializing ??= [];

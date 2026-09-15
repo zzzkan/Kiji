@@ -16,12 +16,12 @@ Code: `src/Kiji/Generation/IncrementalBuildPlanner.cs`, `BuildDependencyRecorder
 
 During a render, `PageRenderContext.Dependencies` collects what the page actually read:
 
-| The page did this | It depends on |
-|---|---|
-| Read a `MarkdownContent`'s front matter, or called `RenderAsync` | `file:` that markdown file |
-| Referenced a local image from markdown | `file:` the image, plus the variants as additional outputs |
-| Observed a `ContentDictionary`'s shape — `Count`, `Keys`, `Values`, enumeration | `content-set` scoped to that dictionary's directory |
-| `this[key]` / `TryGetValue` / `ContainsKey` | `file:` if the item carries provenance, otherwise `content-set` |
+| The page did this                                                               | It depends on                                                   |
+| ------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Read a `MarkdownContent`'s front matter, or called `RenderAsync`                | `file:` that markdown file                                      |
+| Referenced a local image from markdown                                          | `file:` the image, plus the variants as additional outputs      |
+| Observed a `ContentDictionary`'s shape — `Count`, `Keys`, `Values`, enumeration | `content-set` scoped to that dictionary's directory             |
+| `this[key]` / `TryGetValue` / `ContainsKey`                                     | `file:` if the item carries provenance, otherwise `content-set` |
 
 That last row is why provenance matters: markdown sources state it explicitly so it
 survives the projection into a user model, so a keyed lookup collapses to a single-file
@@ -40,8 +40,8 @@ with no rules to remember.
 **Scopes.** A `content-set` dependency's manifest `Key` is the dictionary's
 contents-relative directory (`MarkdownContentOptions.Directory`), empty for the whole
 tree, and the planner fingerprints each scope separately. Two dictionaries over different
-directories therefore do not invalidate each other's index pages. Builds predating this
-wrote `contents` as the key; that is still read as the whole tree.
+directories therefore do not invalidate each other's index pages. An empty key means
+the whole tree; `contents` names a real subdirectory. Schema mismatches trigger a full rebuild.
 
 ## When a page is preserved
 
@@ -69,11 +69,11 @@ it, every lookup falls back to `content-set` — still correct, but every page t
 on all content.
 
 **Anything Kiji cannot observe** — a data file read by a custom loader, an HTTP call, a
-clock. Renders are *assumed deterministic in their inputs*. Declare it:
+clock. Renders are _assumed deterministic in their inputs_. Declare it:
 
 ```csharp
-builder.AddBuildInput("data/authors.json");   // hashes the file or directory
-builder.AddBuildInput("api-version", "2026-01"); // any change re-renders everything
+app.AddBuildInput("data/authors.json");   // hashes the file or directory
+app.AddBuildInput("api-version", "2026-01"); // any change re-renders everything
 ```
 
 In-memory data derived from code needs nothing: assembly MVIDs already cover it.
@@ -95,11 +95,8 @@ back to re-rendering rather than reasoning about whether it is probably fine.**
 
 **The output directory is never wholesale deleted.** After the build, `ReconcileOutputs`
 walks it and deletes every file the new manifest does not claim, then reclaims empty
-directories. That is why an unknown file in the output directory is *not* a reason to
-re-render anything — it is simply removed. Reconciliation checks the directory itself
-rather than the previous manifest's account of it, so it is both stronger and cheaper
-than deleting and rewriting (~64 ms against ~527 ms on a 1000-page tree,
-`Kiji.Benchmarks OutputCleanBenchmarks`).
+directories. That is why an unknown file in the output directory is _not_ a reason to
+re-render anything — it is simply removed. Reconciliation checks the directory itself, including files absent from the old manifest.
 
 **Re-rendering a page does not mean rewriting it.** `WritePageAsync` compares the hash of
 what it just rendered against the previous manifest entry, and skips the write while the
@@ -112,8 +109,20 @@ loads no manifest, so it always writes — that is what it is for.
 `src/Kiji.Tests/IncrementalBuildTests.cs` asserts that a full build and a
 full-build-then-edit-then-incremental-build produce **byte-identical output**. Any change
 to this area extends that test. Also covered there, and worth extending alongside: that a
-skip really skipped (output mtime unchanged), orphan collection, and each fallback trigger.
+skip really skipped (render callback not invoked), orphan collection, and each fallback trigger.
 
 If a build skips a page it should have re-rendered, the bug is almost always a dependency
 that was never recorded — start at `BuildDependencyRecorder` and the read path that should
 have called into it, not at the skip logic.
+
+## Hash and image concurrency
+
+The planner owns its Lazy file/set hash entries for one build. Evaluate only the Lazy
+returned by GetOrAdd, using ExecutionAndPublication; failed or missing inputs must be
+retried by the next build's planner. Hash formatting and Missing behavior are unchanged.
+
+Image generation locks use the absolute materialized image-family path, include waiters
+in their reference count, and recheck each variant after acquisition. Acquire the image
+lock before the global decode/encode slot. Release decoded images and generation slots
+before page-local copying. Cancellation belongs to one caller and must let another
+caller retry. Use deterministic internal hooks, not timing assumptions, to test this.

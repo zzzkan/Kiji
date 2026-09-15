@@ -19,7 +19,7 @@ namespace Kiji.Routing;
 /// <param name="ExcludeFromSitemap">
 /// Indicates whether this page should be excluded from the generated sitemap.
 /// </param>
-public sealed record PlannedPage(
+internal sealed record PlannedPage(
     string SourceIdentifier,
     IReadOnlyDictionary<string, string> Parameters,
     string RoutePath,

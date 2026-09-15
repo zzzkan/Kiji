@@ -87,9 +87,16 @@ internal sealed class DevServerStatusReporter
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(exception);
 
+        var sourceName = source switch
+        {
+            WatchedPathSource.Content => "content",
+            WatchedPathSource.Static => "static",
+            WatchedPathSource.BuildInput => "build input",
+            _ => throw new InvalidOperationException($"Unknown watched path source '{source}'."),
+        };
         WriteLine(
             StatusKind.Warning,
-            $"File watcher for {source.ToDisplayString()} path '{path}' failed: {exception.Message}");
+            $"File watcher for {sourceName} path '{path}' failed: {exception.Message}");
     }
 
     private void WriteLine(StatusKind kind, string message)

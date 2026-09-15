@@ -4,13 +4,13 @@ namespace Kiji.Markdown;
 /// Normalizes markdown image URLs into canonical lookup keys: the referenced path
 /// relative to the markdown file, with forward slashes and no <c>./</c> prefix.
 /// </summary>
-public static class ImageReferenceKey
+internal static class ImageReferenceKey
 {
     public static string FromMarkdownUrl(string url)
     {
         ArgumentNullException.ThrowIfNull(url);
 
-        var path = StripQueryAndFragment(url).Replace('\\', '/');
+        var path = Uri.UnescapeDataString(StripQueryAndFragment(url)).Replace('\\', '/');
 
         while (path.StartsWith("./", StringComparison.Ordinal))
         {

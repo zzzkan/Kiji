@@ -24,7 +24,7 @@ jobs:
         run: dotnet build -c Release
 
       - name: Test
-        run: dotnet test -c Release --no-build
+        run: dotnet test -c Release
 
       - name: Pack
         run: dotnet pack -c Release --no-build -o artifacts

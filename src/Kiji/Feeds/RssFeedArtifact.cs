@@ -7,7 +7,7 @@ namespace Kiji.Feeds;
 /// <summary>
 /// Generates an RSS 2.0 feed from a sequence of entries, written in the order given.
 /// </summary>
-public sealed class RssFeedArtifact : ISiteArtifact
+internal sealed class RssFeedArtifact : ISiteArtifact
 {
     private const string AtomNamespace = "http://www.w3.org/2005/Atom";
 

@@ -1,6 +1,6 @@
 namespace Kiji.Routing;
 
-public sealed record StaticPageDefinition
+internal sealed record StaticPageDefinition
 {
     public StaticPageDefinition(
         string sourceIdentifier,
@@ -248,11 +248,11 @@ public sealed record StaticPageDefinition
         return value;
     }
 
-    public abstract record PageSegment;
+    internal abstract record PageSegment;
 
-    public sealed record PageLiteralSegment(string Value) : PageSegment;
+    internal sealed record PageLiteralSegment(string Value) : PageSegment;
 
-    public sealed record PageParameterSegment(string Name) : PageSegment;
+    internal sealed record PageParameterSegment(string Name) : PageSegment;
 
-    public sealed record BoundPagePath(string RoutePath, string OutputRelativePath);
+    internal sealed record BoundPagePath(string RoutePath, string OutputRelativePath);
 }

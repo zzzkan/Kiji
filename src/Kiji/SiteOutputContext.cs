@@ -13,9 +13,7 @@ public sealed class SiteOutputContext
         Services = services;
     }
 
-    /// <summary>
-    /// The site metadata configured on the builder.
-    /// </summary>
+    /// <summary>The site metadata supplied to this generation.</summary>
     public SiteInfo Site { get; }
 
     /// <summary>
@@ -23,10 +21,6 @@ public sealed class SiteOutputContext
     /// </summary>
     public IReadOnlyList<SitePageInfo> Pages { get; }
 
-    /// <summary>
-    /// The app's services, for artifacts that need content or site configuration.
-    /// Artifacts run once every page has been generated, so resolving a
-    /// <see cref="ContentDictionary{T}"/> here is safe.
-    /// </summary>
+    /// <summary>The site services available during artifact generation.</summary>
     public IServiceProvider Services { get; }
 }

@@ -2,7 +2,7 @@ namespace Kiji;
 
 /// <summary>
 /// Console output for build progress. Per-item detail lines are suppressed unless
-/// verbose mode is enabled (<c>--verbose</c>): the console is a global lock plus
+/// verbose mode is enabled (<c>-p:KijiVerbose=true</c>): the console is a global lock plus
 /// synchronous I/O, and writing one line per page from the parallel render loop
 /// can dominate large builds.
 /// </summary>

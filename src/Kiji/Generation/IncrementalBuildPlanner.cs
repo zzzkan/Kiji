@@ -14,7 +14,7 @@ namespace Kiji.Generation;
 /// ambiguous situation falls back to re-rendering — a stale output is never acceptable.
 /// </summary>
 internal sealed class IncrementalBuildPlanner(
-    SsgOptions options,
+    ResolvedSitePaths options,
     string rootPath,
     string cacheDirectory,
     SiteInfo site,
@@ -23,11 +23,10 @@ internal sealed class IncrementalBuildPlanner(
 {
     private readonly string _rootPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
     private readonly string _manifestPath = Path.Combine(cacheDirectory, "build-manifest.json");
-    private readonly ConcurrentDictionary<string, string> _fileFingerprints = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, string> _contentSetFingerprints = new(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>The scope key written by builds predating per-directory content sets.</summary>
-    private const string LegacyWholeTreeScope = "contents";
+    private readonly ConcurrentDictionary<string, Lazy<string>> _fileFingerprints = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, Lazy<string>> _contentSetFingerprints = new(StringComparer.OrdinalIgnoreCase);
+    internal Action<string>? BeforeContentSetHash { get; init; }
+    internal Action<string>? BeforeFileHash { get; init; }
 
     internal async Task<IncrementalBuildPlan> CreatePlanAsync(
         IReadOnlyList<PageRenderRequest> pages,
@@ -94,7 +93,7 @@ internal sealed class IncrementalBuildPlanner(
         // still be exactly what the previous build wrote. A matching stamp
         // (length + last write time) lets the recorded hash be trusted without
         // re-reading the file; on any stamp mismatch the hash is recomputed.
-        var outputPath = Path.Combine(options.OutputPath, oldPage.OutputRelativePath);
+        var outputPath = Path.Combine(options.OutputDirectory, oldPage.OutputRelativePath);
         if (!StampMatches(outputPath, oldPage.OutputLength, oldPage.OutputLastWriteTimeUtc)
             && !string.Equals(HashFileCached(outputPath), oldPage.OutputHash, StringComparison.Ordinal))
         {
@@ -103,7 +102,7 @@ internal sealed class IncrementalBuildPlanner(
 
         foreach (var additionalOutput in oldPage.AdditionalOutputs)
         {
-            if (!File.Exists(Path.Combine(options.OutputPath, additionalOutput)))
+            if (!File.Exists(Path.Combine(options.OutputDirectory, additionalOutput)))
             {
                 return false;
             }
@@ -193,12 +192,12 @@ internal sealed class IncrementalBuildPlanner(
         var additionalOutputs = recorder.AdditionalOutputs;
         for (var i = 0; i < additionalOutputs.Length; i++)
         {
-            additionalOutputs[i] = Path.GetRelativePath(options.OutputPath, additionalOutputs[i]);
+            additionalOutputs[i] = Path.GetRelativePath(options.OutputDirectory, additionalOutputs[i]);
         }
 
         Array.Sort(additionalOutputs, StringComparer.OrdinalIgnoreCase);
 
-        var outputStamp = ReadStamp(Path.Combine(options.OutputPath, request.OutputRelativePath));
+        var outputStamp = ReadStamp(Path.Combine(options.OutputDirectory, request.OutputRelativePath));
         return new BuildManifestPage(
             request.OutputRelativePath,
             request.RoutePath,
@@ -216,7 +215,7 @@ internal sealed class IncrementalBuildPlanner(
     /// </summary>
     internal async Task<IReadOnlyList<BuildManifestStaticFile>> SyncStaticFilesAsync(IncrementalBuildPlan plan)
     {
-        if (!Directory.Exists(options.StaticPath))
+        if (!Directory.Exists(options.StaticDirectory))
         {
             return [];
         }
@@ -224,7 +223,7 @@ internal sealed class IncrementalBuildPlanner(
         var oldEntries = (plan.OldManifest?.StaticFiles ?? [])
             .ToDictionary(static entry => entry.RelativePath, StringComparer.OrdinalIgnoreCase);
 
-        var files = new DirectoryInfo(options.StaticPath).EnumerateFiles("*", SearchOption.AllDirectories).ToArray();
+        var files = new DirectoryInfo(options.StaticDirectory).EnumerateFiles("*", SearchOption.AllDirectories).ToArray();
         var entries = new BuildManifestStaticFile[files.Length];
         var copied = 0;
 
@@ -234,8 +233,8 @@ internal sealed class IncrementalBuildPlanner(
             (index, _) =>
             {
                 var source = files[index];
-                var relativePath = Path.GetRelativePath(options.StaticPath, source.FullName);
-                var destinationPath = Path.Combine(options.OutputPath, relativePath);
+                var relativePath = Path.GetRelativePath(options.StaticDirectory, source.FullName);
+                var destinationPath = Path.Combine(options.OutputDirectory, relativePath);
 
                 if (oldEntries.TryGetValue(relativePath, out var oldEntry)
                     && oldEntry.SourceLength == source.Length
@@ -277,17 +276,10 @@ internal sealed class IncrementalBuildPlanner(
     /// Makes the output directory hold exactly what this build produced: every file it
     /// does not claim is deleted, and directories left empty are pruned.
     /// </summary>
-    /// <remarks>
-    /// This is the guarantee that used to come from deleting the whole directory and
-    /// writing it again, and it is a stronger one — it is checked against what is
-    /// actually on disk rather than against the previous manifest's account of it, so a
-    /// file no build produced is cleaned up either way. It is also far cheaper: deleting
-    /// and recreating a 1000-page tree measures ~527 ms against ~64 ms to walk it and
-    /// delete the difference (<c>Kiji.Benchmarks OutputCleanBenchmarks</c>).
-    /// </remarks>
+    /// <remarks>Also removes files absent from the previous manifest.</remarks>
     internal void ReconcileOutputs(BuildManifest manifest)
     {
-        if (!Directory.Exists(options.OutputPath))
+        if (!Directory.Exists(options.OutputDirectory))
         {
             return;
         }
@@ -295,9 +287,9 @@ internal sealed class IncrementalBuildPlanner(
         var expected = CollectOutputRelativePaths(manifest);
         var removed = 0;
 
-        foreach (var file in Directory.EnumerateFiles(options.OutputPath, "*", SearchOption.AllDirectories))
+        foreach (var file in Directory.EnumerateFiles(options.OutputDirectory, "*", SearchOption.AllDirectories))
         {
-            if (expected.Contains(Path.GetRelativePath(options.OutputPath, file)))
+            if (expected.Contains(Path.GetRelativePath(options.OutputDirectory, file)))
             {
                 continue;
             }
@@ -308,7 +300,7 @@ internal sealed class IncrementalBuildPlanner(
 
         if (removed > 0)
         {
-            PruneEmptyDirectories(options.OutputPath);
+            PruneEmptyDirectories(options.OutputDirectory);
             BuildOutput.Info($"Removed {removed} file(s) the build did not produce.");
         }
     }
@@ -341,7 +333,7 @@ internal sealed class IncrementalBuildPlanner(
         {
             var json = await File.ReadAllTextAsync(_manifestPath, cancellationToken);
             var manifest = JsonSerializer.Deserialize(json, BuildManifestJsonContext.Default.BuildManifest);
-            return manifest?.SchemaVersion == BuildManifest.CurrentSchemaVersion ? manifest : null;
+            return manifest?.IsValid() == true ? manifest : null;
         }
         catch (JsonException)
         {
@@ -357,22 +349,18 @@ internal sealed class IncrementalBuildPlanner(
     /// The digest of every <c>*.md</c> under a content-set scope — a contents-relative
     /// directory, or empty for the whole tree. Computed once per scope per build.
     /// </summary>
-    /// <remarks>
-    /// <c>"contents"</c> is how builds before scoping keyed the whole-tree dependency,
-    /// so it is still read that way. A site that really does have a
-    /// <c>contents/contents/</c> directory therefore gets the whole-tree digest for it:
-    /// a superset, so the page can only re-render more often, never go stale.
-    /// </remarks>
     internal string ContentSetFingerprint(string scope)
     {
-        return _contentSetFingerprints.GetOrAdd(scope, static (key, self) => self.ComputeContentSetFingerprint(key), this);
+        return _contentSetFingerprints.GetOrAdd(scope, static (key, self) =>
+            new Lazy<string>(() => self.ComputeContentSetFingerprint(key), LazyThreadSafetyMode.ExecutionAndPublication), this).Value;
     }
 
-    internal string ComputeContentSetFingerprint(string scope = "")
+    private string ComputeContentSetFingerprint(string scope)
     {
-        var scopePath = scope.Length == 0 || string.Equals(scope, LegacyWholeTreeScope, StringComparison.OrdinalIgnoreCase)
-            ? options.ContentsPath
-            : Path.GetFullPath(Path.Combine(options.ContentsPath, scope));
+        BeforeContentSetHash?.Invoke(scope);
+        var scopePath = scope.Length == 0
+            ? options.ContentDirectory
+            : Path.GetFullPath(Path.Combine(options.ContentDirectory, scope));
 
         if (!Directory.Exists(scopePath))
         {
@@ -386,7 +374,7 @@ internal sealed class IncrementalBuildPlanner(
         {
             var file = files[index];
             hashed[index] = (
-                Path.GetRelativePath(options.ContentsPath, file.FullPath),
+                Path.GetRelativePath(options.ContentDirectory, file.FullPath),
                 HashFileCached(file.FullPath, (file.Length, file.LastWriteTimeUtc)));
         });
 
@@ -453,21 +441,18 @@ internal sealed class IncrementalBuildPlanner(
 
     private string ComputeOptionsHash()
     {
-        var builder = new StringBuilder()
-            .Append("baseUrl=").Append(site.BaseUrl).Append('\n')
-            .Append("name=").Append(site.Name).Append('\n')
-            .Append("description=").Append(site.Description).Append('\n')
-            .Append("language=").Append(site.Language).Append('\n')
-            .Append("author=").Append(site.Author).Append('\n')
-            .Append("contents=").Append(ToDependencyKey(options.ContentsPath)).Append('\n')
-            .Append("static=").Append(ToDependencyKey(options.StaticPath)).Append('\n')
-            .Append("output=").Append(ToDependencyKey(options.OutputPath)).Append('\n');
+        var builder = new StringBuilder();
+        foreach (var value in new[] { site.BaseUrl.AbsoluteUri, site.Name, site.Description,
+            site.Language, site.Author, ToDependencyKey(options.ContentDirectory),
+            ToDependencyKey(options.StaticDirectory), ToDependencyKey(options.OutputDirectory) })
+        {
+            BuildFingerprint.AppendPart(builder, value);
+        }
 
         foreach (var input in buildInputs)
         {
-            builder.Append("input:").Append(input.Key).Append('=');
-            builder.Append(input.Path is not null ? HashBuildInputPath(input.Path) : input.Value);
-            builder.Append('\n');
+            BuildFingerprint.AppendPart(builder, input.Key);
+            BuildFingerprint.AppendPart(builder, input.Path is not null ? HashBuildInputPath(input.Path) : input.Value);
         }
 
         return BuildFingerprint.HashText(builder.ToString());
@@ -529,7 +514,7 @@ internal sealed class IncrementalBuildPlanner(
     private static bool IsFrameworkAssembly(string name)
     {
         // Framework assemblies change only with SDK updates; excluding them keeps the
-        // fingerprint small. Use --force after an SDK update if in doubt.
+        // fingerprint small. Use -p:KijiForce=true after an SDK update if in doubt.
         return name.StartsWith("System.", StringComparison.Ordinal)
             || name.StartsWith("Microsoft.", StringComparison.Ordinal)
             || name is "System" or "mscorlib" or "netstandard" or "WindowsBase";
@@ -545,9 +530,13 @@ internal sealed class IncrementalBuildPlanner(
         // hash in the registry; only files nobody read yet are hashed from disk.
         return _fileFingerprints.GetOrAdd(
             Path.GetFullPath(path),
-            static (fullPath, state) =>
-                state.Registry?.GetValidatedHash(fullPath, state.Stamp) ?? BuildFingerprint.HashFile(fullPath),
-            (Registry: hashRegistry, Stamp: stamp));
+            static (fullPath, state) => new Lazy<string>(() =>
+            {
+                state.Self.BeforeFileHash?.Invoke(fullPath);
+                return state.Registry?.GetValidatedHash(fullPath, state.Stamp) ?? BuildFingerprint.HashFile(fullPath);
+            },
+                LazyThreadSafetyMode.ExecutionAndPublication),
+            (Registry: hashRegistry, Stamp: stamp, Self: this)).Value;
     }
 
     private string ToDependencyKey(string absolutePath)

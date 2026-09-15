@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Kiji.Tests.TestSite;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -5,7 +6,7 @@ using Xunit;
 namespace Kiji.Tests;
 
 /// <summary>
-/// Covers what <see cref="KijiApp.RunAsync(CancellationToken)"/> decides from the
+/// Covers what <see cref="StaticSite.RunAsync(CancellationToken)"/> decides from the
 /// environment. The dev-server branch is exercised by <see cref="DevServerTests"/>;
 /// what matters here is that the presence of <c>KIJI_OUTPUT</c> is the whole switch,
 /// and that each branch settles the site's paths on its own directory.
@@ -31,6 +32,30 @@ public sealed class RunAsyncTests : IDisposable
     }
 
     [Fact]
+    public async Task PublishSite_RejectsSourceAndCacheOutputPathsWithoutChangingSources()
+    {
+        var source = Path.Combine(_testDir, "contents", "keep.txt");
+        await File.WriteAllTextAsync(source, "source data");
+        foreach (var output in new[] { _testDir, "contents", "contents/generated", "static", ".kiji", ".kiji/cache/site" })
+        {
+            await using var app = CreateApp();
+            await Assert.ThrowsAsync<InvalidOperationException>(() => app.PublishAsync(output));
+            Assert.Equal("source data", await File.ReadAllTextAsync(source));
+        }
+    }
+
+    [Fact]
+    public async Task PublishSite_RejectsChangingPathsOnAnExistingApp()
+    {
+        await using var app = CreateApp();
+        await app.PublishAsync(_outputDir);
+        var other = Path.Combine(_testDir, "other");
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => app.PublishAsync(other));
+        Assert.Contains("Create a new app", exception.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(other));
+    }
+
+    [Fact]
     public async Task RunAsync_WithOutputPath_GeneratesTheSiteThere()
     {
         await using var app = CreateApp();
@@ -42,73 +67,14 @@ public sealed class RunAsyncTests : IDisposable
     }
 
     [Fact]
-    public async Task RunAsync_WithOutputPath_SettlesOptionsOnThatDirectory()
-    {
-        await using var app = CreateApp();
-
-        await app.RunAsync(EnvironmentWith([("KIJI_OUTPUT", _outputDir)]), CancellationToken.None);
-
-        var options = app.Services.GetRequiredService<SsgOptions>();
-        Assert.Equal(Path.GetFullPath(_outputDir), options.OutputPath);
-    }
-
-    [Fact]
     public async Task RunAsync_WithRelativeOutputPath_ResolvesAgainstTheSiteRoot()
     {
         await using var app = CreateApp();
 
         await app.RunAsync(EnvironmentWith([("KIJI_OUTPUT", "out")]), CancellationToken.None);
 
-        var options = app.Services.GetRequiredService<SsgOptions>();
-        Assert.Equal(Path.GetFullPath(Path.Combine(_testDir, "out")), options.OutputPath);
-    }
-
-    [Theory]
-    [InlineData("1")]
-    [InlineData("true")]
-    [InlineData("TRUE")]
-    public async Task RunAsync_WithVerbose_TurnsOnPerFileOutput(string value)
-    {
-        var original = BuildOutput.Verbose;
-        try
-        {
-            await using var app = CreateApp();
-
-            await app.RunAsync(
-                EnvironmentWith([("KIJI_OUTPUT", _outputDir), ("KIJI_VERBOSE", value)]),
-                CancellationToken.None);
-
-            Assert.True(BuildOutput.Verbose);
-        }
-        finally
-        {
-            BuildOutput.Verbose = original;
-        }
-    }
-
-    [Theory]
-    [InlineData("0")]
-    [InlineData("false")]
-    [InlineData("")]
-    [InlineData(null)]
-    public async Task RunAsync_WithoutVerbose_LeavesPerFileOutputOff(string? value)
-    {
-        var original = BuildOutput.Verbose;
-        try
-        {
-            BuildOutput.Verbose = true;
-            await using var app = CreateApp();
-
-            await app.RunAsync(
-                EnvironmentWith([("KIJI_OUTPUT", _outputDir), ("KIJI_VERBOSE", value)]),
-                CancellationToken.None);
-
-            Assert.False(BuildOutput.Verbose);
-        }
-        finally
-        {
-            BuildOutput.Verbose = original;
-        }
+        var options = app.ServiceProvider.GetRequiredService<ResolvedSitePaths>();
+        Assert.Equal(Path.GetFullPath(Path.Combine(_testDir, "out")), options.OutputDirectory);
     }
 
     [Fact]
@@ -133,60 +99,68 @@ public sealed class RunAsyncTests : IDisposable
         Assert.NotEqual(stampBefore, File.GetLastWriteTimeUtc(indexPath));
     }
 
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("   ")]
-    public async Task RunAsync_WithoutOutputPath_DoesNotGenerate(string? value)
+    [Fact]
+    public async Task RunAsync_CanceledDevRun_ExitsNormallyWithoutPublishing()
     {
         await using var app = CreateApp();
         using var cts = new CancellationTokenSource();
-
-        // No output path means the dev server, which runs until cancelled. Cancelling up
-        // front is enough to prove nothing was generated, and keeps the test off a socket.
         await cts.CancelAsync();
-        var exitCode = await app.RunAsync(EnvironmentWith([("KIJI_OUTPUT", value)]), cts.Token);
-
-        // Ctrl+C on the dev server is a normal exit.
+        var exitCode = await app.RunAsync(EnvironmentWith([("KIJI_OUTPUT", "   ")]), cts.Token);
         Assert.Equal(0, exitCode);
         Assert.False(Directory.Exists(_outputDir));
     }
 
     [Fact]
-    public async Task PublishSiteAsync_WithoutOutputPath_Throws()
+    public async Task VerbosePublish_EmitsPerPageOutputInIsolatedProcess()
     {
-        await using var app = CreateApp();
+        const string childOutputVariable = "KIJI_TEST_VERBOSE_OUTPUT";
+        if (Environment.GetEnvironmentVariable(childOutputVariable) is { } childOutput)
+        {
+            await using var app = CreateApp();
+            await app.RunAsync(EnvironmentWith([("KIJI_OUTPUT", childOutput), ("KIJI_VERBOSE", "true")]), CancellationToken.None);
+            return;
+        }
 
-        await Assert.ThrowsAsync<ArgumentException>(() => app.PublishSiteAsync(string.Empty));
+        // Run only this test in a child process; BuildOutput and Console are process-wide.
+        var start = new ProcessStartInfo("dotnet")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        start.ArgumentList.Add(typeof(RunAsyncTests).Assembly.Location);
+        start.ArgumentList.Add("--filter-method");
+        start.ArgumentList.Add($"{typeof(RunAsyncTests).FullName}.{nameof(VerbosePublish_EmitsPerPageOutputInIsolatedProcess)}");
+        start.ArgumentList.Add("--results-directory");
+        start.ArgumentList.Add(Path.Combine(_testDir, "results"));
+        start.Environment[childOutputVariable] = _outputDir;
+        using var process = Process.Start(start)!;
+        var output = process.StandardOutput.ReadToEndAsync();
+        var error = process.StandardError.ReadToEndAsync();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        try { await process.WaitForExitAsync(timeout.Token); }
+        catch (OperationCanceledException)
+        {
+            process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync();
+            throw;
+        }
+        var log = await output;
+        Assert.True(process.ExitCode == 0, log + await error);
+        Assert.Contains($"Generated: {Path.Combine(_outputDir, "index.html")}", log, StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(_outputDir, "index.html")));
     }
 
-    [Fact]
-    public async Task Services_BeforeAnythingSettlesPaths_Throws()
+    private StaticSite CreateApp()
     {
-        var builder = KijiApp.CreateBuilder([]);
-        builder.Site = TestArticleContents.CreateSiteInfo();
-        builder.Paths.Root = _testDir;
+        var app = StaticSite.Create([]);
+        app.Info = TestArticleContents.CreateSiteInfo();
+        app.Paths.RootDirectory = _testDir;
+        app.Paths.ContentDirectory = "contents";
+        app.Paths.StaticDirectory = "static";
 
-        await using var app = builder.Build();
-
-        // KijiApp exposes no provider publicly for exactly this reason; reaching for
-        // SsgOptions before a run has chosen its paths is a bug, not a defaulting case.
-        var exception = Assert.Throws<InvalidOperationException>(
-            () => app.Services.GetRequiredService<SsgOptions>());
-        Assert.Contains("settled", exception.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private KijiApp CreateApp()
-    {
-        var builder = KijiApp.CreateBuilder([]);
-        builder.Site = TestArticleContents.CreateSiteInfo();
-        builder.Paths.Root = _testDir;
-        builder.Paths.Content = "contents";
-        builder.Paths.Static = "static";
-
-        builder.AddContentSource<Post>(static _ => [], static post => post.Slug);
-
-        var app = builder.Build();
+        app.UseContentSource<Post>(static _ => [], static post => post.Slug);
         TestArticleContents.MapSite(app);
         return app;
     }

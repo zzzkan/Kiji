@@ -30,16 +30,78 @@ public sealed class IncrementalBuildTests : IDisposable
     }
 
     [Fact]
+    public async Task ReusingAppForSameOutput_ReloadsContentAndMatchesFreshBuild()
+    {
+        var root = CreateSiteRoot("reused");
+        await using var app = CreateBuildApp(root);
+        await app.PublishAsync(Path.Combine(root, "dist"));
+        await WritePostAsync(root, "changing", "Changed", "Freshly loaded content.");
+        await app.PublishAsync(Path.Combine(root, "dist"));
+
+        var scratch = CreateSiteRoot("scratch");
+        await WritePostAsync(scratch, "changing", "Changed", "Freshly loaded content.");
+        await BuildAsync(scratch);
+        AssertDirectoriesIdentical(Path.Combine(scratch, "dist"), Path.Combine(root, "dist"));
+    }
+
+    [Fact]
+    public async Task IncrementalBuild_MalformedManifestFallsBackToFullBuild()
+    {
+        var renders = 0;
+        void RecordRender() { Interlocked.Increment(ref renders); }
+        var root = CreateSiteRoot("malformed");
+        await BuildAsync(root, RecordRender);
+        var manifestPath = Path.Combine(root, ".kiji", "cache", "build-manifest.json");
+        var original = await File.ReadAllTextAsync(manifestPath);
+        var expected = SnapshotDirectory(Path.Combine(root, "dist"));
+
+        foreach (var damage in new[] { "old-schema", "invalid-json", "null-pages", "null-page", "duplicate-page", "missing-dependencies", "outside-output" })
+        {
+            var json = System.Text.Json.Nodes.JsonNode.Parse(original)!;
+            var pages = json["Pages"]!.AsArray();
+            switch (damage)
+            {
+                case "old-schema": json["SchemaVersion"] = 1; break;
+                case "null-pages": json["Pages"] = null; break;
+                case "null-page": pages[0] = null; break;
+                case "duplicate-page": pages.Add(pages[0]!.DeepClone()); break;
+                case "missing-dependencies": pages[0]!["Dependencies"] = null; break;
+                case "outside-output": pages[0]!["AdditionalOutputs"] = new System.Text.Json.Nodes.JsonArray("../outside"); break;
+            }
+            var previousRenders = renders;
+            await File.WriteAllTextAsync(manifestPath, damage == "invalid-json" ? "{" : json.ToJsonString());
+            await BuildAsync(root, RecordRender);
+            Assert.True(renders > previousRenders, damage);
+            var rebuilt = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(manifestPath))!;
+            Assert.Equal(Kiji.Generation.BuildManifest.CurrentSchemaVersion, rebuilt["SchemaVersion"]!.GetValue<int>());
+            var actual = SnapshotDirectory(Path.Combine(root, "dist"));
+            Assert.Equal(expected.Keys.Order(StringComparer.Ordinal), actual.Keys.Order(StringComparer.Ordinal));
+            foreach (var (path, entry) in expected)
+            {
+                Assert.Equal(entry.Bytes, actual[path].Bytes);
+            }
+        }
+    }
+
+    [Fact]
     public async Task SecondBuild_NoChanges_SkipsPagesAndKeepsOutputsIdentical()
     {
+        var renders = 0;
+        void RecordRender() { Interlocked.Increment(ref renders); }
         var root = CreateSiteRoot("site");
-        await BuildAsync(root);
+        await BuildAsync(root, RecordRender);
 
         var distDir = Path.Combine(root, "dist");
         var before = SnapshotDirectory(distDir);
+        var initialRenders = renders;
+        Assert.True(initialRenders > 0);
+        var stray = Path.Combine(distDir, "manually-added.txt");
+        await File.WriteAllTextAsync(stray, "not produced");
 
-        await BuildAsync(root);
+        await BuildAsync(root, RecordRender);
 
+        Assert.Equal(initialRenders, renders);
+        Assert.False(File.Exists(stray));
         var after = SnapshotDirectory(distDir);
         Assert.Equal(before.Keys.Order(StringComparer.OrdinalIgnoreCase), after.Keys.Order(StringComparer.OrdinalIgnoreCase));
         foreach (var (path, (bytes, lastWrite)) in before)
@@ -97,51 +159,6 @@ public sealed class IncrementalBuildTests : IDisposable
         Assert.True(File.Exists(Path.Combine(root, "dist", "md", "stable", "index.html")));
     }
 
-    /// <summary>
-    /// A file no build produced is something to delete, not a reason to redo the work.
-    /// The output directory is reconciled against what the build produced, so the stray
-    /// file goes and every page that could be proven unchanged still gets skipped.
-    /// </summary>
-    [Fact]
-    public async Task IncrementalBuild_UnknownFileInOutput_RemovesItWithoutReRenderingPages()
-    {
-        var root = CreateSiteRoot("site");
-        await BuildAsync(root);
-
-        var page = Path.Combine(root, "dist", "md", "stable", "index.html");
-        var pageStampBefore = File.GetLastWriteTimeUtc(page);
-
-        var strayPath = Path.Combine(root, "dist", "manually-added.txt");
-        await File.WriteAllTextAsync(strayPath, "not produced by the build");
-
-        await BuildAsync(root);
-
-        Assert.False(File.Exists(strayPath));
-        Assert.True(File.Exists(page));
-        Assert.Equal(pageStampBefore, File.GetLastWriteTimeUtc(page));
-    }
-
-    /// <summary>
-    /// A stray file sitting where a real page belongs is not left alone: the page's
-    /// recorded output hash no longer matches, so the page re-renders over it.
-    /// </summary>
-    [Fact]
-    public async Task IncrementalBuild_StrayFileCollidingWithAPageOutput_IsOverwritten()
-    {
-        var root = CreateSiteRoot("site");
-        await BuildAsync(root);
-
-        var page = Path.Combine(root, "dist", "md", "stable", "index.html");
-        var original = await File.ReadAllBytesAsync(page);
-
-        // Same length as a real output would never be; content certainly is not.
-        await File.WriteAllTextAsync(page, "stray");
-
-        await BuildAsync(root);
-
-        Assert.Equal(original, await File.ReadAllBytesAsync(page));
-    }
-
     [Fact]
     public async Task IncrementalBuild_TamperedPageOutput_ReRendersPage()
     {
@@ -173,34 +190,47 @@ public sealed class IncrementalBuildTests : IDisposable
         Assert.True(File.Exists(Path.Combine(root, "dist", "extra.txt")));
     }
 
-    [Fact]
-    public async Task IncrementalBuild_EditInOneContentDirectory_SkipsPagesReadingAnother()
+    [Theory]
+    [InlineData("notes")]
+    [InlineData("contents")]
+    public async Task IncrementalBuild_EditInOneContentDirectory_SkipsPagesReadingAnother(string notesDirectory)
     {
         var root = Path.Combine(_testDir, "scoped");
         Directory.CreateDirectory(Path.Combine(root, "contents", "posts"));
-        Directory.CreateDirectory(Path.Combine(root, "contents", "notes"));
+        Directory.CreateDirectory(Path.Combine(root, "contents", notesDirectory));
         Directory.CreateDirectory(Path.Combine(root, "static"));
 
         await WriteMarkdownAsync(root, Path.Combine("posts", "first"), "First Post", "Post body.");
-        await WriteMarkdownAsync(root, Path.Combine("notes", "alpha"), "Alpha Note", "Note body.");
+        await WriteMarkdownAsync(root, Path.Combine(notesDirectory, "alpha"), "Alpha Note", "Note body.");
 
-        await BuildScopedAsync(root);
+        await BuildScopedAsync(root, notesDirectory);
 
         var notesIndex = Path.Combine(root, "dist", "notes", "all", "index.html");
         var postPage = Path.Combine(root, "dist", "md", "first", "index.html");
         var notesStampBefore = File.GetLastWriteTimeUtc(notesIndex);
+        var manifestPath = Path.Combine(root, ".kiji", "cache", "build-manifest.json");
+        var before = System.Text.Json.JsonSerializer.Deserialize(
+            await File.ReadAllTextAsync(manifestPath), Kiji.Generation.BuildManifestJsonContext.Default.BuildManifest)!;
+        var notesOutput = Path.GetRelativePath(Path.Combine(root, "dist"), notesIndex);
 
         // Touch content in posts/ only. The notes index enumerates its own collection,
         // so its content-set dependency is scoped to notes/ and still holds.
         await WriteMarkdownAsync(root, Path.Combine("posts", "first"), "First Post", "Edited post body.");
-        await BuildScopedAsync(root);
+        await BuildScopedAsync(root, notesDirectory);
 
         Assert.Contains("Edited post body.", await File.ReadAllTextAsync(postPage), StringComparison.Ordinal);
         Assert.Equal(notesStampBefore, File.GetLastWriteTimeUtc(notesIndex));
+        var after = System.Text.Json.JsonSerializer.Deserialize(
+            await File.ReadAllTextAsync(manifestPath), Kiji.Generation.BuildManifestJsonContext.Default.BuildManifest)!;
+        // An unchanged HTML file alone cannot prove the scope stayed unchanged:
+        // rendering can produce identical HTML and skip the write.
+        Assert.Equal(
+            before.Pages.Single(page => page.OutputRelativePath == notesOutput).Dependencies,
+            after.Pages.Single(page => page.OutputRelativePath == notesOutput).Dependencies);
 
         // Editing notes/ must still re-render it, or the scoping would be unsound.
-        await WriteMarkdownAsync(root, Path.Combine("notes", "beta"), "Beta Note", "Second note.");
-        await BuildScopedAsync(root);
+        await WriteMarkdownAsync(root, Path.Combine(notesDirectory, "beta"), "Beta Note", "Second note.");
+        await BuildScopedAsync(root, notesDirectory);
 
         Assert.Contains("beta: Beta Note", await File.ReadAllTextAsync(notesIndex), StringComparison.Ordinal);
     }
@@ -236,68 +266,58 @@ public sealed class IncrementalBuildTests : IDisposable
 
     private static async Task BuildRelatedAsync(string root)
     {
-        var builder = KijiApp.CreateBuilder([]);
-        builder.Site = TestArticleContents.CreateSiteInfo();
-        builder.Paths.Root = root;
-        builder.Paths.Content = "contents";
-        builder.Paths.Static = "static";
+        await using var app = StaticSite.Create([]);
+        app.Info = TestArticleContents.CreateSiteInfo();
+        app.Paths.RootDirectory = root;
+        app.Paths.ContentDirectory = "contents";
+        app.Paths.StaticDirectory = "static";
 
-        builder.AddMarkdownContent<FrontMatter>(key: static post => post.FileInfo.Slug);
-        builder.AddContentSource<Post>(static _ => [], static post => post.Slug);
+        app.UseMarkdownContent<FrontMatter>(key: static post => post.FileInfo.Slug);
+        app.UseContentSource<Post>(static _ => [], static post => post.Slug);
+        app.UseDefaultLayout<MainLayout>();
+        app.AddStaticPages(typeof(TestArticleContents).Assembly);
+        app.UseNotFoundPage<NotFoundPage>();
 
-        await using var app = builder.Build();
-        app.MapDefaultLayout<MainLayout>();
-        app.MapPages(typeof(TestArticleContents).Assembly);
-        app.MapNotFound<NotFoundPage>();
-
-        app.MapRoutes<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
+        app.AddPages<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
-        app.MapRoutes<TagsPage>(static _ => []);
-        app.MapRoutes<MirrorPostPage>(static _ => []);
-        app.MapRoutes<ScopedNotesIndexPage>(static _ => []);
 
-        app.MapRoutes<MarkdownPostTestPage>(static services => services
+        app.AddPages<MarkdownPostTestPage>(static services => services
             .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
             .Select(static post => new { Slug = post.Key, ContentKey = post.Key }));
-        app.MapRoutes<RelatedPostsTestPage>(static services => services
+        app.AddPages<RelatedPostsTestPage>(static services => services
             .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
             .Select(static post => new { Slug = post.Key, ContentKey = post.Key }));
 
-        await app.PublishSiteAsync(Path.Combine(root, "dist"));
+        await app.PublishAsync(Path.Combine(root, "dist"));
     }
 
-    private static async Task BuildScopedAsync(string root)
+    private static async Task BuildScopedAsync(string root, string notesDirectory)
     {
-        var builder = KijiApp.CreateBuilder([]);
-        builder.Site = TestArticleContents.CreateSiteInfo();
-        builder.Paths.Root = root;
-        builder.Paths.Content = "contents";
-        builder.Paths.Static = "static";
+        await using var app = StaticSite.Create([]);
+        app.Info = TestArticleContents.CreateSiteInfo();
+        app.Paths.RootDirectory = root;
+        app.Paths.ContentDirectory = "contents";
+        app.Paths.StaticDirectory = "static";
 
-        builder.AddMarkdownContent<FrontMatter>(
+        app.UseMarkdownContent<FrontMatter>(
             key: static post => post.FileInfo.Slug,
             configure: static options => options.Directory = "posts");
-        builder.AddMarkdownContent<FrontMatter, ScopedNote>(
+        app.UseMarkdownContent<FrontMatter, ScopedNote>(
             select: ScopedNote.Create,
             key: static note => note.Key,
-            configure: static options => options.Directory = "notes");
-        builder.AddContentSource<Post>(static _ => [], static post => post.Slug);
-
-        await using var app = builder.Build();
-        app.MapDefaultLayout<MainLayout>();
-        app.MapPages(typeof(TestArticleContents).Assembly);
-        app.MapNotFound<NotFoundPage>();
-        app.MapRoutes<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
+            configure: options => options.Directory = notesDirectory);
+        app.UseContentSource<Post>(static _ => [], static post => post.Slug);
+        app.UseDefaultLayout<MainLayout>();
+        app.AddStaticPages(typeof(TestArticleContents).Assembly);
+        app.UseNotFoundPage<NotFoundPage>();
+        app.AddPages<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
-        app.MapRoutes<TagsPage>(static _ => []);
-        app.MapRoutes<MirrorPostPage>(static _ => []);
-        app.MapRoutes<MarkdownPostTestPage>(static services => services
+        app.AddPages<MarkdownPostTestPage>(static services => services
             .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
             .Select(static post => new { Slug = post.Key, ContentKey = post.Key }));
-        app.MapRoutes<ScopedNotesIndexPage>(static _ => [new { Kind = "all" }]);
-        app.MapRoutes<RelatedPostsTestPage>(static _ => []);
+        app.AddPages<ScopedNotesIndexPage>(static _ => [new { Kind = "all" }]);
 
-        await app.PublishSiteAsync(Path.Combine(root, "dist"));
+        await app.PublishAsync(Path.Combine(root, "dist"));
     }
 
     private static async Task WriteMarkdownAsync(string root, string relativePath, string title, string body)
@@ -340,24 +360,29 @@ public sealed class IncrementalBuildTests : IDisposable
             """);
     }
 
-    private static async Task BuildAsync(string root)
+    private static async Task BuildAsync(string root, Action? onRender = null)
     {
-        var builder = KijiApp.CreateBuilder([]);
-        builder.Site = TestArticleContents.CreateSiteInfo();
-        builder.Paths.Root = root;
-        builder.Paths.Content = "contents";
-        builder.Paths.Static = "static";
+        await using var app = CreateBuildApp(root, onRender);
+        await app.PublishAsync(Path.Combine(root, "dist"));
+    }
 
-        builder.AddMarkdownContent<FrontMatter>(key: static post => post.FileInfo.Slug);
-        builder.AddContentSource<Post>(static _ => [], static post => post.Slug);
+    private static StaticSite CreateBuildApp(string root, Action? onRender = null)
+    {
+        var app = StaticSite.Create([]);
+        app.Info = TestArticleContents.CreateSiteInfo();
+        app.Paths.RootDirectory = root;
+        app.Paths.ContentDirectory = "contents";
+        app.Paths.StaticDirectory = "static";
 
-        await using var app = builder.Build();
+        app.UseMarkdownContent<FrontMatter>(key: static post => post.FileInfo.Slug,
+            configure: options => options.AddHtmlTransform(html => { onRender?.Invoke(); return html; }));
+        app.UseContentSource<Post>(static _ => [], static post => post.Slug);
         TestArticleContents.MapSite(app);
-        app.MapRoutes<MarkdownPostTestPage>(static services => services
+        app.AddPages<MarkdownPostTestPage>(static services => services
             .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
             .Select(static post => new { Slug = post.Key, ContentKey = post.Key }));
 
-        await app.PublishSiteAsync(Path.Combine(root, "dist"));
+        return app;
     }
 
     private static Dictionary<string, (byte[] Bytes, DateTime LastWriteTimeUtc)> SnapshotDirectory(string directory)

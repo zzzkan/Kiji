@@ -7,11 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Kiji.Benchmarks;
 
-/// <summary>
-/// Measures the full per-page render (DI scope + HtmlRenderer + render + write) and,
-/// separately, just the scope + renderer construction, to quantify how much of the
-/// per-page cost is renderer setup (Phase 3-1).
-/// </summary>
+/// <summary>Measures component renderer setup and page rendering.</summary>
 [MemoryDiagnoser]
 public class ComponentRendererBenchmarks
 {

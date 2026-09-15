@@ -6,18 +6,17 @@ namespace Kiji.Assets;
 public sealed class ImageOptions
 {
     /// <summary>
-    /// Target widths for responsive variants. Variants are generated only when
-    /// smaller than the source image width.
+    /// Responsive widths smaller than the source, defaulting to 320, 640, 960, and 1280 pixels.
     /// </summary>
     public IReadOnlyList<int> Widths { get; set; } = [320, 640, 960, 1280];
 
     /// <summary>
-    /// Maximum width for the variant generated at the source image size.
+    /// Maximum width for the source-size variant, defaulting to 1920 pixels.
     /// </summary>
     public int MaxSourceWidth { get; set; } = 1920;
 
     /// <summary>
-    /// Encoding quality (0-100) for generated variants.
+    /// Encoding quality from 0 to 100, defaulting to 80.
     /// </summary>
     public int Quality { get; set; } = 80;
 }

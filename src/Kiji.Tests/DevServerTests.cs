@@ -6,15 +6,13 @@ using Xunit;
 
 namespace Kiji.Tests;
 
-/// <summary>
-/// Integration tests for the on-demand development server (Kestrel on an ephemeral port).
-/// </summary>
 public sealed class DevServerTests : IAsyncDisposable
 {
     private readonly string _testDir;
     private readonly string _contentsDir;
     private readonly string _staticDir;
-    private KijiApp? _app;
+    private StaticSite? _app;
+    private int _contentLoads;
 
     public DevServerTests()
     {
@@ -60,55 +58,51 @@ public sealed class DevServerTests : IAsyncDisposable
             Assert.Equal(HttpStatusCode.OK, blogResponse.StatusCode);
             Assert.Contains("<h1>Hello World</h1>", blogHtml, StringComparison.Ordinal);
 
+            foreach (var path in new[] { "/Blog/", "/no-such-page/", "/missing.html" })
+            {
+                using var missing = await client.GetAsync(new Uri(baseAddress, path));
+                Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+                Assert.Equal("text/html", missing.Content.Headers.ContentType?.MediaType);
+            }
+            using var notFound = await client.GetAsync(new Uri(baseAddress, "/404.html"));
+            Assert.Equal(HttpStatusCode.OK, notFound.StatusCode);
+            Assert.Contains("/_kiji/livereload.js", await notFound.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
             var output = logs.ToString();
-            Assert.Contains("kiji dev     🚀 Started Kiji dev server at", output, StringComparison.Ordinal);
-            Assert.Contains("kiji dev     ⌚ Watching content files under", output, StringComparison.Ordinal);
-            Assert.Contains("kiji dev     ⌚ Watching static files under", output, StringComparison.Ordinal);
+            Assert.Contains("Started Kiji dev server at", output, StringComparison.Ordinal);
+            Assert.Contains("Watching content files under", output, StringComparison.Ordinal);
+            Assert.Contains("Watching static files under", output, StringComparison.Ordinal);
         }
     }
 
     [Fact]
-    public async Task Serve_ResolvesMissingTrailingSlashWithoutRedirect()
+    public async Task Serve_RedirectsMissingTrailingSlashPreservingQuery()
     {
         var (baseAddress, devServer) = await StartServerAsync();
         await using (devServer)
         {
             using var client = CreateClient();
 
-            var response = await client.GetAsync(new Uri(baseAddress, "/blog"));
-            var html = await response.Content.ReadAsStringAsync();
+            var response = await client.GetAsync(new Uri(baseAddress, "/blog?tag=a%20b"));
 
-            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-            Assert.Contains("<title>Blog - zzzkan.me</title>", html, StringComparison.Ordinal);
+            Assert.Equal(HttpStatusCode.Found, response.StatusCode);
+            Assert.Equal("/blog/?tag=a%20b", response.Headers.Location!.OriginalString);
         }
     }
 
     [Fact]
-    public async Task Serve_RouteMatchingIsCaseSensitive()
+    public async Task Serve_UnicodeRouteAndBasePathMatchBrowserRequests()
     {
-        var (baseAddress, devServer) = await StartServerAsync();
+        var site = TestArticleContents.CreateSiteInfo() with { BaseUrl = new Uri("https://example.com/日本/") };
+        var (baseAddress, devServer) = await StartServerAsync(new StringWriter(), site, "日本語");
         await using (devServer)
         {
             using var client = CreateClient();
-
-            var response = await client.GetAsync(new Uri(baseAddress, "/Blog/"));
-
-            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        }
-    }
-
-    [Fact]
-    public async Task Serve_UnknownRouteRendersNotFoundPageWith404()
-    {
-        var (baseAddress, devServer) = await StartServerAsync();
-        await using (devServer)
-        {
-            using var client = CreateClient();
-
-            var response = await client.GetAsync(new Uri(baseAddress, "/no-such-page/"));
-
-            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-            Assert.Contains("text/html", response.Content.Headers.ContentType?.MediaType, StringComparison.Ordinal);
+            var page = new Uri(baseAddress, "/日本/blog/日本語/");
+            Assert.Contains("<h1>Hello World</h1>", await client.GetStringAsync(page), StringComparison.Ordinal);
+            var redirect = await client.GetAsync(new Uri(baseAddress, "/日本/blog/日本語?q=1"));
+            Assert.Equal(HttpStatusCode.Found, redirect.StatusCode);
+            Assert.Equal("/%E6%97%A5%E6%9C%AC/blog/%E6%97%A5%E6%9C%AC%E8%AA%9E/?q=1", redirect.Headers.Location!.OriginalString);
         }
     }
 
@@ -141,6 +135,59 @@ public sealed class DevServerTests : IAsyncDisposable
             var output = logs.ToString();
             Assert.Contains($"File updated: .{Path.DirectorySeparatorChar}hello-world.txt", output, StringComparison.Ordinal);
             Assert.Contains("Reloaded 1 browser client(s).", output, StringComparison.Ordinal);
+            await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
+            Assert.Equal(WebSocketState.Closed, socket.State);
+        }
+    }
+
+    [Fact]
+    public async Task Serve_DeclaredBuildInputChangeReloadsContent()
+    {
+        var (baseAddress, devServer) = await StartServerAsync();
+        await using (devServer)
+        {
+            using var client = CreateClient();
+            var page = new Uri(baseAddress, "/blog/hello-world/");
+            Assert.Contains("<h1>Hello World</h1>", await client.GetStringAsync(page), StringComparison.Ordinal);
+            using var socket = new ClientWebSocket();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            await socket.ConnectAsync(new UriBuilder(baseAddress) { Scheme = "ws", Path = "/_kiji/reload" }.Uri, timeout.Token);
+            await File.WriteAllTextAsync(Path.Combine(_testDir, "title.txt"), "External setting updated", timeout.Token);
+            await socket.ReceiveAsync(new byte[64], timeout.Token);
+            Assert.Contains("<h1>External setting updated</h1>", await client.GetStringAsync(page), StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task Serve_StaticDirectoryCreatedDuringStartupServesNewFiles()
+    {
+        Directory.Delete(_staticDir);
+        var (baseAddress, devServer) = await StartServerAsync();
+        await using (devServer)
+        {
+            await File.WriteAllTextAsync(Path.Combine(_staticDir, "new.css"), "body{}");
+            using var client = CreateClient();
+            Assert.Equal("body{}", await client.GetStringAsync(new Uri(baseAddress, "/new.css")));
+        }
+    }
+
+    [Fact]
+    public async Task Serve_ReplacedContentDirectoryStillReceivesChanges()
+    {
+        var (baseAddress, devServer) = await StartServerAsync();
+        await using (devServer)
+        {
+            using var client = CreateClient();
+            var page = new Uri(baseAddress, "/blog/hello-world/");
+            await client.GetStringAsync(page);
+            using var socket = new ClientWebSocket();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            await socket.ConnectAsync(new UriBuilder(baseAddress) { Scheme = "ws", Path = "/_kiji/reload" }.Uri, timeout.Token);
+            Directory.Move(_contentsDir, Path.Combine(_testDir, "old-contents"));
+            Directory.CreateDirectory(_contentsDir);
+            await File.WriteAllTextAsync(Path.Combine(_contentsDir, "hello-world.txt"), "Replacement content", timeout.Token);
+            await socket.ReceiveAsync(new byte[64], timeout.Token);
+            Assert.Contains("<h1>Replacement content</h1>", await client.GetStringAsync(page), StringComparison.Ordinal);
         }
     }
 
@@ -153,6 +200,10 @@ public sealed class DevServerTests : IAsyncDisposable
         var (baseAddress, devServer) = await StartServerAsync(logs);
         await using (devServer)
         {
+            using var client = CreateClient();
+            var page = new Uri(baseAddress, "/blog/hello-world/");
+            await client.GetStringAsync(page);
+            var loads = _contentLoads;
             using var socket = new ClientWebSocket();
             var wsUri = new UriBuilder(baseAddress) { Scheme = "ws", Path = "/_kiji/reload" }.Uri;
             await socket.ConnectAsync(wsUri, CancellationToken.None);
@@ -163,6 +214,10 @@ public sealed class DevServerTests : IAsyncDisposable
             var buffer = new byte[64];
             var result = await socket.ReceiveAsync(buffer, timeout.Token);
             Assert.Equal("reload", Encoding.UTF8.GetString(buffer, 0, result.Count));
+
+            await client.GetStringAsync(page);
+            Assert.Equal(loads, _contentLoads);
+            Assert.Contains("color: red", await client.GetStringAsync(new Uri(baseAddress, "/site.css")), StringComparison.Ordinal);
 
             var output = logs.ToString();
             Assert.Contains($"File updated: .{Path.DirectorySeparatorChar}site.css", output, StringComparison.Ordinal);
@@ -229,8 +284,13 @@ public sealed class DevServerTests : IAsyncDisposable
                 await home.Content.ReadAsStringAsync(),
                 StringComparison.Ordinal);
 
-            // The prefix without a trailing slash resolves to the same page.
-            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(new Uri(baseAddress, "/kiji"))).StatusCode);
+            var script = await client.GetStringAsync(new Uri(baseAddress, "/kiji/_kiji/livereload.js"));
+            Assert.Contains("WebSocket", script, StringComparison.Ordinal);
+            Assert.Contains("/kiji/_kiji/livereload.js", await home.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+            var prefix = await client.GetAsync(new Uri(baseAddress, "/kiji"));
+            Assert.Equal(HttpStatusCode.Found, prefix.StatusCode);
+            Assert.Equal("/kiji/", prefix.Headers.Location!.OriginalString);
 
             var post = await client.GetAsync(new Uri(baseAddress, "/kiji/blog/hello-world/"));
             Assert.Equal(HttpStatusCode.OK, post.StatusCode);
@@ -241,7 +301,7 @@ public sealed class DevServerTests : IAsyncDisposable
 
             // Trailing-slash resolution still works underneath the prefix.
             Assert.Equal(
-                HttpStatusCode.OK,
+                HttpStatusCode.Found,
                 (await client.GetAsync(new Uri(baseAddress, "/kiji/blog/hello-world"))).StatusCode);
 
             // The server root redirects rather than 404s, so the developer lands somewhere useful.
@@ -270,32 +330,6 @@ public sealed class DevServerTests : IAsyncDisposable
         }
     }
 
-    /// <summary>
-    /// The live-reload endpoints are routed, so they only match under the prefix if the
-    /// base path is applied before route matching.
-    /// </summary>
-    [Fact]
-    public async Task Serve_WithBasePath_ServesLiveReloadEndpointsUnderThePrefix()
-    {
-        var (baseAddress, devServer) = await StartServerAsync(
-            new StringWriter(),
-            TestArticleContents.CreateSiteInfoWithBasePath());
-        await using (devServer)
-        {
-            using var client = CreateClient();
-
-            var script = await client.GetAsync(new Uri(baseAddress, "/kiji/_kiji/livereload.js"));
-            Assert.Equal(HttpStatusCode.OK, script.StatusCode);
-            Assert.Contains("WebSocket", await script.Content.ReadAsStringAsync(), StringComparison.Ordinal);
-
-            var html = await (await client.GetAsync(new Uri(baseAddress, "/kiji/"))).Content.ReadAsStringAsync();
-            Assert.Contains(
-                """<script src="/kiji/_kiji/livereload.js" defer></script>""",
-                html,
-                StringComparison.Ordinal);
-        }
-    }
-
     private static HttpClient CreateClient()
     {
         return new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
@@ -308,31 +342,41 @@ public sealed class DevServerTests : IAsyncDisposable
 
     private async Task<(Uri BaseAddress, IAsyncDisposable DevServer)> StartServerAsync(
         StringWriter logs,
-        SiteInfo? site = null)
+        SiteInfo? site = null,
+        string? additionalSlug = null)
     {
         await File.WriteAllTextAsync(Path.Combine(_contentsDir, "hello-world.txt"), "Hello World");
 
-        var builder = KijiApp.CreateBuilder([]);
-        builder.Site = site ?? TestArticleContents.CreateSiteInfo();
-        builder.Paths.Root = _testDir;
-        builder.Paths.Content = _contentsDir;
-        builder.Paths.Static = _staticDir;
+        var app = StaticSite.Create([]);
+        app.Info = site ?? TestArticleContents.CreateSiteInfo();
+        app.Paths.RootDirectory = _testDir;
+        app.Paths.ContentDirectory = _contentsDir;
+        app.Paths.StaticDirectory = _staticDir;
 
         var contentsDir = _contentsDir;
-        builder.AddContentSource<Post>(_ =>
-                [.. Directory.EnumerateFiles(contentsDir, "*.txt")
+        var settingsPath = Path.Combine(_testDir, "title.txt");
+        app.AddBuildInput(settingsPath);
+        app.UseContentSource<Post>(_ =>
+            {
+                Interlocked.Increment(ref _contentLoads);
+                return [.. Directory.EnumerateFiles(contentsDir, "*.txt")
                     .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
-                    .Select(static file => TestArticleContents.CreatePost(
+                    .Select(file => TestArticleContents.CreatePost(
                         Path.GetFileNameWithoutExtension(file),
-                        File.ReadAllText(file).Trim(),
+                        File.Exists(settingsPath) ? File.ReadAllText(settingsPath) : File.ReadAllText(file).Trim(),
                         "desc",
                         new DateOnly(2026, 1, 1),
                         null,
-                        "Testing"))],
+                        "Testing"))];
+            },
             key: static post => post.Slug);
 
-        _app = builder.Build();
+        _app = app;
         TestArticleContents.MapSite(_app);
+        if (additionalSlug is not null)
+        {
+            _app.AddPages<Kiji.Tests.TestSite.Pages.PostPage>(_ => [new { Slug = additionalSlug, ContentKey = "hello-world" }]);
+        }
 
         var reporter = new Kiji.Hosting.DevServerStatusReporter(logs, prefix: "kiji dev", useEmoji: true);
         var (devServer, web) = await _app.StartDevServerAsync(TestUrls.EphemeralPort, CancellationToken.None, reporter);

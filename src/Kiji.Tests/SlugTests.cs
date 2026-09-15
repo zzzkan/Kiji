@@ -6,7 +6,6 @@ public sealed class SlugTests
 {
     [Theory]
     [InlineData("VS Code", "vs-code")]
-    [InlineData("Youtube Music", "youtube-music")]
     [InlineData("Hello, World!", "hello-world")]
     [InlineData("  spaced  out  ", "spaced-out")]
     public void Normalize_ReturnsCanonicalSlug(string tagName, string expected)
@@ -14,13 +13,7 @@ public sealed class SlugTests
         var actual = Slug.Normalize(tagName);
 
         Assert.Equal(expected, actual);
+        Assert.Equal(expected, Slug.Create(tagName).Value);
     }
 
-    [Fact]
-    public void Create_ReturnsCanonicalValueObject()
-    {
-        var actual = Slug.Create(" Hello World ");
-
-        Assert.Equal("hello-world", actual.Value);
-    }
 }

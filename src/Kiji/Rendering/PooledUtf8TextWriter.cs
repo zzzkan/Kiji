@@ -5,10 +5,7 @@ using System.Text.Unicode;
 namespace Kiji.Rendering;
 
 /// <summary>
-/// A <see cref="TextWriter"/> that transcodes UTF-16 writes directly into a pooled
-/// UTF-8 buffer, then persists with a single preallocated file write. Replaces the
-/// StreamWriter-over-FileStream stack (char buffer, byte buffer, chunked async writes)
-/// on the page output path: one pooled buffer, one syscall, no per-page allocations.
+/// Transcodes UTF-16 writes into a pooled UTF-8 buffer.
 /// </summary>
 internal sealed class PooledUtf8TextWriter(int initialCapacity = 64 * 1024) : TextWriter
 {

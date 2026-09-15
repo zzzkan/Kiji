@@ -2,11 +2,7 @@ using BenchmarkDotNet.Attributes;
 
 namespace Kiji.Benchmarks;
 
-/// <summary>
-/// Decides how the build should walk a content or output tree when it needs each
-/// file's size and modification time — which it does everywhere: reading markdown,
-/// fingerprinting the content set, syncing static files, reconciling outputs.
-/// </summary>
+/// <summary>Compares file metadata collection during directory scans.</summary>
 /// <remarks>
 /// Today every scan enumerates paths and then constructs a <see cref="FileInfo"/> per
 /// path, which is a second trip to the filesystem for metadata the directory walk

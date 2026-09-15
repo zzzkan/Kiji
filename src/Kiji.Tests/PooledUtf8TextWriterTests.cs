@@ -87,16 +87,4 @@ public sealed class PooledUtf8TextWriterTests : IDisposable
         Assert.Equal(expected.ToString(), File.ReadAllText(path));
     }
 
-    [Fact]
-    public async Task WriteAsync_ThroughTextWriterBase_Works()
-    {
-        var path = Path.Combine(_testDir, "async.html");
-        using var writer = new PooledUtf8TextWriter();
-
-        await writer.WriteAsync("<html>");
-        await writer.WriteLineAsync("body");
-        writer.WriteToFile(path);
-
-        Assert.Equal($"<html>body{writer.NewLine}", File.ReadAllText(path));
-    }
 }

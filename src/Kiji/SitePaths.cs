@@ -1,42 +1,49 @@
 namespace Kiji;
 
-/// <summary>
-/// Configurable site directory layout. Relative paths are resolved against <see cref="Root"/>.
-/// </summary>
-/// <remarks>
-/// There is deliberately no output directory here. <c>dotnet publish</c> decides where the
-/// generated site goes, and Kiji's MSBuild targets hand that path to the app — so the
-/// publish directory is the single source of truth for it.
-/// </remarks>
+/// <summary>Configurable input directories, frozen when site execution starts.</summary>
 public sealed class SitePaths
 {
+    private bool _frozen;
     internal SitePaths(string root)
     {
-        Root = root;
+        RootDirectory = root;
     }
 
-    /// <summary>
-    /// The site root directory, which <see cref="Content"/> and <see cref="Static"/> resolve
-    /// against. Defaults to the site's own project directory (the nearest ancestor containing
-    /// a project file), falling back to the nearest ancestor containing <c>.git</c> and then
-    /// to the current directory.
-    /// </summary>
-    public string Root { get; set; }
+    /// <summary>The root against which relative site paths are resolved.</summary>
+    /// <remarks>Defaults to the nearest project directory, then the nearest Git directory, then the current directory.</remarks>
+    public string RootDirectory
+    {
+        get;
+        set { EnsureMutable(); field = value; }
+    }
 
-    /// <summary>
-    /// The content directory scanned for source files. Defaults to <c>contents</c>.
-    /// </summary>
-    public string Content { get; set; } = "contents";
+    /// <summary>The content directory relative to the root, defaulting to <c>contents</c>.</summary>
+    public string ContentDirectory
+    {
+        get;
+        set { EnsureMutable(); field = value; }
+    } = "contents";
 
-    /// <summary>
-    /// The static assets directory copied verbatim into the output.
-    /// Defaults to <c>wwwroot</c> under <see cref="Root"/> when not set.
-    /// </summary>
-    public string? Static { get; set; }
+    /// <summary>The static assets directory relative to the root, defaulting to <c>wwwroot</c> when null.</summary>
+    public string? StaticDirectory
+    {
+        get;
+        set { EnsureMutable(); field = value; }
+    }
+
+    internal void Freeze() => _frozen = true;
+
+    private void EnsureMutable()
+    {
+        if (_frozen)
+        {
+            throw new InvalidOperationException("Site paths cannot be changed after execution has started.");
+        }
+    }
 
     internal string ResolveKijiPath()
     {
-        return Path.Combine(Path.GetFullPath(Root), ".kiji");
+        return Path.Combine(Path.GetFullPath(RootDirectory), ".kiji");
     }
 
     internal string ResolveCachePath()
@@ -48,7 +55,7 @@ public sealed class SitePaths
     /// Paths for a publish: the site is written to <paramref name="outputPath"/>, which
     /// <c>dotnet publish</c> supplied.
     /// </summary>
-    internal SsgOptions ResolveForPublish(string outputPath)
+    internal ResolvedSitePaths ResolveForPublish(string outputPath)
     {
         return Resolve(ResolveAgainstRoot(outputPath));
     }
@@ -57,7 +64,7 @@ public sealed class SitePaths
     /// Paths for the dev server: pages render on demand into a mirror under <c>.kiji</c>,
     /// never into a publish directory.
     /// </summary>
-    internal SsgOptions ResolveForServe()
+    internal ResolvedSitePaths ResolveForServe()
     {
         var siteMirrorPath = ResolveSiteMirrorPath();
         Directory.CreateDirectory(siteMirrorPath);
@@ -70,7 +77,7 @@ public sealed class SitePaths
     /// <see cref="ResolveForServe"/> so nothing can be mistaken for a deliverable, and
     /// creates no directories.
     /// </summary>
-    internal SsgOptions ResolveForPlanning()
+    internal ResolvedSitePaths ResolveForPlanning()
     {
         return Resolve(ResolveSiteMirrorPath());
     }
@@ -80,18 +87,18 @@ public sealed class SitePaths
         return Path.Combine(ResolveCachePath(), "site");
     }
 
-    private SsgOptions Resolve(string outputPath)
+    private ResolvedSitePaths Resolve(string outputPath)
     {
-        var staticPath = Static is not null
-            ? ResolveAgainstRoot(Static)
-            : Path.Combine(Path.GetFullPath(Root), "wwwroot");
+        var staticPath = StaticDirectory is not null
+            ? ResolveAgainstRoot(StaticDirectory)
+            : Path.Combine(Path.GetFullPath(RootDirectory), "wwwroot");
 
-        return new SsgOptions
+        return new ResolvedSitePaths
         {
-            ContentsPath = ResolveAgainstRoot(Content),
-            StaticPath = staticPath,
-            OutputPath = outputPath,
-            ImageCachePath = Path.Combine(ResolveCachePath(), "images"),
+            ContentDirectory = ResolveAgainstRoot(ContentDirectory),
+            StaticDirectory = staticPath,
+            OutputDirectory = outputPath,
+            ImageCacheDirectory = Path.Combine(ResolveCachePath(), "images"),
         };
     }
 
@@ -99,6 +106,46 @@ public sealed class SitePaths
     {
         return Path.IsPathFullyQualified(path)
             ? Path.GetFullPath(path)
-            : Path.GetFullPath(Path.Combine(Root, path));
+            : Path.GetFullPath(Path.Combine(RootDirectory, path));
+    }
+
+    internal static string ResolveDefaultRoot(string appBaseDirectory, string currentDirectory)
+    {
+        var projectRoot = FindNearestProjectDirectory(appBaseDirectory)
+            ?? FindNearestProjectDirectory(currentDirectory);
+        if (projectRoot is not null)
+        {
+            return projectRoot;
+        }
+
+        try
+        {
+            return SsgPathResolver.ResolveRepositoryRoot(appBaseDirectory, currentDirectory);
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return currentDirectory;
+        }
+    }
+
+    private static string? FindNearestProjectDirectory(string startPath)
+    {
+        if (string.IsNullOrWhiteSpace(startPath))
+        {
+            return null;
+        }
+
+        var directory = new DirectoryInfo(Path.GetFullPath(startPath));
+        while (directory is not null)
+        {
+            if (directory.EnumerateFiles("*.csproj").Any() || directory.EnumerateFiles("*.fsproj").Any())
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        return null;
     }
 }

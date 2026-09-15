@@ -1,10 +1,13 @@
 namespace Kiji.Markdown;
 
-/// <param name="Slug">
-/// The page-bundle name of the file: the containing directory's name for
-/// <c>index.md</c>, otherwise the file name without its extension. Not normalized —
-/// it is the on-disk name verbatim. The usual choice for a markdown source's key.
-/// </param>
+/// <summary>The location and source timestamp of a Markdown file.</summary>
+/// <param name="ContentsDirectory">The absolute content root directory.</param>
+/// <param name="FilePath">The absolute source file path.</param>
+/// <param name="RelativePath">The file path relative to the content root.</param>
+/// <param name="RelativeDirectoryPath">The containing directory relative to the content root.</param>
+/// <param name="FileNameWithoutExtension">The file name without its extension.</param>
+/// <param name="Slug">The containing directory name for <c>index.md</c>, otherwise the extensionless file name, without normalization.</param>
+/// <param name="SourceLastWriteTimeUtc">The source file's last modification time in UTC.</param>
 public sealed record MarkdownFileInfo(
     string ContentsDirectory,
     string FilePath,
@@ -23,6 +26,7 @@ public sealed record MarkdownFileInfo(
         return Create(contentsDirectory, filePath, stamp.LastWriteTimeUtc);
     }
 
+    /// <summary>Reads file metadata, resolving relative paths against the current directory.</summary>
     public static MarkdownFileInfo Create(string contentsDirectory, string filePath)
     {
         return Create(contentsDirectory, filePath, lastWriteTimeUtc: null);

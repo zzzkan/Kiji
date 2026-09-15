@@ -11,7 +11,7 @@ namespace Kiji.Rendering;
 /// <summary>
 /// Renders Razor components to static HTML strings using <see cref="HtmlRenderer"/>.
 /// </summary>
-public sealed class ComponentRenderer : IAsyncDisposable
+internal sealed class ComponentRenderer : IAsyncDisposable
 {
     private readonly ServiceProvider _serviceProvider;
     private readonly Uri? _baseUri;
@@ -57,7 +57,6 @@ public sealed class ComponentRenderer : IAsyncDisposable
     {
         // No providers by default: each per-page HtmlRenderer resolves loggers, and
         // provider-backed loggers add measurable setup cost across thousands of pages.
-        // Sites can register their own logging via KijiBuilder.Services.
         services.AddLogging();
         services.AddSingleton(_ => HtmlEncoder.Create(UnicodeRanges.All));
         services.AddScoped<StaticNavigationManager>();
@@ -147,14 +146,8 @@ public sealed class ComponentRenderer : IAsyncDisposable
             scope.ServiceProvider,
             scope.ServiceProvider.GetRequiredService<ILoggerFactory>());
 
-        // A fresh HtmlRenderer per page: reuse was evaluated and rejected because (1) HtmlRenderer
-        // accumulates root component state per RenderComponentAsync with no public removal/reset
-        // API, so reuse leaks prior pages' component state; (2) the renderer captures its service
-        // provider at construction, so per-page scoped services (the initialize-once
-        // StaticNavigationManager, HeadContentRegistry) cannot be refreshed on a reused instance;
-        // (3) scope + HtmlRenderer construction measures only ~10% of a representative page render
-        // (Kiji.Benchmarks ComponentRendererBenchmarks), and the parallel build loop would need a
-        // pool of renderers anyway since one renderer's dispatcher renders one page at a time.
+        // A renderer captures its scope and cannot reset root component state.
+        // Keep one renderer per page so navigation, head content, and services stay isolated.
         await renderer.Dispatcher.InvokeAsync(async () =>
         {
             var document = await renderer.RenderComponentAsync(componentType, CreateParameterView(parameters));

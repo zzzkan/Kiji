@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Kiji.Assets;
 using Xunit;
 using SixLabors.ImageSharp;
@@ -6,10 +5,7 @@ using SixLabors.ImageSharp.PixelFormats;
 
 namespace Kiji.Tests;
 
-/// <summary>
-/// Unit tests for <see cref="ImageProcessor"/>.
-/// </summary>
-public sealed partial class ImageProcessorTests : IDisposable
+public sealed class ImageProcessorTests : IDisposable
 {
     private readonly string _testDir;
     private readonly string _sourceDir;
@@ -32,25 +28,6 @@ public sealed partial class ImageProcessorTests : IDisposable
         if (Directory.Exists(_testDir))
         {
             Directory.Delete(_testDir, recursive: true);
-        }
-    }
-
-    [Fact]
-    public async Task ProcessImage_LargeImage_GeneratesAscendingVariants()
-    {
-        var imagePath = Path.Combine(_sourceDir, "test-image.png");
-        await CreateTestImageAsync(imagePath, 1920, 1080);
-
-        var info = await _processor.ProcessImageAsync(imagePath, _outputDir);
-
-        Assert.Equal(1920, info.OriginalWidth);
-        Assert.Equal(1080, info.OriginalHeight);
-        Assert.Equal([320, 640, 960, 1280, 1920], info.Variants.Select(static variant => variant.Width));
-
-        foreach (var variant in info.Variants)
-        {
-            Assert.Matches(VariantFileNameRegex(), variant.FileName);
-            Assert.True(File.Exists(Path.Combine(_outputDir, variant.FileName)));
         }
     }
 
@@ -87,31 +64,31 @@ public sealed partial class ImageProcessorTests : IDisposable
 
         Assert.Equal(2500, info.OriginalWidth);
         Assert.Equal(1400, info.OriginalHeight);
-        Assert.Equal(1920, info.Variants[^1].Width);
+        Assert.Equal([320, 640, 960, 1280, 1920], info.Variants.Select(static variant => variant.Width));
     }
 
     [Fact]
     public async Task ProcessImage_ExistingVariants_AreNotRegenerated()
     {
+        var encodes = 0;
+        var processor = new ImageProcessor
+        {
+            BeforeEncodeAsync = (_, _) => { Interlocked.Increment(ref encodes); return Task.CompletedTask; },
+        };
         var imagePath = Path.Combine(_sourceDir, "existing.png");
         await CreateTestImageAsync(imagePath, 800, 600);
 
-        await _processor.ProcessImageAsync(imagePath, _outputDir);
-        var firstWriteTimes = Directory.GetFiles(_outputDir, "*.webp")
-            .ToDictionary(static file => file, static file => File.GetLastWriteTimeUtc(file));
+        await processor.ProcessImageAsync(imagePath, _outputDir);
+        var initialEncodes = encodes;
+        Assert.True(initialEncodes > 0);
 
-        await Task.Delay(100);
+        await processor.ProcessImageAsync(imagePath, _outputDir);
 
-        await _processor.ProcessImageAsync(imagePath, _outputDir);
-
-        foreach (var (file, firstWriteTime) in firstWriteTimes)
-        {
-            Assert.Equal(firstWriteTime, File.GetLastWriteTimeUtc(file));
-        }
+        Assert.Equal(initialEncodes, encodes);
     }
 
     [Fact]
-    public async Task ProcessImage_ContentChange_ReplacesStaleVariants()
+    public async Task ProcessImage_ContentChange_KeepsVariantsOtherPagesMayReference()
     {
         var imagePath = Path.Combine(_sourceDir, "hash-test.png");
         await CreateTestImageAsync(imagePath, 500, 300);
@@ -127,7 +104,7 @@ public sealed partial class ImageProcessorTests : IDisposable
         Assert.NotEqual(firstFileNames, [.. second.Variants.Select(static variant => variant.FileName)]);
         foreach (var staleFileName in firstFileNames)
         {
-            Assert.DoesNotContain(staleFileName, generatedFiles);
+            Assert.Contains(staleFileName, generatedFiles);
         }
     }
 
@@ -149,64 +126,32 @@ public sealed partial class ImageProcessorTests : IDisposable
     }
 
     [Fact]
-    public async Task ProcessImage_WithCacheDirectory_MaterializesInCacheAndCopiesToOutput()
-    {
-        var imagePath = Path.Combine(_sourceDir, "cached.png");
-        await CreateTestImageAsync(imagePath, 800, 600);
-
-        var info = await _processor.ProcessImageAsync(imagePath, _outputDir, _cacheDir);
-
-        foreach (var variant in info.Variants)
-        {
-            Assert.True(File.Exists(Path.Combine(_cacheDir, variant.FileName)));
-            Assert.True(File.Exists(Path.Combine(_outputDir, variant.FileName)));
-        }
-    }
-
-    [Fact]
     public async Task ProcessImage_WithCacheDirectory_SurvivesOutputCleanWithoutReencoding()
     {
+        var encodes = 0;
+        var processor = new ImageProcessor
+        {
+            BeforeEncodeAsync = (_, _) => { Interlocked.Increment(ref encodes); return Task.CompletedTask; },
+        };
         var imagePath = Path.Combine(_sourceDir, "cached.png");
         await CreateTestImageAsync(imagePath, 800, 600);
 
-        await _processor.ProcessImageAsync(imagePath, _outputDir, _cacheDir);
-        var cacheWriteTimes = Directory.GetFiles(_cacheDir, "*.webp")
-            .ToDictionary(static file => file, static file => File.GetLastWriteTimeUtc(file));
+        await processor.ProcessImageAsync(imagePath, _outputDir, _cacheDir);
+        var initialEncodes = encodes;
+        Assert.True(initialEncodes > 0);
 
         // Simulate a clean build: output is wiped, cache survives.
         Directory.Delete(_outputDir, recursive: true);
-        await Task.Delay(100);
 
-        var info = await _processor.ProcessImageAsync(imagePath, _outputDir, _cacheDir);
+        var info = await processor.ProcessImageAsync(imagePath, _outputDir, _cacheDir);
 
         foreach (var variant in info.Variants)
         {
             Assert.True(File.Exists(Path.Combine(_outputDir, variant.FileName)));
+            Assert.True(File.Exists(Path.Combine(_cacheDir, variant.FileName)));
         }
 
-        foreach (var (file, writeTime) in cacheWriteTimes)
-        {
-            Assert.Equal(writeTime, File.GetLastWriteTimeUtc(file));
-        }
-    }
-
-    [Fact]
-    public async Task ProcessImage_SupportedFormats_AllProcessed()
-    {
-        var pngPath = Path.Combine(_sourceDir, "image.png");
-        await CreateTestImageAsync(pngPath, 500, 300);
-
-        var jpegPath = Path.Combine(_sourceDir, "image2.jpg");
-        using (var image = new Image<Rgba32>(500, 300))
-        {
-            await image.SaveAsJpegAsync(jpegPath);
-        }
-
-        var pngInfo = await _processor.ProcessImageAsync(pngPath, _outputDir);
-        var jpegInfo = await _processor.ProcessImageAsync(jpegPath, _outputDir);
-
-        Assert.NotEmpty(pngInfo.Variants);
-        Assert.NotEmpty(jpegInfo.Variants);
+        Assert.Equal(initialEncodes, encodes);
     }
 
     private static async Task CreateTestImageAsync(string path, int width, int height)
@@ -225,9 +170,29 @@ public sealed partial class ImageProcessorTests : IDisposable
             }
         }
 
-        await image.SaveAsPngAsync(path);
+        if (Path.GetExtension(path) == ".jpg")
+        {
+            await image.SaveAsJpegAsync(path);
+        }
+        else
+        {
+            await image.SaveAsPngAsync(path);
+        }
     }
 
-    [GeneratedRegex(@"^.+\.[0-9a-f]{8}\.\d+w\.webp$")]
-    private static partial Regex VariantFileNameRegex();
+    [Fact]
+    public async Task ProcessImage_ChangedQuality_DoesNotReuseOldEncodedBytes()
+    {
+        var imagePath = Path.Combine(_sourceDir, "quality.png");
+        await CreateTestImageAsync(imagePath, 200, 100);
+        var low = new ImageProcessor(new ImageOptions { Quality = 10 });
+        var high = new ImageProcessor(new ImageOptions { Quality = 95 });
+
+        var first = Assert.Single((await low.ProcessImageAsync(imagePath, _outputDir, _cacheDir)).Variants);
+        var second = Assert.Single((await high.ProcessImageAsync(imagePath, _outputDir, _cacheDir)).Variants);
+        Assert.NotEqual(first.FileName, second.FileName);
+        Assert.NotEqual(await File.ReadAllBytesAsync(Path.Combine(_outputDir, first.FileName)),
+            await File.ReadAllBytesAsync(Path.Combine(_outputDir, second.FileName)));
+    }
+
 }

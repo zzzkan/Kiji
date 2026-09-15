@@ -3,7 +3,7 @@ using YamlDotNet.Serialization.NamingConventions;
 
 namespace Kiji.Markdown;
 
-public static class MarkdownFrontMatterParser
+internal static class MarkdownFrontMatterParser
 {
     internal static readonly IDeserializer DefaultDeserializer = CreateDeserializer(configurations: null);
 

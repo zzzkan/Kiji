@@ -38,45 +38,15 @@ public sealed record SiteInfo
     /// </summary>
     public string Author { get; init; } = string.Empty;
 
-    /// <summary>
-    /// The UTC timestamp captured when this instance was created.
-    /// Useful for cache-busting generated asset URLs.
-    /// </summary>
+    /// <summary>The UTC timestamp captured when this metadata instance is created.</summary>
     public DateTimeOffset BuildTime { get; } = DateTimeOffset.UtcNow;
 
-    /// <summary>
-    /// The path component of <see cref="BaseUrl"/>, always starting and ending with
-    /// <c>/</c>. <c>"/"</c> when the site is published at the domain root, and
-    /// e.g. <c>"/kiji/"</c> when it is published under a sub-path such as a GitHub
-    /// Pages project site.
-    /// </summary>
-    /// <remarks>
-    /// The value is percent-encoded, matching what belongs in an <c>href</c>.
-    /// The base path is a deployment location only: it never affects the generated
-    /// output layout.
-    /// </remarks>
+    /// <summary>The percent-encoded path of <see cref="BaseUrl"/>, starting and ending with <c>/</c>.</summary>
     public string BasePath => BaseUrl.AbsolutePath;
 
-    /// <summary>
-    /// Resolves a site-root-relative path to a root-relative URL under
-    /// <see cref="BasePath"/>. <c>Path("css/app.css")</c> returns <c>/css/app.css</c>
-    /// for a site published at the domain root and <c>/kiji/css/app.css</c> for one
-    /// published at <c>https://example.com/kiji/</c>.
-    /// </summary>
-    /// <param name="path">
-    /// A site-root-relative path, with or without a leading <c>/</c>. Absolute URLs,
-    /// protocol-relative URLs, and fragment- or query-only values are returned unchanged.
-    /// </param>
-    /// <returns>A root-relative URL, suitable for an <c>href</c> or <c>src</c> attribute.</returns>
-    /// <remarks>
-    /// Use this for links you write yourself. Canonical, feed, and sitemap URLs already
-    /// carry the base path (they derive from <see cref="BaseUrl"/>), and markdown
-    /// page-bundle images are document-relative, so neither needs this method.
-    /// </remarks>
-    /// <exception cref="ArgumentException">
-    /// <paramref name="path"/> is document-relative (starts with <c>./</c> or <c>../</c>).
-    /// Document-relative URLs resolve against the containing page and must be left alone.
-    /// </exception>
+    /// <summary>Resolves a site-root-relative path under <see cref="BasePath"/>.</summary>
+    /// <param name="path">A path with or without a leading slash; absolute URLs, protocol-relative URLs, fragments, and query-only values pass through unchanged.</param>
+    /// <exception cref="ArgumentException">The path starts with <c>./</c> or <c>../</c> and must remain document-relative.</exception>
     public string Path(string path)
     {
         ArgumentNullException.ThrowIfNull(path);

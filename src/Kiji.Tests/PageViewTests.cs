@@ -47,7 +47,7 @@ public sealed class PageViewTests
     }
 
     [Fact]
-    public async Task PageWithoutHeadContent_RendersEmptyHead()
+    public async Task PageWithoutLayoutOrHead_RendersOnlyItsBody()
     {
         await using var renderer = CreateRenderer();
 
@@ -56,6 +56,7 @@ public sealed class PageViewTests
 
         Assert.Contains("<head></head>", html, StringComparison.Ordinal);
         Assert.Contains("plain-page", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("site-header", html, StringComparison.Ordinal);
     }
 
     [Fact]

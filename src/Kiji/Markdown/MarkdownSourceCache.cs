@@ -6,9 +6,7 @@ namespace Kiji.Markdown;
 /// <summary>
 /// Reuses parsed markdown sources (front matter, body, content hash) across content
 /// re-materializations as long as the source file's timestamp and length are
-/// unchanged. In the dev server, a single file save re-reads one file instead of
-/// the whole content directory. Builds run in a fresh process, so build correctness
-/// never depends on this cache.
+/// unchanged.
 /// </summary>
 internal sealed class MarkdownSourceCache<TFrontMatter>
 {

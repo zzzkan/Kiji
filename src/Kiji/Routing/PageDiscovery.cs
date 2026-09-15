@@ -10,23 +10,24 @@ namespace Kiji.Routing;
 /// Resolves Razor components into pages via their <c>@page</c> route templates,
 /// either by scanning an assembly or from an explicit type list.
 /// </summary>
-public static class PageDiscovery
+internal static class PageDiscovery
 {
     private static readonly ConcurrentDictionary<Assembly, IReadOnlyList<DiscoveredPage>> AssemblyCache = new();
     private static readonly ConcurrentDictionary<Type, FrozenSet<string>> ParameterNameCache = new();
+    private static readonly ConcurrentDictionary<Type, IReadOnlyList<DiscoveredPage>> TypeCache = new();
 
     /// <summary>
     /// A component resolved from its <c>@page</c> route template.
     /// </summary>
-    public sealed record DiscoveredPage(
+    internal sealed record DiscoveredPage(
         string SourceIdentifier,
         Type ComponentType,
         StaticPageDefinition PageDefinition);
 
     /// <summary>
-    /// Finds the routable pages in an assembly: public, non-abstract
-    /// <see cref="IComponent"/> classes declaring at least one <c>@page</c> route
-    /// template. Other exported types are ignored. Results are cached per assembly;
+    /// Finds parameterless routes on public, non-abstract
+    /// <see cref="IComponent"/> classes in an assembly.
+    /// Parameterized routes are omitted. Results are cached per assembly;
     /// the cache is dropped on hot reload.
     /// </summary>
     public static IReadOnlyList<DiscoveredPage> FromAssembly(Assembly assembly)
@@ -57,9 +58,10 @@ public static class PageDiscovery
     {
         AssemblyCache.Clear();
         ParameterNameCache.Clear();
+        TypeCache.Clear();
     }
 
-    private static IReadOnlyList<DiscoveredPage> ScanAssembly(Assembly assembly)
+    private static List<DiscoveredPage> ScanAssembly(Assembly assembly)
     {
         // Cheapest checks first: metadata flags, then the component hierarchy,
         // then a single attribute read reused for page creation.
@@ -73,19 +75,22 @@ public static class PageDiscovery
 
             foreach (var attribute in type.GetCustomAttributes<RouteAttribute>(inherit: false))
             {
-                pages.Add(CreateDiscoveredPage(attribute.Template, type));
+                var page = CreateDiscoveredPage(attribute.Template, type);
+                if (!page.PageDefinition.IsDynamic)
+                {
+                    pages.Add(page);
+                }
             }
         }
 
-        return EnsureUniqueRoutes(pages);
+        // Check registered routes after the not-found override has replaced its source route.
+        return pages;
     }
 
     /// <summary>
     /// Resolves the given page component types into pages. Every type must be a
     /// non-abstract <see cref="IComponent"/> declaring at least one <c>@page</c> route template.
     /// Duplicate types are tolerated; duplicate route templates are an error.
-    /// Compiler-generated types (closures, display classes) are skipped, so a
-    /// namespace-filtered <c>assembly.GetTypes()</c> query can be passed directly.
     /// </summary>
     public static IReadOnlyList<DiscoveredPage> FromTypes(IEnumerable<Type> pageTypes)
     {
@@ -119,17 +124,16 @@ public static class PageDiscovery
                     $"Type '{pageType.FullName}' is not a routable Razor component. Map only non-abstract classes implementing '{nameof(IComponent)}'.");
             }
 
-            var routeAttributes = pageType.GetCustomAttributes<RouteAttribute>(inherit: false).ToArray();
-            if (routeAttributes.Length == 0)
+            var typePages = TypeCache.GetOrAdd(pageType, static type =>
+                [.. type.GetCustomAttributes<RouteAttribute>(inherit: false)
+                    .Select(attribute => CreateDiscoveredPage(attribute.Template, type))]);
+            if (typePages.Count == 0)
             {
                 throw new InvalidOperationException(
                     $"Page component '{pageType.FullName}' does not declare a '@page' route template.");
             }
 
-            foreach (var attribute in routeAttributes)
-            {
-                pages.Add(CreateDiscoveredPage(attribute.Template, pageType));
-            }
+            pages.AddRange(typePages);
         }
 
         return EnsureUniqueRoutes(pages);

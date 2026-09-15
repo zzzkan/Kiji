@@ -1,38 +1,16 @@
-using System.Diagnostics;
 using Kiji.Rendering;
 
 namespace Kiji.Generation;
 
-public static class StaticSiteGenerator
+internal static class StaticSiteGenerator
 {
-    public static async Task GenerateAsync(
-        SsgOptions options,
-        IReadOnlyList<PageRenderRequest> pageRequests,
-        Func<PageRenderRequest, TextWriter, CancellationToken, Task> renderPageAsync,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(pageRequests);
-        ArgumentNullException.ThrowIfNull(renderPageAsync);
-
-        var stopwatch = Stopwatch.StartNew();
-
-        ValidateNoStaticFileCollisions(options, pageRequests);
-
-        await StaticFileCopier.CopyAsync(options.StaticPath, options.OutputPath);
-
-        await RenderPagesAsync(options, pageRequests, renderPageAsync, previousOutputs: null, cancellationToken);
-
-        BuildOutput.Info($"Generated {pageRequests.Count} pages in {stopwatch.ElapsedMilliseconds} ms.");
-    }
-
     /// <param name="previousOutputs">
     /// What the last build recorded about each output path, keyed by relative path.
     /// Lets a page whose render produced the bytes already on disk skip the write.
     /// Null when nothing may be assumed about the output directory.
     /// </param>
     internal static async Task<IReadOnlyList<RenderedPage>> RenderPagesAsync(
-        SsgOptions options,
+        ResolvedSitePaths options,
         IReadOnlyList<PageRenderRequest> pageRequests,
         Func<PageRenderRequest, TextWriter, CancellationToken, Task> renderPageAsync,
         IReadOnlyDictionary<string, BuildManifestPage>? previousOutputs,
@@ -44,7 +22,7 @@ public static class StaticSiteGenerator
         var outputDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i < pageRequests.Count; i++)
         {
-            var fullPath = ResolvePageOutputPath(options.OutputPath, pageRequests[i].OutputRelativePath);
+            var fullPath = ResolvePageOutputPath(options.OutputDirectory, pageRequests[i].OutputRelativePath);
             resolvedPages[i] = (pageRequests[i], fullPath);
             outputDirectories.Add(Path.GetDirectoryName(fullPath)!);
         }
@@ -91,10 +69,8 @@ public static class StaticSiteGenerator
         await renderPageAsync(pageRequest, writer, cancellationToken);
         var outputHash = writer.GetContentHash();
 
-        // Having to re-render a page does not mean its output changed — an edit that
-        // never reaches the markup, or a code change that touches other pages, produces
-        // the same document. Creating the file again is ~14x the cost of the stat that
-        // rules it out (Kiji.Benchmarks OutputWriteSkipBenchmarks).
+        // Rendering may produce identical HTML. Skip rewriting only when its hash
+        // and the existing output stamp still match the previous build.
         var written = !AlreadyOnDisk(fullPath, previous, outputHash);
         if (written)
         {
@@ -125,21 +101,21 @@ public static class StaticSiteGenerator
         return info.Exists && info.Length == length && info.LastWriteTimeUtc == lastWriteTimeUtc;
     }
 
-    internal static void ValidateNoStaticFileCollisions(SsgOptions options, IReadOnlyList<PageRenderRequest> pageRequests)
+    internal static void ValidateNoStaticFileCollisions(ResolvedSitePaths options, IReadOnlyList<PageRenderRequest> pageRequests)
     {
-        if (!Directory.Exists(options.StaticPath))
+        if (!Directory.Exists(options.StaticDirectory))
         {
             return;
         }
 
         var pageOutputPaths = pageRequests
-            .Select(request => ResolvePageOutputPath(options.OutputPath, request.OutputRelativePath))
+            .Select(request => ResolvePageOutputPath(options.OutputDirectory, request.OutputRelativePath))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var file in Directory.EnumerateFiles(options.StaticPath, "*", SearchOption.AllDirectories))
+        foreach (var file in Directory.EnumerateFiles(options.StaticDirectory, "*", SearchOption.AllDirectories))
         {
-            var relativePath = Path.GetRelativePath(options.StaticPath, file);
-            var staticOutputPath = Path.GetFullPath(Path.Combine(options.OutputPath, relativePath));
+            var relativePath = Path.GetRelativePath(options.StaticDirectory, file);
+            var staticOutputPath = Path.GetFullPath(Path.Combine(options.OutputDirectory, relativePath));
             if (pageOutputPaths.Contains(staticOutputPath))
             {
                 throw new InvalidOperationException(

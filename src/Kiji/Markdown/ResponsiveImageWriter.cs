@@ -56,11 +56,11 @@ internal static class ResponsiveImageWriter
         var variants = imageInfo.Variants;
         var largest = variants[^1];
 
-        var srcset = string.Join(", ", variants.Select(variant => $"./{directory}{variant.FileName} {variant.Width}w"));
+        var srcset = string.Join(", ", variants.Select(variant => $"{CreateVariantUrl(directory, variant.FileName)} {variant.Width}w"));
         var sizes = $"(max-width: {largest.Width}px) 100vw, {largest.Width}px";
 
         renderer.Write("<img src=\"");
-        renderer.WriteEscapeUrl($"./{directory}{largest.FileName}");
+        renderer.WriteEscapeUrl(CreateVariantUrl(directory, largest.FileName));
         renderer.Write("\" srcset=\"");
         renderer.WriteEscape(srcset);
         renderer.Write("\" sizes=\"");
@@ -93,6 +93,13 @@ internal static class ResponsiveImageWriter
     {
         var separatorIndex = referenceKey.LastIndexOf('/');
         return separatorIndex >= 0 ? referenceKey[..(separatorIndex + 1)] : string.Empty;
+    }
+
+    private static string CreateVariantUrl(string directory, string fileName)
+    {
+        // srcset uses spaces and commas as syntax, so HTML escaping alone is not
+        // enough. Encode each path segment while preserving directory separators.
+        return "./" + string.Join('/', (directory + fileName).Split('/').Select(Uri.EscapeDataString));
     }
 
     private static void WriteCommonImageAttributes(HtmlRenderer renderer, ResponsiveImageContext context)

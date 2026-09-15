@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Http;
 namespace Kiji.Hosting;
 
 /// <summary>
-/// Mounts the dev and preview servers under the site's base path, so what you browse
+/// Mounts the dev server under the site's base path, so what you browse
 /// locally matches what the deployed site serves.
 /// </summary>
 internal static class SiteBasePathExtensions
@@ -21,7 +21,7 @@ internal static class SiteBasePathExtensions
         ArgumentNullException.ThrowIfNull(web);
         ArgumentNullException.ThrowIfNull(basePath);
 
-        var prefix = new PathString(basePath.TrimEnd('/'));
+        var prefix = PathString.FromUriComponent(basePath.TrimEnd('/'));
         if (!prefix.HasValue)
         {
             return;
@@ -29,17 +29,17 @@ internal static class SiteBasePathExtensions
 
         web.Use(async (context, next) =>
         {
-            if (context.Request.Path.StartsWithSegments(prefix))
+            // Keep the redirect temporary so it cannot outlive a BaseUrl change.
+            if (context.Request.Path.Equals(prefix)
+                || !context.Request.Path.HasValue || context.Request.Path == "/")
             {
-                await next(context);
+                context.Response.Redirect(prefix.ToUriComponent() + "/" + context.Request.QueryString);
                 return;
             }
 
-            // The site root is the friendly landing spot; send it to the prefix rather
-            // than a 404. Temporary, so a cached redirect never outlives a BaseUrl change.
-            if (!context.Request.Path.HasValue || context.Request.Path == "/")
+            if (context.Request.Path.StartsWithSegments(prefix))
             {
-                context.Response.Redirect(prefix.Value + "/" + context.Request.QueryString);
+                await next(context);
                 return;
             }
 

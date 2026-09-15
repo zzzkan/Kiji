@@ -4,12 +4,6 @@ using Xunit;
 
 namespace Kiji.Tests;
 
-/// <summary>
-/// Unit tests for the markdown content source's file selection
-/// (<see cref="MarkdownContentOptions{TModel}.Directory"/> and
-/// <see cref="MarkdownContentOptions{TModel}.Where"/>), its projection, and the
-/// page-bundle slug convention.
-/// </summary>
 public sealed class MarkdownContentSourceTests : IDisposable
 {
     private readonly string _testDir;
@@ -64,7 +58,7 @@ public sealed class MarkdownContentSourceTests : IDisposable
         WriteMarkdown("_draft.md", "Draft");
 
         var keys = LoadKeys(static options =>
-            options.Where = file => !file.FileNameWithoutExtension.StartsWith('_'));
+            options.FileFilter = file => !file.FileNameWithoutExtension.StartsWith('_'));
 
         Assert.Equal(["published"], keys);
     }
@@ -86,21 +80,18 @@ public sealed class MarkdownContentSourceTests : IDisposable
         WriteMarkdown("second.md", "Second", order: 2);
         WriteMarkdown("first.md", "First", order: 1);
 
-        var builder = CreateBuilder();
-        builder.AddMarkdownContent<OrderedFrontMatter, ScopedNote>(
-            select: static content => ScopedNote.Create(new MarkdownContent<FrontMatter>(
-                content.FileInfo,
-                new FrontMatter { Title = content.FrontMatter.Title },
-                static (_, _) => Task.FromResult(string.Empty))),
+        var app = CreateApp();
+        app.UseMarkdownContent<OrderedFrontMatter, ProjectedNote>(
+            select: static content => new ProjectedNote(content.FileInfo.Slug, content.FrontMatter.Title),
             key: static note => note.Key);
-
-        var app = builder.Build();
         app.UsePlanningOptions();
-        var notes = app.Services.GetRequiredService<ContentDictionary<ScopedNote>>();
+        var notes = app.ServiceProvider.GetRequiredService<ContentDictionary<ProjectedNote>>();
 
         Assert.Equal(["first", "second"], notes.Keys);
         Assert.Equal("First", notes["first"].Title);
     }
+
+    private sealed record ProjectedNote(string Key, string? Title);
 
     private sealed class OrderedFrontMatter
     {
@@ -125,22 +116,20 @@ public sealed class MarkdownContentSourceTests : IDisposable
             """);
     }
 
-    private KijiBuilder CreateBuilder()
+    private StaticSite CreateApp()
     {
-        var builder = KijiApp.CreateBuilder([]);
-        builder.Site = TestArticleContents.CreateSiteInfo();
-        builder.Paths.Root = _testDir;
-        builder.Paths.Content = "contents";
-        return builder;
+        var app = StaticSite.Create([]);
+        app.Info = TestArticleContents.CreateSiteInfo();
+        app.Paths.RootDirectory = _testDir;
+        app.Paths.ContentDirectory = "contents";
+        return app;
     }
 
     private IReadOnlyList<string> LoadKeys(Action<MarkdownContentOptions<MarkdownContent<FrontMatter>>> configure)
     {
-        var builder = CreateBuilder();
-        builder.AddMarkdownContent<FrontMatter>(key: static content => content.FileInfo.Slug, configure: configure);
-
-        var app = builder.Build();
+        var app = CreateApp();
+        app.UseMarkdownContent<FrontMatter>(key: static content => content.FileInfo.Slug, configure: configure);
         app.UsePlanningOptions();
-        return [.. app.Services.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>().Keys];
+        return [.. app.ServiceProvider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>().Keys];
     }
 }

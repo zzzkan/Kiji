@@ -6,9 +6,7 @@ namespace Kiji.Markdown;
 
 /// <summary>
 /// A reusable Markdig <see cref="HtmlRenderer"/> with its writer and image try-writer
-/// attached exactly once. Constructing and setting up an <see cref="HtmlRenderer"/>
-/// per body costs ~3x the render itself (see MarkdownRenderBenchmarks); reuse drops
-/// the render step's time and allocations by ~70%. Not thread-safe — instances are
+/// attached exactly once. Not thread-safe; instances are
 /// handed out one at a time by <see cref="MarkdownProcessor"/>'s pool.
 /// </summary>
 internal sealed class PooledMarkdigRenderer

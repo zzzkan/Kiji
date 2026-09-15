@@ -48,20 +48,18 @@ internal static class TestArticleContents
     }
 
     /// <summary>
-    /// Creates a KijiApp wired exactly like the real site (pages, not-found, content
+    /// Creates a StaticSite wired exactly like the real site (pages, not-found, content
     /// and tag route mappings) over the given posts.
     /// </summary>
-    public static (KijiApp App, ContentDictionary<Post> Posts) CreateApp(params (Post Metadata, string Html)[] entries)
+    public static (StaticSite App, ContentDictionary<Post> Posts) CreateApp(params (Post Metadata, string Html)[] entries)
     {
-        var builder = KijiApp.CreateBuilder([]);
-        builder.Site = CreateSiteInfo();
+        var app = StaticSite.Create([]);
+        app.Info = CreateSiteInfo();
 
         IReadOnlyList<Post> items = [.. entries.Select(static entry => ClonePost(entry.Metadata, entry.Html))];
-        builder.AddContentSource(_ => items, key: static post => post.Slug);
-
-        var app = builder.Build();
+        app.UseContentSource(_ => items, key: static post => post.Slug);
         MapSite(app);
-        return (app, app.Services.GetRequiredService<ContentDictionary<Post>>());
+        return (app, app.ServiceProvider.GetRequiredService<ContentDictionary<Post>>());
     }
 
     /// <summary>
@@ -69,27 +67,23 @@ internal static class TestArticleContents
     /// test-only dynamic templates with empty route sets, so callers only map the
     /// templates they actually exercise.
     /// </summary>
-    public static KijiApp MapTestAssemblyPages(KijiApp app)
+    public static StaticSite MapTestAssemblyPages(StaticSite app)
     {
-        app.MapPages(typeof(TestArticleContents).Assembly);
-        app.MapRoutes<MarkdownPostTestPage>(static _ => []);
-        app.MapRoutes<MirrorPostPage>(static _ => []);
-        app.MapRoutes<ScopedNotesIndexPage>(static _ => []);
-        app.MapRoutes<RelatedPostsTestPage>(static _ => []);
+        app.AddStaticPages(typeof(TestArticleContents).Assembly);
         return app;
     }
 
-    public static KijiApp MapSite(KijiApp app)
+    public static StaticSite MapSite(StaticSite app)
     {
         ArgumentNullException.ThrowIfNull(app);
 
-        app.MapDefaultLayout<MainLayout>();
+        app.UseDefaultLayout<MainLayout>();
         MapTestAssemblyPages(app);
-        app.MapNotFound<NotFoundPage>();
+        app.UseNotFoundPage<NotFoundPage>();
 
-        app.MapRoutes<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
+        app.AddPages<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
-        app.MapRoutes<TagsPage>(static services => CreateTagNameMap(
+        app.AddPages<TagsPage>(static services => CreateTagNameMap(
                 services.GetRequiredService<ContentDictionary<Post>>().Values
                     .SelectMany(static post => post.Tags.Select(static tag => tag.Name)))
             .OrderBy(static pair => pair.Value, StringComparer.OrdinalIgnoreCase)

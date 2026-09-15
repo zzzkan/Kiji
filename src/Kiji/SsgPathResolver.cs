@@ -3,7 +3,7 @@ namespace Kiji;
 /// <summary>
 /// Resolves repository-scoped directories used by the static site generator.
 /// </summary>
-public static class SsgPathResolver
+internal static class SsgPathResolver
 {
     /// <summary>
     /// Resolves the nearest repository root from one or more starting paths.
@@ -20,10 +20,19 @@ public static class SsgPathResolver
 
         foreach (var startPath in candidateStartPaths)
         {
-            var repositoryRoot = FindAncestorDirectory(startPath, IsRepositoryRootDirectory);
-            if (repositoryRoot is not null)
+            var directory = File.Exists(startPath)
+                ? new FileInfo(startPath).Directory
+                : new DirectoryInfo(startPath);
+
+            while (directory is not null)
             {
-                return repositoryRoot;
+                var marker = Path.Combine(directory.FullName, ".git");
+                if (Directory.Exists(marker) || File.Exists(marker))
+                {
+                    return directory.FullName;
+                }
+
+                directory = directory.Parent;
             }
         }
 
@@ -34,32 +43,5 @@ public static class SsgPathResolver
         throw new DirectoryNotFoundException(
             $"Could not locate a repository root from the provided start paths ({formattedStartPaths}). " +
             "Expected an ancestor directory containing one of: '.git'.");
-    }
-
-    private static bool IsRepositoryRootDirectory(string directory)
-    {
-        return Directory.Exists(Path.Combine(directory, ".git"));
-    }
-
-    private static string? FindAncestorDirectory(string startPath, Func<string, bool> predicate)
-    {
-        var fullPath = Path.GetFullPath(startPath);
-        var directory = Directory.Exists(fullPath)
-            ? new DirectoryInfo(fullPath)
-            : File.Exists(fullPath)
-                ? new FileInfo(fullPath).Directory
-                : new DirectoryInfo(fullPath);
-
-        while (directory is not null)
-        {
-            if (predicate(directory.FullName))
-            {
-                return directory.FullName;
-            }
-
-            directory = directory.Parent;
-        }
-
-        return null;
     }
 }

@@ -1,4 +1,4 @@
-@inherits LayoutComponentBase
+﻿@inherits LayoutComponentBase
 @inject SiteInfo Site
 @inject ContentDictionary<MarkdownContent<DocFrontMatter>> Docs
 
@@ -8,7 +8,7 @@
     <div class="bar">
         <a class="site-title" href="@Site.Path("/")">@Site.Name</a>
         <nav aria-label="Main">
-            <a href="@Site.Path("docs/")">Docs</a>
+            <a href="@Site.Path(path: "docs/")">Docs</a>
             <a href="https://github.com/zzzkan/kiji">GitHub</a>
             <a href="https://www.nuget.org/packages/Kiji">NuGet</a>
         </nav>

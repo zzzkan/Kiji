@@ -1,9 +1,6 @@
 namespace Kiji.Assets;
 
-/// <summary>
-/// The result of processing one source image: its intrinsic dimensions and the
-/// generated variants, ascending by width. The largest variant is the default source.
-/// </summary>
+/// <summary>The source dimensions and generated image variants, with the largest variant used as the default source.</summary>
 public sealed record ProcessedImageInfo
 {
     /// <summary>

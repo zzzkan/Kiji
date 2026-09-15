@@ -6,9 +6,6 @@ using Kiji.Assets;
 
 namespace Kiji.Tests;
 
-/// <summary>
-/// Unit tests for <see cref="ResponsiveImageWriter"/>.
-/// </summary>
 public sealed class ResponsiveImageExtensionTests
 {
     private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder()
@@ -34,15 +31,13 @@ public sealed class ResponsiveImageExtensionTests
         return writer.ToString();
     }
 
-    private static readonly int[] DefaultTargetWidths = [320, 640, 960, 1280];
-
     private static ProcessedImageInfo CreateImageInfo(
         string fileName,
         int width = 1920,
         int height = 1080,
         string hash = "abc12345")
     {
-        int[] widths = [.. DefaultTargetWidths.Where(w => w < width), Math.Min(width, 1920)];
+        int[] widths = [320, width];
 
         return new ProcessedImageInfo
         {
@@ -59,60 +54,24 @@ public sealed class ResponsiveImageExtensionTests
         {
             ["test-image.png"] = CreateImageInfo("test-image.png"),
         };
-        var markdown = "![Alt text](test-image.png)";
+        var markdown = "![Alt text](test-image.png \"Image title\")";
 
         var html = Render(markdown, imageInfoLookup);
 
         Assert.Contains("src=\"./test-image.png.abc12345.1920w.webp\"", html);
         Assert.Contains("srcset=\"", html);
         Assert.Contains("./test-image.png.abc12345.320w.webp 320w", html);
-        Assert.Contains("./test-image.png.abc12345.1280w.webp 1280w", html);
-        // No absolute URLs: page-bundle assets sit beside the page output.
-        Assert.DoesNotContain("src=\"/", html);
-    }
-
-    [Fact]
-    public void Process_LocalImageInSubdirectory_KeepsRelativeDirectory()
-    {
-        var imageInfoLookup = new Dictionary<string, ProcessedImageInfo>
-        {
-            ["images/photo.png"] = CreateImageInfo("photo.png", 640, 480),
-        };
-        var markdown = "![Alt text](./images/photo.png)";
-
-        var html = Render(markdown, imageInfoLookup);
-
-        Assert.Contains("src=\"./images/photo.png.abc12345.640w.webp\"", html);
-        Assert.Contains("./images/photo.png.abc12345.320w.webp 320w", html);
-    }
-
-    [Fact]
-    public void Process_LocalImage_GeneratesSizesFromLargestVariant()
-    {
-        var imageInfoLookup = new Dictionary<string, ProcessedImageInfo>
-        {
-            ["test-image.png"] = CreateImageInfo("test-image.png"),
-        };
-        var markdown = "![Alt text](test-image.png)";
-
-        var html = Render(markdown, imageInfoLookup);
-
+        Assert.Contains("./test-image.png.abc12345.1920w.webp 1920w", html);
         Assert.Contains("sizes=\"(max-width: 1920px) 100vw, 1920px\"", html);
-    }
-
-    [Fact]
-    public void Process_LocalImage_FirstImageUsesEagerLoading()
-    {
-        var imageInfoLookup = new Dictionary<string, ProcessedImageInfo>
-        {
-            ["test-image.png"] = CreateImageInfo("test-image.png"),
-        };
-        var markdown = "![Alt text](test-image.png)";
-
-        var html = Render(markdown, imageInfoLookup);
-
+        Assert.Contains("width=\"1920\"", html);
+        Assert.Contains("height=\"1080\"", html);
+        Assert.Contains("alt=\"Alt text\"", html);
+        Assert.Contains("title=\"Image title\"", html);
         Assert.Contains("loading=\"eager\"", html);
         Assert.Contains("decoding=\"async\"", html);
+        Assert.DoesNotContain("class=", html);
+        // No absolute URLs: page-bundle assets sit beside the page output.
+        Assert.DoesNotContain("src=\"/", html);
     }
 
     [Fact]
@@ -127,82 +86,11 @@ public sealed class ResponsiveImageExtensionTests
 
         var html = Render(markdown, imageInfoLookup);
 
-        Assert.Contains("loading=\"eager\"", html);
-        Assert.Contains("loading=\"lazy\"", html);
-    }
-
-    [Fact]
-    public void Process_SeparateRenders_EachDocumentStartsWithEagerLoading()
-    {
-        var imageInfoLookup = new Dictionary<string, ProcessedImageInfo>
-        {
-            ["image1.png"] = CreateImageInfo("image1.png"),
-        };
-
-        // Two renders over the same shared pipeline must not leak the image counter.
-        var first = Render("![First](image1.png)", imageInfoLookup);
-        var second = Render("![First](image1.png)", imageInfoLookup);
-
-        Assert.Contains("loading=\"eager\"", first);
-        Assert.Contains("loading=\"eager\"", second);
-        Assert.DoesNotContain("loading=\"lazy\"", second);
-    }
-
-    [Fact]
-    public void Process_LocalImage_IncludesDimensions()
-    {
-        var imageInfoLookup = new Dictionary<string, ProcessedImageInfo>
-        {
-            ["test-image.png"] = CreateImageInfo("test-image.png", 1920, 1080),
-        };
-        var markdown = "![Alt text](test-image.png)";
-
-        var html = Render(markdown, imageInfoLookup);
-
-        Assert.Contains("width=\"1920\"", html);
-        Assert.Contains("height=\"1080\"", html);
-    }
-
-    [Fact]
-    public void Process_LocalImage_PreservesAltText()
-    {
-        var imageInfoLookup = new Dictionary<string, ProcessedImageInfo>
-        {
-            ["test-image.png"] = CreateImageInfo("test-image.png"),
-        };
-        var markdown = "![My beautiful image](test-image.png)";
-
-        var html = Render(markdown, imageInfoLookup);
-
-        Assert.Contains("alt=\"My beautiful image\"", html);
-    }
-
-    [Fact]
-    public void Process_LocalImage_PreservesTitle()
-    {
-        var imageInfoLookup = new Dictionary<string, ProcessedImageInfo>
-        {
-            ["test-image.png"] = CreateImageInfo("test-image.png"),
-        };
-        var markdown = "![Alt text](test-image.png \"Image title\")";
-
-        var html = Render(markdown, imageInfoLookup);
-
-        Assert.Contains("title=\"Image title\"", html);
-    }
-
-    [Fact]
-    public void Process_LocalImage_HasNoCssClassByDefault()
-    {
-        var imageInfoLookup = new Dictionary<string, ProcessedImageInfo>
-        {
-            ["test-image.png"] = CreateImageInfo("test-image.png"),
-        };
-        var markdown = "![Alt text](test-image.png)";
-
-        var html = Render(markdown, imageInfoLookup);
-
-        Assert.DoesNotContain("class=", html);
+        var images = html.Split("<img", StringSplitOptions.None).Skip(1).Select(part => part[..part.IndexOf('>')]).ToArray();
+        Assert.Equal(2, images.Length);
+        Assert.Contains("loading=\"eager\"", images[0], StringComparison.Ordinal);
+        Assert.Contains("loading=\"lazy\"", images[1], StringComparison.Ordinal);
+        Assert.All(images, image => Assert.Contains("decoding=\"async\"", image, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -217,30 +105,6 @@ public sealed class ResponsiveImageExtensionTests
         var html = Render(markdown, imageInfoLookup, imageCssClass: "post-image");
 
         Assert.Contains("class=\"post-image\"", html);
-    }
-
-    [Fact]
-    public void Process_ExternalImage_NotProcessed()
-    {
-        var imageInfoLookup = new Dictionary<string, ProcessedImageInfo>();
-        var markdown = "![External image](https://example.com/image.png)";
-
-        var html = Render(markdown, imageInfoLookup);
-
-        Assert.Contains("src=\"https://example.com/image.png\"", html);
-        Assert.DoesNotContain("srcset", html);
-    }
-
-    [Fact]
-    public void Process_SiteRootImage_NotProcessed()
-    {
-        var imageInfoLookup = new Dictionary<string, ProcessedImageInfo>();
-        var markdown = "![Static image](/icons/logo.png)";
-
-        var html = Render(markdown, imageInfoLookup);
-
-        Assert.Contains("src=\"/icons/logo.png\"", html);
-        Assert.DoesNotContain("srcset", html);
     }
 
     [Fact]

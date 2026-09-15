@@ -12,25 +12,20 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 
 namespace Kiji;
 
-/// <summary>
-/// A Kiji static site application. Created via <see cref="KijiBuilder.Build"/>;
-/// declare page mappings with the <c>Map*</c> methods, then hand control to
-/// <see cref="RunAsync(CancellationToken)"/>.
-///
-/// <para>
-/// There are no commands. <c>dotnet run</c> and <c>dotnet watch</c> start the dev server;
-/// <c>dotnet publish</c> generates the site, because Kiji's MSBuild targets run this same
-/// app with <c>KIJI_OUTPUT</c> set to the publish directory.
-/// </para>
-/// </summary>
-public sealed class KijiApp : IAsyncDisposable
+/// <summary>Defines, generates, and serves a static website.</summary>
+/// <remarks>Configure and register content before execution; settings become read-only when execution starts.</remarks>
+public sealed class StaticSite : IAsyncDisposable
 {
-    private readonly KijiBuilder _builder;
+    private readonly string[] _args;
+    private readonly ContentRuntime _runtime = new();
+    private readonly List<KijiBuildInput> _buildInputs = [];
+    private readonly HashSet<Type> _pageServiceTypes = [];
+    private Func<IImageAssetProcessor> _imageAssetProcessorFactory = static () => new ImageProcessor();
+    private bool _configurationFrozen;
     private readonly List<RouteRegistration> _routeRegistrations = [];
     private readonly List<ISiteArtifact> _artifacts = [];
     private readonly List<Assembly> _pageAssemblies = [];
@@ -47,29 +42,82 @@ public sealed class KijiApp : IAsyncDisposable
 
     private ServiceProvider? _services;
     private ComponentRenderer? _renderer;
-    private SsgOptions? _activeOptions;
+    private ResolvedSitePaths? _activeOptions;
     private bool _forceFullBuild;
 
-    internal KijiApp(KijiBuilder builder)
+    private StaticSite(string[] args)
     {
-        _builder = builder;
-        Site = builder.Site!;
+        _args = [.. args];
+        Paths = new SitePaths(SitePaths.ResolveDefaultRoot(AppContext.BaseDirectory, Directory.GetCurrentDirectory()));
     }
 
-    /// <summary>
-    /// The site metadata configured on the builder.
-    /// </summary>
-    public SiteInfo Site { get; }
+    /// <summary>The site metadata, required before execution and readable only after assignment.</summary>
+    public SiteInfo Info
+    {
+        get => field ?? throw new InvalidOperationException("Set StaticSite.Info before running the site.");
+        set
+        {
+            EnsureConfigurable();
+            ArgumentNullException.ThrowIfNull(value);
+            field = value;
+        }
+    } = null!;
+
+    /// <summary>The site directories, configurable before execution starts.</summary>
+    public SitePaths Paths { get; }
+
+    /// <summary>Registers a concrete service shared by components within one page render.</summary>
+    /// <remarks>
+    /// Constructor dependencies are resolved automatically. Each render gets a fresh instance,
+    /// disposed when that render finishes. Content loaders, route/feed factories and artifacts
+    /// cannot resolve page services. Registration does not cache method results.
+    /// </remarks>
+    public StaticSite AddPageService<T>() where T : class
+    {
+        EnsureConfigurable();
+        var type = typeof(T);
+        if (type.IsAbstract || type.IsInterface || type.GetConstructors().Length == 0)
+        {
+            throw new ArgumentException($"Page service '{type.FullName}' must be a concrete type with a public constructor.");
+        }
+
+        if (!_pageServiceTypes.Add(type))
+        {
+            throw new InvalidOperationException($"Page service '{type.FullName}' is already registered.");
+        }
+
+        return this;
+    }
+
+    /// <summary>Replaces the image processor with a lazily created, site-owned instance.</summary>
+    /// <remarks>
+    /// The last registration wins. The factory must return a new, non-null instance; Kiji
+    /// disposes it with the site. The processor must support concurrent calls and must not
+    /// retain page or content state. Content changes and hot reload do not recreate it.
+    /// Declare external configuration with AddBuildInput and include encoder settings in
+    /// any custom persistent cache identity.
+    /// </remarks>
+    public StaticSite UseImageAssetProcessor(Func<IImageAssetProcessor> factory)
+    {
+        EnsureConfigurable();
+        ArgumentNullException.ThrowIfNull(factory);
+        _imageAssetProcessorFactory = factory;
+        return this;
+    }
+
+    internal IEnumerable<string> WatchedBuildInputs => _buildInputs
+        .Where(static input => input.Path is not null)
+        .Select(input => Path.GetFullPath(input.Path!, Path.GetFullPath(Paths.RootDirectory)));
 
     /// <summary>
     /// The app's services. Deliberately not public: content must not be reachable while
-    /// the site is still being declared, because loading it resolves <see cref="SsgOptions"/>
+    /// the site is still being declared, because loading it resolves <see cref="ResolvedSitePaths"/>
     /// — a singleton — and the running command is what decides those paths. Everything
     /// that legitimately needs services is handed a provider at a point where the command
     /// has already started: route and feed factories, content loaders, and
     /// <see cref="SiteOutputContext.Services"/> for artifacts.
     /// </summary>
-    internal IServiceProvider Services
+    internal IServiceProvider ServiceProvider
     {
         get
         {
@@ -79,50 +127,103 @@ public sealed class KijiApp : IAsyncDisposable
     }
 
     /// <summary>
-    /// Creates a new <see cref="KijiBuilder"/>.
+    /// Creates a site for configuration, registration, and execution.
     /// </summary>
-    /// <param name="args">Command line arguments; forwarded to <see cref="RunAsync(CancellationToken)"/> for command dispatch.</param>
-    public static KijiBuilder CreateBuilder(string[] args)
+    /// <param name="args">Arguments forwarded to ASP.NET Core configuration when serving.</param>
+    public static StaticSite Create(string[] args)
     {
         ArgumentNullException.ThrowIfNull(args);
 
-        return new KijiBuilder(args);
+        return new StaticSite(args);
+    }
+
+    /// <summary>Registers a file or directory whose changes require a full rebuild.</summary>
+    /// <param name="path">An absolute path or a path relative to <see cref="SitePaths.RootDirectory"/>.</param>
+    public StaticSite AddBuildInput(string path)
+    {
+        EnsureConfigurable();
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        _buildInputs.Add(new KijiBuildInput($"path:{path}", Value: null, Path: path));
+        return this;
+    }
+
+    /// <summary>Registers a named value whose changes require a full rebuild.</summary>
+    public StaticSite AddBuildInput(string key, string value)
+    {
+        EnsureConfigurable();
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        ArgumentNullException.ThrowIfNull(value);
+
+        _buildInputs.Add(new KijiBuildInput(key, value, Path: null));
+        return this;
+    }
+
+    /// <summary>Uses a content source resolved as <see cref="ContentDictionary{T}"/>.</summary>
+    /// <param name="loader">Loads items lazily once per snapshot, after execution paths are settled.</param>
+    /// <param name="key">Returns a non-empty key unique within the source, compared case-insensitively.</param>
+    public StaticSite UseContentSource<T>(
+        Func<IServiceProvider, IReadOnlyList<T>> loader,
+        Func<T, string> key,
+        Action<ContentSourceOptions<T>>? configure = null)
+        where T : class
+    {
+        EnsureConfigurable();
+        ArgumentNullException.ThrowIfNull(loader);
+        ArgumentNullException.ThrowIfNull(key);
+
+        var options = new ContentSourceOptions<T>();
+        configure?.Invoke(options);
+
+        return UseContentSource(
+            services => new ContentSourceItems<T>(loader(services), Provenance: null),
+            key,
+            options);
     }
 
     /// <summary>
-    /// Registers the default layout applied to every page by the built-in root document.
-    /// Individual pages can override it with the <c>@layout</c> directive. Optional:
-    /// without a default layout, pages render directly inside <c>&lt;body&gt;</c>.
+    /// The provenance-carrying form of <see cref="UseContentSource{T}(Func{IServiceProvider, IReadOnlyList{T}}, Func{T, string}, Action{ContentSourceOptions{T}})"/>,
+    /// for loaders that project items into a model no longer implementing
+    /// <see cref="IContentSourceFile"/> and must state the source file themselves.
     /// </summary>
-    public KijiApp MapDefaultLayout<TLayout>()
+    internal StaticSite UseContentSource<T>(
+        Func<IServiceProvider, ContentSourceItems<T>> loader,
+        Func<T, string> key,
+        ContentSourceOptions<T> options,
+        string contentSetScope = "")
+        where T : class
+    {
+        EnsureConfigurable();
+        _runtime.Register(new ContentDictionary<T>(_runtime, loader, key, options, contentSetScope));
+        return this;
+    }
+
+    /// <summary>Registers the default layout for pages without their own <c>@layout</c>.</summary>
+    /// <remarks>Without a default layout, pages render directly inside the document body.</remarks>
+    public StaticSite UseDefaultLayout<TLayout>()
         where TLayout : LayoutComponentBase
     {
+        EnsureConfigurable();
         _defaultLayoutType = typeof(TLayout);
         return this;
     }
 
-    /// <summary>
-    /// Registers every routable page component in the entry assembly: public,
-    /// non-abstract components declaring a <c>@page</c> route template. This is the
-    /// .NET equivalent of file-based routing — writing <c>@page</c> is what makes a
-    /// component a page, wherever its file lives.
-    /// </summary>
-    public KijiApp MapPages()
+    /// <summary>Registers public, non-abstract pages with parameterless routes from the entry assembly.</summary>
+    public StaticSite AddStaticPages()
     {
+        EnsureConfigurable();
         var entryAssembly = Assembly.GetEntryAssembly()
             ?? throw new InvalidOperationException(
-                "No entry assembly is available in this host. Call MapPages(Assembly) with the assembly containing your pages.");
+                "No entry assembly is available in this host. Call AddStaticPages(Assembly) with the assembly containing your pages.");
 
-        return MapPages(entryAssembly);
+        return AddStaticPages(entryAssembly);
     }
 
-    /// <summary>
-    /// Registers every routable page component in the given assembly: public,
-    /// non-abstract components declaring a <c>@page</c> route template.
-    /// May be called multiple times with different assemblies.
-    /// </summary>
-    public KijiApp MapPages(Assembly assembly)
+    /// <summary>Registers public, non-abstract pages with parameterless routes from an assembly.</summary>
+    /// <remarks>Repeated registration of the same assembly has no effect; parameterized routes are ignored.</remarks>
+    public StaticSite AddStaticPages(Assembly assembly)
     {
+        EnsureConfigurable();
         ArgumentNullException.ThrowIfNull(assembly);
 
         if (_pageAssemblies.Contains(assembly))
@@ -130,78 +231,57 @@ public sealed class KijiApp : IAsyncDisposable
             return this;
         }
 
-        if (PageDiscovery.FromAssembly(assembly).Count == 0)
-        {
-            throw new InvalidOperationException(
-                $"Assembly '{assembly.GetName().Name}' contains no routable page components. Pages are public, non-abstract components declaring a '@page' route template.");
-        }
-
         _pageAssemblies.Add(assembly);
         return this;
     }
 
-    /// <summary>
-    /// Marks a page component as the not-found page. It is generated as <c>404.html</c>
-    /// and excluded from the sitemap.
-    /// </summary>
-    public KijiApp MapNotFound<TComponent>()
+    /// <summary>Registers a page as <c>404.html</c> and excludes it from the sitemap.</summary>
+    /// <remarks>The component must declare exactly one route and cannot also be registered with <c>AddPages</c>.</remarks>
+    public StaticSite UseNotFoundPage<TComponent>()
         where TComponent : IComponent
     {
+        EnsureConfigurable();
+        if (_routeRegistrations.Any(registration => registration.ComponentType == typeof(TComponent)))
+        {
+            throw new InvalidOperationException("A not-found page cannot also be registered with AddPages.");
+        }
         _notFoundComponentType = typeof(TComponent);
         return this;
     }
 
-    /// <summary>
-    /// Supplies the parameter sets for a page declaring a dynamic route template: one
-    /// generated page per object returned. Each object's property names are the page's
-    /// <c>[Parameter]</c> names — those that also appear in the route template bind the
-    /// URL, and the rest are passed through to the component. The factory is
-    /// re-evaluated for every site snapshot.
-    /// </summary>
-    /// <remarks>
-    /// This says nothing about content. The factory receives the app's services, so
-    /// project content by resolving a <see cref="ContentDictionary{T}"/> here — which is
-    /// also the earliest point content can be read at all, since the running command has
-    /// settled the site's paths by then.
-    /// </remarks>
-    public KijiApp MapRoutes<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)
+    /// <summary>Registers parameter sets for a component declaring exactly one parameterized route.</summary>
+    /// <param name="parameters">A deferred factory evaluated per snapshot; each object supplies route values and component parameters.</param>
+    /// <remarks>No assembly registration is required; multiple registrations concatenate their results, which may be empty.</remarks>
+    public StaticSite AddPages<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)
         where TPage : IComponent
     {
+        EnsureConfigurable();
         ArgumentNullException.ThrowIfNull(parameters);
+
+        if (_notFoundComponentType == typeof(TPage))
+        {
+            throw new InvalidOperationException("A not-found page cannot also be registered with AddPages.");
+        }
 
         _routeRegistrations.Add(new RouteRegistration(
             typeof(TPage),
-            () => [.. parameters(Services).Select(static values => new StaticPageRouteEntry(
+            () => [.. parameters(ServiceProvider).Select(static values => new StaticPageRouteEntry(
                 RouteValues.ToDictionary(values)))]));
         return this;
     }
 
-    /// <summary>
-    /// Registers a site-wide output artifact (e.g. an RSS feed or a sitemap) generated
-    /// after all pages are rendered. Extension packages build on this method.
-    /// </summary>
-    public KijiApp MapArtifact(ISiteArtifact artifact)
+    /// <summary>Registers a site-wide output file written after all pages are rendered.</summary>
+    public StaticSite AddArtifact(ISiteArtifact artifact)
     {
+        EnsureConfigurable();
         ArgumentNullException.ThrowIfNull(artifact);
 
         _artifacts.Add(artifact);
         return this;
     }
 
-    /// <summary>
-    /// Runs the site: generates it when the build host asked for that, otherwise starts
-    /// the dev server.
-    /// </summary>
-    /// <remarks>
-    /// The only signal is <c>KIJI_OUTPUT</c>, the directory to generate into. Kiji's
-    /// MSBuild targets set it during <c>dotnet publish</c>; nothing sets it under
-    /// <c>dotnet run</c> or <c>dotnet watch</c>, so those get the dev server. The value
-    /// doubles as the mode, which is why there is no separate command to name.
-    /// <para>
-    /// A site whose entry point never reaches this method generates nothing on publish —
-    /// this is the only place <c>KIJI_OUTPUT</c> is read.
-    /// </para>
-    /// </remarks>
+    /// <summary>Publishes or serves the site according to the MSBuild execution context.</summary>
+    /// <remarks>Await this method in the entry point so <c>dotnet publish</c> generates the site.</remarks>
     /// <returns>The process exit code.</returns>
     public Task<int> RunAsync(CancellationToken cancellationToken = default)
     {
@@ -238,11 +318,11 @@ public sealed class KijiApp : IAsyncDisposable
             {
                 BuildOutput.Verbose = EnvironmentValue.IsTruthy(environment(VerboseVariable));
                 _forceFullBuild = EnvironmentValue.IsTruthy(environment(ForceVariable));
-                await PublishSiteAsync(outputPath!, cts.Token);
+                await PublishAsync(outputPath!, cts.Token);
                 return 0;
             }
 
-            await DevAsync(cts.Token);
+            await ServeAsync(cts.Token);
             return 0;
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
@@ -253,25 +333,18 @@ public sealed class KijiApp : IAsyncDisposable
         }
     }
 
-    /// <summary>
-    /// Generates the static site into <paramref name="outputPath"/> incrementally: pages
-    /// whose inputs (content files, options, site assemblies) are unchanged since the last
-    /// run are skipped and their outputs kept. Any ambiguity — no manifest, unknown files
-    /// in the output directory, changed assemblies — falls back to a full rebuild.
-    /// Publish with <c>-p:KijiForce=true</c> to always rebuild.
-    /// </summary>
-    /// <param name="outputPath">
-    /// Where to write the site. <c>dotnet publish</c> supplies this through
-    /// <c>KIJI_OUTPUT</c>; there is deliberately no default, because the publish
-    /// directory is the only thing that knows it.
-    /// </param>
-    /// <param name="cancellationToken">Cancels the generation.</param>
-    public async Task PublishSiteAsync(string outputPath, CancellationToken cancellationToken = default)
+    /// <summary>Generates the site, reusing unchanged output from a previous publish.</summary>
+    /// <param name="outputPath">An absolute output directory or a path relative to <see cref="SitePaths.RootDirectory"/>.</param>
+    /// <remarks>Repeated publication uses the same output directory; switching directories or execution modes requires a new site.</remarks>
+    public async Task PublishAsync(string outputPath, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
+        FreezeConfiguration();
 
-        var options = _builder.Paths.ResolveForPublish(outputPath);
-        UseOptions(options);
+        var options = Paths.ResolveForPublish(outputPath);
+        OutputPathValidator.Validate(options, Paths.RootDirectory, Paths.ResolveKijiPath());
+        UseRunOptions(options);
+        InvalidateContent();
 
         var stopwatch = Stopwatch.StartNew();
         var phases = new BuildPhaseTimer();
@@ -283,15 +356,22 @@ public sealed class KijiApp : IAsyncDisposable
 
         var planner = new IncrementalBuildPlanner(
             options,
-            _builder.Paths.Root,
-            _builder.Paths.ResolveCachePath(),
-            Site,
-            _builder.BuildInputs,
+            Paths.RootDirectory,
+            Paths.ResolveCachePath(),
+            Info,
+            _buildInputs,
             _services!.GetService<ContentFileRegistry>());
 
+        // Helpers and custom encoder factories may live outside the page assemblies.
+        // Their code is a build input even when pages only reach it through injection.
         var plan = await planner.CreatePlanAsync(
             snapshot.Pages,
-            [.. _pageAssemblies, typeof(KijiApp).Assembly],
+            [.. _pageAssemblies,
+                .. _routeRegistrations.Select(static registration => registration.ComponentType.Assembly),
+                .. _pageServiceTypes.Select(static type => type.Assembly),
+                _imageAssetProcessorFactory.Method.Module.Assembly,
+                .. _notFoundComponentType is { } notFound ? new[] { notFound.Assembly } : [],
+                typeof(StaticSite).Assembly],
             _forceFullBuild,
             cancellationToken);
         phases.Mark(BuildPhaseTimer.Plan);
@@ -299,7 +379,7 @@ public sealed class KijiApp : IAsyncDisposable
         // The output directory is kept, never wiped: whatever this build does not
         // produce is deleted by the reconciliation pass below, which is both cheaper
         // than a delete-and-rewrite and checked against the directory itself.
-        Directory.CreateDirectory(options.OutputPath);
+        Directory.CreateDirectory(options.OutputDirectory);
         phases.Mark(BuildPhaseTimer.Clean);
 
         var staticFiles = await planner.SyncStaticFilesAsync(plan);
@@ -308,7 +388,7 @@ public sealed class KijiApp : IAsyncDisposable
         // Render only the pages the plan could not prove unchanged, recording what
         // each render reads and writes for the next build's skip checks. The previous
         // manifest comes along so a render that reproduces the bytes already on disk
-        // skips the write; with --force there is no manifest and everything is written.
+        // skips the write; with KijiForce there is no manifest and everything is written.
         var recorders = new ConcurrentDictionary<string, BuildDependencyRecorder>(StringComparer.OrdinalIgnoreCase);
         var rendered = await StaticSiteGenerator.RenderPagesAsync(
             options,
@@ -369,18 +449,9 @@ public sealed class KijiApp : IAsyncDisposable
             $"Generated {written} pages ({plan.CarriedPages.Count} unchanged, skipped{reproducedNote}) in {stopwatch.ElapsedMilliseconds} ms.");
     }
 
-    /// <summary>
-    /// Starts the on-demand development server. Pages render per request through the
-    /// same pipeline as <see cref="PublishSiteAsync"/>, content changes reload the browser
-    /// automatically, and optimized images are cached under <c>.kiji/cache</c>. Nothing
-    /// is written to a publish directory.
-    /// </summary>
-    /// <remarks>
-    /// The address comes from ASP.NET Core configuration — <c>ASPNETCORE_URLS</c>,
-    /// <c>--urls</c>, or <c>launchSettings.json</c> — and falls back to
-    /// <c>http://127.0.0.1:8080</c> when none of those set one.
-    /// </remarks>
-    public async Task DevAsync(CancellationToken cancellationToken = default)
+    /// <summary>Starts the development server with automatic browser reload on content changes.</summary>
+    /// <remarks>The address comes from ASP.NET Core configuration, defaulting to <c>http://127.0.0.1:8080</c>.</remarks>
+    public async Task ServeAsync(CancellationToken cancellationToken = default)
     {
         var (devServer, web) = await StartDevServerAsync(cancellationToken);
         await using (devServer)
@@ -389,7 +460,7 @@ public sealed class KijiApp : IAsyncDisposable
         }
     }
 
-    /// <inheritdoc/>
+    /// <summary>Releases the renderer and services owned by this site.</summary>
     public async ValueTask DisposeAsync()
     {
         if (_renderer is not null)
@@ -406,7 +477,7 @@ public sealed class KijiApp : IAsyncDisposable
     internal Task<(DevServer DevServer, WebApplication WebApplication)> StartDevServerAsync(
         CancellationToken cancellationToken)
     {
-        return StartDevServerAsync(_builder.Args, cancellationToken);
+        return StartDevServerAsync(_args, cancellationToken);
     }
 
     /// <param name="args">
@@ -421,12 +492,21 @@ public sealed class KijiApp : IAsyncDisposable
         CancellationToken cancellationToken,
         DevServerStatusReporter? reporter = null)
     {
-        var options = UseOptions(_builder.Paths.ResolveForServe());
+        FreezeConfiguration();
+        var options = UseRunOptions(Paths.ResolveForServe());
         EnsureServices();
 
         var devServer = new DevServer(this, reporter);
-        var web = await devServer.StartAsync(options, args, cancellationToken);
-        return (devServer, web);
+        try
+        {
+            var web = await devServer.StartAsync(options, args, cancellationToken);
+            return (devServer, web);
+        }
+        catch
+        {
+            await devServer.DisposeAsync();
+            throw;
+        }
     }
 
     internal Task<string> RenderPageAsync(PageRenderRequest request, CancellationToken cancellationToken)
@@ -436,20 +516,16 @@ public sealed class KijiApp : IAsyncDisposable
 
     internal void InvalidateContent()
     {
-        _builder.Runtime.Invalidate();
+        _runtime.Invalidate();
     }
 
     internal SiteSnapshot CreateSnapshot()
     {
+        FreezeConfiguration();
         // Planning expands route factories, which read content. If nothing has settled
         // the options yet, fall back to paths that cannot be mistaken for a deliverable.
-        UseOptions(_builder.Paths.ResolveForPlanning());
+        UseOptions(Paths.ResolveForPlanning());
         EnsureServices();
-
-        if (_pageAssemblies.Count == 0)
-        {
-            throw new InvalidOperationException("No pages are mapped. Call MapPages(...) first.");
-        }
 
         var snapshotPhases = new BuildPhaseTimer();
         var scanned = new List<PageDiscovery.DiscoveredPage>();
@@ -458,8 +534,12 @@ public sealed class KijiApp : IAsyncDisposable
             scanned.AddRange(PageDiscovery.FromAssembly(assembly));
         }
 
-        var discovered = PageDiscovery.EnsureUniqueRoutes(scanned);
-        discovered = ApplyNotFoundOverride(discovered);
+        foreach (var componentType in _routeRegistrations.Select(static registration => registration.ComponentType).Distinct())
+        {
+            scanned.Add(FindDynamicPage(PageDiscovery.FromTypes([componentType]), componentType));
+        }
+
+        var discovered = PageDiscovery.EnsureUniqueRoutes(ApplyNotFoundOverride(scanned));
 
         var pagesByComponent = new Dictionary<string, PageDiscovery.DiscoveredPage>(StringComparer.OrdinalIgnoreCase);
         foreach (var page in discovered)
@@ -603,19 +683,20 @@ public sealed class KijiApp : IAsyncDisposable
             return discovered;
         }
 
-        var notFoundPage = discovered.SingleOrDefault(page => page.ComponentType == _notFoundComponentType)
-            ?? throw new InvalidOperationException(
-                $"Not-found component '{_notFoundComponentType.FullName}' does not declare a '@page' route template.");
-
+        var candidates = PageDiscovery.FromTypes([_notFoundComponentType]);
+        if (candidates.Count != 1)
+        {
+            throw new InvalidOperationException(
+                $"Not-found component '{_notFoundComponentType.FullName}' must declare exactly one '@page' route template.");
+        }
         var overridden = StaticPageDefinition.Create(
-            notFoundPage.PageDefinition.SourceIdentifier,
+            "/404.html",
             routePathOverride: "/404.html",
             outputRelativePathOverride: "404.html",
             excludeFromSitemap: true);
 
-        return [.. discovered.Select(page => page == notFoundPage
-            ? new PageDiscovery.DiscoveredPage(page.SourceIdentifier, page.ComponentType, overridden)
-            : page)];
+        return [.. discovered.Where(page => page.ComponentType != _notFoundComponentType),
+            new PageDiscovery.DiscoveredPage(overridden.SourceIdentifier, _notFoundComponentType, overridden)];
     }
 
     private async Task<string> RenderPageAsync(ComponentRenderer renderer, PageRenderRequest request, CancellationToken cancellationToken)
@@ -627,7 +708,7 @@ public sealed class KijiApp : IAsyncDisposable
         {
             return await renderer.RenderComponentAsync<KijiRoot>(
                 request.RootParameters ?? CreateRootParameters(request),
-                Site.BaseUrl.AppendRelativePath(request.RoutePath));
+                Info.BaseUrl.AppendRelativePath(request.RoutePath));
         }
         finally
         {
@@ -650,7 +731,7 @@ public sealed class KijiApp : IAsyncDisposable
             await renderer.RenderComponentToAsync<KijiRoot>(
                 output,
                 request.RootParameters ?? CreateRootParameters(request),
-                Site.BaseUrl.AppendRelativePath(request.RoutePath));
+                Info.BaseUrl.AppendRelativePath(request.RoutePath));
         }
         finally
         {
@@ -681,15 +762,15 @@ public sealed class KijiApp : IAsyncDisposable
     private SiteOutputContext CreateOutputContext(SiteSnapshot snapshot)
     {
         return new SiteOutputContext(
-            Site,
+            Info,
             [.. snapshot.Pages.Select(static page => new SitePageInfo(
                 page.RoutePath,
                 page.OutputRelativePath,
                 page.ExcludeFromSitemap))],
-            Services);
+            ServiceProvider);
     }
 
-    private async Task<IReadOnlyList<string>> GenerateArtifactsAsync(SsgOptions options, SiteSnapshot snapshot, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<string>> GenerateArtifactsAsync(ResolvedSitePaths options, SiteSnapshot snapshot, CancellationToken cancellationToken)
     {
         if (_artifacts.Count == 0)
         {
@@ -702,7 +783,7 @@ public sealed class KijiApp : IAsyncDisposable
 
         foreach (var artifact in _artifacts)
         {
-            var fullPath = ResolveArtifactPath(options.OutputPath, artifact.OutputRelativePath);
+            var fullPath = ResolveArtifactPath(options.OutputDirectory, artifact.OutputRelativePath);
             if (reservedPaths.TryGetValue(fullPath, out var collisionTarget))
             {
                 throw new InvalidOperationException(
@@ -715,29 +796,29 @@ public sealed class KijiApp : IAsyncDisposable
             await using var stream = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 64 * 1024, useAsync: true);
             await artifact.WriteAsync(stream, context, cancellationToken);
 
-            artifactRelativePaths.Add(Path.GetRelativePath(options.OutputPath, fullPath));
+            artifactRelativePaths.Add(Path.GetRelativePath(options.OutputDirectory, fullPath));
             BuildOutput.Info($"Generated: {fullPath}");
         }
 
         return artifactRelativePaths;
     }
 
-    private static Dictionary<string, string> CreateReservedArtifactPaths(SsgOptions options, SiteSnapshot snapshot)
+    private static Dictionary<string, string> CreateReservedArtifactPaths(ResolvedSitePaths options, SiteSnapshot snapshot)
     {
         var reservedPaths = snapshot.Pages.ToDictionary(
-            page => ResolveArtifactPath(options.OutputPath, page.OutputRelativePath),
+            page => ResolveArtifactPath(options.OutputDirectory, page.OutputRelativePath),
             static _ => "a generated page output path",
             StringComparer.OrdinalIgnoreCase);
 
-        if (!Directory.Exists(options.StaticPath))
+        if (!Directory.Exists(options.StaticDirectory))
         {
             return reservedPaths;
         }
 
-        foreach (var file in Directory.EnumerateFiles(options.StaticPath, "*", SearchOption.AllDirectories))
+        foreach (var file in Directory.EnumerateFiles(options.StaticDirectory, "*", SearchOption.AllDirectories))
         {
-            var relativePath = Path.GetRelativePath(options.StaticPath, file);
-            var outputPath = ResolveArtifactPath(options.OutputPath, relativePath);
+            var relativePath = Path.GetRelativePath(options.StaticDirectory, file);
+            var outputPath = ResolveArtifactPath(options.OutputDirectory, relativePath);
             reservedPaths.TryAdd(outputPath, "a static file output path");
         }
 
@@ -761,13 +842,24 @@ public sealed class KijiApp : IAsyncDisposable
 
     /// <summary>
     /// Settles the paths the running command works against. First caller wins:
-    /// <see cref="SsgOptions"/> is a singleton, so what is fixed here is what every
+    /// <see cref="ResolvedSitePaths"/> is a singleton, so what is fixed here is what every
     /// loader and renderer sees for the rest of the process.
     /// </summary>
-    private SsgOptions UseOptions(SsgOptions options)
+    private ResolvedSitePaths UseOptions(ResolvedSitePaths options)
     {
         _activeOptions ??= options;
         return _activeOptions;
+    }
+
+    private ResolvedSitePaths UseRunOptions(ResolvedSitePaths options)
+    {
+        if (_activeOptions is not null && _activeOptions != options)
+        {
+            throw new InvalidOperationException(
+                "This StaticSite has already settled its paths. Create a new app to use a different output directory or switch between publishing and serving.");
+        }
+
+        return UseOptions(options);
     }
 
     /// <summary>
@@ -776,11 +868,13 @@ public sealed class KijiApp : IAsyncDisposable
     /// </summary>
     internal void UsePlanningOptions()
     {
-        UseOptions(_builder.Paths.ResolveForPlanning());
+        FreezeConfiguration();
+        UseOptions(Paths.ResolveForPlanning());
     }
 
     private void EnsureServices()
     {
+        FreezeConfiguration();
         if (_services is not null)
         {
             return;
@@ -788,7 +882,7 @@ public sealed class KijiApp : IAsyncDisposable
 
         var services = new ServiceCollection();
         ComponentRenderer.AddComponentRenderingServices(services);
-        services.AddSingleton(Site);
+        services.AddSingleton(Info);
         // Deliberately not defaulted: the run decides these paths (a publish writes to
         // the directory dotnet publish chose, the dev server to its own mirror) and, as a
         // singleton, the first resolution wins for the whole process. No public API hands
@@ -796,19 +890,53 @@ public sealed class KijiApp : IAsyncDisposable
         // user-facing error — but a default here would silently pin publish paths onto
         // the dev server.
         services.AddSingleton(_ => _activeOptions ?? throw new InvalidOperationException(
-            "SsgOptions was resolved before a command settled the site's paths."));
-        _builder.Runtime.ApplyRegistrations(services);
+            "ResolvedSitePaths was resolved before a command settled the site's paths."));
+        _runtime.ApplyRegistrations(services);
 
-        foreach (var descriptor in _builder.Services)
-        {
-            services.Add(descriptor);
-        }
-
-        services.TryAddSingleton<IImageAssetProcessor>(static _ => new ImageProcessor());
+        services.AddSingleton<IImageAssetProcessor>(_ => _imageAssetProcessorFactory()
+            ?? throw new InvalidOperationException("The image asset processor factory returned null."));
         services.AddSingleton<ContentFileRegistry>();
 
-        _services = services.BuildServiceProvider();
-        _builder.Runtime.Attach(_services);
+        foreach (var type in _pageServiceTypes)
+        {
+            if (services.Any(descriptor => descriptor.ServiceType == type
+                || (type.IsGenericType && descriptor.ServiceType == type.GetGenericTypeDefinition())))
+            {
+                throw new InvalidOperationException($"Page service '{type.FullName}' conflicts with a service managed by Kiji.");
+            }
+        }
+
+        foreach (var type in _pageServiceTypes)
+        {
+            services.AddScoped(type);
+        }
+
+        _services = services.BuildServiceProvider(new ServiceProviderOptions
+        {
+            ValidateScopes = true,
+            ValidateOnBuild = true,
+        });
+        _runtime.Attach(_services);
+    }
+
+    internal void EnsureConfigurable()
+    {
+        if (_configurationFrozen)
+        {
+            throw new InvalidOperationException("Site configuration cannot be changed after execution has started. Create a new StaticSite to configure another site.");
+        }
+    }
+
+    private void FreezeConfiguration()
+    {
+        if (_configurationFrozen)
+        {
+            return;
+        }
+
+        _ = Info;
+        Paths.Freeze();
+        _configurationFrozen = true;
     }
 
     private ComponentRenderer GetRenderer()
@@ -822,7 +950,7 @@ public sealed class KijiApp : IAsyncDisposable
 
         // The renderer shares the single app container, so components see the exact
         // same registrations (options, content collections, image backend) as loaders.
-        _renderer = ComponentRenderer.Attach(_services!, Site.BaseUrl);
+        _renderer = ComponentRenderer.Attach(_services!, Info.BaseUrl);
         return _renderer;
     }
 

@@ -3,12 +3,7 @@ using YamlDotNet.Serialization;
 
 namespace Kiji.Markdown;
 
-/// <summary>
-/// Configures a markdown content source: which files it reads, how its items are
-/// ordered and validated, the Markdig pipeline, transforms over the rendered HTML, and
-/// front matter deserialization. Passed to
-/// <see cref="KijiBuilderExtensions.AddMarkdownContent{TFrontMatter}"/>.
-/// </summary>
+/// <summary>Configures Markdown file selection, validation, and rendering.</summary>
 public sealed class MarkdownContentOptions<TModel> : ContentSourceOptions<TModel>
     where TModel : class
 {
@@ -16,19 +11,11 @@ public sealed class MarkdownContentOptions<TModel> : ContentSourceOptions<TModel
 
     internal List<Action<DeserializerBuilder>> FrontMatterConfigurations { get; } = [];
 
-    /// <summary>
-    /// The directory this source reads, relative to the content directory. Every
-    /// <c>*.md</c> beneath it is discovered recursively. Default: the content directory
-    /// itself. Set it to keep markdown with different front matter in separate
-    /// collections, e.g. <c>"posts"</c> for <c>contents/posts/</c>.
-    /// </summary>
+    /// <summary>The directory to scan recursively for <c>*.md</c>, relative to the content directory and defaulting to its root.</summary>
     public string? Directory { get; set; }
 
-    /// <summary>
-    /// Optional filter over the discovered files; only those it accepts are loaded.
-    /// Default: every file.
-    /// </summary>
-    public Func<MarkdownFileInfo, bool>? Where { get; set; }
+    /// <summary>An optional file filter applied before loading, defaulting to all Markdown files.</summary>
+    public Func<MarkdownFileInfo, bool>? FileFilter { get; set; }
 
     /// <summary>
     /// Optional CSS class applied to images rendered from markdown. Default: none.
@@ -39,22 +26,19 @@ public sealed class MarkdownContentOptions<TModel> : ContentSourceOptions<TModel
         set => Processing.ImageCssClass = value;
     }
 
-    /// <inheritdoc cref="MarkdownProcessingOptions.ConfigurePipeline"/>
-    public void ConfigurePipeline(Action<MarkdownPipelineBuilder> configure)
+    /// <summary>Registers a Markdig configuration applied after the default pipeline is configured.</summary>
+    public void ConfigureMarkdig(Action<MarkdownPipelineBuilder> configure)
     {
-        Processing.ConfigurePipeline(configure);
+        Processing.ConfigureMarkdig(configure);
     }
 
-    /// <inheritdoc cref="MarkdownProcessingOptions.AddHtmlPostProcessor"/>
-    public void AddHtmlPostProcessor(Func<string, string> postProcessor)
+    /// <summary>Registers an HTML transformation applied after Markdown rendering, in registration order.</summary>
+    public void AddHtmlTransform(Func<string, string> transform)
     {
-        Processing.AddHtmlPostProcessor(postProcessor);
+        Processing.AddHtmlTransform(transform);
     }
 
-    /// <summary>
-    /// Configures the YAML deserializer used for front matter. Runs after the built-in
-    /// defaults (camelCase naming convention, unmatched properties ignored).
-    /// </summary>
+    /// <summary>Registers a YAML deserializer configuration after the camelCase and ignore-unmatched-properties defaults.</summary>
     public void ConfigureFrontMatter(Action<DeserializerBuilder> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);

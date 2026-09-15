@@ -3,15 +3,13 @@ using System.Diagnostics;
 namespace Kiji.Generation;
 
 /// <summary>
-/// Reports how long each stage of <see cref="KijiApp.PublishSiteAsync"/> took, so a
+/// Reports how long each stage of <see cref="StaticSite.PublishAsync"/> took, so a
 /// measurement harness can attribute a build's time without patching the build path.
 /// Nothing listens by default: <see cref="Observer"/> is null and each
 /// <see cref="Mark"/> is a null check.
 /// </summary>
 /// <remarks>
-/// Phase attribution is what a whole-build wall clock cannot give you, and a number
-/// that moved without a phase to pin it on is not yet an explanation. Set
-/// <see cref="Observer"/> once per process; it is read on the build thread only.
+/// Set <see cref="Observer"/> once per process; it is read on the build thread only.
 /// </remarks>
 internal sealed class BuildPhaseTimer
 {

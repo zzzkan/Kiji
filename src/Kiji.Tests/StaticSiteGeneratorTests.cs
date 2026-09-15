@@ -23,14 +23,14 @@ public sealed class StaticSiteGeneratorTests : IDisposable
     }
 
     [Fact]
-    public async Task GenerateAsync_PageOutputPathEscapingOutputDirectory_Throws()
+    public async Task RenderPagesAsync_PageOutputPathEscapingOutputDirectory_Throws()
     {
         var outputDir = Path.Combine(_testDir, "output");
-        var options = new SsgOptions
+        var options = new ResolvedSitePaths
         {
-            ContentsPath = _testDir,
-            StaticPath = Path.Combine(_testDir, "static"),
-            OutputPath = outputDir,
+            ContentDirectory = Path.Combine(_testDir, "contents"),
+            StaticDirectory = Path.Combine(_testDir, "static"),
+            OutputDirectory = outputDir,
         };
 
         var request = new PageRenderRequest(
@@ -41,10 +41,10 @@ public sealed class StaticSiteGeneratorTests : IDisposable
             OutputRelativePath: Path.Combine("blog", "..", "..", "evil.txt"));
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            StaticSiteGenerator.GenerateAsync(
+            StaticSiteGenerator.RenderPagesAsync(
                 options,
                 [request],
-                static async (_, output, _) => await output.WriteAsync("ignored")));
+                static async (_, output, _) => await output.WriteAsync("ignored"), previousOutputs: null, CancellationToken.None));
 
         Assert.Contains("Page output path", exception.Message, StringComparison.Ordinal);
         Assert.Contains("escapes the output directory", exception.Message, StringComparison.Ordinal);
@@ -52,14 +52,14 @@ public sealed class StaticSiteGeneratorTests : IDisposable
     }
 
     [Fact]
-    public async Task GenerateAsync_WritesUtf8WithoutBom()
+    public async Task RenderPagesAsync_WritesUtf8WithoutBom()
     {
         var outputDir = Path.Combine(_testDir, "output");
-        var options = new SsgOptions
+        var options = new ResolvedSitePaths
         {
-            ContentsPath = _testDir,
-            StaticPath = Path.Combine(_testDir, "static"),
-            OutputPath = outputDir,
+            ContentDirectory = Path.Combine(_testDir, "contents"),
+            StaticDirectory = Path.Combine(_testDir, "static"),
+            OutputDirectory = outputDir,
         };
 
         var request = new PageRenderRequest(
@@ -69,10 +69,10 @@ public sealed class StaticSiteGeneratorTests : IDisposable
             RoutePath: "/",
             OutputRelativePath: "index.html");
 
-        await StaticSiteGenerator.GenerateAsync(
+        await StaticSiteGenerator.RenderPagesAsync(
             options,
             [request],
-            static async (_, output, _) => await output.WriteAsync("<!doctype html><html>日本語</html>"));
+            static async (_, output, _) => await output.WriteAsync("<!doctype html><html>日本語</html>"), previousOutputs: null, CancellationToken.None);
 
         var bytes = await File.ReadAllBytesAsync(Path.Combine(outputDir, "index.html"));
         Assert.True(bytes.Length >= 3);

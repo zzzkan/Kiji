@@ -11,7 +11,7 @@ namespace Kiji.Hosting;
 /// <c>HtmlRenderer</c> pipeline used by the static build; the only additions are
 /// post-render live-reload script injection and content watching.
 /// </summary>
-internal sealed class DevServer(KijiApp app) : IAsyncDisposable
+internal sealed class DevServer(StaticSite app) : IAsyncDisposable
 {
     private const string DefaultUrl = "http://127.0.0.1:8080";
 
@@ -30,16 +30,19 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
     private Timer? _debounceTimer;
     private volatile bool _contentChanged;
     private WebApplication? _webApplication;
+    private Task? _warmupTask;
+    private bool _disposed;
 
-    internal DevServer(KijiApp app, DevServerStatusReporter? reporter = null)
+    internal DevServer(StaticSite app, DevServerStatusReporter? reporter = null)
         : this(app)
     {
         _reporter = reporter ?? DevServerStatusReporter.CreateForCurrentProcess();
     }
 
-    internal async Task<WebApplication> StartAsync(SsgOptions options, string[] args, CancellationToken cancellationToken)
+    internal async Task<WebApplication> StartAsync(ResolvedSitePaths options, string[] args, CancellationToken cancellationToken)
     {
-        Directory.CreateDirectory(options.OutputPath);
+        Directory.CreateDirectory(options.OutputDirectory);
+        Directory.CreateDirectory(options.StaticDirectory);
 
         var builder = WebApplication.CreateSlimBuilder(args);
         builder.Logging.SetMinimumLevel(LogLevel.Warning);
@@ -54,11 +57,12 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
         }
 
         var web = builder.Build();
+        _webApplication = web;
 
         // Must run before route matching, so the /_kiji/* endpoints below match a
         // prefixed request. WebApplication auto-inserts UseRouting ahead of all user
         // middleware when endpoints exist, unless the app calls UseRouting itself.
-        web.UseSiteBasePath(app.Site.BasePath);
+        web.UseSiteBasePath(app.Info.BasePath);
         web.UseRouting();
 
         web.UseWebSockets();
@@ -82,11 +86,11 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
             await context.Response.WriteAsync(LiveReloadScript.Value, context.RequestAborted);
         });
 
-        if (Directory.Exists(options.StaticPath))
+        if (Directory.Exists(options.StaticDirectory))
         {
             web.UseStaticFiles(new StaticFileOptions
             {
-                FileProvider = new PhysicalFileProvider(options.StaticPath),
+                FileProvider = new PhysicalFileProvider(options.StaticDirectory),
                 ServeUnknownFileTypes = true,
                 OnPrepareResponse = static context => context.Context.Response.Headers.CacheControl = "no-store",
             });
@@ -96,28 +100,44 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
         // mirror during on-demand page renders and served from there.
         web.UseStaticFiles(new StaticFileOptions
         {
-            FileProvider = new PhysicalFileProvider(options.OutputPath),
+            FileProvider = new PhysicalFileProvider(options.OutputDirectory),
             ServeUnknownFileTypes = true,
             OnPrepareResponse = static context => context.Context.Response.Headers.CacheControl = "no-store",
         });
 
-        web.MapFallback(HandlePageAsync);
+        // Leave unmatched requests without an endpoint while static files run.
+        // A routed catch-all makes StaticFileMiddleware skip file requests, and
+        // MapFallback's default nonfile constraint excludes pages such as /404.html.
+        web.Use(async (context, next) =>
+        {
+            if (context.GetEndpoint() is null)
+            {
+                await HandlePageAsync(context);
+            }
+            else
+            {
+                await next(context);
+            }
+        });
 
-        WatchDirectory(options.ContentsPath, WatchedPathSource.Content);
-        WatchDirectory(options.StaticPath, WatchedPathSource.Static);
+        WatchDirectory(options.ContentDirectory, WatchedPathSource.Content);
+        WatchDirectory(options.StaticDirectory, WatchedPathSource.Static);
+        foreach (var input in app.WatchedBuildInputs)
+        {
+            WatchDirectory(input, WatchedPathSource.BuildInput);
+        }
 
         await web.StartAsync(cancellationToken);
-        _webApplication = web;
         ActiveServers.TryAdd(this, 0);
         _reporter.DevServerStarted(
-            new Uri(new Uri(web.Urls.First()), app.Site.BasePath),
-            options.ContentsPath,
-            Directory.Exists(options.StaticPath) ? options.StaticPath : null);
+            new Uri(new Uri(web.Urls.First()), app.Info.BasePath),
+            options.ContentDirectory,
+            Directory.Exists(options.StaticDirectory) ? options.StaticDirectory : null);
 
         // Warm the snapshot (page discovery + content materialization) in the
         // background so the first request doesn't pay for it. Failures are ignored
         // here; the first request recomputes and surfaces the real error.
-        _ = Task.Run(() =>
+        _warmupTask = Task.Run(() =>
         {
             try
             {
@@ -145,11 +165,12 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
         }
     }
 
-    private async Task ReloadAfterCodeUpdateAsync()
+    internal async Task ReloadAfterCodeUpdateAsync()
     {
         lock (_snapshotLock)
         {
             _snapshot = null;
+            app.InvalidateContent();
         }
 
         var reloadedClients = await _hub.BroadcastReloadAsync(CancellationToken.None);
@@ -159,6 +180,10 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         ActiveServers.TryRemove(this, out _);
+        lock (_snapshotLock)
+        {
+            _disposed = true;
+        }
 
         foreach (var watcher in _watchers)
         {
@@ -173,6 +198,11 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
         if (_webApplication is not null)
         {
             await _webApplication.DisposeAsync();
+        }
+
+        if (_warmupTask is not null)
+        {
+            await _warmupTask;
         }
     }
 
@@ -191,11 +221,12 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
 
         if (!snapshot.PagesByRoute.TryGetValue(path, out var page))
         {
-            // Resolve /route and /route/ to the same page without redirecting,
-            // matching common static host behavior for directory-style output.
+            // Directory-style pages must have a trailing slash in the browser:
+            // page-bundle URLs such as ./cover.webp resolve relative to that URL.
             if (!path.EndsWith('/') && snapshot.PagesByRoute.TryGetValue(path + "/", out var slashPage))
             {
-                await WritePageAsync(context, slashPage, StatusCodes.Status200OK);
+                context.Response.Redirect(context.Request.PathBase.Add(PathString.FromUriComponent(slashPage.RoutePath)).ToUriComponent()
+                    + context.Request.QueryString);
                 return;
             }
 
@@ -228,7 +259,8 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
     // "/_kiji/livereload.js" reference.
     private static string InjectLiveReloadScript(string html, PathString pathBase)
     {
-        var tag = $"""<script src="{pathBase.Value}/_kiji/livereload.js" defer></script>""";
+        var scriptPath = System.Text.Encodings.Web.HtmlEncoder.Default.Encode(pathBase.ToUriComponent() + "/_kiji/livereload.js");
+        var tag = $"""<script src="{scriptPath}" defer></script>""";
         var bodyCloseIndex = html.LastIndexOf("</body>", StringComparison.OrdinalIgnoreCase);
         return bodyCloseIndex >= 0
             ? html.Insert(bodyCloseIndex, tag)
@@ -251,12 +283,22 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
 
     private void WatchDirectory(string path, WatchedPathSource source)
     {
-        if (!Directory.Exists(path))
+        path = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        // Watch an existing parent, so creating, deleting or replacing the source
+        // directory itself does not permanently detach the watcher.
+        var ancestor = Directory.GetParent(path);
+        while (ancestor is not null && !ancestor.Exists)
+        {
+            ancestor = ancestor.Parent;
+        }
+
+        var watchRoot = ancestor?.FullName ?? path;
+        if (!Directory.Exists(watchRoot))
         {
             return;
         }
 
-        var watcher = new FileSystemWatcher(path)
+        var watcher = new FileSystemWatcher(watchRoot)
         {
             IncludeSubdirectories = true,
             NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite,
@@ -264,6 +306,11 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
 
         void HandleChange(object sender, FileSystemEventArgs args)
         {
+            if (!IsWatchedPath(args.FullPath) && (args is not RenamedEventArgs renamed || !IsWatchedPath(renamed.OldFullPath)))
+            {
+                return;
+            }
+
             // A file save also touches its parent directory's timestamp, raising a
             // second Changed event for the directory itself; only files matter here.
             if (args.ChangeType is WatcherChangeTypes.Changed && Directory.Exists(args.FullPath))
@@ -271,13 +318,20 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
                 return;
             }
 
-            ScheduleReload(new WatchedChange(source, args.ChangeType, Path.GetRelativePath(path, args.FullPath)), source is WatchedPathSource.Content);
+            ScheduleReload(new WatchedChange(source, args.ChangeType, Path.GetRelativePath(path, args.FullPath)), source is not WatchedPathSource.Static);
+        }
+
+        bool IsWatchedPath(string candidate)
+        {
+            var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            return string.Equals(candidate, path, comparison)
+                || candidate.StartsWith(path + Path.DirectorySeparatorChar, comparison);
         }
 
         watcher.Changed += HandleChange;
         watcher.Created += HandleChange;
         watcher.Deleted += HandleChange;
-        watcher.Renamed += (_, args) => ScheduleReload(new WatchedChange(source, WatcherChangeTypes.Renamed, Path.GetRelativePath(path, args.FullPath)), source is WatchedPathSource.Content);
+        watcher.Renamed += HandleChange;
         watcher.Error += (_, args) =>
         {
             var exception = args.GetException();
@@ -285,6 +339,9 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
             {
                 _reporter.WatcherError(source, path, exception);
             }
+            // Events may have been lost (e.g. buffer overflow). Rebuild the snapshot
+            // conservatively instead of continuing to serve potentially stale content.
+            ScheduleReload(new WatchedChange(source, WatcherChangeTypes.Changed, "."), source is not WatchedPathSource.Static);
         };
         watcher.EnableRaisingEvents = true;
 
@@ -293,15 +350,16 @@ internal sealed class DevServer(KijiApp app) : IAsyncDisposable
 
     private void ScheduleReload(WatchedChange change, bool contentChanged)
     {
-        if (contentChanged)
-        {
-            _contentChanged = true;
-        }
-
         // Editors fire multiple events per save; debounce before reloading. Watcher
         // callbacks arrive on thread-pool threads, so timer creation must be locked.
         lock (_snapshotLock)
         {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _contentChanged |= contentChanged;
             _pendingChanges.Add(change);
             _debounceTimer ??= new Timer(_ => OnDebounceElapsed(), state: null, Timeout.Infinite, Timeout.Infinite);
             _debounceTimer.Change(DebounceMilliseconds, Timeout.Infinite);

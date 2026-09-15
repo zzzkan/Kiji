@@ -3,7 +3,7 @@ namespace Kiji.Routing;
 /// <summary>
 /// Provides helper methods to create a plan of static pages from page definitions and site content.
 /// </summary>
-public static class StaticPagePlanner
+internal static class StaticPagePlanner
 {
     /// <summary>
     /// Plans all static pages by expanding the given page definitions using already discovered dynamic route entries.
@@ -103,6 +103,21 @@ public static class StaticPagePlanner
 
         if (duplicateOutputPath is null)
         {
+            var outputs = pages.Select(static page => page.OutputRelativePath)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var page in pages)
+            {
+                var directory = Path.GetDirectoryName(page.OutputRelativePath);
+                while (!string.IsNullOrEmpty(directory))
+                {
+                    if (outputs.Contains(directory))
+                    {
+                        throw new InvalidOperationException(
+                            $"Page output '{page.OutputRelativePath}' requires directory '{directory}', which is also a page output file.");
+                    }
+                    directory = Path.GetDirectoryName(directory);
+                }
+            }
             return;
         }
 

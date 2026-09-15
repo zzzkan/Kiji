@@ -1,9 +1,6 @@
 namespace Kiji;
 
-/// <summary>
-/// A site-wide output file generated after all pages are rendered, e.g. an RSS feed
-/// or a sitemap. Register implementations with <see cref="KijiApp.MapArtifact"/>.
-/// </summary>
+/// <summary>A site-wide output file registered with <see cref="StaticSite.AddArtifact"/> and written after page rendering.</summary>
 public interface ISiteArtifact
 {
     /// <summary>

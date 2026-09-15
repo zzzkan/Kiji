@@ -3,10 +3,7 @@ using BenchmarkDotNet.Attributes;
 
 namespace Kiji.Benchmarks;
 
-/// <summary>
-/// Measures the page write path: the current StreamWriter-over-async-FileStream shape
-/// versus a single pre-encoded write (Phase 1-2 / 2-2 baseline and target).
-/// </summary>
+/// <summary>Compares page output writing strategies.</summary>
 [MemoryDiagnoser]
 public class PageWriteBenchmarks
 {

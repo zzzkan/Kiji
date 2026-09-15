@@ -4,20 +4,21 @@ internal sealed record WatchedChange(WatchedPathSource Source, WatcherChangeType
 {
     internal string ToStatusMessage()
     {
-        return $"File {ChangeType.ToDisplayString()}: {ToDisplayPath()}";
-    }
-
-    private string ToDisplayPath()
-    {
-        if (string.IsNullOrWhiteSpace(Path) || System.IO.Path.IsPathRooted(Path))
+        var action = ChangeType switch
         {
-            return Path;
-        }
-
+            WatcherChangeTypes.Created => "created",
+            WatcherChangeTypes.Changed => "updated",
+            WatcherChangeTypes.Deleted => "deleted",
+            WatcherChangeTypes.Renamed => "renamed",
+            _ => ChangeType.ToString(),
+        };
         var relativePrefix = $".{System.IO.Path.DirectorySeparatorChar}";
-
-        return Path.StartsWith(relativePrefix, StringComparison.Ordinal)
+        var displayPath = string.IsNullOrWhiteSpace(Path)
+            || System.IO.Path.IsPathRooted(Path)
+            || Path.StartsWith(relativePrefix, StringComparison.Ordinal)
             ? Path
             : relativePrefix + Path;
+
+        return $"File {action}: {displayPath}";
     }
 }

@@ -7,13 +7,8 @@ namespace Kiji;
 /// </summary>
 public static class Content
 {
-    /// <summary>
-    /// Creates a standalone dictionary over a fixed set of items, detached from any site.
-    /// Intended for tests and simple scenarios that do not load content from disk.
-    /// </summary>
-    /// <param name="items">The items to expose.</param>
-    /// <param name="key">Identifies each item. Keys must be non-empty and unique.</param>
-    /// <param name="configure">Declares the dictionary's validation.</param>
+    /// <summary>Creates a standalone content dictionary from fixed items.</summary>
+    /// <param name="key">Returns a non-empty key unique within the source, compared case-insensitively.</param>
     public static ContentDictionary<T> FromItems<T>(
         IReadOnlyList<T> items,
         Func<T, string> key,

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Buffers;
 using System.IO.Hashing;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -17,7 +18,22 @@ internal static class BuildFingerprint
     {
         try
         {
-            return Convert.ToHexStringLower(XxHash128.Hash(File.ReadAllBytes(path)));
+            using var stream = File.OpenRead(path);
+            var buffer = ArrayPool<byte>.Shared.Rent(64 * 1024);
+            try
+            {
+                var hash = new XxHash128();
+                int read;
+                while ((read = stream.Read(buffer)) != 0)
+                {
+                    hash.Append(buffer.AsSpan(0, read));
+                }
+                return Convert.ToHexStringLower(hash.GetCurrentHash());
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
         }
         catch (IOException)
         {
@@ -48,10 +64,8 @@ internal static class BuildFingerprint
         var builder = new StringBuilder();
         foreach (var (relativePath, contentHash) in files.OrderBy(static file => file.RelativePath, StringComparer.OrdinalIgnoreCase))
         {
-            builder.Append(relativePath.Replace('\\', '/'));
-            builder.Append(':');
-            builder.Append(contentHash);
-            builder.Append('\n');
+            AppendPart(builder, relativePath.Replace('\\', '/'));
+            AppendPart(builder, contentHash);
         }
 
         return HashText(builder.ToString());
@@ -67,12 +81,16 @@ internal static class BuildFingerprint
         var builder = new StringBuilder();
         foreach (var pair in parameters.OrderBy(static pair => pair.Key, StringComparer.Ordinal))
         {
-            builder.Append(pair.Key);
-            builder.Append('=');
-            builder.Append(Convert.ToString(pair.Value, CultureInfo.InvariantCulture));
-            builder.Append('\n');
+            AppendPart(builder, pair.Key);
+            AppendPart(builder, pair.Value?.GetType().FullName);
+            AppendPart(builder, pair.Value is null ? null : Convert.ToString(pair.Value, CultureInfo.InvariantCulture));
         }
 
         return HashText(builder.ToString());
+    }
+
+    internal static void AppendPart(StringBuilder builder, string? value)
+    {
+        builder.Append((value?.Length ?? -1).ToString(CultureInfo.InvariantCulture)).Append(':').Append(value);
     }
 }

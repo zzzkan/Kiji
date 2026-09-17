@@ -272,8 +272,8 @@ public sealed class IncrementalBuildTests : IDisposable
         app.Paths.ContentDirectory = "contents";
         app.Paths.StaticDirectory = "static";
 
-        app.UseMarkdownContent<FrontMatter>(key: static post => post.FileInfo.FullName);
-        app.UseContentSource<Post>(static _ => [], static post => post.Slug);
+        app.UseMarkdownContent<FrontMatter>();
+        app.UseContentSource<Post>(static _ => []);
         app.UseDefaultLayout<MainLayout>();
         app.AddStaticPages(typeof(TestArticleContents).Assembly);
         app.UseNotFoundPage<NotFoundPage>();
@@ -299,14 +299,11 @@ public sealed class IncrementalBuildTests : IDisposable
         app.Paths.ContentDirectory = "contents";
         app.Paths.StaticDirectory = "static";
 
-        app.UseMarkdownContent<FrontMatter>(
-            key: static post => post.FileInfo.FullName,
-            configure: static options => options.Directory = "posts");
+        app.UseMarkdownContent<FrontMatter>(static options => options.Directory = "posts");
         app.UseMarkdownContent<FrontMatter, ScopedNote>(
             select: ScopedNote.Create,
-            key: static note => note.Key,
             configure: options => options.Directory = notesDirectory);
-        app.UseContentSource<Post>(static _ => [], static post => post.Slug);
+        app.UseContentSource<Post>(static _ => []);
         app.UseDefaultLayout<MainLayout>();
         app.AddStaticPages(typeof(TestArticleContents).Assembly);
         app.UseNotFoundPage<NotFoundPage>();
@@ -374,9 +371,8 @@ public sealed class IncrementalBuildTests : IDisposable
         app.Paths.ContentDirectory = "contents";
         app.Paths.StaticDirectory = "static";
 
-        app.UseMarkdownContent<FrontMatter>(key: static post => post.FileInfo.FullName,
-            configure: options => options.AddHtmlTransform(html => { onRender?.Invoke(); return html; }));
-        app.UseContentSource<Post>(static _ => [], static post => post.Slug);
+        app.UseMarkdownContent<FrontMatter>(options => options.AddHtmlPostProcessor(html => { onRender?.Invoke(); return html; }));
+        app.UseContentSource<Post>(static _ => []);
         TestArticleContents.MapSite(app);
         app.AddPages<MarkdownPostTestPage>(static services => services
             .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()

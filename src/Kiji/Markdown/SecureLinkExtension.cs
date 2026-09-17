@@ -8,7 +8,7 @@ using Markdig.Syntax.Inlines;
 namespace Kiji.Markdown;
 
 /// <summary>Adds <c>target="_blank"</c> and <c>rel="noopener noreferrer"</c> to external Markdown links.</summary>
-public sealed class SecureLinkExtension : IMarkdownExtension
+internal sealed class SecureLinkExtension : IMarkdownExtension
 {
     /// <inheritdoc/>
     public void Setup(MarkdownPipelineBuilder pipeline)

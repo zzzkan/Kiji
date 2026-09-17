@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using Kiji.Tests.TestSite;
-using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Kiji.Tests;
@@ -67,14 +66,37 @@ public sealed class RunAsyncTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_DisposesTheSite_AndRejectsASecondRun()
+    {
+        var app = CreateApp();
+
+        await app.RunAsync(EnvironmentWith([("KIJI_OUTPUT", _outputDir)]), CancellationToken.None);
+
+        Assert.Throws<ObjectDisposedException>(() => app.ServiceProvider);
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => app.RunAsync(EnvironmentWith([("KIJI_OUTPUT", _outputDir)]), CancellationToken.None));
+        Assert.Contains("only be run once", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_DisposesTheSite_WhenEnvironmentLookupFails()
+    {
+        var app = CreateApp();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => app.RunAsync(static _ => throw new InvalidOperationException("environment failure"), CancellationToken.None));
+
+        Assert.Throws<ObjectDisposedException>(() => app.ServiceProvider);
+    }
+
+    [Fact]
     public async Task RunAsync_WithRelativeOutputPath_ResolvesAgainstTheSiteRoot()
     {
         await using var app = CreateApp();
 
         await app.RunAsync(EnvironmentWith([("KIJI_OUTPUT", "out")]), CancellationToken.None);
 
-        var options = app.ServiceProvider.GetRequiredService<ResolvedSitePaths>();
-        Assert.Equal(Path.GetFullPath(Path.Combine(_testDir, "out")), options.OutputDirectory);
+        Assert.True(File.Exists(Path.Combine(_testDir, "out", "index.html")));
     }
 
     [Fact]
@@ -160,7 +182,7 @@ public sealed class RunAsyncTests : IDisposable
         app.Paths.ContentDirectory = "contents";
         app.Paths.StaticDirectory = "static";
 
-        app.UseContentSource<Post>(static _ => [], static post => post.Slug);
+        app.UseContentSource<Post>(static _ => []);
         TestArticleContents.MapSite(app);
         return app;
     }

@@ -32,7 +32,7 @@ public sealed class ContentLoadTimingTests : IDisposable
         app.Info = TestArticleContents.CreateSiteInfo();
         app.Paths.RootDirectory = _testDir;
         app.Paths.ContentDirectory = "contents";
-        app.UseMarkdownContent<FrontMatter>(key: static post => post.FileInfo.FullName);
+        app.UseMarkdownContent<FrontMatter>();
         return app;
     }
 
@@ -55,6 +55,25 @@ public sealed class ContentLoadTimingTests : IDisposable
 
         Assert.Empty(reachable);
         Assert.Empty(typeof(MarkdownContent<>).GetConstructors());
+    }
+
+    [Fact]
+    public void PublicApi_HidesExecutionInternals_AndKeepsContentDictionaryPublic()
+    {
+        var exportedNames = typeof(StaticSite).Assembly.GetExportedTypes().Select(static type => type.Name).ToHashSet(StringComparer.Ordinal);
+
+        Assert.DoesNotContain(typeof(IAsyncDisposable), typeof(StaticSite).GetInterfaces());
+        Assert.Null(typeof(StaticSite).GetMethod("PublishAsync", BindingFlags.Public | BindingFlags.Instance));
+        Assert.Null(typeof(StaticSite).GetMethod("ServeAsync", BindingFlags.Public | BindingFlags.Instance));
+        Assert.True(typeof(ContentDictionary<>).IsPublic);
+        Assert.Contains(typeof(IReadOnlyDictionary<,>), typeof(ContentDictionary<>).GetInterfaces()
+            .Where(static type => type.IsGenericType)
+            .Select(static type => type.GetGenericTypeDefinition()));
+        Assert.Empty(typeof(ContentDictionary<>).GetConstructors(BindingFlags.Public | BindingFlags.Instance));
+        Assert.True(typeof(ResolvedSitePaths).IsNotPublic);
+        Assert.DoesNotContain("ImageProcessor", exportedNames);
+        Assert.DoesNotContain("ImageOptions", exportedNames);
+        Assert.DoesNotContain("Slug", exportedNames);
     }
 
     [Fact]

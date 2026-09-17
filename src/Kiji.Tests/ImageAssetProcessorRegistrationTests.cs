@@ -17,14 +17,14 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
         var calls = 0;
         await using (var app = CreateApp())
         {
-            app.UseImageAssetProcessor(() => throw new InvalidOperationException("Superseded factory must not run."));
-            app.UseImageAssetProcessor(() => { calls++; return processor; });
+            app.UseImageProcessor(() => throw new InvalidOperationException("Superseded factory must not run."));
+            app.UseImageProcessor(() => { calls++; return processor; });
             app.CreateSnapshot();
             Assert.Equal(0, calls);
             Assert.Equal(0, processor.DisposeCount);
-            Assert.Same(processor, app.ServiceProvider.GetRequiredService<IImageAssetProcessor>());
+            Assert.Same(processor, app.ServiceProvider.GetRequiredService<IImageProcessor>());
             app.InvalidateContent();
-            Assert.Same(processor, app.ServiceProvider.GetRequiredService<IImageAssetProcessor>());
+            Assert.Same(processor, app.ServiceProvider.GetRequiredService<IImageProcessor>());
             Assert.Equal(1, calls);
         }
         Assert.Equal(1, processor.DisposeCount);
@@ -38,8 +38,8 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
         File.WriteAllText(Path.Combine(_root, "contents", "source.png"), "custom processor input");
         var processor = new TrackingImageProcessor();
         await using var app = CreateApp();
-        app.UseImageAssetProcessor(() => processor);
-        app.UseMarkdownContent<FrontMatter>(post => post.FileInfo.FullName);
+        app.UseImageProcessor(() => processor);
+        app.UseMarkdownContent<FrontMatter>();
         app.AddPages<MarkdownPostTestPage>(provider => provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
             .Select(post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
         var output = Path.Combine(_root, "dist");
@@ -57,8 +57,8 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
     public async Task NullFactoryResult_HasUsefulDiagnostic()
     {
         await using var invalid = CreateApp();
-        invalid.UseImageAssetProcessor(() => null!);
-        var exception = Assert.Throws<InvalidOperationException>(() => invalid.ServiceProvider.GetRequiredService<IImageAssetProcessor>());
+        invalid.UseImageProcessor(() => null!);
+        var exception = Assert.Throws<InvalidOperationException>(() => invalid.ServiceProvider.GetRequiredService<IImageProcessor>());
         Assert.Contains("factory returned null", exception.Message, StringComparison.Ordinal);
     }
 

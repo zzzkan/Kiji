@@ -60,13 +60,13 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
                 null,
                 "DotNet"),
         ];
-        app.UseContentSource(_ => items, key: static post => post.Slug);
+        app.UseContentSource(_ => items);
         TestArticleContents.MapSite(app);
 
         app.AddRssFeed(static services => services.GetRequiredService<ContentDictionary<Post>>().Values
             .OrderByDescending(static post => post.CreatedAt)
             .Select(static post => new FeedItem(
-                post.Title, post.Description, post.CreatedAt, RoutePath: $"blog/{post.Slug}/")));
+                post.Title, post.Description, post.CreatedAt, RelativePath: $"blog/{post.Slug}/")));
         app.AddSitemap();
 
         await app.PublishAsync(_outputDir);
@@ -101,6 +101,10 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         // Feed entries appear in the order AddRssFeed produced them (newest first).
         Assert.True(
             feedXml.IndexOf("Hello World", StringComparison.Ordinal) < feedXml.IndexOf("Other Post", StringComparison.Ordinal));
+
+        var manifest = await ReadManifestAsync();
+        var detail = manifest.Pages.Single(page => page.OutputRelativePath == Path.Combine("blog", "hello-world", "index.html"));
+        Assert.Contains(detail.Dependencies, static dependency => dependency is { Kind: "content-set", Key: "" });
     }
 
     [Fact]
@@ -129,8 +133,8 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         app.Paths.ContentDirectory = _contentsDir;
         app.Paths.StaticDirectory = GetStaticDirectory();
 
-        app.UseMarkdownContent<FrontMatter>(key: static post => post.FileInfo.FullName);
-        app.UseContentSource<Post>(static _ => [], static post => post.Slug);
+        app.UseMarkdownContent<FrontMatter>();
+        app.UseContentSource<Post>(static _ => []);
         TestArticleContents.MapSite(app);
         app.AddPages<MarkdownPostTestPage>(static services => services
             .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
@@ -156,6 +160,17 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         // Encoded variants are kept in the persistent cache under .kiji/cache.
         var imageCacheDir = Path.Combine(_testDir, ".kiji", "cache", "images");
         Assert.NotEmpty(Directory.GetFiles(imageCacheDir, "*.webp", SearchOption.AllDirectories));
+
+        var manifest = await ReadManifestAsync();
+        var detail = manifest.Pages.Single(page => page.OutputRelativePath == Path.Combine("md", "hello-world", "index.html"));
+        Assert.Contains(detail.Dependencies, static dependency => dependency is { Kind: "file", Key: "contents/hello/hello-world.md" });
+    }
+
+    private async Task<Kiji.Generation.BuildManifest> ReadManifestAsync()
+    {
+        return System.Text.Json.JsonSerializer.Deserialize(
+            await File.ReadAllTextAsync(Path.Combine(_testDir, ".kiji", "cache", "build-manifest.json")),
+            Kiji.Generation.BuildManifestJsonContext.Default.BuildManifest)!;
     }
 
     private static async Task CreateTestImageAsync(string path, int width, int height)

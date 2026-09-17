@@ -3,7 +3,7 @@ namespace Kiji;
 /// <summary>
 /// Site-wide metadata used for rendering, feeds, and sitemaps.
 /// </summary>
-public sealed record SiteInfo
+public sealed class SiteInfo
 {
     /// <summary>
     /// The absolute base URL of the published site, normalized to end with a trailing slash.
@@ -37,71 +37,6 @@ public sealed record SiteInfo
     /// The site author name.
     /// </summary>
     public string Author { get; init; } = string.Empty;
-
-    /// <summary>The percent-encoded path of <see cref="BaseUrl"/>, starting and ending with <c>/</c>.</summary>
-    public string BasePath => BaseUrl.AbsolutePath;
-
-    /// <summary>Resolves a site-root-relative path under <see cref="BasePath"/>.</summary>
-    /// <param name="path">A path with or without a leading slash; absolute URLs, protocol-relative URLs, fragments, and query-only values pass through unchanged.</param>
-    /// <exception cref="ArgumentException">The path starts with <c>./</c> or <c>../</c> and must remain document-relative.</exception>
-    public string Path(string path)
-    {
-        ArgumentNullException.ThrowIfNull(path);
-
-        var basePath = BasePath;
-        if (path.Length == 0 || path == "/")
-        {
-            return basePath;
-        }
-
-        if (path[0] is '#' or '?'
-            || path.StartsWith("//", StringComparison.Ordinal)
-            || HasUriScheme(path))
-        {
-            return path;
-        }
-
-        if (path.StartsWith("./", StringComparison.Ordinal) || path.StartsWith("../", StringComparison.Ordinal))
-        {
-            throw new ArgumentException(
-                $"'{path}' is document-relative. SiteInfo.Path resolves site-root-relative paths; "
-                + "leave document-relative URLs (such as page-bundle image references) unchanged.",
-                nameof(path));
-        }
-
-        // Domain-root site with an already-rooted path: nothing to prepend.
-        if (basePath.Length == 1 && path[0] == '/')
-        {
-            return path;
-        }
-
-        return string.Concat(basePath, path.AsSpan().TrimStart('/'));
-    }
-
-    // RFC 3986 scheme: ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ) ":"
-    private static bool HasUriScheme(string path)
-    {
-        if (!char.IsAsciiLetter(path[0]))
-        {
-            return false;
-        }
-
-        for (var i = 1; i < path.Length; i++)
-        {
-            var character = path[i];
-            if (character == ':')
-            {
-                return true;
-            }
-
-            if (!char.IsAsciiLetterOrDigit(character) && character is not ('+' or '-' or '.'))
-            {
-                return false;
-            }
-        }
-
-        return false;
-    }
 
     private static Uri ValidateBaseUrl(Uri value)
     {

@@ -3,7 +3,7 @@ namespace Kiji.Assets;
 /// <summary>
 /// Options controlling responsive image generation.
 /// </summary>
-public sealed class ImageOptions
+internal sealed class ImageOptions
 {
     /// <summary>
     /// Responsive widths smaller than the source, defaulting to 320, 640, 960, and 1280 pixels.

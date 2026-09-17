@@ -57,9 +57,9 @@ static HTML via Blazor's `HtmlRenderer`, assembled with a minimal-API style app.
 - `UseNotFoundPage<T>()`'s component still needs its own `@page`/`[Route]`, or it throws.
 - `SitePaths.RootDirectory` defaults to the nearest ancestor with a project file, then the nearest
   with `.git`, then the current directory.
-- `SiteInfo.Path(...)` throws on `./` and `../`: document-relative URLs must stay untouched.
 - The dev server serves under `SiteInfo.BaseUrl`'s path and returns 404 outside it, on
-  purpose — a link that forgot `Site.Path` should fail locally, not after deploy.
+  purpose — a link that forgot to prepend `Site.BaseUrl.AbsolutePath` should fail locally,
+  not after deploy.
 - Framework (`System.*`/`Microsoft.*`) assemblies are excluded from the incremental build
   fingerprint. After an SDK update, publish with `-p:KijiForce=true` to be certain.
 - The object `AddPages` yields is the page's whole parameter set, not just route values.
@@ -73,7 +73,7 @@ static HTML via Blazor's `HtmlRenderer`, assembled with a minimal-API style app.
   by the page, layout, and children and disposed after rendering. Loaders, route/feed
   factories, and artifacts cannot resolve page services. Share derived indexes through
   `AddContentSource<T>`, not page services. There is no public service collection.
-- Replace image processing with `UseImageAssetProcessor(() => new CustomProcessor())`.
+- Replace image processing with `UseImageProcessor(() => new CustomProcessor())`.
   The site owns one lazy processor, including disposal; it must support concurrent calls
   and retain no page/content state. Reloading content does not recreate it. Declare
   external configuration with `AddBuildInput` and version custom image cache identities.

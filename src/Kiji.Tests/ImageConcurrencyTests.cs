@@ -29,9 +29,9 @@ public sealed class ImageConcurrencyTests : IDisposable
         {
             BeforeEncodeAsync = async (_, ct) => { Interlocked.Increment(ref count); entered.TrySetResult(); await release.Task.WaitAsync(ct); },
         };
-        var first = processor.ProcessImageAsync(source, Path.Combine(_root, "a"), Path.Combine(_root, "cache"));
+        var first = processor.ProcessAsync(source, Path.Combine(_root, "a"), Path.Combine(_root, "cache"));
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        var others = Enumerable.Range(0, 12).Select(i => processor.ProcessImageAsync(source,
+        var others = Enumerable.Range(0, 12).Select(i => processor.ProcessAsync(source,
             Path.Combine(_root, "page" + i), Path.Combine(_root, "cache"))).ToArray();
         release.SetResult();
         var info = await first;
@@ -60,8 +60,8 @@ public sealed class ImageConcurrencyTests : IDisposable
                 await both.Task.WaitAsync(TimeSpan.FromSeconds(10), ct);
             },
         };
-        await Task.WhenAll(processor.ProcessImageAsync(a, Path.Combine(_root, "out")),
-            processor.ProcessImageAsync(b, Path.Combine(_root, "out")));
+        await Task.WhenAll(processor.ProcessAsync(a, Path.Combine(_root, "out")),
+            processor.ProcessAsync(b, Path.Combine(_root, "out")));
         Assert.Equal(2, count);
     }
 
@@ -88,8 +88,8 @@ public sealed class ImageConcurrencyTests : IDisposable
             BeforeEncodeAsync = (_, _) => Interlocked.Increment(ref attempts) == 1
                 ? Task.FromException(new IOException("test failure")) : Task.CompletedTask,
         };
-        await Assert.ThrowsAsync<IOException>(() => processor.ProcessImageAsync(source, Path.Combine(_root, "out")));
-        await processor.ProcessImageAsync(source, Path.Combine(_root, "out"));
+        await Assert.ThrowsAsync<IOException>(() => processor.ProcessAsync(source, Path.Combine(_root, "out")));
+        await processor.ProcessAsync(source, Path.Combine(_root, "out"));
         Assert.Equal(2, attempts);
         Assert.Empty(Directory.GetFiles(_root, "*.tmp", SearchOption.AllDirectories));
     }
@@ -112,10 +112,10 @@ public sealed class ImageConcurrencyTests : IDisposable
                 }
             },
         };
-        var first = processor.ProcessImageAsync(source, Path.Combine(_root, "first"),
+        var first = processor.ProcessAsync(source, Path.Combine(_root, "first"),
             Path.Combine(_root, "cache"), canceled.Token);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        var second = processor.ProcessImageAsync(source, Path.Combine(_root, "second"), Path.Combine(_root, "cache"));
+        var second = processor.ProcessAsync(source, Path.Combine(_root, "second"), Path.Combine(_root, "cache"));
         canceled.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
         var result = await second.WaitAsync(TimeSpan.FromSeconds(10));

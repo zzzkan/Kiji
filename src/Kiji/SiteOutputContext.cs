@@ -1,8 +1,7 @@
 namespace Kiji;
 
 /// <summary>
-/// The full-site input handed to <see cref="ISiteArtifact.WriteAsync"/>: site metadata
-/// and every generated page.
+/// The full-site input handed to an artifact writer: site metadata and every generated page.
 /// </summary>
 public sealed class SiteOutputContext
 {

@@ -19,17 +19,17 @@ namespace Kiji;
 
 /// <summary>Defines, generates, and serves a static website.</summary>
 /// <remarks>Configure and register content before execution; settings become read-only when execution starts.</remarks>
-public sealed class StaticSite : IAsyncDisposable
+public sealed class StaticSite
 {
     private readonly string[] _args;
     private readonly ContentRuntime _runtime = new();
     private readonly List<string> _buildInputPaths = [];
     private readonly List<KeyValuePair<string, string>> _buildInputValues = [];
     private readonly HashSet<Type> _pageServiceTypes = [];
-    private Func<IImageAssetProcessor> _imageAssetProcessorFactory = static () => new ImageProcessor();
+    private Func<IImageProcessor> _imageProcessorFactory = static () => new ImageProcessor();
     private bool _configurationFrozen;
     private readonly List<RouteRegistration> _routeRegistrations = [];
-    private readonly List<ISiteArtifact> _artifacts = [];
+    private readonly List<SiteArtifactRegistration> _artifacts = [];
     private readonly List<Assembly> _pageAssemblies = [];
     private Type? _defaultLayoutType;
     private Type? _notFoundComponentType;
@@ -46,6 +46,8 @@ public sealed class StaticSite : IAsyncDisposable
     private ComponentRenderer? _renderer;
     private ResolvedSitePaths? _activeOptions;
     private bool _forceFullBuild;
+    private bool _hasRun;
+    private bool _disposed;
 
     private StaticSite(string[] args)
     {
@@ -99,11 +101,11 @@ public sealed class StaticSite : IAsyncDisposable
     /// Declare external configuration with AddBuildInput and include encoder settings in
     /// any custom persistent cache identity.
     /// </remarks>
-    public StaticSite UseImageAssetProcessor(Func<IImageAssetProcessor> factory)
+    public StaticSite UseImageProcessor(Func<IImageProcessor> factory)
     {
         EnsureConfigurable();
         ArgumentNullException.ThrowIfNull(factory);
-        _imageAssetProcessorFactory = factory;
+        _imageProcessorFactory = factory;
         return this;
     }
 
@@ -162,38 +164,36 @@ public sealed class StaticSite : IAsyncDisposable
 
     /// <summary>Uses a content source resolved as <see cref="ContentDictionary{T}"/>.</summary>
     /// <param name="loader">Loads items lazily once per snapshot, after execution paths are settled.</param>
-    /// <param name="key">Returns a non-empty key unique within the source, compared case-insensitively.</param>
     public StaticSite UseContentSource<T>(
-        Func<IServiceProvider, IReadOnlyList<T>> loader,
-        Func<T, string> key,
-        Action<ContentSourceOptions<T>>? configure = null)
+        Func<IServiceProvider, IReadOnlyList<T>> loader)
         where T : class
     {
         EnsureConfigurable();
         ArgumentNullException.ThrowIfNull(loader);
-        ArgumentNullException.ThrowIfNull(key);
-
-        var options = new ContentSourceOptions<T>();
-        configure?.Invoke(options);
 
         return UseContentSource(
-            services => [.. loader(services).Select(static item => (item, SourceFile: (string?)null))],
-            key,
-            options);
+            services =>
+            {
+                var items = loader(services);
+                var keyed = new (string Key, T Item, string? SourceFile)[items.Count];
+                for (var i = 0; i < items.Count; i++)
+                {
+                    keyed[i] = (i.ToString(System.Globalization.CultureInfo.InvariantCulture), items[i], null);
+                }
+                return keyed;
+            });
     }
 
     /// <summary>
-    /// The provenance-carrying form of <see cref="UseContentSource{T}(Func{IServiceProvider, IReadOnlyList{T}}, Func{T, string}, Action{ContentSourceOptions{T}})"/>.
+    /// The provenance-carrying form used by file-backed content loaders.
     /// </summary>
     internal StaticSite UseContentSource<T>(
-        Func<IServiceProvider, IReadOnlyList<(T Item, string? SourceFile)>> loader,
-        Func<T, string> key,
-        ContentSourceOptions<T> options,
+        Func<IServiceProvider, IReadOnlyList<(string Key, T Item, string? SourceFile)>> loader,
         string contentSetScope = "")
         where T : class
     {
         EnsureConfigurable();
-        _runtime.Register(new ContentDictionary<T>(_runtime, loader, key, options, contentSetScope));
+        _runtime.Register(new ContentDictionary<T>(_runtime, loader, contentSetScope));
         return this;
     }
 
@@ -269,12 +269,15 @@ public sealed class StaticSite : IAsyncDisposable
     }
 
     /// <summary>Registers a site-wide output file written after all pages are rendered.</summary>
-    public StaticSite AddArtifact(ISiteArtifact artifact)
+    public StaticSite AddArtifact(
+        string outputRelativePath,
+        Func<Stream, SiteOutputContext, CancellationToken, Task> write)
     {
         EnsureConfigurable();
-        ArgumentNullException.ThrowIfNull(artifact);
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputRelativePath);
+        ArgumentNullException.ThrowIfNull(write);
 
-        _artifacts.Add(artifact);
+        _artifacts.Add(new SiteArtifactRegistration(outputRelativePath, write));
         return this;
     }
 
@@ -295,46 +298,58 @@ public sealed class StaticSite : IAsyncDisposable
     internal async Task<int> RunAsync(Func<string, string?> environment, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(environment);
-
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-
-        void HandleShutdownSignal(PosixSignalContext context)
+        if (_hasRun)
         {
-            context.Cancel = true;
-            cts.Cancel();
+            throw new InvalidOperationException("A StaticSite can only be run once.");
         }
-
-        using var sigInt = PosixSignalRegistration.Create(PosixSignal.SIGINT, HandleShutdownSignal);
-        using var sigTerm = PosixSignalRegistration.Create(PosixSignal.SIGTERM, HandleShutdownSignal);
-
-        var outputPath = environment(OutputPathVariable);
-        var publishing = !string.IsNullOrWhiteSpace(outputPath);
+        _hasRun = true;
 
         try
         {
-            if (publishing)
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+            void HandleShutdownSignal(PosixSignalContext context)
             {
-                BuildOutput.Verbose = EnvironmentValue.IsTruthy(environment(VerboseVariable));
-                _forceFullBuild = EnvironmentValue.IsTruthy(environment(ForceVariable));
-                await PublishAsync(outputPath!, cts.Token);
-                return 0;
+                context.Cancel = true;
+                cts.Cancel();
             }
 
-            await ServeAsync(cts.Token);
-            return 0;
+            using var sigInt = PosixSignalRegistration.Create(PosixSignal.SIGINT, HandleShutdownSignal);
+            using var sigTerm = PosixSignalRegistration.Create(PosixSignal.SIGTERM, HandleShutdownSignal);
+
+            var outputPath = environment(OutputPathVariable);
+            var publishing = !string.IsNullOrWhiteSpace(outputPath);
+
+            try
+            {
+                if (publishing)
+                {
+                    BuildOutput.Verbose = EnvironmentValue.IsTruthy(environment(VerboseVariable));
+                    _forceFullBuild = EnvironmentValue.IsTruthy(environment(ForceVariable));
+                    await PublishAsync(outputPath!, cts.Token);
+                    return 0;
+                }
+
+                await ServeAsync(cts.Token);
+                return 0;
+            }
+            catch (OperationCanceledException) when (cts.IsCancellationRequested)
+            {
+                // Stopping the dev server with Ctrl+C is a normal exit; an interrupted
+                // generation left partial output and is reported as failure.
+                return publishing ? 1 : 0;
+            }
         }
-        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        finally
         {
-            // Stopping the dev server with Ctrl+C is a normal exit; an interrupted
-            // generation left partial output and is reported as failure.
-            return publishing ? 1 : 0;
+            await DisposeAsync();
         }
     }
 
     /// <summary>Generates the site, reusing unchanged output from a previous publish.</summary>
     /// <param name="outputPath">An absolute output directory or a path relative to <see cref="SitePaths.RootDirectory"/>.</param>
     /// <remarks>Repeated publication uses the same output directory; switching directories or execution modes requires a new site.</remarks>
-    public async Task PublishAsync(string outputPath, CancellationToken cancellationToken = default)
+    internal async Task PublishAsync(string outputPath, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
         FreezeConfiguration();
@@ -368,7 +383,7 @@ public sealed class StaticSite : IAsyncDisposable
             [.. _pageAssemblies,
                 .. _routeRegistrations.Select(static registration => registration.ComponentType.Assembly),
                 .. _pageServiceTypes.Select(static type => type.Assembly),
-                _imageAssetProcessorFactory.Method.Module.Assembly,
+                _imageProcessorFactory.Method.Module.Assembly,
                 .. _notFoundComponentType is { } notFound ? new[] { notFound.Assembly } : [],
                 typeof(StaticSite).Assembly],
             _forceFullBuild,
@@ -450,7 +465,7 @@ public sealed class StaticSite : IAsyncDisposable
 
     /// <summary>Starts the development server with automatic browser reload on content changes.</summary>
     /// <remarks>The address comes from ASP.NET Core configuration, defaulting to <c>http://127.0.0.1:8080</c>.</remarks>
-    public async Task ServeAsync(CancellationToken cancellationToken = default)
+    internal async Task ServeAsync(CancellationToken cancellationToken = default)
     {
         var (devServer, web) = await StartDevServerAsync(cancellationToken);
         await using (devServer)
@@ -459,9 +474,14 @@ public sealed class StaticSite : IAsyncDisposable
         }
     }
 
-    /// <summary>Releases the renderer and services owned by this site.</summary>
-    public async ValueTask DisposeAsync()
+    internal async ValueTask DisposeAsync()
     {
+        if (_disposed)
+        {
+            return;
+        }
+        _disposed = true;
+
         if (_renderer is not null)
         {
             await _renderer.DisposeAsync();
@@ -685,7 +705,7 @@ public sealed class StaticSite : IAsyncDisposable
         {
             return await renderer.RenderComponentAsync<KijiRoot>(
                 request.RootParameters ?? CreateRootParameters(request),
-                Info.BaseUrl.AppendRelativePath(request.RoutePath));
+                new Uri(Info.BaseUrl, request.RoutePath.TrimStart('/')));
         }
         finally
         {
@@ -708,7 +728,7 @@ public sealed class StaticSite : IAsyncDisposable
             await renderer.RenderComponentToAsync<KijiRoot>(
                 output,
                 request.RootParameters ?? CreateRootParameters(request),
-                Info.BaseUrl.AppendRelativePath(request.RoutePath));
+                new Uri(Info.BaseUrl, request.RoutePath.TrimStart('/')));
         }
         finally
         {
@@ -741,7 +761,7 @@ public sealed class StaticSite : IAsyncDisposable
         return new SiteOutputContext(
             Info,
             [.. snapshot.Pages.Select(static page => new SitePageInfo(
-                page.RoutePath,
+                page.RoutePath.TrimStart('/'),
                 page.OutputRelativePath,
                 page.ExcludeFromSitemap))],
             ServiceProvider);
@@ -869,6 +889,7 @@ public sealed class StaticSite : IAsyncDisposable
 
     private void EnsureServices()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         FreezeConfiguration();
         if (_services is not null)
         {
@@ -888,8 +909,8 @@ public sealed class StaticSite : IAsyncDisposable
             "ResolvedSitePaths was resolved before a command settled the site's paths."));
         _runtime.ApplyRegistrations(services);
 
-        services.AddSingleton<IImageAssetProcessor>(_ => _imageAssetProcessorFactory()
-            ?? throw new InvalidOperationException("The image asset processor factory returned null."));
+        services.AddSingleton<IImageProcessor>(_ => _imageProcessorFactory()
+            ?? throw new InvalidOperationException("The image processor factory returned null."));
         services.AddSingleton<ContentFileRegistry>();
 
         foreach (var type in _pageServiceTypes)

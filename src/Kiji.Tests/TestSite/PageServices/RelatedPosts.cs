@@ -20,7 +20,8 @@ public sealed class RelatedPosts(
 
     private IReadOnlyList<string> GetTagKeys(string name)
     {
-        if (!tags.TryGetValue(name, out var tag))
+        var tag = tags.Values.FirstOrDefault(tag => string.Equals(tag.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (tag is null)
         {
             return [];
         }

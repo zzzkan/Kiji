@@ -9,7 +9,7 @@ namespace Kiji.Assets;
 
 /// <summary>Generates responsive WebP image variants.</summary>
 /// <param name="options">Image settings, or null to use the defaults.</param>
-public sealed class ImageProcessor(ImageOptions? options = null) : IImageAssetProcessor
+internal sealed class ImageProcessor(ImageOptions? options = null) : IImageProcessor
 {
     /// <summary>
     /// Caps the number of decoded images alive across pages. ImageSharp retains
@@ -30,7 +30,7 @@ public sealed class ImageProcessor(ImageOptions? options = null) : IImageAssetPr
     }
 
     /// <inheritdoc/>
-    public async Task<ProcessedImageInfo> ProcessImageAsync(
+    public async Task<ProcessedImageInfo> ProcessAsync(
         string sourceFilePath,
         string outputDirectory,
         string? cacheDirectory = null,

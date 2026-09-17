@@ -11,6 +11,7 @@ public static class SitemapStaticSiteExtensions
     {
         ArgumentNullException.ThrowIfNull(app);
 
-        return app.AddArtifact(new SitemapArtifact(path));
+        var artifact = new SitemapArtifact(path);
+        return app.AddArtifact(artifact.OutputRelativePath, SitemapArtifact.WriteAsync);
     }
 }

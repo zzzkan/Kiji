@@ -93,7 +93,15 @@ public sealed class DevServerTests : IAsyncDisposable
     [Fact]
     public async Task Serve_UnicodeRouteAndBasePathMatchBrowserRequests()
     {
-        var site = TestArticleContents.CreateSiteInfo() with { BaseUrl = new Uri("https://example.com/日本/") };
+        var source = TestArticleContents.CreateSiteInfo();
+        var site = new SiteInfo
+        {
+            BaseUrl = new Uri("https://example.com/日本/"),
+            Name = source.Name,
+            Description = source.Description,
+            Language = source.Language,
+            Author = source.Author,
+        };
         var (baseAddress, devServer) = await StartServerAsync(new StringWriter(), site, "日本語");
         await using (devServer)
         {
@@ -265,8 +273,8 @@ public sealed class DevServerTests : IAsyncDisposable
 
     /// <summary>
     /// A site published under a sub-path must be browsable at that sub-path locally,
-    /// and must serve nothing outside it — otherwise a link that forgets
-    /// <see cref="SiteInfo.Path(string)"/> works in dev and 404s only once deployed.
+    /// and must serve nothing outside it — otherwise a link that omits
+    /// <see cref="SiteInfo.BaseUrl"/>'s path works in dev and 404s only once deployed.
     /// </summary>
     [Fact]
     public async Task Serve_WithBasePath_ServesUnderThePrefixAndRejectsOutsideIt()
@@ -309,7 +317,7 @@ public sealed class DevServerTests : IAsyncDisposable
             Assert.Equal(HttpStatusCode.Found, root.StatusCode);
             Assert.Equal("/kiji/", root.Headers.Location!.ToString());
 
-            // Static assets resolve under the prefix, which is where Site.Path points them.
+            // Static assets resolve under the prefix exposed by Site.BaseUrl.AbsolutePath.
             await File.WriteAllTextAsync(Path.Combine(_staticDir, "site.css"), "body{}");
             Assert.Equal(
                 HttpStatusCode.OK,
@@ -368,14 +376,13 @@ public sealed class DevServerTests : IAsyncDisposable
                         new DateOnly(2026, 1, 1),
                         null,
                         "Testing"))];
-            },
-            key: static post => post.Slug);
+            });
 
         _app = app;
         TestArticleContents.MapSite(_app);
         if (additionalSlug is not null)
         {
-            _app.AddPages<Kiji.Tests.TestSite.Pages.PostPage>(_ => [new { Slug = additionalSlug, ContentKey = "hello-world" }]);
+            _app.AddPages<Kiji.Tests.TestSite.Pages.PostPage>(_ => [new { Slug = additionalSlug, ContentKey = "0" }]);
         }
 
         var reporter = new Kiji.Hosting.DevServerStatusReporter(logs, prefix: "kiji dev", useEmoji: true);

@@ -29,7 +29,7 @@ public sealed class PageDiscoveryTests
     {
         var app = StaticSite.Create([]);
         app.Info = TestArticleContents.CreateSiteInfo();
-        app.UseContentSource<Post>(static _ => [], static post => post.Slug);
+        app.UseContentSource<Post>(static _ => []);
         // Under the MTP runner the test project is its own executable, so the
         // entry assembly is Kiji.Tests itself.
         app.AddStaticPages();
@@ -89,7 +89,7 @@ public sealed class PageDiscoveryTests
     {
         var app = StaticSite.Create([]);
         app.Info = TestArticleContents.CreateSiteInfo();
-        app.UseContentSource<Post>(static _ => [], static post => post.Slug);
+        app.UseContentSource<Post>(static _ => []);
         app.UseDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(app);
         app.UseNotFoundPage<NotFoundPage>();
@@ -171,7 +171,7 @@ public sealed class PageDiscoveryTests
     {
         var app = StaticSite.Create([]);
         app.Info = TestArticleContents.CreateSiteInfo();
-        app.UseContentSource<Post>(static _ => [], static post => post.Slug);
+        app.UseContentSource<Post>(static _ => []);
         app.UseDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(app);
         app.UseNotFoundPage<NotFoundPage>();

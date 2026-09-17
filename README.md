@@ -8,19 +8,17 @@ HTML.
 
 ## Quick start
 
+Requires the .NET 10 SDK.
+
 ```powershell
-dotnet new install Kiji.Templates
-dotnet new kiji -o MySite
+dotnet new console -f net10.0 -o MySite
 cd MySite
-dotnet watch
+dotnet add package Kiji --version 0.1.0-preview
 ```
 
-That is a working site on <http://localhost:8080> with live reload. `dotnet publish -o dist`
-writes it to `dist/`, which any static host will serve.
-
-The scaffold is deliberately minimal — a home page, a markdown post, a 404 page, and a
-sitemap. Feeds, tag pages, and image optimization are all supported and left out of the
-starting point; the generated README says where to find each.
+Follow the [getting-started guide](https://zzzkan.github.io/kiji/docs/getting-started/)
+to configure the Razor SDK and add your pages. Then `dotnet watch` serves the site and
+`dotnet publish -c Release -o dist` generates the static output.
 
 ## Why Kiji
 
@@ -70,14 +68,27 @@ Design constraints, alternatives already evaluated and rejected, conventions, an
 are recorded in [AGENTS.md](AGENTS.md). Read it before changing the rendering, generation,
 or incremental build paths.
 
-Releases are versioned by [MinVer](https://github.com/adamralph/minver) from git tags. Tag
-a release commit and push the tag; the
-[release workflow](.github/workflows/release.yml) builds, tests, packs, and pushes `Kiji`
-and `Kiji.Templates` to NuGet.org.
+### Releasing
+
+The first release is `Kiji` **0.1.0-preview**; `Kiji.Templates` is not included.
+Docs continue to use the project reference while the package is unpublished.
+The template's package version is substituted during packing.
+
+The [release workflow](.github/workflows/release.yml) uses
+[NuGet Trusted Publishing](https://learn.microsoft.com/nuget/nuget-org/trusted-publishing).
+Before releasing, create a NuGet.org policy for repository owner `zzzkan`, repository
+`kiji`, and workflow file `release.yml` (no environment). Scope it to `Kiji`, allowing
+the first package and subsequent versions. Set the GitHub Actions secret `NUGET_USER`
+to the policy's NuGet username, not an email address. The workflow no longer uses a
+stored `NUGET_API_KEY`.
+
+Versions come from [MinVer](https://github.com/adamralph/minver). After reviewing the
+changes and passing CI, tagging the release commit and **pushing the tag publishes
+to NuGet.org**. These are release commands, not preparation steps:
 
 ```powershell
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.0-preview
+git push origin v0.1.0-preview
 ```
 
 ## License

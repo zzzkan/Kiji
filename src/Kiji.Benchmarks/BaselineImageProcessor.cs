@@ -9,7 +9,7 @@ namespace Kiji.Benchmarks;
 
 /// <summary>Generates responsive WebP image variants.</summary>
 /// <param name="options">Image settings, or null to use the defaults.</param>
-internal sealed class BaselineImageProcessor(ImageOptions? options = null, bool guardPublication = false) : IImageAssetProcessor
+internal sealed class BaselineImageProcessor(ImageOptions? options = null, bool guardPublication = false) : IImageProcessor
 {
     // Allocation-only comparison: protect publication/copy from the original's
     // Windows sharing violation, without deduplicating decode/resize/encode work.
@@ -23,7 +23,7 @@ internal sealed class BaselineImageProcessor(ImageOptions? options = null, bool 
     private readonly ImageOptions _options = options ?? new ImageOptions();
 
     /// <inheritdoc/>
-    public async Task<ProcessedImageInfo> ProcessImageAsync(
+    public async Task<ProcessedImageInfo> ProcessAsync(
         string sourceFilePath,
         string outputDirectory,
         string? cacheDirectory = null,

@@ -4,7 +4,7 @@
     <PackageType>Template</PackageType>
     <IsPackable>true</IsPackable>
     <Title>Kiji site template</Title>
-    <Description>The `dotnet new kiji` project template for Kiji, a static site generator framework for .NET. Scaffolds a Razor-component site with a markdown blog, RSS feed, and sitemap.</Description>
+    <Description>The `dotnet new kiji` project template for Kiji, a static site generator framework for .NET. Scaffolds a Razor-component site with a markdown blog and sitemap.</Description>
     <PackageTags>dotnet-new;templates;template;static-site-generator;ssg;razor;blazor;markdown</PackageTags>
 
     <!-- Content-only package: nothing here is compiled, and no assembly ships. -->

@@ -3,6 +3,7 @@ using Kiji.Rendering;
 using Kiji.Tests.TestSite.Pages;
 using Kiji.Tests.TestSite;
 using Microsoft.Extensions.DependencyInjection;
+using System.Text.RegularExpressions;
 
 namespace Kiji.Tests;
 
@@ -57,7 +58,7 @@ internal static class TestArticleContents
         app.Info = CreateSiteInfo();
 
         IReadOnlyList<Post> items = [.. entries.Select(static entry => ClonePost(entry.Metadata, entry.Html))];
-        app.UseContentSource(_ => items, key: static post => post.Slug);
+        app.UseContentSource(_ => items);
         MapSite(app);
         return (app, app.ServiceProvider.GetRequiredService<ContentDictionary<Post>>());
     }
@@ -105,7 +106,7 @@ internal static class TestArticleContents
             .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
             .Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            var slug = Slug.Normalize(tagName);
+            var slug = NormalizeSlug(tagName);
             if (namesBySlug.TryGetValue(slug, out var existingValue) &&
                 !string.Equals(existingValue, tagName, StringComparison.OrdinalIgnoreCase))
             {
@@ -117,6 +118,21 @@ internal static class TestArticleContents
         }
 
         return namesBySlug;
+    }
+
+    private static string NormalizeSlug(string value)
+    {
+        var trimmed = value.Trim().Trim('/', '\\');
+        if (trimmed.Length == 0 || trimmed.Contains('/') || trimmed.Contains('\\'))
+        {
+            throw new InvalidOperationException($"Slug '{value}' must be a non-empty single route segment.");
+        }
+
+        var normalized = Regex.Replace(trimmed.ToLowerInvariant(), @"[^a-z0-9\-]", "-");
+        normalized = Regex.Replace(normalized, "-+", "-").Trim('-');
+        return normalized.Length > 0
+            ? normalized
+            : throw new InvalidOperationException($"Slug '{value}' cannot be normalized to an empty value.");
     }
 
     public static IReadOnlyList<PageRenderRequest> CreatePageRequests(params (Post Metadata, string Html)[] entries)

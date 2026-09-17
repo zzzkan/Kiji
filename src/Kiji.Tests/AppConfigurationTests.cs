@@ -56,7 +56,7 @@ public sealed class AppConfigurationTests : IDisposable
             observedOutput = provider.GetRequiredService<ResolvedSitePaths>().OutputDirectory;
             Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<object>());
             return [];
-        }, static post => post.Slug);
+        });
         TestArticleContents.MapSite(app);
         app.AddPages<PostPage>(provider =>
         {
@@ -95,7 +95,7 @@ public sealed class AppConfigurationTests : IDisposable
         void AssertFrozen()
         {
             Assert.Throws<InvalidOperationException>(() => app.AddPageService<object>());
-            Assert.Throws<InvalidOperationException>(() => app.UseImageAssetProcessor(
+            Assert.Throws<InvalidOperationException>(() => app.UseImageProcessor(
                 () => throw new Xunit.Sdk.XunitException("Factory must not run after execution starts.")));
             Assert.Throws<InvalidOperationException>(() => paths.RootDirectory = _root);
             Assert.Throws<InvalidOperationException>(() => paths.ContentDirectory = "other");
@@ -103,8 +103,8 @@ public sealed class AppConfigurationTests : IDisposable
             Assert.Throws<InvalidOperationException>(() => app.Info = TestArticleContents.CreateSiteInfo());
             Assert.Throws<InvalidOperationException>(() => app.AddBuildInput("input.json"));
             Assert.Throws<InvalidOperationException>(() => app.AddBuildInput("version", "2"));
-            Assert.Throws<InvalidOperationException>(() => app.UseContentSource<object>(static _ => [], static _ => "key"));
-            Assert.Throws<InvalidOperationException>(() => app.UseMarkdownContent<FrontMatter>(static doc => doc.FileInfo.FullName,
+            Assert.Throws<InvalidOperationException>(() => app.UseContentSource<object>(static _ => []));
+            Assert.Throws<InvalidOperationException>(() => app.UseMarkdownContent<FrontMatter>(
                 _ => throw new Xunit.Sdk.XunitException("Configuration callback must not run after execution starts.")));
             Assert.Throws<InvalidOperationException>(() => app.AddStaticPages());
             Assert.Throws<InvalidOperationException>(() => app.AddStaticPages(typeof(PostPage).Assembly));

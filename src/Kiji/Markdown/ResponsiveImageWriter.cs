@@ -109,12 +109,6 @@ internal static class ResponsiveImageWriter
         renderer.Write($" loading=\"{loading}\" decoding=\"async\"");
         context.ImageCount++;
 
-        if (!string.IsNullOrEmpty(context.ImageCssClass))
-        {
-            renderer.Write(" class=\"");
-            renderer.WriteEscape(context.ImageCssClass);
-            renderer.Write("\"");
-        }
     }
 
     private static void WriteTitleAttribute(HtmlRenderer renderer, string title)

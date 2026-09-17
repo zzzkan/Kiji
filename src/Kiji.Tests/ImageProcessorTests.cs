@@ -37,7 +37,7 @@ public sealed class ImageProcessorTests : IDisposable
         var imagePath = Path.Combine(_sourceDir, "small-image.png");
         await CreateTestImageAsync(imagePath, 500, 300);
 
-        var info = await _processor.ProcessImageAsync(imagePath, _outputDir);
+        var info = await _processor.ProcessAsync(imagePath, _outputDir);
 
         Assert.Equal([320, 500], info.Variants.Select(static variant => variant.Width));
     }
@@ -48,7 +48,7 @@ public sealed class ImageProcessorTests : IDisposable
         var imagePath = Path.Combine(_sourceDir, "tiny-image.png");
         await CreateTestImageAsync(imagePath, 200, 150);
 
-        var info = await _processor.ProcessImageAsync(imagePath, _outputDir);
+        var info = await _processor.ProcessAsync(imagePath, _outputDir);
 
         var variant = Assert.Single(info.Variants);
         Assert.Equal(200, variant.Width);
@@ -60,7 +60,7 @@ public sealed class ImageProcessorTests : IDisposable
         var imagePath = Path.Combine(_sourceDir, "huge.png");
         await CreateTestImageAsync(imagePath, 2500, 1400);
 
-        var info = await _processor.ProcessImageAsync(imagePath, _outputDir);
+        var info = await _processor.ProcessAsync(imagePath, _outputDir);
 
         Assert.Equal(2500, info.OriginalWidth);
         Assert.Equal(1400, info.OriginalHeight);
@@ -78,11 +78,11 @@ public sealed class ImageProcessorTests : IDisposable
         var imagePath = Path.Combine(_sourceDir, "existing.png");
         await CreateTestImageAsync(imagePath, 800, 600);
 
-        await processor.ProcessImageAsync(imagePath, _outputDir);
+        await processor.ProcessAsync(imagePath, _outputDir);
         var initialEncodes = encodes;
         Assert.True(initialEncodes > 0);
 
-        await processor.ProcessImageAsync(imagePath, _outputDir);
+        await processor.ProcessAsync(imagePath, _outputDir);
 
         Assert.Equal(initialEncodes, encodes);
     }
@@ -93,12 +93,12 @@ public sealed class ImageProcessorTests : IDisposable
         var imagePath = Path.Combine(_sourceDir, "hash-test.png");
         await CreateTestImageAsync(imagePath, 500, 300);
 
-        var first = await _processor.ProcessImageAsync(imagePath, _outputDir);
+        var first = await _processor.ProcessAsync(imagePath, _outputDir);
         var firstFileNames = first.Variants.Select(static variant => variant.FileName).ToArray();
 
         await CreateTestImageAsync(imagePath, 600, 400);
 
-        var second = await _processor.ProcessImageAsync(imagePath, _outputDir);
+        var second = await _processor.ProcessAsync(imagePath, _outputDir);
         var generatedFiles = Directory.GetFiles(_outputDir, "*.webp").Select(Path.GetFileName).ToArray();
 
         Assert.NotEqual(firstFileNames, [.. second.Variants.Select(static variant => variant.FileName)]);
@@ -116,8 +116,8 @@ public sealed class ImageProcessorTests : IDisposable
         await CreateTestImageAsync(jpgPath, 900, 450);
         await CreateTestImageAsync(pngPath, 400, 200);
 
-        await _processor.ProcessImageAsync(jpgPath, _outputDir);
-        await _processor.ProcessImageAsync(pngPath, _outputDir);
+        await _processor.ProcessAsync(jpgPath, _outputDir);
+        await _processor.ProcessAsync(pngPath, _outputDir);
 
         var generatedFiles = Directory.GetFiles(_outputDir, "*.webp").Select(Path.GetFileName).Cast<string>().ToArray();
 
@@ -136,14 +136,14 @@ public sealed class ImageProcessorTests : IDisposable
         var imagePath = Path.Combine(_sourceDir, "cached.png");
         await CreateTestImageAsync(imagePath, 800, 600);
 
-        await processor.ProcessImageAsync(imagePath, _outputDir, _cacheDir);
+        await processor.ProcessAsync(imagePath, _outputDir, _cacheDir);
         var initialEncodes = encodes;
         Assert.True(initialEncodes > 0);
 
         // Simulate a clean build: output is wiped, cache survives.
         Directory.Delete(_outputDir, recursive: true);
 
-        var info = await processor.ProcessImageAsync(imagePath, _outputDir, _cacheDir);
+        var info = await processor.ProcessAsync(imagePath, _outputDir, _cacheDir);
 
         foreach (var variant in info.Variants)
         {
@@ -188,8 +188,8 @@ public sealed class ImageProcessorTests : IDisposable
         var low = new ImageProcessor(new ImageOptions { Quality = 10 });
         var high = new ImageProcessor(new ImageOptions { Quality = 95 });
 
-        var first = Assert.Single((await low.ProcessImageAsync(imagePath, _outputDir, _cacheDir)).Variants);
-        var second = Assert.Single((await high.ProcessImageAsync(imagePath, _outputDir, _cacheDir)).Variants);
+        var first = Assert.Single((await low.ProcessAsync(imagePath, _outputDir, _cacheDir)).Variants);
+        var second = Assert.Single((await high.ProcessAsync(imagePath, _outputDir, _cacheDir)).Variants);
         Assert.NotEqual(first.FileName, second.FileName);
         Assert.NotEqual(await File.ReadAllBytesAsync(Path.Combine(_outputDir, first.FileName)),
             await File.ReadAllBytesAsync(Path.Combine(_outputDir, second.FileName)));

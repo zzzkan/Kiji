@@ -2,13 +2,13 @@ using Kiji.Assets;
 
 namespace Kiji.Tests.TestSite.PageServices;
 
-public sealed class TrackingImageProcessor : IImageAssetProcessor, IAsyncDisposable
+public sealed class TrackingImageProcessor : IImageProcessor, IAsyncDisposable
 {
     private int _calls;
     public int Calls => _calls;
     public int DisposeCount { get; private set; }
 
-    public async Task<ProcessedImageInfo> ProcessImageAsync(string sourceFilePath, string outputDirectory,
+    public async Task<ProcessedImageInfo> ProcessAsync(string sourceFilePath, string outputDirectory,
         string? cacheDirectory = null, CancellationToken cancellationToken = default)
     {
         Interlocked.Increment(ref _calls);

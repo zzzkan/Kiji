@@ -19,28 +19,26 @@ internal sealed class MarkdownProcessor
 {
     private readonly MarkdownPipeline _pipeline;
     private readonly ConcurrentBag<PooledMarkdigRenderer> _rendererPool = [];
-    private readonly IImageAssetProcessor _imageAssetProcessor;
+    private readonly IImageProcessor _imageProcessor;
     private readonly IReadOnlyList<Func<string, string>> _htmlPostProcessors;
     private readonly string _outputPath;
     private readonly string? _imageCachePath;
-    private readonly string? _imageCssClass;
 
     /// <param name="options">The resolved site paths.</param>
-    /// <param name="imageAssetProcessor">The image backend used to process referenced local images.</param>
+    /// <param name="imageProcessor">The image backend used to process referenced local images.</param>
     /// <param name="contentOptions">Optional pipeline and post-processing configuration.</param>
     public MarkdownProcessor(
         ResolvedSitePaths options,
-        IImageAssetProcessor imageAssetProcessor,
+        IImageProcessor imageProcessor,
         MarkdownProcessingOptions? contentOptions = null)
     {
         ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(imageAssetProcessor);
+        ArgumentNullException.ThrowIfNull(imageProcessor);
 
-        _imageAssetProcessor = imageAssetProcessor;
+        _imageProcessor = imageProcessor;
         _outputPath = options.OutputDirectory;
         _imageCachePath = options.ImageCacheDirectory;
         _htmlPostProcessors = contentOptions is null ? [] : [.. contentOptions.HtmlPostProcessors];
-        _imageCssClass = contentOptions?.ImageCssClass;
         _pipeline = BuildPipeline(contentOptions);
     }
 
@@ -63,7 +61,7 @@ internal sealed class MarkdownProcessor
         var document = global::Markdig.Markdown.Parse(markdownBody, _pipeline);
 
         var imageInfoLookup = await MaterializeReferencedImagesAsync(filePath, document, cancellationToken);
-        var imageContext = new ResponsiveImageContext(imageInfoLookup, _imageCssClass);
+        var imageContext = new ResponsiveImageContext(imageInfoLookup);
 
         var html = Render(document, imageContext);
 
@@ -109,7 +107,7 @@ internal sealed class MarkdownProcessor
 
             pageContext.Dependencies?.AddFile(sourceFile);
 
-            var processed = await _imageAssetProcessor.ProcessImageAsync(
+            var processed = await _imageProcessor.ProcessAsync(
                 sourceFile,
                 outputDirectory,
                 cacheDirectory,

@@ -7,6 +7,6 @@
 
 <h1>Not found</h1>
 <p>
-    That page does not exist. Try the <a href="@Site.Path("docs/")">documentation</a>
-    or go <a href="@Site.Path("/")">home</a>.
+    That page does not exist. Try the <a href="@(Site.BaseUrl.AbsolutePath + "docs/")">documentation</a>
+    or go <a href="@Site.BaseUrl.AbsolutePath">home</a>.
 </p>

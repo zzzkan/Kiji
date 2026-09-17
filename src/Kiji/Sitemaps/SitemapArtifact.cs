@@ -7,7 +7,7 @@ namespace Kiji.Sitemaps;
 /// Generates a sitemap from every generated page, excluding pages marked
 /// with <c>ExcludeFromSitemap</c>. URLs are sorted for deterministic output.
 /// </summary>
-internal sealed class SitemapArtifact : ISiteArtifact
+internal sealed class SitemapArtifact
 {
     private const string SitemapNamespace = "http://www.sitemaps.org/schemas/sitemap/0.9";
 
@@ -23,7 +23,7 @@ internal sealed class SitemapArtifact : ISiteArtifact
     public string OutputRelativePath { get; }
 
     /// <inheritdoc/>
-    public async Task WriteAsync(Stream output, SiteOutputContext context, CancellationToken cancellationToken)
+    public static async Task WriteAsync(Stream output, SiteOutputContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(context);
@@ -32,7 +32,7 @@ internal sealed class SitemapArtifact : ISiteArtifact
 
         var pages = context.Pages
             .Where(static page => !page.ExcludeFromSitemap)
-            .OrderBy(static page => page.RoutePath, StringComparer.OrdinalIgnoreCase);
+            .OrderBy(static page => page.RelativePath, StringComparer.OrdinalIgnoreCase);
 
         var settings = new XmlWriterSettings
         {
@@ -53,7 +53,8 @@ internal sealed class SitemapArtifact : ISiteArtifact
                 cancellationToken.ThrowIfCancellationRequested();
 
                 await writer.WriteStartElementAsync(prefix: null, "url", ns: null);
-                await writer.WriteElementStringAsync(prefix: null, "loc", ns: null, context.Site.BaseUrl.AppendRelativePath(page.RoutePath).AbsoluteUri);
+                RelativePath.Validate(page.RelativePath, nameof(page.RelativePath));
+                await writer.WriteElementStringAsync(prefix: null, "loc", ns: null, new Uri(context.Site.BaseUrl, page.RelativePath).AbsoluteUri);
                 await writer.WriteEndElementAsync();
             }
 

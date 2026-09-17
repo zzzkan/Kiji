@@ -17,12 +17,4 @@ internal static class UriExtensions
             : new Uri(absoluteUri + '/', UriKind.Absolute);
     }
 
-    public static Uri AppendRelativePath(this Uri baseUri, string relativePath)
-    {
-        ArgumentNullException.ThrowIfNull(baseUri);
-        ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
-
-        var normalizedBaseUri = baseUri.ToTrailingSlashUri();
-        return new Uri(normalizedBaseUri.AbsoluteUri + relativePath.TrimStart('/'), UriKind.Absolute);
-    }
 }

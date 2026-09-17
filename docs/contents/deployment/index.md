@@ -23,24 +23,24 @@ app.Info = new SiteInfo
 
 ## Publishing under a sub-path
 
-A GitHub Pages *project* site is served from `https://your-name.github.io/repo/`, not the
+A GitHub Pages _project_ site is served from `https://your-name.github.io/repo/`, not the
 domain root. Put that whole URL in `BaseUrl`:
 
 ```csharp
 BaseUrl = new Uri("https://your-name.github.io/my-site/"),
 ```
 
-Then write your own links through `Site.Path`:
+Then prefix site-root links with `Site.BaseUrl.AbsolutePath`:
 
 ```razor
-<a href="@Site.Path("docs/")">Docs</a>
-<link rel="stylesheet" href="@Site.Path("css/app.css")" />
+<a href="@(Site.BaseUrl.AbsolutePath + "docs/")">Docs</a>
+<link rel="stylesheet" href="@(Site.BaseUrl.AbsolutePath + "css/app.css")" />
 ```
 
-`Site.Path("css/app.css")` returns `/my-site/css/app.css` here, and `/css/app.css` for a
-site at the domain root — so the same markup works either way.
+`Site.BaseUrl.AbsolutePath` is `/my-site/` here and `/` for a site at the domain root,
+so the same concatenation works either way.
 
-What you do *not* have to touch:
+What you do _not_ have to touch:
 
 - **Canonical, feed, and sitemap URLs.** They derive from `BaseUrl`.
 - **Markdown page-bundle images.** They are relative to the page that uses them.
@@ -48,7 +48,7 @@ What you do *not* have to touch:
   `dist/my-site/`.
 
 The dev server serves under the same prefix, and deliberately returns 404 outside it.
-That is on purpose: a link that forgets `Site.Path` fails while you are looking at it,
+That is on purpose: a link that forgets the base path fails while you are looking at it,
 instead of only after you deploy.
 
 See [Markdown and images](../markdown/#page-bundle-images) for image URL rules.
@@ -84,7 +84,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: "10.0.x"
 
       - run: dotnet publish src/MySite -c Release -o dist
 

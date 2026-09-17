@@ -6,7 +6,7 @@ using KijiSite.Components;
 using KijiSite.Pages;
 using Microsoft.Extensions.DependencyInjection;
 
-await using var app = StaticSite.Create(args);
+var app = StaticSite.Create(args);
 app.Info = new SiteInfo
 {
     BaseUrl = new Uri("SITE_BASE_URL"),
@@ -16,8 +16,7 @@ app.Info = new SiteInfo
 };
 
 app.UseMarkdownContent<PostFrontMatter, Post>(
-    select: static content => Post.Create(content),
-    key: static post => post.Slug);
+    select: static content => Post.Create(content));
 
 app.UseDefaultLayout<MainLayout>();
 app.AddStaticPages();

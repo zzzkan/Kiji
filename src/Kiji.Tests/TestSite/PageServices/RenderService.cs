@@ -4,7 +4,7 @@ public sealed class RenderService : IAsyncDisposable
 {
     public RenderService(ContentDictionary<ServiceProbe> probes, RenderDependency dependency)
     {
-        Probe = probes["probe"];
+        Probe = probes["0"];
         Dependency = dependency;
         Probe.Created.Enqueue(this);
     }

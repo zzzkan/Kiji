@@ -62,7 +62,7 @@ internal sealed class DevServer(StaticSite app) : IAsyncDisposable
         // Must run before route matching, so the /_kiji/* endpoints below match a
         // prefixed request. WebApplication auto-inserts UseRouting ahead of all user
         // middleware when endpoints exist, unless the app calls UseRouting itself.
-        web.UseSiteBasePath(app.Info.BasePath);
+        web.UseSiteBasePath(app.Info.BaseUrl.AbsolutePath);
         web.UseRouting();
 
         web.UseWebSockets();
@@ -130,7 +130,7 @@ internal sealed class DevServer(StaticSite app) : IAsyncDisposable
         await web.StartAsync(cancellationToken);
         ActiveServers.TryAdd(this, 0);
         _reporter.DevServerStarted(
-            new Uri(new Uri(web.Urls.First()), app.Info.BasePath),
+            new Uri(new Uri(web.Urls.First()), app.Info.BaseUrl.AbsolutePath),
             options.ContentDirectory,
             Directory.Exists(options.StaticDirectory) ? options.StaticDirectory : null);
 

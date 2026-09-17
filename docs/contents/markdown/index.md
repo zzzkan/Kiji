@@ -37,8 +37,7 @@ collections, and use `FileFilter` to skip files:
 
 ```csharp
 app.UseMarkdownContent<PostFrontMatter>(
-    key: post => post.FileInfo.FullName,
-    configure: options =>
+    options =>
     {
         options.Directory = "posts";                   // contents/posts/**/*.md
         options.FileFilter = file => !Path.GetFileNameWithoutExtension(file.Name).StartsWith('_');
@@ -68,8 +67,8 @@ demand:
 <div>@((MarkupString)_html)</div>
 ```
 
-`ContentKey` is the dictionary key the route mapping supplied. For raw markdown content,
-the source file's absolute `FileInfo.FullName` is a convenient key: it uniquely identifies
+`ContentKey` is the opaque dictionary key the route mapping supplied. For Markdown content,
+Kiji uses the source file's absolute `FileInfo.FullName` internally: it uniquely identifies
 the dictionary entry without assigning it any URL meaning. `FileInfo` is the ordinary
 `System.IO.FileInfo`; Kiji does not add a slug or logical content path to it.
 
@@ -82,18 +81,17 @@ pipeline, the deserializer, or add HTML transformations when you register the so
 
 ```csharp
 app.UseMarkdownContent<PostFrontMatter>(
-    key: post => post.FileInfo.FullName,
-    configure: options => options.ConfigureMarkdig(pipeline => pipeline.UseEmojiAndSmiley()));
+    options => options.ConfigureMarkdown(pipeline => pipeline.UseEmojiAndSmiley()));
 ```
 
-Use `ConfigureMarkdig` to customize Markdown parsing and rendering, such as adding
+Use `ConfigureMarkdown` to customize Markdown parsing and rendering, such as adding
 syntax extensions or changing how a standalone link is rendered. Use
-`AddHtmlTransform` to modify the resulting HTML instead:
+`AddHtmlPostProcessor` to modify the resulting HTML instead. `ConfigureYaml` customizes
+front matter deserialization:
 
 ```csharp
 app.UseMarkdownContent<PostFrontMatter>(
-    key: post => post.FileInfo.FullName,
-    configure: options => options.AddHtmlTransform(html => $"<div class=\"markdown-body\">{html}</div>"));
+    options => options.AddHtmlPostProcessor(html => $"<div class=\"markdown-body\">{html}</div>"));
 ```
 
 HTML transforms are synchronous and run in registration order, each receiving the
@@ -123,19 +121,19 @@ Percent-encoded filenames such as `my%20photo.jpg` are supported. Query strings 
 fragments on local image references are removed when resolving the source file.
 
 A site-root reference like `![](/img/logo.png)` is left alone and served from `wwwroot/`
-instead. Those are not base-path safe, so route them through `Site.Path` in markup rather
-than markdown if you publish under a sub-path.
+instead. Those are not base-path safe. In Razor markup, prepend
+`Site.BaseUrl.AbsolutePath`; in Markdown, prefer a document-relative image beside its page.
 
-To replace the encoder entirely, supply a factory for your `IImageAssetProcessor`:
+To replace the encoder entirely, supply a factory for your `IImageProcessor`:
 
 ```csharp
-app.UseImageAssetProcessor(() => new CustomProcessor());
+app.UseImageProcessor(() => new CustomProcessor());
 ```
 
 Kiji calls the factory lazily and shares the processor for the site's lifetime. The
-last registration wins; a null factory or result is rejected. Kiji disposes the processor
-when the site is disposed, including asynchronous disposal. Each factory must create
-an instance owned by that site.
+last registration wins; a null factory or result is rejected. `RunAsync` disposes the
+processor on success, failure, and cancellation, including asynchronous disposal. Each
+factory must create an instance owned by that site.
 
 The processor must support concurrent calls and must not retain page or content state.
 Content changes and hot reload do not recreate it. Declare external encoder configuration

@@ -1,4 +1,5 @@
 using Kiji.Tests.TestSite;
+using Kiji.Sitemaps;
 using Microsoft.Extensions.DependencyInjection;
 using System.Text;
 using Xunit;
@@ -6,8 +7,7 @@ using Xunit;
 namespace Kiji.Tests;
 
 /// <summary>
-/// Tests for <see cref="ISiteArtifact"/> registration via <see cref="StaticSite.AddArtifact"/>
-/// and <see cref="SiteOutputContext"/>.
+/// Tests for delegate artifact registration and <see cref="SiteOutputContext"/>.
 /// </summary>
 public sealed class SiteArtifactTests : IDisposable
 {
@@ -33,11 +33,13 @@ public sealed class SiteArtifactTests : IDisposable
         }
     }
 
-    private sealed class RecordingArtifact(string outputRelativePath) : ISiteArtifact
+    private sealed class RecordingArtifact(string outputRelativePath)
     {
         public string OutputRelativePath { get; } = outputRelativePath;
 
         public SiteOutputContext? ObservedContext { get; private set; }
+
+        public void Register(StaticSite app) => app.AddArtifact(OutputRelativePath, WriteAsync);
 
         public async Task WriteAsync(Stream output, SiteOutputContext context, CancellationToken cancellationToken)
         {
@@ -53,7 +55,7 @@ public sealed class SiteArtifactTests : IDisposable
         await using var app = await CreateAppAsync(artifact);
         app.AddPages<MirrorPostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
-        app.AddArtifact(new Kiji.Sitemaps.SitemapArtifact("seo/sitemap.xml"));
+        app.AddSitemap("seo/sitemap.xml");
 
         await app.PublishAsync(_outputDir);
 
@@ -63,8 +65,8 @@ public sealed class SiteArtifactTests : IDisposable
         Assert.True(File.Exists(Path.Combine(_outputDir, "mirror", "hello-world", "index.html")));
         Assert.Contains("/mirror/hello-world/", await File.ReadAllTextAsync(Path.Combine(_outputDir, "seo", "sitemap.xml")), StringComparison.Ordinal);
         var context = artifact.ObservedContext!;
-        Assert.Contains(context.Pages, static page => page.RoutePath == "/blog/hello-world/");
-        Assert.Contains(context.Pages, static page => page is { RoutePath: "/404.html", ExcludeFromSitemap: true });
+        Assert.Contains(context.Pages, static page => page.RelativePath == "blog/hello-world/");
+        Assert.Contains(context.Pages, static page => page is { RelativePath: "404.html", ExcludeFromSitemap: true });
 
     }
 
@@ -118,18 +120,38 @@ public sealed class SiteArtifactTests : IDisposable
         Assert.Contains("collides with another artifact output path", exception.Message, StringComparison.Ordinal);
     }
 
-    private async Task<StaticSite> CreateAppAsync(ISiteArtifact artifact)
+    [Fact]
+    public async Task PublishAsync_PassesCancellationToArtifactWriter()
+    {
+        await using var app = await CreateAppAsync([],
+            staticPath: null);
+        using var cancellation = new CancellationTokenSource();
+        var observed = false;
+        app.AddArtifact("cancel.txt", (_, _, token) =>
+        {
+            observed = true;
+            cancellation.Cancel();
+            token.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => app.PublishAsync(_outputDir, cancellation.Token));
+        Assert.True(observed);
+    }
+
+    private async Task<StaticSite> CreateAppAsync(RecordingArtifact artifact)
     {
         return await CreateAppAsync([artifact], staticPath: null);
     }
 
-    private async Task<StaticSite> CreateAppAsync(IReadOnlyList<ISiteArtifact> artifacts, string? staticPath)
+    private async Task<StaticSite> CreateAppAsync(IReadOnlyList<RecordingArtifact> artifacts, string? staticPath)
     {
         return await CreateAppCoreAsync(artifacts, staticPath);
     }
 
     private async Task<StaticSite> CreateAppCoreAsync(
-        IReadOnlyList<ISiteArtifact> artifacts,
+        IReadOnlyList<RecordingArtifact> artifacts,
         string? staticPath)
     {
         var app = StaticSite.Create([]);
@@ -148,11 +170,11 @@ public sealed class SiteArtifactTests : IDisposable
                 null,
                 "Testing"),
         ];
-        app.UseContentSource<Post>(_ => items, static post => post.Slug);
+        app.UseContentSource<Post>(_ => items);
         TestArticleContents.MapSite(app);
         foreach (var artifact in artifacts)
         {
-            app.AddArtifact(artifact);
+            artifact.Register(app);
         }
 
         await Task.CompletedTask;

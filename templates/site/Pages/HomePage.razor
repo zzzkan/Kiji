@@ -11,7 +11,7 @@
     @foreach (var post in Posts.Values.OrderByDescending(post => post.CreatedAt))
     {
         <li>
-            <a href="@Site.Path($"{post.Slug}/")">@post.Title</a>
+            <a href="@(Site.BaseUrl.AbsolutePath + $"{post.Slug}/")">@post.Title</a>
         </li>
     }
 </ul>

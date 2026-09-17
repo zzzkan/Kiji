@@ -5,6 +5,10 @@ site generator framework for .NET. Pages are Razor components rendered to static
 
 ## Install
 
+This package is not part of the initial `Kiji 0.1.0-preview` release. The commands
+below apply once `Kiji.Templates` is published; for now, use the
+[getting-started guide](https://zzzkan.github.io/kiji/docs/getting-started/).
+
 ```powershell
 dotnet new install Kiji.Templates
 ```
@@ -40,8 +44,7 @@ dotnet new kiji -o MySite --baseUrl https://your-name.github.io/my-site/
 ```
 
 Kiji then serves the dev server under that same prefix, so what you browse locally
-matches what you deploy. Write your own links through `Site.Path("css/app.css")`, which
-resolves under the prefix.
+matches what you deploy. Prefix site-root links with `Site.BaseUrl.AbsolutePath`.
 
 See the [project README](https://github.com/zzzkan/kiji) for the full walkthrough.
 

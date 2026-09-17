@@ -64,13 +64,28 @@ public sealed class MarkdownContentSourceTests : IDisposable
 
         var app = CreateApp();
         app.UseMarkdownContent<OrderedFrontMatter, ProjectedNote>(
-            select: static content => new ProjectedNote(Path.GetFileNameWithoutExtension(content.FileInfo.Name), content.FrontMatter.Title),
-            key: static note => note.Key);
+            select: static content => new ProjectedNote(Path.GetFileNameWithoutExtension(content.FileInfo.Name), content.FrontMatter.Title));
         app.UsePlanningOptions();
         var notes = app.ServiceProvider.GetRequiredService<ContentDictionary<ProjectedNote>>();
 
-        Assert.Equal(["first", "second"], notes.Keys);
-        Assert.Equal("First", notes["first"].Title);
+        Assert.Equal(
+            [Path.Combine(_testDir, "contents", "first.md"), Path.Combine(_testDir, "contents", "second.md")],
+            notes.Keys);
+        Assert.Equal(["first", "second"], notes.Values.Select(static note => note.Key));
+        Assert.Equal("First", notes.Values.Single(static note => note.Key == "first").Title);
+    }
+
+    [Fact]
+    public void RawMarkdown_UsesTheAbsoluteSourcePathAsItsOpaqueKey()
+    {
+        WriteMarkdown("nested/post.md", "Post");
+        var app = CreateApp();
+        app.UseMarkdownContent<FrontMatter>();
+        app.UsePlanningOptions();
+
+        var content = app.ServiceProvider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>();
+
+        Assert.Equal(Path.Combine(_testDir, "contents", "nested", "post.md"), Assert.Single(content.Keys));
     }
 
     private sealed record ProjectedNote(string Key, string? Title);
@@ -107,10 +122,10 @@ public sealed class MarkdownContentSourceTests : IDisposable
         return app;
     }
 
-    private IReadOnlyList<string> LoadKeys(Action<MarkdownContentOptions<MarkdownContent<FrontMatter>>> configure)
+    private IReadOnlyList<string> LoadKeys(Action<MarkdownOptions> configure)
     {
         var app = CreateApp();
-        app.UseMarkdownContent<FrontMatter>(key: static content => content.FileInfo.FullName, configure: configure);
+        app.UseMarkdownContent<FrontMatter>(configure);
         app.UsePlanningOptions();
         return [.. app.ServiceProvider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
             .Values.Select(static content => Path.GetFileNameWithoutExtension(content.FileInfo.Name))];

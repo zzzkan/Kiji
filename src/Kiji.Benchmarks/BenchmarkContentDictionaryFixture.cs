@@ -12,8 +12,6 @@ internal static class BenchmarkContentDictionaryFixture
         runtime.Attach(new ServiceCollection().BuildServiceProvider());
         return new ContentDictionary<T>(
             runtime,
-            _ => [.. items.Select(static item => (item, SourceFile: (string?)null))],
-            key,
-            new ContentSourceOptions<T>());
+            _ => [.. items.Select(item => (key(item), item, SourceFile: (string?)null))]);
     }
 }

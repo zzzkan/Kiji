@@ -5,14 +5,14 @@ using YamlDotNet.Serialization.NamingConventions;
 
 namespace Kiji.Tests;
 
-public sealed class MarkdownContentOptionsTests : IDisposable
+public sealed class MarkdownOptionsTests : IDisposable
 {
     private readonly string _testDir;
     private readonly string _testFilesDir;
 
-    public MarkdownContentOptionsTests()
+    public MarkdownOptionsTests()
     {
-        _testDir = Path.Combine(Path.GetTempPath(), $"MarkdownContentOptionsTests_{Guid.NewGuid():N}");
+        _testDir = Path.Combine(Path.GetTempPath(), $"MarkdownOptionsTests_{Guid.NewGuid():N}");
         _testFilesDir = Path.Combine(_testDir, "files");
         Directory.CreateDirectory(_testFilesDir);
     }
@@ -38,11 +38,11 @@ public sealed class MarkdownContentOptionsTests : IDisposable
     }
 
     [Fact]
-    public async Task ConfigureMarkdig_CanRemoveSecureLinkExtension()
+    public async Task ConfigureMarkdown_CanRemoveSecureLinkExtension()
     {
         var mdPath = CreateMarkdownFile("insecure.md", "[External](https://example.com)");
         var processor = CreateProcessor(static options =>
-            options.ConfigureMarkdig(static builder => builder.Extensions.TryRemove<SecureLinkExtension>()));
+            options.ConfigureMarkdown(static builder => builder.Extensions.TryRemove<SecureLinkExtension>()));
 
         var html = await ProcessFileAsync(processor, mdPath);
 
@@ -51,13 +51,13 @@ public sealed class MarkdownContentOptionsTests : IDisposable
     }
 
     [Fact]
-    public async Task AddHtmlTransform_RunsInRegistrationOrder()
+    public async Task AddHtmlPostProcessor_RunsInRegistrationOrder()
     {
         var mdPath = CreateMarkdownFile("order.md", "Body.");
         var processor = CreateProcessor(static options =>
         {
-            options.AddHtmlTransform(static html => html + "<!--first-->");
-            options.AddHtmlTransform(static html => html + "<!--second-->");
+            options.AddHtmlPostProcessor(static html => html + "<!--first-->");
+            options.AddHtmlPostProcessor(static html => html + "<!--second-->");
         });
 
         var html = await ProcessFileAsync(processor, mdPath);
@@ -81,10 +81,10 @@ public sealed class MarkdownContentOptionsTests : IDisposable
     }
 
     [Fact]
-    public void ConfigureFrontMatter_CustomNamingConvention_IsApplied()
+    public void ConfigureYaml_CustomNamingConvention_IsApplied()
     {
-        var options = new MarkdownContentOptions<MarkdownContent<FrontMatter>>();
-        options.ConfigureFrontMatter(static builder => builder.WithNamingConvention(UnderscoredNamingConvention.Instance));
+        var options = new MarkdownOptions();
+        options.ConfigureYaml(static builder => builder.WithNamingConvention(UnderscoredNamingConvention.Instance));
         var deserializer = MarkdownFrontMatterParser.CreateDeserializer(options.FrontMatterConfigurations);
         var mdPath = CreateMarkdownFile(
             "underscored.md",

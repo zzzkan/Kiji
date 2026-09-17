@@ -6,7 +6,7 @@ using Kiji.Markdown;
 using Kiji.Sitemaps;
 using Microsoft.Extensions.DependencyInjection;
 
-await using var site = StaticSite.Create(args);
+var site = StaticSite.Create(args);
 site.Info = new()
 {
     BaseUrl = new Uri("https://zzzkan.github.io/kiji/"),
@@ -17,8 +17,7 @@ site.Info = new()
 };
 
 site.UseMarkdownContent<DocFrontMatter, Doc>(
-    select: static content => Doc.Create(content),
-    key: static doc => doc.Slug);
+    select: static content => Doc.Create(content));
 site.UseDefaultLayout<MainLayout>();
 site.UseNotFoundPage<NotFoundPage>();
 

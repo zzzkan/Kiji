@@ -4,7 +4,7 @@
   "classifications": [ "Web", "Static Site Generator", "Razor", "Blazor" ],
   "identity": "Kiji.Site.CSharp",
   "name": "Kiji static site",
-  "description": "A Kiji static site: Razor component pages, a markdown blog, an RSS feed, and a sitemap.",
+  "description": "A Kiji static site: Razor component pages, a markdown blog, and a sitemap.",
   "shortName": "kiji",
   "sourceName": "KijiSite",
   "defaultName": "KijiSite",

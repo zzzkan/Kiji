@@ -1,4 +1,5 @@
 using Kiji.Markdown;
+using System.Text.RegularExpressions;
 
 namespace Kiji.Tests.TestSite;
 
@@ -69,7 +70,7 @@ public sealed class Post
             .Select(static tag => new Tag
             {
                 Name = tag,
-                UrlSlug = global::Kiji.Slug.Normalize(tag),
+                UrlSlug = NormalizeSlug(tag),
             })
             .ToArray();
 
@@ -96,6 +97,21 @@ public sealed class Post
             throw new InvalidOperationException($"Cannot determine slug for markdown file: {fileInfo.FullName}");
         }
 
-        return global::Kiji.Slug.Normalize(value);
+        return NormalizeSlug(value);
+    }
+
+    private static string NormalizeSlug(string value)
+    {
+        var trimmed = value.Trim().Trim('/', '\\');
+        if (trimmed.Length == 0 || trimmed.Contains('/') || trimmed.Contains('\\'))
+        {
+            throw new InvalidOperationException($"Slug '{value}' must be a non-empty single route segment.");
+        }
+
+        var normalized = Regex.Replace(trimmed.ToLowerInvariant(), @"[^a-z0-9\-]", "-");
+        normalized = Regex.Replace(normalized, "-+", "-").Trim('-');
+        return normalized.Length > 0
+            ? normalized
+            : throw new InvalidOperationException($"Slug '{value}' cannot be normalized to an empty value.");
     }
 }

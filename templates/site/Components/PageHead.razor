@@ -2,7 +2,7 @@
 @inject SiteInfo Site
 
 @* Contributes into the <head> of the document Kiji renders. Render at most one per page.
-   Site.Path keeps asset links working if the site is published under a sub-path;
+   Site.BaseUrl.AbsolutePath keeps asset links working if the site is published under a sub-path;
    NavigationManager.Uri is already the absolute canonical URL. *@
 <Kiji.Components.HeadContent>
     <meta charset="utf-8" />
@@ -10,7 +10,7 @@
     <title>@PageTitle</title>
     <meta name="description" content="@Description" />
     <link rel="canonical" href="@NavigationManager.Uri" />
-    <link rel="stylesheet" href="@Site.Path("css/app.css")" />
+    <link rel="stylesheet" href="@(Site.BaseUrl.AbsolutePath + "css/app.css")" />
 </Kiji.Components.HeadContent>
 
 @code {

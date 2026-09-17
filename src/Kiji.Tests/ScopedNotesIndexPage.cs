@@ -23,11 +23,11 @@ public sealed class ScopedNotesIndexPage : ComponentBase
     protected override void BuildRenderTree(RenderTreeBuilder builder)
     {
         builder.OpenElement(0, "ul");
-        foreach (var (key, note) in Notes)
+        foreach (var note in Notes.Values)
         {
             builder.OpenRegion(1);
             builder.OpenElement(0, "li");
-            builder.AddContent(1, $"{key}: {note.Title}");
+            builder.AddContent(1, $"{note.Key}: {note.Title}");
             builder.CloseElement();
             builder.CloseRegion();
         }

@@ -2,7 +2,7 @@
 @inject SiteInfo Site
 
 <header>
-    <a href="@Site.Path("/")">@Site.Name</a>
+    <a href="@Site.BaseUrl.AbsolutePath">@Site.Name</a>
 </header>
 
 <main>@Body</main>

@@ -1,4 +1,5 @@
 using Kiji.Markdown;
+using System.Text.RegularExpressions;
 
 namespace Kiji.Docs.Models;
 
@@ -38,6 +39,21 @@ public sealed class Doc
             throw new InvalidOperationException($"Cannot determine a slug for '{content.FileInfo.FullName}'.");
         }
 
-        return new Doc(content, Kiji.Slug.Normalize(value));
+        return new Doc(content, NormalizeSlug(value));
+    }
+
+    private static string NormalizeSlug(string value)
+    {
+        var trimmed = value.Trim().Trim('/', '\\');
+        if (trimmed.Length == 0 || trimmed.Contains('/') || trimmed.Contains('\\'))
+        {
+            throw new InvalidOperationException($"Slug '{value}' must be a non-empty single route segment.");
+        }
+
+        var normalized = Regex.Replace(trimmed.ToLowerInvariant(), @"[^a-z0-9\-]", "-");
+        normalized = Regex.Replace(normalized, "-+", "-").Trim('-');
+        return normalized.Length > 0
+            ? normalized
+            : throw new InvalidOperationException($"Slug '{value}' cannot be normalized to an empty value.");
     }
 }

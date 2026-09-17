@@ -14,8 +14,7 @@ public sealed class ResponsiveImageExtensionTests
 
     private static string Render(
         string markdown,
-        IReadOnlyDictionary<string, ProcessedImageInfo> imageInfoLookup,
-        string? imageCssClass = null)
+        IReadOnlyDictionary<string, ProcessedImageInfo> imageInfoLookup)
     {
         var document = global::Markdig.Markdown.Parse(markdown, Pipeline);
         var writer = new StringWriter();
@@ -23,7 +22,7 @@ public sealed class ResponsiveImageExtensionTests
         Pipeline.Setup(renderer);
         var contextHolder = new ResponsiveImageContextHolder
         {
-            Current = new ResponsiveImageContext(imageInfoLookup, imageCssClass),
+            Current = new ResponsiveImageContext(imageInfoLookup),
         };
         ResponsiveImageWriter.Attach(renderer, contextHolder);
         renderer.Render(document);
@@ -91,20 +90,6 @@ public sealed class ResponsiveImageExtensionTests
         Assert.Contains("loading=\"eager\"", images[0], StringComparison.Ordinal);
         Assert.Contains("loading=\"lazy\"", images[1], StringComparison.Ordinal);
         Assert.All(images, image => Assert.Contains("decoding=\"async\"", image, StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public void Process_LocalImage_AppliesConfiguredCssClass()
-    {
-        var imageInfoLookup = new Dictionary<string, ProcessedImageInfo>
-        {
-            ["test-image.png"] = CreateImageInfo("test-image.png"),
-        };
-        var markdown = "![Alt text](test-image.png)";
-
-        var html = Render(markdown, imageInfoLookup, imageCssClass: "post-image");
-
-        Assert.Contains("class=\"post-image\"", html);
     }
 
     [Fact]

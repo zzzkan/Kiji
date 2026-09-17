@@ -1,7 +1,7 @@
 namespace Kiji;
 
 /// <summary>The absolute directories resolved for the current execution.</summary>
-public sealed record ResolvedSitePaths
+internal sealed record ResolvedSitePaths
 {
     /// <summary>The absolute content directory, which content loaders may require to exist.</summary>
     public required string ContentDirectory

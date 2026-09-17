@@ -29,15 +29,15 @@ template to `"/blog/{Slug}/"` and the posts move; nothing else needs to know.
 | RSS feed | `app.AddRssFeed(services => …)` — [Concepts](https://zzzkan.github.io/kiji/docs/concepts/) |
 | Tag or archive pages | Another `AddPages` over the values you want — [Concepts](https://zzzkan.github.io/kiji/docs/concepts/) |
 | Responsive images | Already works; just reference an image from markdown — [Markdown and images](https://zzzkan.github.io/kiji/docs/markdown/) |
-| A custom markdown pipeline | `UseMarkdownContent(key: …, configure: …)` — [Markdown and images](https://zzzkan.github.io/kiji/docs/markdown/) |
+| A custom markdown pipeline | `UseMarkdownContent(options => options.ConfigureMarkdown(…))` — [Markdown and images](https://zzzkan.github.io/kiji/docs/markdown/) |
 | Publishing under a sub-path | Put the path in `SiteInfo.BaseUrl` — [Deployment](https://zzzkan.github.io/kiji/docs/deployment/) |
 
 ## Linking
 
-Write links through `Site.Path(...)` rather than hard-coding a leading slash:
+Prefix site-root links with `Site.BaseUrl.AbsolutePath` rather than hard-coding a leading slash:
 
 ```razor
-<a href="@Site.Path("hello-world/")">A post</a>
+<a href="@(Site.BaseUrl.AbsolutePath + "hello-world/")">A post</a>
 ```
 
 That keeps them correct if you publish under a sub-path. The dev server serves under the

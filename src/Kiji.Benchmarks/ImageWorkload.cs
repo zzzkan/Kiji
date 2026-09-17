@@ -41,14 +41,14 @@ internal sealed class ImageWorkload : IDisposable
         if (Directory.Exists(Output)) { Directory.Delete(Output, true); }
     }
 
-    internal Task RunAsync(IImageAssetProcessor processor) => Task.WhenAll(_sources.Select((source, i) =>
-        processor.ProcessImageAsync(source, Path.Combine(Output, i.ToString(System.Globalization.CultureInfo.InvariantCulture)), Cache)));
+    internal Task RunAsync(IImageProcessor processor) => Task.WhenAll(_sources.Select((source, i) =>
+        processor.ProcessAsync(source, Path.Combine(Output, i.ToString(System.Globalization.CultureInfo.InvariantCulture)), Cache)));
 
-    internal async Task RunSequentialAsync(IImageAssetProcessor processor)
+    internal async Task RunSequentialAsync(IImageProcessor processor)
     {
         for (var i = 0; i < _sources.Length; i++)
         {
-            await processor.ProcessImageAsync(_sources[i], Path.Combine(Output, i.ToString(System.Globalization.CultureInfo.InvariantCulture)), Cache);
+            await processor.ProcessAsync(_sources[i], Path.Combine(Output, i.ToString(System.Globalization.CultureInfo.InvariantCulture)), Cache);
         }
     }
 

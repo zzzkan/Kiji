@@ -15,6 +15,7 @@ public static class RssFeedStaticSiteExtensions
     {
         ArgumentNullException.ThrowIfNull(app);
 
-        return app.AddArtifact(new RssFeedArtifact(items, path));
+        var artifact = new RssFeedArtifact(items, path);
+        return app.AddArtifact(artifact.OutputRelativePath, artifact.WriteAsync);
     }
 }

@@ -73,4 +73,14 @@ public sealed class FeedsTests
         Assert.Equal("https://example.com/rss/all.xml", selfLink.Attribute("href")!.Value);
     }
 
+    [Theory]
+    [InlineData("/blog/post/")]
+    [InlineData("https://example.com/blog/post/")]
+    [InlineData("blog/post/?draft=true")]
+    [InlineData("blog\\post\\")]
+    public void FeedItem_RejectsInvalidRelativePath(string path)
+    {
+        Assert.Throws<ArgumentException>(() => new FeedItem("Post", "Description", DateTimeOffset.UtcNow, path));
+    }
+
 }

@@ -110,7 +110,13 @@ public sealed class PageServiceTests : IDisposable
                     return [];
                 });
                 break;
-            case "artifact": app.AddArtifact(new PageServiceArtifact()); break;
+            case "artifact":
+                app.AddArtifact("service.txt", static (_, context, _) =>
+                {
+                    _ = context.Services.GetRequiredService<RenderDependency>();
+                    return Task.CompletedTask;
+                });
+                break;
         }
         var exception = await Assert.ThrowsAnyAsync<Exception>(() => app.PublishAsync(Path.Combine(_root, "dist")));
         Assert.Contains("scoped service", exception.ToString(), StringComparison.OrdinalIgnoreCase);
@@ -124,7 +130,7 @@ public sealed class PageServiceTests : IDisposable
         app.Paths.RootDirectory = _root;
         if (probe is not null)
         {
-            app.UseContentSource<ServiceProbe>(_ => [probe], _ => "probe");
+            app.UseContentSource<ServiceProbe>(_ => [probe]);
             app.AddPageService<RenderDependency>().AddPageService<RenderService>();
             app.UseDefaultLayout<ServiceLayout>();
         }

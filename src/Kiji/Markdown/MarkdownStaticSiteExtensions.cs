@@ -11,36 +11,30 @@ namespace Kiji.Markdown;
 public static class MarkdownStaticSiteExtensions
 {
     /// <summary>Uses Markdown files as a content dictionary with parsed front matter and lazily rendered bodies.</summary>
-    /// <param name="key">Returns a non-empty, case-insensitively unique key.</param>
     public static StaticSite UseMarkdownContent<TFrontMatter>(
         this StaticSite app,
-        Func<MarkdownContent<TFrontMatter>, string> key,
-        Action<MarkdownContentOptions<MarkdownContent<TFrontMatter>>>? configure = null)
+        Action<MarkdownOptions>? configure = null)
         where TFrontMatter : class
     {
         return app.UseMarkdownContent<TFrontMatter, MarkdownContent<TFrontMatter>>(
             static content => content,
-            key,
             configure);
     }
 
     /// <summary>Uses Markdown files projected into a dictionary of custom models.</summary>
     /// <param name="select">Projects each parsed file independently; the result must not depend on other items.</param>
-    /// <param name="key">Returns a non-empty, case-insensitively unique key.</param>
     public static StaticSite UseMarkdownContent<TFrontMatter, TModel>(
         this StaticSite app,
         Func<MarkdownContent<TFrontMatter>, TModel> select,
-        Func<TModel, string> key,
-        Action<MarkdownContentOptions<TModel>>? configure = null)
+        Action<MarkdownOptions>? configure = null)
         where TFrontMatter : class
         where TModel : class
     {
         ArgumentNullException.ThrowIfNull(app);
         app.EnsureConfigurable();
         ArgumentNullException.ThrowIfNull(select);
-        ArgumentNullException.ThrowIfNull(key);
 
-        var contentOptions = new MarkdownContentOptions<TModel>();
+        var contentOptions = new MarkdownOptions();
         configure?.Invoke(contentOptions);
 
         // A factory rather than a shared instance: front matter parsing runs on
@@ -58,8 +52,8 @@ public static class MarkdownStaticSiteExtensions
             services =>
             {
                 var options = services.GetRequiredService<ResolvedSitePaths>();
-                var imageAssetProcessor = services.GetRequiredService<IImageAssetProcessor>();
-                var markdownProcessor = new MarkdownProcessor(options, imageAssetProcessor, contentOptions.Processing);
+                var imageProcessor = services.GetRequiredService<IImageProcessor>();
+                var markdownProcessor = new MarkdownProcessor(options, imageProcessor, contentOptions.Processing);
 
                 var sources = new MarkdownContentsBuilder<TFrontMatter>(
                     options.ContentDirectory,
@@ -77,16 +71,14 @@ public static class MarkdownStaticSiteExtensions
                 // The projection is positional, so provenance is stated here rather than
                 // derived: TModel need not expose its source file for a keyed lookup to
                 // stay a single-file dependency.
-                var items = new (TModel Item, string? SourceFile)[sources.Count];
+                var items = new (string Key, TModel Item, string? SourceFile)[sources.Count];
                 for (var i = 0; i < sources.Count; i++)
                 {
-                    items[i] = (select(sources[i]), sources[i].FileInfo.FullName);
+                    items[i] = (sources[i].FileInfo.FullName, select(sources[i]), sources[i].FileInfo.FullName);
                 }
 
                 return items;
             },
-            key,
-            contentOptions,
             contentOptions.ResolveContentSetScope());
     }
 }

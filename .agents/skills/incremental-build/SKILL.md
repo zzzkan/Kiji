@@ -38,7 +38,7 @@ the recommended shape precisely because the dependency then falls out of the enu
 with no rules to remember.
 
 **Scopes.** A `content-set` dependency's manifest `Key` is the dictionary's
-contents-relative directory (`MarkdownContentOptions.Directory`), empty for the whole
+contents-relative directory (`MarkdownOptions.Directory`), empty for the whole
 tree, and the planner fingerprints each scope separately. Two dictionaries over different
 directories therefore do not invalidate each other's index pages. An empty key means
 the whole tree; `contents` names a real subdirectory. Schema mismatches trigger a full rebuild.
@@ -62,11 +62,12 @@ and the file is never opened. A no-change rebuild is therefore `O(stat)`, not
 
 ## Adding something new
 
-**A content source.** The key comes from the selector passed at registration. File-backed
-internal loaders supply each item's absolute source path alongside the item so keyed
-lookups stay file-scoped; the markdown loader does this after projection into the site
-model. Sources without provenance fall back to `content-set` — still correct, but every
-page then depends on all content.
+**A content source.** Kiji creates keys rather than accepting a user selector. General
+sources receive zero-based invariant strings in loader order. File-backed internal loaders
+can choose stable keys and supply each item's absolute source path alongside the item;
+Markdown uses the absolute source path for both key and provenance, including after
+projection into the site model. Sources without provenance fall back to `content-set` —
+still correct, but every page then depends on all content.
 
 **Anything Kiji cannot observe** — a data file read by a custom loader, an HTTP call, a
 clock. Renders are _assumed deterministic in their inputs_. Declare it:

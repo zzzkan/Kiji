@@ -10,10 +10,12 @@ generates it.
 
 ## Install
 
+Requires the .NET 10 SDK. The initial release is a preview; pin its version explicitly.
+
 ```powershell
-dotnet new console -o MySite
+dotnet new console -f net10.0 -o MySite
 cd MySite
-dotnet add package Kiji
+dotnet add package Kiji --version 0.1.0-preview
 ```
 
 Then switch the project to the Razor SDK so you can write pages as `.razor` files:
@@ -32,7 +34,7 @@ using Kiji.Markdown;
 using Kiji.Sitemaps;
 using Microsoft.Extensions.DependencyInjection;
 
-await using var app = StaticSite.Create(args);
+var app = StaticSite.Create(args);
 app.Info = new SiteInfo
 {
     BaseUrl = new Uri("https://example.com/"),
@@ -40,17 +42,17 @@ app.Info = new SiteInfo
 };
 
 // The front matter shape is yours; Kiji does not define one.
-app.UseMarkdownContent<PostFrontMatter>(key: post => post.FileInfo.FullName);
+app.UseMarkdownContent<PostFrontMatter, Post>(Post.Create);
 
 app.UseDefaultLayout<MainLayout>();
 app.AddStaticPages();
 app.UseNotFoundPage<NotFoundPage>();
 
 app.AddPages<PostPage>(services => services
-    .GetRequiredService<ContentDictionary<MarkdownContent<PostFrontMatter>>>()
+    .GetRequiredService<ContentDictionary<Post>>()
     .Select(post => new
     {
-        Slug = Slug.Normalize(post.Value.FileInfo.Directory!.Name),
+        post.Value.Slug,
         ContentKey = post.Key,
     }));
 
@@ -62,6 +64,10 @@ return await app.RunAsync();
 Configure `app.Info`, `app.Paths`, and all `Add*` / `Use*` registrations
 before calling `RunAsync`. Starting the site makes those settings read-only; later
 changes throw. The dev server reloads changed content automatically.
+
+`Post.Create` is site code: it validates front matter and derives `Post.Slug` from the
+Markdown file name. Kiji's dictionary key remains an opaque lookup value and never becomes
+part of the URL.
 
 A page is any public component with a route:
 
@@ -93,9 +99,8 @@ browsers. Razor and C# changes require `dotnet watch`.
 
 Upload the contents of `dist/` to your static host.
 
-For direct calls to `PublishAsync`, choose an output directory separate from source
-and cache directories. Repeated publishes to the same directory reload content. Create
-a new `StaticSite` to change output directories or switch between serving and publishing.
+`RunAsync` is the public execution boundary and can be called once. It chooses serving or
+publishing from the MSBuild environment and releases all owned resources before returning.
 
 ## Project layout
 

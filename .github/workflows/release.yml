@@ -10,6 +10,9 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -27,11 +30,17 @@ jobs:
         run: dotnet test -c Release
 
       - name: Pack
-        run: dotnet pack -c Release --no-build -o artifacts
+        run: dotnet pack src/Kiji/Kiji.csproj -c Release --no-build -o artifacts
+
+      - name: NuGet login
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
 
       - name: Push to NuGet.org
         run: >-
-          dotnet nuget push "artifacts/*.nupkg"
-          --api-key "${{ secrets.NUGET_API_KEY }}"
+          dotnet nuget push "artifacts/Kiji.*.nupkg"
+          --api-key "${{ steps.login.outputs.NUGET_API_KEY }}"
           --source https://api.nuget.org/v3/index.json
           --skip-duplicates

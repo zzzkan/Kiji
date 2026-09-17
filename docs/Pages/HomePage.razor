@@ -9,7 +9,7 @@
         Kiji is a static site generator framework for .NET. Use Razor components to build pages, with Markdown, layouts, and static assets.
     </p>
     <p class="cta">
-        <a class="button" href="@Site.Path("docs/getting-started/")">Get started</a>
+        <a class="button" href="@(Site.BaseUrl.AbsolutePath + "docs/getting-started/")">Get started</a>
         <a href="https://github.com/zzzkan/kiji">Source on GitHub</a>
     </p>
 </div>
@@ -52,9 +52,9 @@
 
 <section class="quickstart">
     <h2>Getting started</h2>
-    <pre><code>dotnet add package Kiji</code></pre>
+    <pre><code>dotnet add package Kiji --version 0.1.0-preview</code></pre>
     <p>
-        Then declare your site. <a href="@Site.Path("docs/getting-started/")">The full
+        Then declare your site. <a href="@(Site.BaseUrl.AbsolutePath + "docs/getting-started/")">The full
         walkthrough</a> covers the project layout and the CLI.
     </p>
 </section>

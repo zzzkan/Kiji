@@ -11,8 +11,8 @@
     <meta property="og:description" content="@Description" />
     <meta property="og:url" content="@NavigationManager.Uri" />
     <meta property="og:type" content="website" />
-    <link rel="stylesheet" href="@Site.Path("css/app.css")" />
-    <link rel="icon" href="@Site.Path("icon.svg")" type="image/svg+xml" />
+    <link rel="stylesheet" href="@(Site.BaseUrl.AbsolutePath + "css/app.css")" />
+    <link rel="icon" href="@(Site.BaseUrl.AbsolutePath + "icon.svg")" type="image/svg+xml" />
 </Kiji.Components.HeadContent>
 
 @code {

@@ -56,13 +56,14 @@ than hanging.
 ## Content dictionaries
 
 `UseMarkdownContent<TFrontMatter>(...)` and `UseContentSource<T>(...)` declare a
-`ContentDictionary<T>`, which materializes lazily. It is keyed: every item has a
-non-empty, unique key, supplied where the source is declared.
+`ContentDictionary<T>`, which materializes lazily. Kiji assigns each item an opaque key:
+Markdown uses the absolute source path, while a general source uses zero-based strings in
+loader order. These keys exist only to find an item again in the same dictionary; they are
+not URLs, slugs, domain identifiers, or persistent IDs.
 
 ```csharp
 app.UseMarkdownContent<PostFrontMatter>(
-    key: post => post.FileInfo.FullName,
-    configure: options => options.Directory = "posts");
+    options => options.Directory = "posts");
 ```
 
 There is no handle to pass around. **A dictionary is identified by its element type**, and
@@ -79,9 +80,9 @@ rather than a silent overwrite.
 It is an `IReadOnlyDictionary<string, T>`. Sort explicitly for the display order you want:
 
 ```razor
-@foreach (var (slug, post) in Posts.OrderByDescending(entry => entry.Value.FrontMatter.CreatedAt))
+@foreach (var post in Posts.Values.OrderByDescending(post => post.FrontMatter.CreatedAt))
 {
-    <a href="@Site.Path($"blog/{slug}/")">@post.FrontMatter.Title</a>
+    <a href="@(Site.BaseUrl.AbsolutePath + $"blog/{PostSlug(post)}/")">@post.FrontMatter.Title</a>
 }
 ```
 
@@ -98,16 +99,12 @@ projection is also where content that does not belong gets rejected:
 ```csharp
 app.UseMarkdownContent<PostFrontMatter, Post>(
     select: Post.Create,
-    key: post => post.Slug,
-    configure: options =>
-    {
-        options.FileFilter = file => !file.FileNameWithoutExtension.StartsWith('_');
-        options.AddValidation(post => post.Title.Length > 0, "title is required");
-    });
+    configure: options => options.FileFilter = file => !Path.GetFileNameWithoutExtension(file.Name).StartsWith('_'));
 ```
 
-`AddValidation` collects every failure and reports them together, each naming its source
-file, so bad content is fixed in one pass rather than one rebuild at a time.
+Validate required metadata inside `Post.Create` and include `content.FileInfo.FullName` in
+the exception. The projection owns site-specific rules such as slug generation; Kiji does
+not attach route meaning to `FileInfo` or the dictionary key.
 
 The projection runs per item, so each model keeps the source file of the markdown it came
 from — which is what lets a keyed lookup stay a single-file dependency. Do not let it
@@ -159,7 +156,7 @@ that also appear in the route template bind the URL, and the rest are passed thr
 ```csharp
 app.AddPages<PostPage>(services => services
     .GetRequiredService<ContentDictionary<Post>>()
-    .Select(post => new { Slug = post.Key, ContentKey = post.Key }));
+    .Select(post => new { post.Value.Slug, ContentKey = post.Key }));
 ```
 
 This says nothing about content — the factory receives the app's services, and a content
@@ -173,9 +170,9 @@ app.AddPages<TagPage>(services => services
     .Select(tag => new { TagSlug = tag }));
 ```
 
-Note that `Slug` and `ContentKey` above are **different things** that happen to hold the
-same value: `Slug` is the page's route segment, `ContentKey` is how the page finds itself
-in the dictionary. Declaring both keeps them free to diverge.
+`Slug` and `ContentKey` are deliberately different: `Slug` is the model's route segment,
+while `ContentKey` is Kiji's opaque reference for finding that model in the dictionary.
+Only `Slug` appears in the URL.
 
 ```razor
 @page "/blog/{Slug}/"
@@ -209,25 +206,26 @@ they should be read:
 app.AddRssFeed(services => services
     .GetRequiredService<ContentDictionary<Post>>().Values
     .OrderByDescending(post => post.CreatedAt)
-    .Select(post => new FeedItem(post.Title, post.Description, post.CreatedAt, RoutePath: $"blog/{post.Slug}/")));
+    .Select(post => new FeedItem(post.Title, post.Description, post.CreatedAt, RelativePath: $"blog/{post.Slug}/")));
 
 app.AddSitemap();
 ```
 
-`RoutePath` is combined with `SiteInfo.BaseUrl`, so it carries a base path automatically —
+`RelativePath` is combined with `SiteInfo.BaseUrl`, so it carries a base path automatically —
 write it prefix-free, the same as an index page link.
 
-Anything else site-wide implements `ISiteArtifact` and registers with
-`app.AddArtifact(...)`. Artifacts run after all pages and see every page's metadata.
+Anything else site-wide registers a writer delegate with
+`app.AddArtifact(outputRelativePath, write)`. Artifacts run after all pages and the writer
+receives every page's metadata through `SiteOutputContext`.
 
 ## Base paths
 
 `SiteInfo.BaseUrl` may include a path segment, for a site published under a sub-path such
-as a GitHub Pages project site. Write your own links through `Site.Path`:
+as a GitHub Pages project site. Prefix site-root links with `BaseUrl.AbsolutePath`:
 
 ```razor
-<a href="@Site.Path("docs/")">Docs</a>
-<link rel="stylesheet" href="@Site.Path("css/app.css")" />
+<a href="@(Site.BaseUrl.AbsolutePath + "docs/")">Docs</a>
+<link rel="stylesheet" href="@(Site.BaseUrl.AbsolutePath + "css/app.css")" />
 ```
 
 Canonical, feed, and sitemap URLs already carry the prefix, since they derive from

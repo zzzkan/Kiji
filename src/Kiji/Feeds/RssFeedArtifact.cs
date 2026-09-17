@@ -7,7 +7,7 @@ namespace Kiji.Feeds;
 /// <summary>
 /// Generates an RSS 2.0 feed from a sequence of entries, written in the order given.
 /// </summary>
-internal sealed class RssFeedArtifact : ISiteArtifact
+internal sealed class RssFeedArtifact
 {
     private const string AtomNamespace = "http://www.w3.org/2005/Atom";
 
@@ -59,7 +59,7 @@ internal sealed class RssFeedArtifact : ISiteArtifact
             await writer.WriteElementStringAsync(prefix: null, "language", ns: null, site.Language);
 
             await writer.WriteStartElementAsync("atom", "link", AtomNamespace);
-            await writer.WriteAttributeStringAsync(prefix: null, "href", ns: null, site.BaseUrl.AppendRelativePath(OutputRelativePath).AbsoluteUri);
+            await writer.WriteAttributeStringAsync(prefix: null, "href", ns: null, new Uri(site.BaseUrl, OutputRelativePath).AbsoluteUri);
             await writer.WriteAttributeStringAsync(prefix: null, "rel", ns: null, "self");
             await writer.WriteAttributeStringAsync(prefix: null, "type", ns: null, "application/rss+xml");
             await writer.WriteEndElementAsync();
@@ -68,7 +68,8 @@ internal sealed class RssFeedArtifact : ISiteArtifact
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var itemUrl = site.BaseUrl.AppendRelativePath(item.RoutePath).AbsoluteUri;
+                RelativePath.Validate(item.RelativePath, nameof(item.RelativePath));
+                var itemUrl = new Uri(site.BaseUrl, item.RelativePath).AbsoluteUri;
                 // RFC 1123 date; converting to UTC keeps the offset correct for any zone.
                 var pubDate = item.PublishedAt.UtcDateTime.ToString("r", CultureInfo.InvariantCulture);
 

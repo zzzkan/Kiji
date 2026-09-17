@@ -6,24 +6,18 @@ RSS feeds, sitemaps, and a live-reloading dev server are all in this one package
 
 ## Quick start
 
+Requires the .NET 10 SDK.
+
 ```powershell
-dotnet new install Kiji.Templates
-dotnet new kiji -o MySite
+dotnet new console -f net10.0 -o MySite
 cd MySite
-dotnet watch
-```
-
-That is a working site on <http://localhost:8080> with live reload. `dotnet publish -o dist` writes it
-into `dist/`, which any static host will serve.
-
-## Or add it to an existing project
-
-```powershell
-dotnet add package Kiji
+dotnet add package Kiji --version 0.1.0-preview
 ```
 
 Use the [getting-started guide](https://zzzkan.github.io/kiji/docs/getting-started/)
 for project configuration, pages, and the document shell.
+Then `dotnet watch` serves the site at <http://localhost:8080> and
+`dotnet publish -c Release -o dist` generates the static output.
 
 Add `dist/` and `.kiji/` to your `.gitignore`.
 
@@ -31,3 +25,10 @@ Add `dist/` and `.kiji/` to your `.gitignore`.
 
 <https://zzzkan.github.io/kiji/> — getting started, concepts, markdown and images,
 deployment, and performance. The site is itself built with Kiji.
+
+## License
+
+Kiji is MIT licensed. Dependencies retain their own licenses; ImageSharp's
+[license](https://github.com/SixLabors/ImageSharp/blob/v3.1.12/LICENSE) grants Apache-2.0
+use for open-source projects and transitive consumers. Direct use in other projects
+must meet its stated conditions.

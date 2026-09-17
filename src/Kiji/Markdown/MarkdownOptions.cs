@@ -3,9 +3,8 @@ using YamlDotNet.Serialization;
 
 namespace Kiji.Markdown;
 
-/// <summary>Configures Markdown file selection, validation, and rendering.</summary>
-public sealed class MarkdownContentOptions<TModel> : ContentSourceOptions<TModel>
-    where TModel : class
+/// <summary>Configures Markdown file selection and rendering.</summary>
+public sealed class MarkdownOptions
 {
     internal MarkdownProcessingOptions Processing { get; } = new();
 
@@ -17,39 +16,25 @@ public sealed class MarkdownContentOptions<TModel> : ContentSourceOptions<TModel
     /// <summary>An optional file filter applied before loading, defaulting to all Markdown files.</summary>
     public Func<FileInfo, bool>? FileFilter { get; set; }
 
-    /// <summary>
-    /// Optional CSS class applied to images rendered from markdown. Default: none.
-    /// </summary>
-    public string? ImageCssClass
-    {
-        get => Processing.ImageCssClass;
-        set => Processing.ImageCssClass = value;
-    }
-
     /// <summary>Registers a Markdig configuration applied after the default pipeline is configured.</summary>
-    public void ConfigureMarkdig(Action<MarkdownPipelineBuilder> configure)
+    public void ConfigureMarkdown(Action<MarkdownPipelineBuilder> configure)
     {
-        Processing.ConfigureMarkdig(configure);
+        Processing.ConfigureMarkdown(configure);
     }
 
-    /// <summary>Registers an HTML transformation applied after Markdown rendering, in registration order.</summary>
-    public void AddHtmlTransform(Func<string, string> transform)
+    /// <summary>Registers an HTML post-processor applied after Markdown rendering, in registration order.</summary>
+    public void AddHtmlPostProcessor(Func<string, string> postProcessor)
     {
-        Processing.AddHtmlTransform(transform);
+        Processing.AddHtmlPostProcessor(postProcessor);
     }
 
     /// <summary>Registers a YAML deserializer configuration after the camelCase and ignore-unmatched-properties defaults.</summary>
-    public void ConfigureFrontMatter(Action<DeserializerBuilder> configure)
+    public void ConfigureYaml(Action<DeserializerBuilder> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
-
         FrontMatterConfigurations.Add(configure);
     }
 
-    /// <summary>
-    /// Resolves <see cref="Directory"/> against the content directory, rejecting a path
-    /// that would escape it.
-    /// </summary>
     internal string ResolveContentsDirectory(string contentsPath)
     {
         if (string.IsNullOrWhiteSpace(Directory))
@@ -68,11 +53,6 @@ public sealed class MarkdownContentOptions<TModel> : ContentSourceOptions<TModel
         return resolved;
     }
 
-    /// <summary>
-    /// <see cref="Directory"/> normalized into a content-set scope key: forward slashes,
-    /// no leading or trailing separator, empty for the whole content directory. The key
-    /// lands in the build manifest, so it must not depend on the host's separator.
-    /// </summary>
     internal string ResolveContentSetScope()
     {
         return string.IsNullOrWhiteSpace(Directory)

@@ -23,15 +23,15 @@ public sealed class ContentDictionaryTests
             entered.Set();
             Assert.True(release.Wait(TimeSpan.FromSeconds(10)));
             return [new Item("shared", 1)];
-        }, item => item.Slug);
+        });
         var dictionary = app.ServiceProvider.GetRequiredService<ContentDictionary<Item>>();
-        var first = Task.Run(() => dictionary["shared"]);
+        var first = Task.Run(() => dictionary["0"]);
         Task<Item>? second = null;
         using var secondStarted = new ManualResetEventSlim();
         try
         {
             Assert.True(entered.Wait(TimeSpan.FromSeconds(10)));
-            second = Task.Run(() => { secondStarted.Set(); return dictionary["shared"]; });
+            second = Task.Run(() => { secondStarted.Set(); return dictionary["0"]; });
             Assert.True(secondStarted.Wait(TimeSpan.FromSeconds(10)));
         }
         finally { release.Set(); }
@@ -39,7 +39,7 @@ public sealed class ContentDictionaryTests
         Assert.Equal(1, calls);
         Assert.Same(results[0], results[1]);
         app.InvalidateContent();
-        Assert.NotSame(results[0], dictionary["shared"]);
+        Assert.NotSame(results[0], dictionary["0"]);
         Assert.Equal(2, calls);
     }
 
@@ -69,15 +69,15 @@ public sealed class ContentDictionaryTests
     /// dictionary. A stable order is what keeps a rebuild byte-identical.
     /// </summary>
     [Fact]
-    public void Enumeration_IsAscendingByKey_RegardlessOfInsertionOrder()
+    public void Enumeration_PreservesLoaderOrder()
     {
         var dictionary = ContentDictionaryFixture.FromItems<Item>(
             [new("charlie", 1), new("alpha", 2), new("bravo", 3)],
             static item => item.Slug);
 
-        Assert.Equal(["alpha", "bravo", "charlie"], dictionary.Select(static entry => entry.Key));
-        Assert.Equal(["alpha", "bravo", "charlie"], dictionary.Keys);
-        Assert.Equal([2, 3, 1], dictionary.Values.Select(static item => item.Order));
+        Assert.Equal(["charlie", "alpha", "bravo"], dictionary.Select(static entry => entry.Key));
+        Assert.Equal(["charlie", "alpha", "bravo"], dictionary.Keys);
+        Assert.Equal([1, 2, 3], dictionary.Values.Select(static item => item.Order));
     }
 
     [Fact]
@@ -102,19 +102,16 @@ public sealed class ContentDictionaryTests
     }
 
     [Fact]
-    public void Validate_ReportsEveryFailureAtOnce()
+    public void UseContentSource_AssignsOpaqueOrdinalKeysInLoaderOrder()
     {
-        var dictionary = ContentDictionaryFixture.FromItems<Item>(
-            [new("a", 0), new("b", 1), new("c", 0)],
-            static item => item.Slug,
-            static options => options.AddValidation(static item => item.Order > 0, "order must be positive"));
+        var app = StaticSite.Create([]);
+        app.Info = TestArticleContents.CreateSiteInfo();
+        app.UseContentSource<Item>(static _ => [new("b", 2), new("a", 1)]);
+        var dictionary = app.ServiceProvider.GetRequiredService<ContentDictionary<Item>>();
 
-        var exception = Assert.Throws<InvalidOperationException>(() => dictionary.Count);
-
-        // Both failures are reported, so content is not fixed one rebuild at a time.
-        Assert.Contains("2 invalid item(s)", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("'a'", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("'c'", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(["0", "1"], dictionary.Keys);
+        Assert.Equal(["b", "a"], dictionary.Values.Select(static item => item.Slug));
+        Assert.Equal("b", dictionary["0"].Slug);
     }
 
     [Fact]
@@ -122,10 +119,10 @@ public sealed class ContentDictionaryTests
     {
         var app = StaticSite.Create([]);
         app.Info = TestArticleContents.CreateSiteInfo();
-        app.UseContentSource<Item>(static _ => [], static item => item.Slug);
+        app.UseContentSource<Item>(static _ => []);
 
         var exception = Assert.Throws<InvalidOperationException>(
-            () => app.UseContentSource<Item>(static _ => [], static item => item.Slug));
+            () => app.UseContentSource<Item>(static _ => []));
 
         Assert.Contains("already registered", exception.Message, StringComparison.Ordinal);
         Assert.Contains(nameof(Item), exception.Message, StringComparison.Ordinal);
@@ -141,14 +138,13 @@ public sealed class ContentDictionaryTests
     {
         var app = StaticSite.Create([]);
         app.Info = TestArticleContents.CreateSiteInfo();
-        app.UseContentSource<Item>(
-            static _ => [new("a", 1), new("b", 2)],
-            static item => item.Slug);
+        app.UseContentSource<Item>(static _ => [new("a", 1), new("b", 2)]);
         app.UseContentSource<Derived>(
-            static services => [.. services.GetRequiredService<ContentDictionary<Item>>().Values.Select(static item => new Derived(item.Slug.ToUpperInvariant()))],
-            static derived => derived.Slug);
+            static services => [.. services.GetRequiredService<ContentDictionary<Item>>().Values.Select(static item => new Derived(item.Slug.ToUpperInvariant()))]);
 
-        Assert.Equal(["A", "B"], app.ServiceProvider.GetRequiredService<ContentDictionary<Derived>>().Keys);
+        var derived = app.ServiceProvider.GetRequiredService<ContentDictionary<Derived>>();
+        Assert.Equal(["0", "1"], derived.Keys);
+        Assert.Equal(["A", "B"], derived.Values.Select(static item => item.Slug));
     }
 
     [Fact]
@@ -157,11 +153,9 @@ public sealed class ContentDictionaryTests
         var app = StaticSite.Create([]);
         app.Info = TestArticleContents.CreateSiteInfo();
         app.UseContentSource<Item>(
-            static services => [.. services.GetRequiredService<ContentDictionary<Derived>>().Values.Select(static d => new Item(d.Slug, 1))],
-            static item => item.Slug);
+            static services => [.. services.GetRequiredService<ContentDictionary<Derived>>().Values.Select(static d => new Item(d.Slug, 1))]);
         app.UseContentSource<Derived>(
-            static services => [.. services.GetRequiredService<ContentDictionary<Item>>().Values.Select(static i => new Derived(i.Slug))],
-            static derived => derived.Slug);
+            static services => [.. services.GetRequiredService<ContentDictionary<Item>>().Values.Select(static i => new Derived(i.Slug))]);
 
         var exception = Assert.Throws<InvalidOperationException>(() => app.ServiceProvider.GetRequiredService<ContentDictionary<Item>>().Count);
 
@@ -187,8 +181,7 @@ public sealed class ContentDictionaryTests
             {
                 loads++;
                 return [new("a", 1)];
-            },
-            static item => item.Slug);
+            });
         var dictionary = app.ServiceProvider.GetRequiredService<ContentDictionary<Item>>();
 
         Assert.Equal(0, loads);

@@ -13,7 +13,7 @@ internal static class SiteBasePathExtensions
     /// Serves the application under <paramref name="basePath"/>. Requests outside the
     /// prefix are rejected rather than passed through: production serves nothing there,
     /// and letting them succeed locally would hide a forgotten
-    /// <see cref="SiteInfo.Path(string)"/> until after deployment. Does nothing when the
+    /// site base path until after deployment. Does nothing when the
     /// site is published at the domain root.
     /// </summary>
     internal static void UseSiteBasePath(this WebApplication web, string basePath)
@@ -47,7 +47,7 @@ internal static class SiteBasePathExtensions
             context.Response.ContentType = "text/plain; charset=utf-8";
             await context.Response.WriteAsync(
                 $"404. This site is served under {prefix}/ because SiteInfo.BaseUrl has that path. "
-                + "Use Site.Path(\"...\") for site-root-relative URLs so they resolve here and once deployed.",
+                + "Prefix site-root-relative URLs with Site.BaseUrl.AbsolutePath so they resolve here and once deployed.",
                 context.RequestAborted);
         });
 

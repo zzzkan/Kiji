@@ -10,7 +10,7 @@
     @foreach (var doc in Docs.Values.OrderBy(doc => doc.Order))
     {
         <li>
-            <a href="@Site.Path($"docs/{doc.Slug}/")">
+            <a href="@(Site.BaseUrl.AbsolutePath + $"docs/{doc.Slug}/")">
                 @doc.Title
             </a>
             <p>@doc.Description</p>

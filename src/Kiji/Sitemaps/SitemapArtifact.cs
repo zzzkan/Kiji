@@ -4,26 +4,43 @@ using System.Xml;
 namespace Kiji.Sitemaps;
 
 /// <summary>
-/// Generates a sitemap from every generated page, excluding pages marked
-/// with <c>ExcludeFromSitemap</c>. URLs are sorted for deterministic output.
+/// Generates a sitemap from generated pages. URLs are sorted for deterministic output.
 /// </summary>
 internal sealed class SitemapArtifact
 {
+    private const string NotFoundRelativePath = "404.html";
     private const string SitemapNamespace = "http://www.sitemaps.org/schemas/sitemap/0.9";
+    private readonly HashSet<string> _excludedPaths;
 
     /// <param name="outputRelativePath">The output path relative to the output directory.</param>
-    public SitemapArtifact(string outputRelativePath = "sitemap.xml")
+    /// <param name="excludedPaths">Site-relative page paths to omit in addition to <c>404.html</c>.</param>
+    public SitemapArtifact(string outputRelativePath = "sitemap.xml", IEnumerable<string>? excludedPaths = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(outputRelativePath);
 
         OutputRelativePath = outputRelativePath;
+        _excludedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            NotFoundRelativePath,
+        };
+
+        if (excludedPaths is null)
+        {
+            return;
+        }
+
+        foreach (var path in excludedPaths)
+        {
+            RelativePath.Validate(path, nameof(excludedPaths));
+            _excludedPaths.Add(path);
+        }
     }
 
     /// <inheritdoc/>
     public string OutputRelativePath { get; }
 
     /// <inheritdoc/>
-    public static async Task WriteAsync(Stream output, SiteOutputContext context, CancellationToken cancellationToken)
+    public async Task WriteAsync(Stream output, SiteOutputContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(context);
@@ -31,7 +48,7 @@ internal sealed class SitemapArtifact
         cancellationToken.ThrowIfCancellationRequested();
 
         var pages = context.Pages
-            .Where(static page => !page.ExcludeFromSitemap)
+            .Where(page => !_excludedPaths.Contains(page.RelativePath))
             .OrderBy(static page => page.RelativePath, StringComparer.OrdinalIgnoreCase);
 
         var settings = new XmlWriterSettings

@@ -109,7 +109,6 @@ public sealed class PageRegistrationTests
         var page = Assert.Single(site.CreateSnapshot().Pages);
         Assert.Equal("/404.html", page.RoutePath);
         Assert.Equal("404.html", page.OutputRelativePath);
-        Assert.True(page.ExcludeFromSitemap);
     }
 
     [Fact]

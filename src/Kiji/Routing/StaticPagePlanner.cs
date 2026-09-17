@@ -50,8 +50,7 @@ internal static class StaticPagePlanner
             page.ComponentType,
             new Dictionary<string, object?>(StringComparer.Ordinal),
             pathBinding.RoutePath,
-            pathBinding.OutputRelativePath,
-            ExcludeFromSitemap: page.PageDefinition.ExcludeFromSitemap);
+            pathBinding.OutputRelativePath);
     }
 
     private static List<PageRenderRequest> CreateDynamicPages(
@@ -63,8 +62,7 @@ internal static class StaticPagePlanner
                 page.ComponentType,
                 match.ToDictionary(static pair => pair.Key, static pair => (object?)pair.Value, StringComparer.Ordinal),
                 page.PageDefinition.ResolveRoutePath(match),
-                page.PageDefinition.ResolveOutputRelativePath(match),
-                ExcludeFromSitemap: page.PageDefinition.ExcludeFromSitemap))];
+                page.PageDefinition.ResolveOutputRelativePath(match)))];
     }
 
     private static void ValidateDynamicPageCoverage(

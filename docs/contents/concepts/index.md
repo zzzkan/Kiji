@@ -211,6 +211,19 @@ app.AddRssFeed(services => services
 app.AddSitemap();
 ```
 
+The sitemap excludes `404.html` by default. Pass site-relative paths to omit other
+generated pages:
+
+```csharp
+app.AddSitemap(excludedPaths: [
+    "preview/",
+    "internal/status/",
+]);
+```
+
+Exclusions match a page's relative path exactly and, like other site-relative paths, do
+not start with `/`.
+
 `RelativePath` is combined with `SiteInfo.BaseUrl`, so it carries a base path automatically —
 write it prefix-free, the same as an index page link.
 

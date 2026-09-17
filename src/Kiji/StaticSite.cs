@@ -234,7 +234,7 @@ public sealed class StaticSite
         return this;
     }
 
-    /// <summary>Registers a page as <c>404.html</c> and excludes it from the sitemap.</summary>
+    /// <summary>Registers a page as <c>404.html</c>.</summary>
     /// <remarks>The component must declare exactly one route and cannot also be registered with <c>AddPages</c>.</remarks>
     public StaticSite UseNotFoundPage<TComponent>()
         where TComponent : IComponent
@@ -689,8 +689,7 @@ public sealed class StaticSite
         var overridden = StaticPageDefinition.Create(
             "/404.html",
             routePathOverride: "/404.html",
-            outputRelativePathOverride: "404.html",
-            excludeFromSitemap: true);
+            outputRelativePathOverride: "404.html");
 
         return [.. discovered.Where(page => page.ComponentType != _notFoundComponentType),
             new PageDiscovery.DiscoveredPage(overridden.SourceIdentifier, _notFoundComponentType, overridden)];
@@ -762,8 +761,7 @@ public sealed class StaticSite
             Info,
             [.. snapshot.Pages.Select(static page => new SitePageInfo(
                 page.RoutePath.TrimStart('/'),
-                page.OutputRelativePath,
-                page.ExcludeFromSitemap))],
+                page.OutputRelativePath))],
             ServiceProvider);
     }
 

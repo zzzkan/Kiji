@@ -30,15 +30,15 @@ static HTML via Blazor's `HtmlRenderer`, assembled with a minimal-API style app.
 
 ## Already evaluated and rejected — do not reintroduce
 
-| Idea                                   | Why not                                                                                                                                             |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Pooling Blazor's `HtmlRenderer`        | Root component state cannot be reset via public API, per-page scoped services are captured at construction |
-| Blazor's `SectionOutlet` / `RouteView` | Their state lives on the renderer, out of Kiji's control; replaced by `HeadOutlet` / `PageView` with state on the DI scope                          |
-| Native AOT / trimming                  | `HtmlRenderer`, `ParameterView`, and YamlDotNet are reflection-based; SSG is throughput-bound so AOT's wins do not apply                            |
-| Source-generated page discovery        | The cached assembly scan does not justify generated discovery                                                                                                            |
-| Rendering to `IBufferWriter<byte>`     | `HtmlRootComponent` only exposes `WriteHtmlTo(TextWriter)`                                                                                          |
-| Content-addressed image output         | Breaks the page-bundle layout and `./` references                                                                                                   |
-| Incremental RSS/sitemap                | They depend on all page metadata and are cheap to regenerate                                                                                        |
+| Idea                                   | Why not                                                                                                                    |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Pooling Blazor's `HtmlRenderer`        | Root component state cannot be reset via public API, per-page scoped services are captured at construction                 |
+| Blazor's `SectionOutlet` / `RouteView` | Their state lives on the renderer, out of Kiji's control; replaced by `HeadOutlet` / `PageView` with state on the DI scope |
+| Native AOT / trimming                  | `HtmlRenderer`, `ParameterView`, and YamlDotNet are reflection-based; SSG is throughput-bound so AOT's wins do not apply   |
+| Source-generated page discovery        | The cached assembly scan does not justify generated discovery                                                              |
+| Rendering to `IBufferWriter<byte>`     | `HtmlRootComponent` only exposes `WriteHtmlTo(TextWriter)`                                                                 |
+| Content-addressed image output         | Breaks the page-bundle layout and `./` references                                                                          |
+| Incremental RSS/sitemap                | They depend on all page metadata and are cheap to regenerate                                                               |
 
 ## Conventions
 

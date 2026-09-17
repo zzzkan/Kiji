@@ -6,14 +6,12 @@ internal sealed record StaticPageDefinition
         string sourceIdentifier,
         IReadOnlyList<PageSegment> segments,
         string? routePathOverride = null,
-        string? outputRelativePathOverride = null,
-        bool excludeFromSitemap = false)
+        string? outputRelativePathOverride = null)
     {
         SourceIdentifier = sourceIdentifier;
         Segments = segments;
         RoutePathOverride = routePathOverride;
         OutputRelativePathOverride = outputRelativePathOverride;
-        ExcludeFromSitemap = excludeFromSitemap;
 
         ValidateConfiguration();
     }
@@ -26,8 +24,6 @@ internal sealed record StaticPageDefinition
 
     public string? OutputRelativePathOverride { get; }
 
-    public bool ExcludeFromSitemap { get; }
-
     public bool IsDynamic => Segments.Any(static segment => segment is PageParameterSegment);
 
     public IReadOnlyList<string> ParameterNames =>
@@ -38,8 +34,7 @@ internal sealed record StaticPageDefinition
     public static StaticPageDefinition Create(
         string routeTemplate,
         string? routePathOverride = null,
-        string? outputRelativePathOverride = null,
-        bool excludeFromSitemap = false)
+        string? outputRelativePathOverride = null)
     {
         var normalizedTemplate = NormalizeRouteTemplate(routeTemplate);
 
@@ -47,8 +42,7 @@ internal sealed record StaticPageDefinition
             normalizedTemplate,
             ParseSegments(normalizedTemplate),
             routePathOverride,
-            outputRelativePathOverride,
-            excludeFromSitemap);
+            outputRelativePathOverride);
     }
 
     public static string NormalizeRouteTemplate(string routeTemplate)

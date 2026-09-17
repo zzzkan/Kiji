@@ -5,8 +5,7 @@ internal sealed record PageRenderRequest(
     Type ComponentType,
     IReadOnlyDictionary<string, object?> Parameters,
     string RoutePath,
-    string OutputRelativePath,
-    bool ExcludeFromSitemap = false)
+    string OutputRelativePath)
 {
     /// <summary>
     /// Root component parameters precomputed at snapshot time, so repeated renders

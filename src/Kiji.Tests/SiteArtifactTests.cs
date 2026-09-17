@@ -55,7 +55,7 @@ public sealed class SiteArtifactTests : IDisposable
         await using var app = await CreateAppAsync(artifact);
         app.AddPages<MirrorPostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
-        app.AddSitemap("seo/sitemap.xml");
+        app.AddSitemap("seo/sitemap.xml", ["mirror/hello-world/"]);
 
         await app.PublishAsync(_outputDir);
 
@@ -63,11 +63,12 @@ public sealed class SiteArtifactTests : IDisposable
         Assert.Equal("artifact from zzzkan.me", written);
 
         Assert.True(File.Exists(Path.Combine(_outputDir, "mirror", "hello-world", "index.html")));
-        Assert.Contains("/mirror/hello-world/", await File.ReadAllTextAsync(Path.Combine(_outputDir, "seo", "sitemap.xml")), StringComparison.Ordinal);
+        var sitemap = await File.ReadAllTextAsync(Path.Combine(_outputDir, "seo", "sitemap.xml"));
+        Assert.DoesNotContain("/mirror/hello-world/", sitemap, StringComparison.Ordinal);
+        Assert.Contains("/blog/hello-world/", sitemap, StringComparison.Ordinal);
         var context = artifact.ObservedContext!;
         Assert.Contains(context.Pages, static page => page.RelativePath == "blog/hello-world/");
-        Assert.Contains(context.Pages, static page => page is { RelativePath: "404.html", ExcludeFromSitemap: true });
-
+        Assert.Contains(context.Pages, static page => page.RelativePath == "404.html");
     }
 
     [Fact]

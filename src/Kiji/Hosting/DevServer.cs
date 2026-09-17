@@ -23,6 +23,7 @@ internal sealed class DevServer(StaticSite app) : IAsyncDisposable
 
     private readonly LiveReloadHub _hub = new();
     private readonly DevServerStatusReporter _reporter = DevServerStatusReporter.CreateForCurrentProcess();
+    private readonly string _displayRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Directory.GetCurrentDirectory()));
     private readonly Lock _snapshotLock = new();
     private readonly List<FileSystemWatcher> _watchers = [];
     private readonly List<WatchedChange> _pendingChanges = [];
@@ -120,9 +121,10 @@ internal sealed class DevServer(StaticSite app) : IAsyncDisposable
             }
         });
 
+        var buildInputs = app.WatchedBuildInputs.ToArray();
         WatchDirectory(options.ContentDirectory, WatchedPathSource.Content);
         WatchDirectory(options.StaticDirectory, WatchedPathSource.Static);
-        foreach (var input in app.WatchedBuildInputs)
+        foreach (var input in buildInputs)
         {
             WatchDirectory(input, WatchedPathSource.BuildInput);
         }
@@ -132,7 +134,8 @@ internal sealed class DevServer(StaticSite app) : IAsyncDisposable
         _reporter.DevServerStarted(
             new Uri(new Uri(web.Urls.First()), app.Info.BaseUrl.AbsolutePath),
             options.ContentDirectory,
-            Directory.Exists(options.StaticDirectory) ? options.StaticDirectory : null);
+            Directory.Exists(options.StaticDirectory) ? options.StaticDirectory : null,
+            buildInputs);
 
         // Warm the snapshot (page discovery + content materialization) in the
         // background so the first request doesn't pay for it. Failures are ignored
@@ -318,7 +321,13 @@ internal sealed class DevServer(StaticSite app) : IAsyncDisposable
                 return;
             }
 
-            ScheduleReload(new WatchedChange(source, args.ChangeType, Path.GetRelativePath(path, args.FullPath)), source is not WatchedPathSource.Static);
+            ScheduleReload(
+                CreateWatchedChange(
+                    source,
+                    args.ChangeType,
+                    args.FullPath,
+                    args is RenamedEventArgs renamedEvent ? renamedEvent.OldFullPath : null),
+                source is not WatchedPathSource.Static);
         }
 
         bool IsWatchedPath(string candidate)
@@ -341,7 +350,9 @@ internal sealed class DevServer(StaticSite app) : IAsyncDisposable
             }
             // Events may have been lost (e.g. buffer overflow). Rebuild the snapshot
             // conservatively instead of continuing to serve potentially stale content.
-            ScheduleReload(new WatchedChange(source, WatcherChangeTypes.Changed, "."), source is not WatchedPathSource.Static);
+            ScheduleReload(
+                CreateWatchedChange(source, WatcherChangeTypes.Changed, path),
+                source is not WatchedPathSource.Static);
         };
         watcher.EnableRaisingEvents = true;
 
@@ -390,9 +401,59 @@ internal sealed class DevServer(StaticSite app) : IAsyncDisposable
     // so collapse to one entry per file, keeping the latest change type.
     internal static List<WatchedChange> DeduplicateChanges(IEnumerable<WatchedChange> changes)
     {
+        var pathComparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         return [.. changes
-            .GroupBy(static change => (change.Source, change.Path))
-            .Select(static group => group.Last())];
+            .GroupBy(static change => change.FullPath, pathComparer)
+            .Select(static group =>
+            {
+                var latest = group.Last();
+                var preferredSource = group.MinBy(static change => GetSourcePriority(change.Source))!.Source;
+                return latest with { Source = preferredSource };
+            })];
+    }
+
+    private WatchedChange CreateWatchedChange(
+        WatchedPathSource source,
+        WatcherChangeTypes changeType,
+        string fullPath,
+        string? oldFullPath = null)
+    {
+        fullPath = Path.GetFullPath(fullPath);
+        return new WatchedChange(
+            source,
+            changeType,
+            fullPath,
+            GetDisplayPath(fullPath, _displayRoot),
+            oldFullPath is null ? null : GetDisplayPath(Path.GetFullPath(oldFullPath), _displayRoot));
+    }
+
+    internal static string GetDisplayPath(string fullPath, string displayRoot)
+    {
+        fullPath = Path.GetFullPath(fullPath);
+        displayRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(displayRoot));
+        var relativePath = Path.GetRelativePath(displayRoot, fullPath);
+        var parentPrefix = $"..{Path.DirectorySeparatorChar}";
+        if (!Path.IsPathRooted(relativePath)
+            && !string.Equals(relativePath, "..", StringComparison.Ordinal)
+            && !relativePath.StartsWith(parentPrefix, StringComparison.Ordinal))
+        {
+            return string.Equals(relativePath, ".", StringComparison.Ordinal)
+                ? relativePath
+                : $".{Path.DirectorySeparatorChar}{relativePath}";
+        }
+
+        return fullPath;
+    }
+
+    private static int GetSourcePriority(WatchedPathSource source)
+    {
+        return source switch
+        {
+            WatchedPathSource.Content => 0,
+            WatchedPathSource.BuildInput => 1,
+            WatchedPathSource.Static => 2,
+            _ => throw new InvalidOperationException($"Unknown watched path source '{source}'."),
+        };
     }
 
     private async Task ReportReloadAsync(List<WatchedChange> changes)

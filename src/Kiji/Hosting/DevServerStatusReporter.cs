@@ -2,11 +2,12 @@ namespace Kiji.Hosting;
 
 internal sealed class DevServerStatusReporter
 {
-    private const string KijiDevPrefix = "kiji dev";
+    private const string KijiPrefix = "kiji";
     private const int DotNetWatchPrefixWidth = 12;
     // Colors match dotnet watch's ConsoleReporter (DarkGray prefix+emoji, default
     // message text, yellow warnings) so interleaved output reads as one stream.
     private const string Yellow = "\u001b[33m";
+    private const string EmphasizedUrl = "\u001b[1;4:4;36m";
     private const string Reset = "\u001b[0m";
     private const string DarkGray = "\u001b[90m";
 
@@ -34,20 +35,31 @@ internal sealed class DevServerStatusReporter
             !EnvironmentValue.IsTruthy(Environment.GetEnvironmentVariable("NO_COLOR")) &&
             !string.Equals(Environment.GetEnvironmentVariable("TERM"), "dumb", StringComparison.OrdinalIgnoreCase);
 
-        return new DevServerStatusReporter(Console.Out, KijiDevPrefix, useEmoji, useAnsiColor);
+        return new DevServerStatusReporter(Console.Out, KijiPrefix, useEmoji, useAnsiColor);
     }
 
-    internal void DevServerStarted(Uri address, string contentPath, string? staticPath)
+    internal void DevServerStarted(
+        Uri address,
+        string contentPath,
+        string? staticPath,
+        IReadOnlyList<string> buildInputPaths)
     {
         ArgumentNullException.ThrowIfNull(address);
         ArgumentException.ThrowIfNullOrWhiteSpace(contentPath);
+        ArgumentNullException.ThrowIfNull(buildInputPaths);
 
-        WriteLine(StatusKind.Started, $"Started Kiji dev server at {address}");
-        WriteLine(StatusKind.Change, $"Watching content files under '{contentPath}'.");
+        var displayAddress = _useAnsiColor ? $"{EmphasizedUrl}{address}{Reset}" : address.ToString();
+        WriteLine(StatusKind.Started, $"Dev server started at {displayAddress}");
+        WriteLine(StatusKind.Change, $"Watching content: '{contentPath}'.");
 
         if (!string.IsNullOrWhiteSpace(staticPath))
         {
-            WriteLine(StatusKind.Change, $"Watching static files under '{staticPath}'.");
+            WriteLine(StatusKind.Change, $"Watching static assets: '{staticPath}'.");
+        }
+
+        foreach (var buildInputPath in buildInputPaths)
+        {
+            WriteLine(StatusKind.Change, $"Watching build input: '{buildInputPath}'.");
         }
     }
 
@@ -66,20 +78,19 @@ internal sealed class DevServerStatusReporter
         }
 
         WriteLine(
-            reloadedClientCount > 0 ? StatusKind.Reload : StatusKind.Change,
+            reloadedClientCount > 0 ? StatusKind.Reload : StatusKind.Skip,
             reloadedClientCount > 0
                 ? $"Reloaded {reloadedClientCount} browser client(s)."
-                : "Detected changes, but no browser clients were connected.");
+                : "Browser reload skipped: no clients connected; changes will be visible on the next request.");
     }
 
     internal void CodeUpdated(int reloadedClientCount)
     {
-        // Follows dotnet watch's own "changes applied" line, so stay quiet unless
-        // there is actually a browser to refresh.
-        if (reloadedClientCount > 0)
-        {
-            WriteLine(StatusKind.Reload, $"Reloaded {reloadedClientCount} browser client(s).");
-        }
+        WriteLine(
+            reloadedClientCount > 0 ? StatusKind.Reload : StatusKind.Skip,
+            reloadedClientCount > 0
+                ? $"Page cache refreshed after a code update; reloaded {reloadedClientCount} browser client(s)."
+                : "Page cache refreshed after a code update; browser reload skipped: no clients connected.");
     }
 
     internal void WatcherError(WatchedPathSource source, string path, Exception exception)
@@ -126,6 +137,7 @@ internal sealed class DevServerStatusReporter
                 StatusKind.Started => "🚀",
                 StatusKind.Change => "⌚",
                 StatusKind.Reload => "🔥",
+                StatusKind.Skip => "↪",
                 StatusKind.Warning => "⚠",
                 _ => throw new InvalidOperationException($"Unknown status kind '{kind}'."),
             };
@@ -136,6 +148,7 @@ internal sealed class DevServerStatusReporter
             StatusKind.Started => "[Started]",
             StatusKind.Change => "[Watch]",
             StatusKind.Reload => "[Reload]",
+            StatusKind.Skip => "[Skip]",
             StatusKind.Warning => "[Warn]",
             _ => throw new InvalidOperationException($"Unknown status kind '{kind}'."),
         };
@@ -146,6 +159,7 @@ internal sealed class DevServerStatusReporter
         Started,
         Change,
         Reload,
+        Skip,
         Warning,
     }
 }

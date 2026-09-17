@@ -1,24 +1,32 @@
 namespace Kiji.Hosting;
 
-internal sealed record WatchedChange(WatchedPathSource Source, WatcherChangeTypes ChangeType, string Path)
+internal sealed record WatchedChange(
+    WatchedPathSource Source,
+    WatcherChangeTypes ChangeType,
+    string FullPath,
+    string DisplayPath,
+    string? OldDisplayPath = null)
 {
     internal string ToStatusMessage()
     {
+        var subject = Source switch
+        {
+            WatchedPathSource.Content => "Content",
+            WatchedPathSource.Static => "Static asset",
+            WatchedPathSource.BuildInput => "Build input",
+            _ => throw new InvalidOperationException($"Unknown watched path source '{Source}'."),
+        };
         var action = ChangeType switch
         {
             WatcherChangeTypes.Created => "created",
-            WatcherChangeTypes.Changed => "updated",
+            WatcherChangeTypes.Changed => "changed",
             WatcherChangeTypes.Deleted => "deleted",
             WatcherChangeTypes.Renamed => "renamed",
             _ => ChangeType.ToString(),
         };
-        var relativePrefix = $".{System.IO.Path.DirectorySeparatorChar}";
-        var displayPath = string.IsNullOrWhiteSpace(Path)
-            || System.IO.Path.IsPathRooted(Path)
-            || Path.StartsWith(relativePrefix, StringComparison.Ordinal)
-            ? Path
-            : relativePrefix + Path;
 
-        return $"File {action}: {displayPath}";
+        return ChangeType is WatcherChangeTypes.Renamed && !string.IsNullOrWhiteSpace(OldDisplayPath)
+            ? $"{subject} {action}: {OldDisplayPath} -> {DisplayPath}"
+            : $"{subject} {action}: {DisplayPath}";
     }
 }

@@ -87,13 +87,13 @@
        Keep dotnet watch off the files Kiji watches itself
        ============================================================== -->
   <ItemGroup Condition="'$(KijiGenerateOnPublish)' == 'true' and '$(KijiWatchStaticFiles)' != 'true'">
-    <!-- dotnet watch collects Compile, EmbeddedResource, the project file, and — under the
-         Razor SDK — Content items under wwwroot/. Content is the only overlap with Kiji's own
-         FileSystemWatcher, which already picks up static files with a 250 ms debounce and
-         reloads the browser. Leaving both on means every CSS edit also restarts the process.
-         Marking them unwatched drops the restart and keeps the reload.
-         Code stays watched on purpose: hot reload is what refreshes edited components.
-         Content directories outside wwwroot are never watched, so they need nothing here. -->
+    <!-- The Razor SDK explicitly registers Content items under wwwroot with dotnet watch.
+         Kiji's FileSystemWatcher already picks up those static files with a 250 ms debounce
+         and reloads the browser, so marking them unwatched avoids duplicate static-file
+         handling. Newer dotnet watch versions may still observe other project-tree changes
+         such as Kiji content files through their directory watcher. Kiji reports the semantic
+         action it took for those changes rather than trying to alter that SDK-owned watcher.
+         Code stays watched on purpose: hot reload refreshes edited components. -->
     <KijiUnwatchedContent Include="wwwroot\**" />
     <Content Update="@(KijiUnwatchedContent)" Watch="false" />
   </ItemGroup>

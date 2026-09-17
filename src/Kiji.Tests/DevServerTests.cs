@@ -69,9 +69,10 @@ public sealed class DevServerTests : IAsyncDisposable
             Assert.Contains("/_kiji/livereload.js", await notFound.Content.ReadAsStringAsync(), StringComparison.Ordinal);
 
             var output = logs.ToString();
-            Assert.Contains("Started Kiji dev server at", output, StringComparison.Ordinal);
-            Assert.Contains("Watching content files under", output, StringComparison.Ordinal);
-            Assert.Contains("Watching static files under", output, StringComparison.Ordinal);
+            Assert.Contains("Dev server started at", output, StringComparison.Ordinal);
+            Assert.Contains("Watching content:", output, StringComparison.Ordinal);
+            Assert.Contains("Watching static assets:", output, StringComparison.Ordinal);
+            Assert.Contains("Watching build input:", output, StringComparison.Ordinal);
         }
     }
 
@@ -141,7 +142,10 @@ public sealed class DevServerTests : IAsyncDisposable
             Assert.Contains("<h1>Hello Updated</h1>", updatedHtml, StringComparison.Ordinal);
 
             var output = logs.ToString();
-            Assert.Contains($"File updated: .{Path.DirectorySeparatorChar}hello-world.txt", output, StringComparison.Ordinal);
+            Assert.Contains(
+                $"Content changed: {Path.Combine(_contentsDir, "hello-world.txt")}",
+                output,
+                StringComparison.Ordinal);
             Assert.Contains("Reloaded 1 browser client(s).", output, StringComparison.Ordinal);
             await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
             Assert.Equal(WebSocketState.Closed, socket.State);
@@ -151,7 +155,8 @@ public sealed class DevServerTests : IAsyncDisposable
     [Fact]
     public async Task Serve_DeclaredBuildInputChangeReloadsContent()
     {
-        var (baseAddress, devServer) = await StartServerAsync();
+        using var logs = new StringWriter();
+        var (baseAddress, devServer) = await StartServerAsync(logs);
         await using (devServer)
         {
             using var client = CreateClient();
@@ -163,6 +168,10 @@ public sealed class DevServerTests : IAsyncDisposable
             await File.WriteAllTextAsync(Path.Combine(_testDir, "title.txt"), "External setting updated", timeout.Token);
             await socket.ReceiveAsync(new byte[64], timeout.Token);
             Assert.Contains("<h1>External setting updated</h1>", await client.GetStringAsync(page), StringComparison.Ordinal);
+            Assert.Contains(
+                $"Build input changed: {Path.Combine(_testDir, "title.txt")}",
+                logs.ToString(),
+                StringComparison.Ordinal);
         }
     }
 
@@ -228,7 +237,10 @@ public sealed class DevServerTests : IAsyncDisposable
             Assert.Contains("color: red", await client.GetStringAsync(new Uri(baseAddress, "/site.css")), StringComparison.Ordinal);
 
             var output = logs.ToString();
-            Assert.Contains($"File updated: .{Path.DirectorySeparatorChar}site.css", output, StringComparison.Ordinal);
+            Assert.Contains(
+                $"Static asset changed: {Path.Combine(_staticDir, "site.css")}",
+                output,
+                StringComparison.Ordinal);
             Assert.Contains("Reloaded 1 browser client(s).", output, StringComparison.Ordinal);
         }
     }
@@ -256,19 +268,39 @@ public sealed class DevServerTests : IAsyncDisposable
     [Fact]
     public void DeduplicateChanges_CollapsesRepeatedEventsPerFileKeepingLatestChangeType()
     {
+        var contentPath = Path.Combine(Path.GetTempPath(), "site", "contents", "2026", "post", "index.md");
+        var staticPath = Path.Combine(Path.GetTempPath(), "site", "wwwroot", "site.css");
         List<Kiji.Hosting.WatchedChange> events =
         [
-            new(Kiji.Hosting.WatchedPathSource.Content, WatcherChangeTypes.Created, @"2026\post\index.md"),
-            new(Kiji.Hosting.WatchedPathSource.Content, WatcherChangeTypes.Changed, @"2026\post\index.md"),
-            new(Kiji.Hosting.WatchedPathSource.Content, WatcherChangeTypes.Changed, @"2026\post\index.md"),
-            new(Kiji.Hosting.WatchedPathSource.Static, WatcherChangeTypes.Changed, "site.css"),
+            new(Kiji.Hosting.WatchedPathSource.Content, WatcherChangeTypes.Created, contentPath, Path.Combine("contents", "2026", "post", "index.md")),
+            new(Kiji.Hosting.WatchedPathSource.BuildInput, WatcherChangeTypes.Changed, contentPath, Path.Combine("contents", "2026", "post", "index.md")),
+            new(Kiji.Hosting.WatchedPathSource.Content, WatcherChangeTypes.Changed, contentPath, Path.Combine("contents", "2026", "post", "index.md")),
+            new(Kiji.Hosting.WatchedPathSource.Static, WatcherChangeTypes.Changed, staticPath, Path.Combine("wwwroot", "site.css")),
         ];
 
         var deduplicated = Kiji.Hosting.DevServer.DeduplicateChanges(events);
 
         Assert.Equal(2, deduplicated.Count);
-        Assert.Equal(new Kiji.Hosting.WatchedChange(Kiji.Hosting.WatchedPathSource.Content, WatcherChangeTypes.Changed, @"2026\post\index.md"), deduplicated[0]);
-        Assert.Equal(new Kiji.Hosting.WatchedChange(Kiji.Hosting.WatchedPathSource.Static, WatcherChangeTypes.Changed, "site.css"), deduplicated[1]);
+        Assert.Equal(Kiji.Hosting.WatchedPathSource.Content, deduplicated[0].Source);
+        Assert.Equal(WatcherChangeTypes.Changed, deduplicated[0].ChangeType);
+        Assert.Equal(contentPath, deduplicated[0].FullPath);
+        Assert.Equal(Kiji.Hosting.WatchedPathSource.Static, deduplicated[1].Source);
+        Assert.Equal(staticPath, deduplicated[1].FullPath);
+    }
+
+    [Fact]
+    public void GetDisplayPath_UsesWorkingDirectoryStylePathAndKeepsExternalPathAbsolute()
+    {
+        var displayRoot = Path.Combine(Path.GetTempPath(), "workspace");
+        var siteFile = Path.Combine(displayRoot, "docs", "contents", "index.md");
+        var externalFile = Path.Combine(Path.GetTempPath(), "external", "authors.json");
+
+        Assert.Equal(
+            $".{Path.DirectorySeparatorChar}{Path.Combine("docs", "contents", "index.md")}",
+            Kiji.Hosting.DevServer.GetDisplayPath(siteFile, displayRoot));
+        Assert.Equal(
+            Path.GetFullPath(externalFile),
+            Kiji.Hosting.DevServer.GetDisplayPath(externalFile, displayRoot));
     }
 
     /// <summary>
@@ -332,7 +364,7 @@ public sealed class DevServerTests : IAsyncDisposable
                 (await client.GetAsync(new Uri(baseAddress, "/site.css"))).StatusCode);
 
             Assert.Contains(
-                $"Started Kiji dev server at {new Uri(baseAddress, "/kiji/")}",
+                $"Dev server started at {new Uri(baseAddress, "/kiji/")}",
                 logs.ToString(),
                 StringComparison.Ordinal);
         }
@@ -385,7 +417,7 @@ public sealed class DevServerTests : IAsyncDisposable
             _app.AddPages<Kiji.Tests.TestSite.Pages.PostPage>(_ => [new { Slug = additionalSlug, ContentKey = "0" }]);
         }
 
-        var reporter = new Kiji.Hosting.DevServerStatusReporter(logs, prefix: "kiji dev", useEmoji: true);
+        var reporter = new Kiji.Hosting.DevServerStatusReporter(logs, prefix: "kiji", useEmoji: true);
         var (devServer, web) = await _app.StartDevServerAsync(TestUrls.EphemeralPort, CancellationToken.None, reporter);
         return (new Uri(web.Urls.First()), devServer);
     }

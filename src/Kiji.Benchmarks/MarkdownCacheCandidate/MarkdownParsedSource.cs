@@ -6,13 +6,17 @@ using YamlDotNet.Serialization;
 namespace Kiji.Benchmarks.MarkdownCacheCandidate;
 
 /// <summary>Only syntax is cached. User conversions run on each materialization.</summary>
-internal sealed record MarkdownParsedSource(string Body, byte[] Events, string ContentHash, MarkdownFileStamp Stamp)
+internal sealed record MarkdownParsedSource(
+    string Body,
+    byte[] Events,
+    string ContentHash,
+    (long Length, DateTime LastWriteTimeUtc) Stamp)
 {
     private ParsingEvent[]? _firstEvents;
 
     internal void SetFirstEvents(ParsingEvent[] events) => _firstEvents = events;
 
-    internal static MarkdownParsedSource Read(string path, MarkdownFileStamp stamp)
+    internal static MarkdownParsedSource Read(string path, (long Length, DateTime LastWriteTimeUtc) stamp)
     {
         var bytes = File.ReadAllBytes(path);
         using var reader = new StreamReader(new MemoryStream(bytes), detectEncodingFromByteOrderMarks: true);
@@ -32,6 +36,6 @@ internal sealed record MarkdownParsedSource(string Body, byte[] Events, string C
         var events = Interlocked.Exchange(ref _firstEvents, null) ?? YamlEventCodec.Decode(Events);
         var frontMatter = deserializer.Deserialize<T>(new YamlEventParser(events))
             ?? throw new InvalidOperationException("Failed to deserialize YAML front matter.");
-        return new MarkdownSource<T>(frontMatter, Body, ContentHash, Stamp.Length, Stamp.LastWriteTimeUtc);
+        return new MarkdownSource<T>(frontMatter, Body, ContentHash);
     }
 }

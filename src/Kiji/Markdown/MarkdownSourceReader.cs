@@ -11,46 +11,30 @@ namespace Kiji.Markdown;
 /// </summary>
 internal static class MarkdownSourceReader
 {
-    internal static MarkdownSource<TFrontMatter> Read<TFrontMatter>(string filePath, IDeserializer deserializer)
-    {
-        var info = new FileInfo(filePath);
-        return Read<TFrontMatter>(filePath, new MarkdownFileStamp(info.Length, info.LastWriteTimeUtc), deserializer);
-    }
-
-    /// <param name="stamp">
-    /// The file's size and last write time from the directory walk that found it. It is
-    /// recorded alongside the content hash, so a later build can trust the hash while
-    /// the stamp still holds without opening the file.
-    /// </param>
     internal static MarkdownSource<TFrontMatter> Read<TFrontMatter>(
-        string filePath,
-        MarkdownFileStamp stamp,
+        FileInfo file,
         IDeserializer deserializer)
     {
-        var bytes = File.ReadAllBytes(filePath);
+        var bytes = File.ReadAllBytes(file.FullName);
         var contentHash = BuildFingerprint.HashBytes(bytes);
         var content = DecodeText(bytes);
 
-        TFrontMatter frontMatter;
-        string body;
+        (TFrontMatter FrontMatter, string Body) parsed;
         try
         {
-            frontMatter = MarkdownFrontMatterParser.ParseContent<TFrontMatter>(content, deserializer);
-            body = MarkdownFrontMatterParser.RemoveFrontMatter(content);
+            parsed = MarkdownFrontMatterParser.ParseContentAndBody<TFrontMatter>(content, deserializer);
         }
         catch (Exception exception)
         {
             throw new InvalidOperationException(
-                $"Failed to parse YAML front matter of '{filePath}'. {exception.Message}",
+                $"Failed to parse YAML front matter of '{file.FullName}'. {exception.Message}",
                 exception);
         }
 
         return new MarkdownSource<TFrontMatter>(
-            frontMatter,
-            body,
-            contentHash,
-            stamp.Length,
-            stamp.LastWriteTimeUtc);
+            parsed.FrontMatter,
+            parsed.Body,
+            contentHash);
     }
 
     private static string DecodeText(byte[] bytes)

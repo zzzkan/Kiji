@@ -32,7 +32,7 @@ public sealed class ContentLoadTimingTests : IDisposable
         app.Info = TestArticleContents.CreateSiteInfo();
         app.Paths.RootDirectory = _testDir;
         app.Paths.ContentDirectory = "contents";
-        app.UseMarkdownContent<FrontMatter>(key: static post => post.FileInfo.Slug);
+        app.UseMarkdownContent<FrontMatter>(key: static post => post.FileInfo.FullName);
         return app;
     }
 

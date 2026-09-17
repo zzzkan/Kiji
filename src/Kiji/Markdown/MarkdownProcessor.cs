@@ -45,22 +45,6 @@ internal sealed class MarkdownProcessor
     }
 
     /// <summary>
-    /// Processes a markdown file body, materializing referenced images into the current
-    /// page's output directory and converting the result to HTML.
-    /// </summary>
-    /// <param name="filePath">Path to the markdown file.</param>
-    public async Task<string> ProcessAsync(string filePath, CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
-
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var content = await File.ReadAllTextAsync(filePath, cancellationToken);
-        var markdownBody = MarkdownFrontMatterParser.RemoveFrontMatter(content);
-        return await ProcessBodyAsync(filePath, markdownBody, cancellationToken);
-    }
-
-    /// <summary>
     /// Processes an already-read markdown body for the given source file, skipping the
     /// file read. <paramref name="filePath"/> still identifies the source for image
     /// resolution and dependency tracking.

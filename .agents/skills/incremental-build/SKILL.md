@@ -21,7 +21,7 @@ During a render, `PageRenderContext.Dependencies` collects what the page actuall
 | Read a `MarkdownContent`'s front matter, or called `RenderAsync`                | `file:` that markdown file                                      |
 | Referenced a local image from markdown                                          | `file:` the image, plus the variants as additional outputs      |
 | Observed a `ContentDictionary`'s shape — `Count`, `Keys`, `Values`, enumeration | `content-set` scoped to that dictionary's directory             |
-| `this[key]` / `TryGetValue` / `ContainsKey`                                     | `file:` if the item carries provenance, otherwise `content-set` |
+| `this[key]` / `TryGetValue` / `ContainsKey`                                     | `file:` if the loader supplied provenance, otherwise `content-set` |
 
 That last row is why provenance matters: markdown sources state it explicitly so it
 survives the projection into a user model, so a keyed lookup collapses to a single-file
@@ -62,11 +62,11 @@ and the file is never opened. A no-change rebuild is therefore `O(stat)`, not
 
 ## Adding something new
 
-**A content source.** The key comes from the selector passed at registration. If items
-derive from files, implement `IContentSourceFile` (or have the loader supply provenance, as
-the markdown source does for projected models) so keyed lookups stay file-scoped. Without
-it, every lookup falls back to `content-set` — still correct, but every page then depends
-on all content.
+**A content source.** The key comes from the selector passed at registration. File-backed
+internal loaders supply each item's absolute source path alongside the item so keyed
+lookups stay file-scoped; the markdown loader does this after projection into the site
+model. Sources without provenance fall back to `content-set` — still correct, but every
+page then depends on all content.
 
 **Anything Kiji cannot observe** — a data file read by a custom loader, an HTTP call, a
 clock. Renders are _assumed deterministic in their inputs_. Declare it:

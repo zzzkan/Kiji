@@ -22,24 +22,6 @@ public sealed class MarkdownContentSourceTests : IDisposable
         }
     }
 
-    [Theory]
-    [InlineData("hello.md", "hello")]
-    [InlineData("hello/index.md", "hello")]
-    [InlineData("hello/INDEX.md", "hello")]
-    [InlineData("nested/hello/index.md", "hello")]
-    [InlineData("nested/hello.md", "hello")]
-    public void Slug_FollowsThePageBundleConvention(string relativePath, string expected)
-    {
-        var contentsDir = Path.Combine(_testDir, "contents");
-        var filePath = Path.Combine(contentsDir, relativePath.Replace('/', Path.DirectorySeparatorChar));
-        Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
-        File.WriteAllText(filePath, "body");
-
-        var fileInfo = MarkdownFileInfo.Create(contentsDir, filePath);
-
-        Assert.Equal(expected, fileInfo.Slug);
-    }
-
     [Fact]
     public void Directory_LimitsTheSourceToThatSubtree()
     {
@@ -58,7 +40,7 @@ public sealed class MarkdownContentSourceTests : IDisposable
         WriteMarkdown("_draft.md", "Draft");
 
         var keys = LoadKeys(static options =>
-            options.FileFilter = file => !file.FileNameWithoutExtension.StartsWith('_'));
+            options.FileFilter = file => !Path.GetFileNameWithoutExtension(file.Name).StartsWith('_'));
 
         Assert.Equal(["published"], keys);
     }
@@ -82,7 +64,7 @@ public sealed class MarkdownContentSourceTests : IDisposable
 
         var app = CreateApp();
         app.UseMarkdownContent<OrderedFrontMatter, ProjectedNote>(
-            select: static content => new ProjectedNote(content.FileInfo.Slug, content.FrontMatter.Title),
+            select: static content => new ProjectedNote(Path.GetFileNameWithoutExtension(content.FileInfo.Name), content.FrontMatter.Title),
             key: static note => note.Key);
         app.UsePlanningOptions();
         var notes = app.ServiceProvider.GetRequiredService<ContentDictionary<ProjectedNote>>();
@@ -128,8 +110,9 @@ public sealed class MarkdownContentSourceTests : IDisposable
     private IReadOnlyList<string> LoadKeys(Action<MarkdownContentOptions<MarkdownContent<FrontMatter>>> configure)
     {
         var app = CreateApp();
-        app.UseMarkdownContent<FrontMatter>(key: static content => content.FileInfo.Slug, configure: configure);
+        app.UseMarkdownContent<FrontMatter>(key: static content => content.FileInfo.FullName, configure: configure);
         app.UsePlanningOptions();
-        return [.. app.ServiceProvider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>().Keys];
+        return [.. app.ServiceProvider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
+            .Values.Select(static content => Path.GetFileNameWithoutExtension(content.FileInfo.Name))];
     }
 }

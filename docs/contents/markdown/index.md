@@ -37,11 +37,11 @@ collections, and use `FileFilter` to skip files:
 
 ```csharp
 app.UseMarkdownContent<PostFrontMatter>(
-    key: post => post.FileInfo.Slug,
+    key: post => post.FileInfo.FullName,
     configure: options =>
     {
         options.Directory = "posts";                   // contents/posts/**/*.md
-        options.FileFilter = file => !file.FileNameWithoutExtension.StartsWith('_');
+        options.FileFilter = file => !Path.GetFileNameWithoutExtension(file.Name).StartsWith('_');
     });
 ```
 
@@ -68,10 +68,13 @@ demand:
 <div>@((MarkupString)_html)</div>
 ```
 
-`ContentKey` is the dictionary key the route mapping supplied. `MarkdownFileInfo.Slug` is
-the usual thing to key on: the directory name for an `index.md`, otherwise the file name
-without its extension. So `contents/posts/hello/index.md` and `contents/posts/hello.md`
-are both the page `hello`.
+`ContentKey` is the dictionary key the route mapping supplied. For raw markdown content,
+the source file's absolute `FileInfo.FullName` is a convenient key: it uniquely identifies
+the dictionary entry without assigning it any URL meaning. `FileInfo` is the ordinary
+`System.IO.FileInfo`; Kiji does not add a slug or logical content path to it.
+
+Derive a URL slug only when mapping pages. A page-bundle site can use the containing
+directory name for `index.md`, while a flat-file site can use the extensionless file name.
 
 The body goes through Markdig with the advanced extensions enabled, plus link hardening
 that adds `target="_blank" rel="noopener noreferrer"` to external links. Customize the
@@ -79,7 +82,7 @@ pipeline, the deserializer, or add HTML transformations when you register the so
 
 ```csharp
 app.UseMarkdownContent<PostFrontMatter>(
-    key: post => post.FileInfo.Slug,
+    key: post => post.FileInfo.FullName,
     configure: options => options.ConfigureMarkdig(pipeline => pipeline.UseEmojiAndSmiley()));
 ```
 
@@ -89,7 +92,7 @@ syntax extensions or changing how a standalone link is rendered. Use
 
 ```csharp
 app.UseMarkdownContent<PostFrontMatter>(
-    key: post => post.FileInfo.Slug,
+    key: post => post.FileInfo.FullName,
     configure: options => options.AddHtmlTransform(html => $"<div class=\"markdown-body\">{html}</div>"));
 ```
 

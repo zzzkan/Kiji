@@ -7,32 +7,6 @@ internal static class MarkdownFrontMatterParser
 {
     internal static readonly IDeserializer DefaultDeserializer = CreateDeserializer(configurations: null);
 
-    public static TFrontMatter Parse<TFrontMatter>(string filePath)
-    {
-        return Parse<TFrontMatter>(filePath, DefaultDeserializer);
-    }
-
-    /// <summary>
-    /// Parses the YAML front matter of a markdown file with a custom deserializer.
-    /// </summary>
-    public static TFrontMatter Parse<TFrontMatter>(string filePath, IDeserializer deserializer)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
-        ArgumentNullException.ThrowIfNull(deserializer);
-
-        var content = File.ReadAllText(filePath);
-        try
-        {
-            return ParseContent<TFrontMatter>(content, deserializer);
-        }
-        catch (Exception exception)
-        {
-            throw new InvalidOperationException(
-                $"Failed to parse YAML front matter of '{filePath}'. {exception.Message}",
-                exception);
-        }
-    }
-
     internal static TFrontMatter ParseContent<TFrontMatter>(string content)
     {
         return ParseContent<TFrontMatter>(content, DefaultDeserializer);
@@ -50,6 +24,20 @@ internal static class MarkdownFrontMatterParser
         return frontMatter is not null
             ? frontMatter
             : throw new InvalidOperationException("Failed to deserialize YAML front matter.");
+    }
+
+    internal static (TFrontMatter FrontMatter, string Body) ParseContentAndBody<TFrontMatter>(
+        string content,
+        IDeserializer deserializer)
+    {
+        if (!TryExtractFrontMatter(content, out var yaml, out var body))
+        {
+            throw new InvalidOperationException("YAML front matter not found.");
+        }
+
+        var frontMatter = deserializer.Deserialize<TFrontMatter>(content[yaml])
+            ?? throw new InvalidOperationException("Failed to deserialize YAML front matter.");
+        return (frontMatter, content[body]);
     }
 
     internal static IDeserializer CreateDeserializer(IReadOnlyList<Action<DeserializerBuilder>>? configurations)

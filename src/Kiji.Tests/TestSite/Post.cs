@@ -55,12 +55,12 @@ public sealed class Post
         var frontMatter = content.FrontMatter;
         if (string.IsNullOrWhiteSpace(frontMatter.Title))
         {
-            throw new InvalidOperationException($"Missing title in front matter: {content.FileInfo.FilePath}");
+            throw new InvalidOperationException($"Missing title in front matter: {content.FileInfo.FullName}");
         }
 
         if (frontMatter.CreatedAt is null)
         {
-            throw new InvalidOperationException($"Missing createdAt in front matter: {content.FileInfo.FilePath}");
+            throw new InvalidOperationException($"Missing createdAt in front matter: {content.FileInfo.FullName}");
         }
 
         var slug = CreateSlug(content.FileInfo);
@@ -69,7 +69,7 @@ public sealed class Post
             .Select(static tag => new Tag
             {
                 Name = tag,
-                UrlSlug = global::Kiji.Slug.Create(tag).Value,
+                UrlSlug = global::Kiji.Slug.Normalize(tag),
             })
             .ToArray();
 
@@ -84,15 +84,18 @@ public sealed class Post
             tags);
     }
 
-    private static string CreateSlug(MarkdownFileInfo fileInfo)
+    private static string CreateSlug(FileInfo fileInfo)
     {
         ArgumentNullException.ThrowIfNull(fileInfo);
 
-        if (string.IsNullOrWhiteSpace(fileInfo.Slug))
+        var value = string.Equals(fileInfo.Name, "index.md", StringComparison.OrdinalIgnoreCase)
+            ? fileInfo.Directory?.Name
+            : Path.GetFileNameWithoutExtension(fileInfo.Name);
+        if (string.IsNullOrWhiteSpace(value))
         {
-            throw new InvalidOperationException($"Cannot determine slug for markdown file: {fileInfo.FilePath}");
+            throw new InvalidOperationException($"Cannot determine slug for markdown file: {fileInfo.FullName}");
         }
 
-        return global::Kiji.Slug.Normalize(fileInfo.Slug);
+        return global::Kiji.Slug.Normalize(value);
     }
 }

@@ -16,14 +16,16 @@ site.Info = new()
     Author = "zzzkan",
 };
 
-site.UseMarkdownContent<DocFrontMatter>(key: static doc => doc.FileInfo.Slug);
+site.UseMarkdownContent<DocFrontMatter, Doc>(
+    select: static content => Doc.Create(content),
+    key: static doc => doc.Slug);
 site.UseDefaultLayout<MainLayout>();
 site.UseNotFoundPage<NotFoundPage>();
 
 site.AddStaticPages();
 site.AddPages<DocPage>(static services => services
-    .GetRequiredService<ContentDictionary<MarkdownContent<DocFrontMatter>>>()
-    .Select(static doc => new { Slug = doc.Key, ContentKey = doc.Key }));
+    .GetRequiredService<ContentDictionary<Doc>>()
+    .Select(static doc => new { doc.Value.Slug, ContentKey = doc.Key }));
 site.AddSitemap();
 
 return await site.RunAsync();

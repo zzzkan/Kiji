@@ -18,13 +18,11 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
 
     /// <summary>
     /// The directory actually scanned. Defaults to the content directory; a source
-    /// reading a subdirectory narrows it. Paths on <see cref="MarkdownFileInfo"/> stay
-    /// relative to <see cref="_contentsDirectory"/> either way, so narrowing the scan
-    /// never changes what an item reports about itself.
+    /// reading a subdirectory narrows it.
     /// </summary>
     private readonly string? _scanDirectory;
 
-    private readonly Func<MarkdownFileInfo, bool>? _filter;
+    private readonly Func<FileInfo, bool>? _filter;
 
     internal MarkdownContentsBuilder(
         string contentsDirectory,
@@ -33,7 +31,7 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
         MarkdownSourceCache<TFrontMatter> sourceCache,
         ContentFileRegistry? hashRegistry = null,
         string? scanDirectory = null,
-        Func<MarkdownFileInfo, bool>? filter = null)
+        Func<FileInfo, bool>? filter = null)
         : this(contentsDirectory, renderAsync, frontMatterDeserializerFactory)
     {
         _sourceCache = sourceCache;
@@ -71,9 +69,7 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
         {
             try
             {
-                var markdownFile = markdownFiles[index].FullName;
-                var stamp = MarkdownFileStamp.From(markdownFiles[index]);
-                var fileInfo = MarkdownFileInfo.Create(_contentsDirectory, markdownFile, stamp);
+                var fileInfo = markdownFiles[index];
                 if (_filter is not null)
                 {
                     if (!_filter(fileInfo))
@@ -85,10 +81,10 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
                 }
 
                 var source = _sourceCache is not null
-                    ? _sourceCache.GetOrRead(markdownFile, stamp, deserializers.Value!)
-                    : MarkdownSourceReader.Read<TFrontMatter>(markdownFile, stamp, deserializers.Value!);
+                    ? _sourceCache.GetOrRead(fileInfo, deserializers.Value!)
+                    : MarkdownSourceReader.Read<TFrontMatter>(fileInfo, deserializers.Value!);
                 items[index] = new MarkdownContent<TFrontMatter>(fileInfo, source.FrontMatter, source.Body, _renderAsync);
-                _hashRegistry?.Record(markdownFile, source.Length, source.LastWriteTimeUtc, source.ContentHash);
+                _hashRegistry?.Record(fileInfo, source.ContentHash);
             }
             catch (Exception exception)
             {
@@ -110,7 +106,7 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
         // second walk, which is the largest single cost left in a no-change build.
         _hashRegistry?.RecordScan(
             scanDirectory,
-            [.. markdownFiles.Select(static file => new ScannedFile(file.FullName, file.Length, file.LastWriteTimeUtc))]);
+            markdownFiles);
 
         // Filtered-out slots were never assigned; compacting keeps the order above.
         return included is null

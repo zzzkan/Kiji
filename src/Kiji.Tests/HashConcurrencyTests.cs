@@ -23,14 +23,14 @@ public sealed class HashConcurrencyTests
                     ContentDirectory = root,
                     OutputDirectory = root,
                     StaticDirectory = root,
-                }, root, root, new SiteInfo { BaseUrl = new Uri("https://example.com/"), Name = "Test" }, []);
+                }, root, root, new SiteInfo { BaseUrl = new Uri("https://example.com/"), Name = "Test" }, [], []);
             }
             var planner = new IncrementalBuildPlanner(new ResolvedSitePaths
             {
                 ContentDirectory = root,
                 OutputDirectory = root,
                 StaticDirectory = root,
-            }, root, root, new SiteInfo { BaseUrl = new Uri("https://example.com/"), Name = "Test" }, [])
+            }, root, root, new SiteInfo { BaseUrl = new Uri("https://example.com/"), Name = "Test" }, [], [])
             {
                 BeforeFileHash = _ => { Interlocked.Increment(ref count); entered.Set(); release.Wait(); },
             };
@@ -64,7 +64,7 @@ public sealed class HashConcurrencyTests
                 ContentDirectory = root,
                 OutputDirectory = root,
                 StaticDirectory = root,
-            }, root, root, new SiteInfo { BaseUrl = new Uri("https://example.com/"), Name = "Test" }, [])
+            }, root, root, new SiteInfo { BaseUrl = new Uri("https://example.com/"), Name = "Test" }, [], [])
             {
                 BeforeContentSetHash = _ => { Interlocked.Increment(ref scopeCount); entered.Set(); release.Wait(); },
                 BeforeFileHash = _ => Interlocked.Increment(ref fileCount),

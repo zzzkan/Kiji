@@ -10,8 +10,9 @@ public sealed class ModelTests
     {
         var attempts = 0;
         var item = new MarkdownContent<string>(
-            new MarkdownFileInfo("root", "post.md", "post.md", "", "post", "post", DateTime.UtcNow),
+            new FileInfo("post.md"),
             "Post",
+            string.Empty,
             (_, _) => ++attempts == 1
                 ? Task.FromException<string>(new InvalidOperationException("temporary failure"))
                 : Task.FromResult("recovered"));
@@ -26,15 +27,9 @@ public sealed class ModelTests
     {
         var renderCount = 0;
         var item = new MarkdownContent<string>(
-            new MarkdownFileInfo(
-                @"C:\test-contents",
-                @"C:\test-contents\newer-post.md",
-                "newer-post.md",
-                string.Empty,
-                "newer-post",
-                "newer-post",
-                new DateTime(2024, 2, 20, 0, 0, 0, DateTimeKind.Utc)),
+            new FileInfo(@"C:\test-contents\newer-post.md"),
             "Newer",
+            string.Empty,
             (_, _) =>
             {
                 renderCount++;

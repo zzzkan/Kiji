@@ -77,14 +77,14 @@ public static class BuildRunner
         };
         app.Paths.RootDirectory = root;
 
-        app.UseMarkdownContent<PostFrontMatter>(key: static post => PostSlug.From(post.FileInfo));
+        app.UseMarkdownContent<PostFrontMatter>(key: static post => post.FileInfo.FullName);
         app.UseDefaultLayout<MainLayout>();
         app.AddStaticPages(typeof(BuildRunner).Assembly);
         app.UseNotFoundPage<NotFoundPage>();
 
         app.AddPages<PostPage>(static services => services
             .GetRequiredService<ContentDictionary<MarkdownContent<PostFrontMatter>>>()
-            .Select(static post => new { Slug = post.Key, ContentKey = post.Key }));
+            .Select(static post => new { Slug = PostSlug.From(post.Value.FileInfo), ContentKey = post.Key }));
         app.AddRssFeed(static services => services
             .GetRequiredService<ContentDictionary<MarkdownContent<PostFrontMatter>>>()
             .OrderByDescending(static post => post.Value.FrontMatter.CreatedAt)
@@ -92,7 +92,7 @@ public static class BuildRunner
                 post.Value.FrontMatter.Title ?? string.Empty,
                 post.Value.FrontMatter.Description ?? string.Empty,
                 post.Value.FrontMatter.CreatedAt ?? DateTimeOffset.UnixEpoch,
-                RoutePath: $"blog/{post.Key}/")));
+                RoutePath: $"blog/{PostSlug.From(post.Value.FileInfo)}/")));
         app.AddSitemap();
 
         await app.PublishAsync(Path.Combine(root, "dist"));

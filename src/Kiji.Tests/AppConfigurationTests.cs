@@ -104,7 +104,7 @@ public sealed class AppConfigurationTests : IDisposable
             Assert.Throws<InvalidOperationException>(() => app.AddBuildInput("input.json"));
             Assert.Throws<InvalidOperationException>(() => app.AddBuildInput("version", "2"));
             Assert.Throws<InvalidOperationException>(() => app.UseContentSource<object>(static _ => [], static _ => "key"));
-            Assert.Throws<InvalidOperationException>(() => app.UseMarkdownContent<FrontMatter>(static doc => doc.FileInfo.Slug,
+            Assert.Throws<InvalidOperationException>(() => app.UseMarkdownContent<FrontMatter>(static doc => doc.FileInfo.FullName,
                 _ => throw new Xunit.Sdk.XunitException("Configuration callback must not run after execution starts.")));
             Assert.Throws<InvalidOperationException>(() => app.AddStaticPages());
             Assert.Throws<InvalidOperationException>(() => app.AddStaticPages(typeof(PostPage).Assembly));

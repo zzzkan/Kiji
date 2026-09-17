@@ -1,3 +1,5 @@
+using Kiji.Rendering;
+
 namespace Kiji.Routing;
 
 /// <summary>
@@ -11,19 +13,19 @@ internal static class StaticPagePlanner
     /// <param name="pages">The collection of static page definitions to be planned.</param>
     /// <param name="dynamicRoutesByPage">The dynamic route entries keyed by page source identifier.</param>
     /// <returns>A read-only list of planned pages ordered by their output relative path.</returns>
-    public static IReadOnlyList<PlannedPage> PlanPages(
-        IReadOnlyList<StaticPageDefinition> pages,
-        IReadOnlyDictionary<string, IReadOnlyList<StaticPageRouteEntry>> dynamicRoutesByPage)
+    public static IReadOnlyList<PageRenderRequest> PlanPages(
+        IReadOnlyList<PageDiscovery.DiscoveredPage> pages,
+        IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>> dynamicRoutesByPage)
     {
         ArgumentNullException.ThrowIfNull(pages);
         ArgumentNullException.ThrowIfNull(dynamicRoutesByPage);
 
         ValidateDynamicPageCoverage(pages, dynamicRoutesByPage);
 
-        var plannedPages = new List<PlannedPage>();
+        var plannedPages = new List<PageRenderRequest>();
         foreach (var page in pages.OrderBy(static page => page.SourceIdentifier, StringComparer.OrdinalIgnoreCase))
         {
-            if (!page.IsDynamic)
+            if (!page.PageDefinition.IsDynamic)
             {
                 plannedPages.Add(CreateStaticPage(page));
                 continue;
@@ -39,39 +41,41 @@ internal static class StaticPagePlanner
         return orderedPages;
     }
 
-    private static PlannedPage CreateStaticPage(StaticPageDefinition page)
+    private static PageRenderRequest CreateStaticPage(PageDiscovery.DiscoveredPage page)
     {
-        var pathBinding = page.ResolveStaticPath();
+        var pathBinding = page.PageDefinition.ResolveStaticPath();
 
-        return new PlannedPage(
+        return new PageRenderRequest(
             page.SourceIdentifier,
-            new Dictionary<string, string>(StringComparer.Ordinal),
+            page.ComponentType,
+            new Dictionary<string, object?>(StringComparer.Ordinal),
             pathBinding.RoutePath,
             pathBinding.OutputRelativePath,
-            ExcludeFromSitemap: page.ExcludeFromSitemap);
+            ExcludeFromSitemap: page.PageDefinition.ExcludeFromSitemap);
     }
 
-    private static List<PlannedPage> CreateDynamicPages(
-        StaticPageDefinition page,
-        IReadOnlyList<StaticPageRouteEntry> matches)
+    private static List<PageRenderRequest> CreateDynamicPages(
+        PageDiscovery.DiscoveredPage page,
+        IReadOnlyList<IReadOnlyDictionary<string, string>> matches)
     {
-        return [.. matches.Select(match => new PlannedPage(
+        return [.. matches.Select(match => new PageRenderRequest(
                 page.SourceIdentifier,
-                match.RouteValues,
-                page.ResolveRoutePath(match.RouteValues),
-                page.ResolveOutputRelativePath(match.RouteValues),
-                ExcludeFromSitemap: page.ExcludeFromSitemap))];
+                page.ComponentType,
+                match.ToDictionary(static pair => pair.Key, static pair => (object?)pair.Value, StringComparer.Ordinal),
+                page.PageDefinition.ResolveRoutePath(match),
+                page.PageDefinition.ResolveOutputRelativePath(match),
+                ExcludeFromSitemap: page.PageDefinition.ExcludeFromSitemap))];
     }
 
     private static void ValidateDynamicPageCoverage(
-        IReadOnlyList<StaticPageDefinition> pages,
-        IReadOnlyDictionary<string, IReadOnlyList<StaticPageRouteEntry>> dynamicRoutesByPage)
+        IReadOnlyList<PageDiscovery.DiscoveredPage> pages,
+        IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>> dynamicRoutesByPage)
     {
         var pageSet = pages.Select(static page => page.SourceIdentifier)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var missingRoutes = pages
-            .Where(static page => page.IsDynamic)
+            .Where(static page => page.PageDefinition.IsDynamic)
             .Select(static page => page.SourceIdentifier)
             .Where(sourceIdentifier => !dynamicRoutesByPage.ContainsKey(sourceIdentifier))
             .OrderBy(static sourceIdentifier => sourceIdentifier, StringComparer.OrdinalIgnoreCase)
@@ -95,7 +99,7 @@ internal static class StaticPagePlanner
         }
     }
 
-    private static void ValidateUniqueOutputPaths(IReadOnlyList<PlannedPage> pages)
+    private static void ValidateUniqueOutputPaths(IReadOnlyList<PageRenderRequest> pages)
     {
         var duplicateOutputPath = pages
             .GroupBy(static page => page.OutputRelativePath, StringComparer.OrdinalIgnoreCase)

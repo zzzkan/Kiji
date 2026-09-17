@@ -12,22 +12,19 @@ internal sealed class MarkdownSourceCache<TFrontMatter>
 {
     private readonly ConcurrentDictionary<string, Entry> _entries = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <param name="stamp">
-    /// The file's size and last write time, already known from the directory walk that
-    /// found it. Passing it in is what keeps a cache hit free of filesystem calls.
-    /// </param>
+    /// <remarks>The enumerated file carries a pre-cached size and last-write time, keeping cache hits free of filesystem calls.</remarks>
     internal MarkdownSource<TFrontMatter> GetOrRead(
-        string filePath,
-        MarkdownFileStamp stamp,
+        FileInfo file,
         IDeserializer deserializer)
     {
-        if (_entries.TryGetValue(filePath, out var entry) && entry.Token == stamp)
+        var stamp = (file.Length, file.LastWriteTimeUtc);
+        if (_entries.TryGetValue(file.FullName, out var entry) && entry.Stamp == stamp)
         {
             return entry.Source;
         }
 
-        var source = MarkdownSourceReader.Read<TFrontMatter>(filePath, stamp, deserializer);
-        _entries[filePath] = new Entry(new MarkdownFileStamp(source.Length, source.LastWriteTimeUtc), source);
+        var source = MarkdownSourceReader.Read<TFrontMatter>(file, deserializer);
+        _entries[file.FullName] = new Entry(stamp, source);
         return source;
     }
 
@@ -46,5 +43,5 @@ internal sealed class MarkdownSourceCache<TFrontMatter>
         }
     }
 
-    private sealed record Entry(MarkdownFileStamp Token, MarkdownSource<TFrontMatter> Source);
+    private sealed record Entry((long Length, DateTime LastWriteTimeUtc) Stamp, MarkdownSource<TFrontMatter> Source);
 }

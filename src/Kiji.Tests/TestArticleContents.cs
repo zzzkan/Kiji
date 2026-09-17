@@ -138,7 +138,7 @@ internal static class TestArticleContents
 
     private static ContentDictionary<Post> ContentDictionaryFromItems(IReadOnlyList<Post> posts)
     {
-        return Content.FromItems(posts, key: static post => post.Slug);
+        return ContentDictionaryFixture.FromItems(posts, key: static post => post.Slug);
     }
 
     private static Post ClonePost(Post post, string html)
@@ -174,15 +174,9 @@ internal static class TestArticleContents
         };
 
         return new MarkdownContent<FrontMatter>(
-            new MarkdownFileInfo(
-                @"C:\test-contents",
-                Path.Combine(@"C:\test-contents", slug + ".md"),
-                slug + ".md",
-                string.Empty,
-                slug,
-                slug,
-                new DateTime(2026, 3, 20, 0, 0, 0, DateTimeKind.Utc)),
+            new FileInfo(Path.Combine(@"C:\test-contents", slug + ".md")),
             frontMatter,
+            string.Empty,
             (_, _) => Task.FromResult(html));
     }
 

@@ -11,7 +11,7 @@ namespace Kiji.Markdown;
 public static class MarkdownStaticSiteExtensions
 {
     /// <summary>Uses Markdown files as a content dictionary with parsed front matter and lazily rendered bodies.</summary>
-    /// <param name="key">Returns a non-empty, case-insensitively unique key; <see cref="MarkdownFileInfo.Slug"/> is a typical choice.</param>
+    /// <param name="key">Returns a non-empty, case-insensitively unique key.</param>
     public static StaticSite UseMarkdownContent<TFrontMatter>(
         this StaticSite app,
         Func<MarkdownContent<TFrontMatter>, string> key,
@@ -63,9 +63,10 @@ public static class MarkdownStaticSiteExtensions
 
                 var sources = new MarkdownContentsBuilder<TFrontMatter>(
                     options.ContentDirectory,
-                    (content, cancellationToken) => content.Body is { } body
-                        ? markdownProcessor.ProcessBodyAsync(content.FileInfo.FilePath, body, cancellationToken)
-                        : markdownProcessor.ProcessAsync(content.FileInfo.FilePath, cancellationToken),
+                    (content, cancellationToken) => markdownProcessor.ProcessBodyAsync(
+                        content.FileInfo.FullName,
+                        content.Body,
+                        cancellationToken),
                     CreateFrontMatterDeserializer,
                     sourceCache,
                     services.GetService<ContentFileRegistry>(),
@@ -76,15 +77,13 @@ public static class MarkdownStaticSiteExtensions
                 // The projection is positional, so provenance is stated here rather than
                 // derived: TModel need not expose its source file for a keyed lookup to
                 // stay a single-file dependency.
-                var items = new TModel[sources.Count];
-                var provenance = new string?[sources.Count];
+                var items = new (TModel Item, string? SourceFile)[sources.Count];
                 for (var i = 0; i < sources.Count; i++)
                 {
-                    items[i] = select(sources[i]);
-                    provenance[i] = sources[i].FileInfo.FilePath;
+                    items[i] = (select(sources[i]), sources[i].FileInfo.FullName);
                 }
 
-                return new ContentSourceItems<TModel>(items, provenance);
+                return items;
             },
             key,
             contentOptions,

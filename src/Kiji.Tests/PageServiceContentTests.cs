@@ -109,12 +109,16 @@ public sealed class PageServiceContentTests : IDisposable
         var app = StaticSite.Create([]);
         app.Info = new SiteInfo { Name = "Related", BaseUrl = new Uri("https://example.test/") };
         app.Paths.RootDirectory = _root;
-        app.UseMarkdownContent<FrontMatter>(post => post.FileInfo.Slug);
+        app.UseMarkdownContent<FrontMatter>(post => post.FileInfo.FullName);
         app.UseContentSource<RelatedTag>(provider => includeTags?.Invoke() == false ? []
             : RelatedTag.Collect(provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>(), probe), tag => tag.Name);
         app.AddPageService<RelatedPosts>();
         app.AddPages<RelatedPage>(provider => provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
-            .Select(post => new { post.Key }));
+            .Select(post => new
+            {
+                Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name),
+                ContentKey = post.Key,
+            }));
         return app;
     }
 

@@ -12,13 +12,13 @@ public sealed class ContentDictionary<T> : IReadOnlyDictionary<string, T>
     where T : class
 {
     private readonly ContentRuntime _runtime;
-    private readonly Func<IServiceProvider, ContentSourceItems<T>> _load;
+    private readonly Func<IServiceProvider, IReadOnlyList<(T Item, string? SourceFile)>> _load;
     private readonly Func<T, string> _key;
     private readonly ContentSourceOptions<T> _options;
 
     internal ContentDictionary(
         ContentRuntime runtime,
-        Func<IServiceProvider, ContentSourceItems<T>> load,
+        Func<IServiceProvider, IReadOnlyList<(T Item, string? SourceFile)>> load,
         Func<T, string> key,
         ContentSourceOptions<T> options,
         string contentSetScope = "")
@@ -144,39 +144,37 @@ public sealed class ContentDictionary<T> : IReadOnlyDictionary<string, T>
     private MaterializedContent Materialize(IServiceProvider services)
     {
         var loaded = _load(services);
-        var items = loaded.Items;
-        var provenance = loaded.Provenance ?? DeriveProvenance(items);
 
-        var keys = new string[items.Count];
+        var keys = new string[loaded.Count];
         var failures = new List<string>();
-        for (var i = 0; i < items.Count; i++)
+        for (var i = 0; i < loaded.Count; i++)
         {
-            keys[i] = _key(items[i]);
+            keys[i] = _key(loaded[i].Item);
             if (string.IsNullOrWhiteSpace(keys[i]))
             {
-                failures.Add($"{Describe(provenance[i])}: produced an empty key.");
+                failures.Add($"{Describe(loaded[i].SourceFile)}: produced an empty key.");
             }
         }
 
-        var index = new Dictionary<string, T>(items.Count, StringComparer.OrdinalIgnoreCase);
-        var provenanceByKey = new Dictionary<string, string?>(items.Count, StringComparer.OrdinalIgnoreCase);
-        for (var i = 0; i < items.Count; i++)
+        var index = new Dictionary<string, T>(loaded.Count, StringComparer.OrdinalIgnoreCase);
+        var provenanceByKey = new Dictionary<string, string?>(loaded.Count, StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < loaded.Count; i++)
         {
             if (string.IsNullOrWhiteSpace(keys[i]))
             {
                 continue;
             }
 
-            if (!index.TryAdd(keys[i], items[i]))
+            if (!index.TryAdd(keys[i], loaded[i].Item))
             {
                 throw new InvalidOperationException(
-                    $"ContentDictionary<{typeof(T).Name}> contains duplicate key '{keys[i]}' ({Describe(provenance[i])} and {Describe(provenanceByKey[keys[i]])}). Keys must be unique (case-insensitive).");
+                    $"ContentDictionary<{typeof(T).Name}> contains duplicate key '{keys[i]}' ({Describe(loaded[i].SourceFile)} and {Describe(provenanceByKey[keys[i]])}). Keys must be unique (case-insensitive).");
             }
 
-            provenanceByKey[keys[i]] = provenance[i];
+            provenanceByKey[keys[i]] = loaded[i].SourceFile;
         }
 
-        Validate(items, keys, provenance, failures);
+        Validate(loaded, keys, failures);
 
         // Ascending key order, so the generated route set — and therefore the sitemap
         // and every page's output path — is identical from one build to the next.
@@ -196,9 +194,8 @@ public sealed class ContentDictionary<T> : IReadOnlyDictionary<string, T>
     /// avoiding here, so the first failure does not stop the pass.
     /// </summary>
     private void Validate(
-        IReadOnlyList<T> items,
+        IReadOnlyList<(T Item, string? SourceFile)> items,
         string[] keys,
-        IReadOnlyList<string?> provenance,
         List<string> failures)
     {
         for (var i = 0; i < items.Count; i++)
@@ -207,11 +204,11 @@ public sealed class ContentDictionary<T> : IReadOnlyDictionary<string, T>
             {
                 try
                 {
-                    validator(items[i]);
+                    validator(items[i].Item);
                 }
                 catch (Exception exception)
                 {
-                    failures.Add($"{Describe(provenance[i], keys[i])}: {exception.Message}");
+                    failures.Add($"{Describe(items[i].SourceFile, keys[i])}: {exception.Message}");
                 }
             }
         }
@@ -235,17 +232,6 @@ public sealed class ContentDictionary<T> : IReadOnlyDictionary<string, T>
     {
         return sourceFilePath
             ?? (string.IsNullOrWhiteSpace(key) ? "<no source file>" : $"'{key}'");
-    }
-
-    private static string?[] DeriveProvenance(IReadOnlyList<T> items)
-    {
-        var provenance = new string?[items.Count];
-        for (var i = 0; i < items.Count; i++)
-        {
-            provenance[i] = (items[i] as IContentSourceFile)?.SourceFilePath;
-        }
-
-        return provenance;
     }
 
     private sealed class MaterializedContent(

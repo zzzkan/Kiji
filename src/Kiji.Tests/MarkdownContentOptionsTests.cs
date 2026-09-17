@@ -31,7 +31,7 @@ public sealed class MarkdownContentOptionsTests : IDisposable
         var mdPath = CreateMarkdownFile("secure.md", "[External](https://example.com)");
         var processor = CreateProcessor();
 
-        var html = await processor.ProcessAsync(mdPath);
+        var html = await ProcessFileAsync(processor, mdPath);
 
         Assert.Contains("target=\"_blank\"", html);
         Assert.Contains("rel=\"noopener noreferrer\"", html);
@@ -44,7 +44,7 @@ public sealed class MarkdownContentOptionsTests : IDisposable
         var processor = CreateProcessor(static options =>
             options.ConfigureMarkdig(static builder => builder.Extensions.TryRemove<SecureLinkExtension>()));
 
-        var html = await processor.ProcessAsync(mdPath);
+        var html = await ProcessFileAsync(processor, mdPath);
 
         Assert.DoesNotContain("target=\"_blank\"", html);
         Assert.Contains("href=\"https://example.com\"", html);
@@ -60,7 +60,7 @@ public sealed class MarkdownContentOptionsTests : IDisposable
             options.AddHtmlTransform(static html => html + "<!--second-->");
         });
 
-        var html = await processor.ProcessAsync(mdPath);
+        var html = await ProcessFileAsync(processor, mdPath);
 
         Assert.EndsWith("<!--first--><!--second-->", html.TrimEnd());
     }
@@ -73,7 +73,7 @@ public sealed class MarkdownContentOptionsTests : IDisposable
             "![External](https://example.com/a.png)\n\n![Static](/icons/b.png)");
         var processor = CreateProcessor();
 
-        var html = await processor.ProcessAsync(mdPath);
+        var html = await ProcessFileAsync(processor, mdPath);
 
         Assert.Contains("src=\"https://example.com/a.png\"", html);
         Assert.Contains("src=\"/icons/b.png\"", html);
@@ -97,7 +97,7 @@ public sealed class MarkdownContentOptionsTests : IDisposable
             Body.
             """);
 
-        var frontMatter = MarkdownFrontMatterParser.Parse<FrontMatter>(mdPath, deserializer);
+        var frontMatter = MarkdownFrontMatterParser.ParseContent<FrontMatter>(File.ReadAllText(mdPath), deserializer);
 
         Assert.Equal("Snake Case", frontMatter.Title);
         Assert.True(frontMatter.CreatedAt.HasValue);
@@ -112,7 +112,7 @@ public sealed class MarkdownContentOptionsTests : IDisposable
             .Select(i => CreateMarkdownFile($"parallel-{i}.md", $"# Title {i}\n\nBody {i}."))
             .ToArray();
 
-        var results = await Task.WhenAll(paths.Select(path => processor.ProcessAsync(path)));
+        var results = await Task.WhenAll(paths.Select(path => ProcessFileAsync(processor, path)));
 
         for (var i = 0; i < results.Length; i++)
         {
@@ -135,6 +135,12 @@ public sealed class MarkdownContentOptionsTests : IDisposable
             },
             new ImageProcessor(),
             contentOptions);
+    }
+
+    private static Task<string> ProcessFileAsync(MarkdownProcessor processor, string path)
+    {
+        var body = MarkdownFrontMatterParser.RemoveFrontMatter(File.ReadAllText(path));
+        return processor.ProcessBodyAsync(path, body);
     }
 
     private string CreateMarkdownFile(string fileName, string body)

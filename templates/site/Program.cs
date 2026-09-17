@@ -15,19 +15,17 @@ app.Info = new SiteInfo
     Language = "en",
 };
 
-// Posts live at contents/<slug>/index.md, so images can sit beside the post using them.
-// The directory name becomes FileInfo.Slug, which this source uses as its key.
-app.UseMarkdownContent<PostFrontMatter>(key: static post => post.FileInfo.Slug);
+app.UseMarkdownContent<PostFrontMatter, Post>(
+    select: static content => Post.Create(content),
+    key: static post => post.Slug);
 
 app.UseDefaultLayout<MainLayout>();
 app.AddStaticPages();
 app.UseNotFoundPage<NotFoundPage>();
 
-// Slug is the page's route segment; ContentKey is how the page finds itself in the
-// dictionary. They are the same value here, but they are different things.
 app.AddPages<PostPage>(static services => services
-    .GetRequiredService<ContentDictionary<MarkdownContent<PostFrontMatter>>>()
-    .Select(static post => new { Slug = post.Key, ContentKey = post.Key }));
+    .GetRequiredService<ContentDictionary<Post>>()
+    .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
 
 app.AddSitemap();
 

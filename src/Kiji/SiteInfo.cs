@@ -38,9 +38,6 @@ public sealed record SiteInfo
     /// </summary>
     public string Author { get; init; } = string.Empty;
 
-    /// <summary>The UTC timestamp captured when this metadata instance is created.</summary>
-    public DateTimeOffset BuildTime { get; } = DateTimeOffset.UtcNow;
-
     /// <summary>The percent-encoded path of <see cref="BaseUrl"/>, starting and ending with <c>/</c>.</summary>
     public string BasePath => BaseUrl.AbsolutePath;
 

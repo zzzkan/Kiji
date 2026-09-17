@@ -30,6 +30,9 @@ public sealed class TemplatePackageTests
             Assert.DoesNotContain("SITE_NAME", program, StringComparison.Ordinal);
             Assert.DoesNotContain("SITE_BASE_URL", program, StringComparison.Ordinal);
             Assert.True(File.Exists(Path.Combine(output, "Pages", "PostPage.razor")));
+            Assert.True(File.Exists(Path.Combine(output, "Post.cs")));
+            Assert.Contains("UseMarkdownContent<PostFrontMatter, Post>", program, StringComparison.Ordinal);
+            Assert.Contains("ContentDictionary<Post>", program, StringComparison.Ordinal);
         }
         finally
         {

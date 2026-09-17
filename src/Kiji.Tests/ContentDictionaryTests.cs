@@ -46,7 +46,7 @@ public sealed class ContentDictionaryTests
     [Fact]
     public void Dictionary_LooksItemsUpByKeyCaseInsensitively()
     {
-        var dictionary = Content.FromItems<Item>([new("b", 2), new("a", 1)], static item => item.Slug);
+        var dictionary = ContentDictionaryFixture.FromItems<Item>([new("b", 2), new("a", 1)], static item => item.Slug);
 
         Assert.Equal(2, dictionary.Count);
         Assert.Equal(2, dictionary["b"].Order);
@@ -59,7 +59,7 @@ public sealed class ContentDictionaryTests
     [Fact]
     public void Indexer_UnknownKey_Throws()
     {
-        var dictionary = Content.FromItems<Item>([new("a", 1)], static item => item.Slug);
+        var dictionary = ContentDictionaryFixture.FromItems<Item>([new("a", 1)], static item => item.Slug);
 
         Assert.Throws<KeyNotFoundException>(() => dictionary["missing"]);
     }
@@ -71,7 +71,7 @@ public sealed class ContentDictionaryTests
     [Fact]
     public void Enumeration_IsAscendingByKey_RegardlessOfInsertionOrder()
     {
-        var dictionary = Content.FromItems<Item>(
+        var dictionary = ContentDictionaryFixture.FromItems<Item>(
             [new("charlie", 1), new("alpha", 2), new("bravo", 3)],
             static item => item.Slug);
 
@@ -83,7 +83,7 @@ public sealed class ContentDictionaryTests
     [Fact]
     public void EmptyKey_FailsNamingTheItem()
     {
-        var dictionary = Content.FromItems<Item>([new("ok", 1), new("   ", 2)], static item => item.Slug);
+        var dictionary = ContentDictionaryFixture.FromItems<Item>([new("ok", 1), new("   ", 2)], static item => item.Slug);
 
         var exception = Assert.Throws<InvalidOperationException>(() => dictionary.Count);
 
@@ -93,7 +93,7 @@ public sealed class ContentDictionaryTests
     [Fact]
     public void DuplicateKeys_FailMaterializationNamingBothItems()
     {
-        var dictionary = Content.FromItems<Item>([new("same", 1), new("SAME", 2)], static item => item.Slug);
+        var dictionary = ContentDictionaryFixture.FromItems<Item>([new("same", 1), new("SAME", 2)], static item => item.Slug);
 
         var exception = Assert.Throws<InvalidOperationException>(() => dictionary.Count);
 
@@ -104,7 +104,7 @@ public sealed class ContentDictionaryTests
     [Fact]
     public void Validate_ReportsEveryFailureAtOnce()
     {
-        var dictionary = Content.FromItems<Item>(
+        var dictionary = ContentDictionaryFixture.FromItems<Item>(
             [new("a", 0), new("b", 1), new("c", 0)],
             static item => item.Slug,
             static options => options.AddValidation(static item => item.Order > 0, "order must be positive"));

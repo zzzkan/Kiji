@@ -15,7 +15,7 @@ public sealed class RelatedPosts(
             .GroupBy(key => key, StringComparer.OrdinalIgnoreCase)
             .OrderByDescending(group => group.Count())
             .ThenBy(group => group.Key, StringComparer.Ordinal)
-            .Select(group => group.Key)];
+            .Select(group => Path.GetFileNameWithoutExtension(posts[group.Key].FileInfo.Name))];
     }
 
     private IReadOnlyList<string> GetTagKeys(string name)

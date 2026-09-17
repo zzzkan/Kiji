@@ -32,8 +32,8 @@ internal sealed class BaselineIncrementalBuildPlanner(
         {
             var file = files[index];
             hashed[index] = (
-                Path.GetRelativePath(options.ContentDirectory, file.FullPath),
-                HashFileCached(file.FullPath, (file.Length, file.LastWriteTimeUtc)));
+                Path.GetRelativePath(options.ContentDirectory, file.FullName),
+                HashFileCached(file.FullName, (file.Length, file.LastWriteTimeUtc)));
         });
 
         return BuildFingerprint.HashFileSet(hashed);
@@ -45,19 +45,14 @@ internal sealed class BaselineIncrementalBuildPlanner(
     /// Enumerating <see cref="FileInfo"/> carries each stamp out of the walk, so the
     /// registry can validate its recorded hash without going back to disk.
     /// </summary>
-    private IReadOnlyList<ScannedFile> ScanContentFiles(string directory)
+    private IReadOnlyList<FileInfo> ScanContentFiles(string directory)
     {
         if (hashRegistry?.GetScan(directory) is { } scanned)
         {
             return scanned;
         }
 
-        return
-        [
-            .. new DirectoryInfo(directory)
-                .EnumerateFiles("*.md", SearchOption.AllDirectories)
-                .Select(static file => new ScannedFile(file.FullName, file.Length, file.LastWriteTimeUtc)),
-        ];
+        return [.. new DirectoryInfo(directory).EnumerateFiles("*.md", SearchOption.AllDirectories)];
     }
 
     internal string HashFileCached(string path, (long Length, DateTime LastWriteTimeUtc)? stamp = null)

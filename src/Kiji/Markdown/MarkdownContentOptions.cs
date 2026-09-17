@@ -15,7 +15,7 @@ public sealed class MarkdownContentOptions<TModel> : ContentSourceOptions<TModel
     public string? Directory { get; set; }
 
     /// <summary>An optional file filter applied before loading, defaulting to all Markdown files.</summary>
-    public Func<MarkdownFileInfo, bool>? FileFilter { get; set; }
+    public Func<FileInfo, bool>? FileFilter { get; set; }
 
     /// <summary>
     /// Optional CSS class applied to images rendered from markdown. Default: none.

@@ -107,9 +107,9 @@ public class ContentLoadBenchmarks
         var provenance = new Dictionary<string, string?>(contents.Count, StringComparer.OrdinalIgnoreCase);
         foreach (var content in contents)
         {
-            var key = content.FileInfo.Slug;
+            var key = content.FileInfo.FullName;
             index[key] = content;
-            provenance[key] = content.FileInfo.FilePath;
+            provenance[key] = content.FileInfo.FullName;
         }
 
         var entries = index.OrderBy(static entry => entry.Key, StringComparer.Ordinal).ToArray();

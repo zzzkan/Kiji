@@ -26,7 +26,7 @@ public class MarkdownEventBenchmarks
         _path = Path.Combine(Path.GetTempPath(), $"kiji-events-{Guid.NewGuid():N}", "snapshot.bin");
         _sources = new Dictionary<string, MarkdownParsedSource>
         {
-            ["post/index.md"] = new("body", _events, "hash", new MarkdownFileStamp(100, DateTime.UnixEpoch)),
+            ["post/index.md"] = new("body", _events, "hash", (100, DateTime.UnixEpoch)),
         };
         MarkdownDiskCache.Save(_path, _sources);
         if (ParseAndConvert().Title != ReplayAndConvert().Title) { throw new InvalidOperationException("YAML mismatch."); }

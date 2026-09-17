@@ -1,5 +1,3 @@
-using Kiji.Markdown;
-
 namespace Kiji.SyntheticSite;
 
 /// <summary>
@@ -8,10 +6,13 @@ namespace Kiji.SyntheticSite;
 /// </summary>
 public static class PostSlug
 {
-    public static string From(MarkdownFileInfo fileInfo)
+    public static string From(FileInfo fileInfo)
     {
         ArgumentNullException.ThrowIfNull(fileInfo);
 
-        return fileInfo.RelativeDirectoryPath;
+        return string.Equals(fileInfo.Name, "index.md", StringComparison.OrdinalIgnoreCase)
+            ? fileInfo.Directory?.Name
+                ?? throw new InvalidOperationException($"Cannot determine a slug for '{fileInfo.FullName}'.")
+            : Path.GetFileNameWithoutExtension(fileInfo.Name);
     }
 }

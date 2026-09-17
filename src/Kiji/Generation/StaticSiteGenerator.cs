@@ -22,7 +22,10 @@ internal static class StaticSiteGenerator
         var outputDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i < pageRequests.Count; i++)
         {
-            var fullPath = ResolvePageOutputPath(options.OutputDirectory, pageRequests[i].OutputRelativePath);
+            var fullPath = OutputPathValidator.ResolveUnderRoot(
+                options.OutputDirectory,
+                pageRequests[i].OutputRelativePath,
+                "Page output path");
             resolvedPages[i] = (pageRequests[i], fullPath);
             outputDirectories.Add(Path.GetDirectoryName(fullPath)!);
         }
@@ -109,7 +112,10 @@ internal static class StaticSiteGenerator
         }
 
         var pageOutputPaths = pageRequests
-            .Select(request => ResolvePageOutputPath(options.OutputDirectory, request.OutputRelativePath))
+            .Select(request => OutputPathValidator.ResolveUnderRoot(
+                options.OutputDirectory,
+                request.OutputRelativePath,
+                "Page output path"))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         foreach (var file in Directory.EnumerateFiles(options.StaticDirectory, "*", SearchOption.AllDirectories))
@@ -124,18 +130,4 @@ internal static class StaticSiteGenerator
         }
     }
 
-    private static string ResolvePageOutputPath(string outputPath, string relativePath)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
-
-        var outputRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(outputPath));
-        var fullPath = Path.GetFullPath(Path.Combine(outputRoot, relativePath));
-        if (!fullPath.StartsWith(outputRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                $"Page output path '{relativePath}' escapes the output directory.");
-        }
-
-        return fullPath;
-    }
 }

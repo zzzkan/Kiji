@@ -272,7 +272,7 @@ public sealed class IncrementalBuildTests : IDisposable
         app.Paths.ContentDirectory = "contents";
         app.Paths.StaticDirectory = "static";
 
-        app.UseMarkdownContent<FrontMatter>(key: static post => post.FileInfo.Slug);
+        app.UseMarkdownContent<FrontMatter>(key: static post => post.FileInfo.FullName);
         app.UseContentSource<Post>(static _ => [], static post => post.Slug);
         app.UseDefaultLayout<MainLayout>();
         app.AddStaticPages(typeof(TestArticleContents).Assembly);
@@ -283,10 +283,10 @@ public sealed class IncrementalBuildTests : IDisposable
 
         app.AddPages<MarkdownPostTestPage>(static services => services
             .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
-            .Select(static post => new { Slug = post.Key, ContentKey = post.Key }));
+            .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
         app.AddPages<RelatedPostsTestPage>(static services => services
             .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
-            .Select(static post => new { Slug = post.Key, ContentKey = post.Key }));
+            .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
 
         await app.PublishAsync(Path.Combine(root, "dist"));
     }
@@ -300,7 +300,7 @@ public sealed class IncrementalBuildTests : IDisposable
         app.Paths.StaticDirectory = "static";
 
         app.UseMarkdownContent<FrontMatter>(
-            key: static post => post.FileInfo.Slug,
+            key: static post => post.FileInfo.FullName,
             configure: static options => options.Directory = "posts");
         app.UseMarkdownContent<FrontMatter, ScopedNote>(
             select: ScopedNote.Create,
@@ -314,7 +314,7 @@ public sealed class IncrementalBuildTests : IDisposable
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
         app.AddPages<MarkdownPostTestPage>(static services => services
             .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
-            .Select(static post => new { Slug = post.Key, ContentKey = post.Key }));
+            .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
         app.AddPages<ScopedNotesIndexPage>(static _ => [new { Kind = "all" }]);
 
         await app.PublishAsync(Path.Combine(root, "dist"));
@@ -374,13 +374,13 @@ public sealed class IncrementalBuildTests : IDisposable
         app.Paths.ContentDirectory = "contents";
         app.Paths.StaticDirectory = "static";
 
-        app.UseMarkdownContent<FrontMatter>(key: static post => post.FileInfo.Slug,
+        app.UseMarkdownContent<FrontMatter>(key: static post => post.FileInfo.FullName,
             configure: options => options.AddHtmlTransform(html => { onRender?.Invoke(); return html; }));
         app.UseContentSource<Post>(static _ => [], static post => post.Slug);
         TestArticleContents.MapSite(app);
         app.AddPages<MarkdownPostTestPage>(static services => services
             .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
-            .Select(static post => new { Slug = post.Key, ContentKey = post.Key }));
+            .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
 
         return app;
     }

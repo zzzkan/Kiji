@@ -18,18 +18,18 @@ namespace Kiji.Generation;
 internal sealed class ContentFileRegistry
 {
     private readonly ConcurrentDictionary<string, Entry> _entries = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, IReadOnlyList<ScannedFile>> _scans = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, IReadOnlyList<FileInfo>> _scans = new(StringComparer.OrdinalIgnoreCase);
 
-    internal void Record(string fullPath, long length, DateTime lastWriteTimeUtc, string hash)
+    internal void Record(FileInfo file, string hash)
     {
-        _entries[fullPath] = new Entry(length, lastWriteTimeUtc, hash);
+        _entries[file.FullName] = new Entry(file.Length, file.LastWriteTimeUtc, hash);
     }
 
     /// <summary>
     /// Records the markdown files found under <paramref name="directory"/>, so anything
     /// else that needs the same listing this build can have it without walking again.
     /// </summary>
-    internal void RecordScan(string directory, IReadOnlyList<ScannedFile> files)
+    internal void RecordScan(string directory, IReadOnlyList<FileInfo> files)
     {
         _scans[Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory))] = files;
     }
@@ -39,7 +39,7 @@ internal sealed class ContentFileRegistry
     /// nothing walked it. A parent's listing is deliberately not reused for a
     /// subdirectory: filtering it would cost as much as the walk it replaces.
     /// </summary>
-    internal IReadOnlyList<ScannedFile>? GetScan(string directory)
+    internal IReadOnlyList<FileInfo>? GetScan(string directory)
     {
         return _scans.TryGetValue(Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory)), out var files)
             ? files

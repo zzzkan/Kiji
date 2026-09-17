@@ -26,7 +26,7 @@ public class PageServiceBenchmarks
     {
         _registrations = new ServiceCollection();
         ComponentRenderer.AddComponentRenderingServices(_registrations);
-        _registrations.AddSingleton(Content.FromItems<PageServiceBenchmarkItem>(
+        _registrations.AddSingleton(BenchmarkContentDictionaryFixture.FromItems<PageServiceBenchmarkItem>(
             [new("page", "Page service benchmark")], item => item.Key));
         _registrations.AddScoped<PageServiceBenchmarkHelper>();
         _baseline = CreateProvider(validate: false);

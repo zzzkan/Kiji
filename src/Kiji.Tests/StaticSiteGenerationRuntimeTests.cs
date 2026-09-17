@@ -129,12 +129,12 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         app.Paths.ContentDirectory = _contentsDir;
         app.Paths.StaticDirectory = GetStaticDirectory();
 
-        app.UseMarkdownContent<FrontMatter>(key: static post => post.FileInfo.Slug);
+        app.UseMarkdownContent<FrontMatter>(key: static post => post.FileInfo.FullName);
         app.UseContentSource<Post>(static _ => [], static post => post.Slug);
         TestArticleContents.MapSite(app);
         app.AddPages<MarkdownPostTestPage>(static services => services
             .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
-            .Select(static post => new { Slug = post.Key, ContentKey = post.Key }));
+            .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
 
         await app.PublishAsync(_outputDir);
 

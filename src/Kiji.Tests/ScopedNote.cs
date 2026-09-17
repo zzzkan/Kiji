@@ -22,6 +22,6 @@ public sealed class ScopedNote
     {
         ArgumentNullException.ThrowIfNull(content);
 
-        return new ScopedNote(content.FileInfo.Slug, content.FrontMatter.Title ?? string.Empty);
+        return new ScopedNote(Path.GetFileNameWithoutExtension(content.FileInfo.Name), content.FrontMatter.Title ?? string.Empty);
     }
 }

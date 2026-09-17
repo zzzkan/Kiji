@@ -1,4 +1,3 @@
-using Kiji.Markdown;
 using System.Runtime.InteropServices;
 using System.Text;
 using Kiji.Generation;
@@ -34,7 +33,7 @@ internal static class MarkdownDiskCache
                 {
                     return [];
                 }
-                var stamp = new MarkdownFileStamp(data.ReadInt64(), new DateTime(data.ReadInt64(), DateTimeKind.Utc));
+                var stamp = (Length: data.ReadInt64(), LastWriteTimeUtc: new DateTime(data.ReadInt64(), DateTimeKind.Utc));
                 var contentHash = data.ReadString();
                 var body = data.ReadString();
                 var eventLength = data.ReadInt32();

@@ -39,9 +39,9 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
         var processor = new TrackingImageProcessor();
         await using var app = CreateApp();
         app.UseImageAssetProcessor(() => processor);
-        app.UseMarkdownContent<FrontMatter>(post => post.FileInfo.Slug);
+        app.UseMarkdownContent<FrontMatter>(post => post.FileInfo.FullName);
         app.AddPages<MarkdownPostTestPage>(provider => provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
-            .Select(post => new { Slug = post.Key, ContentKey = post.Key }));
+            .Select(post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
         var output = Path.Combine(_root, "dist");
         await app.PublishAsync(output);
         Assert.Equal(1, processor.Calls);

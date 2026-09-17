@@ -1,19 +1,19 @@
 @page "/docs/"
 @inject SiteInfo Site
-@inject ContentDictionary<MarkdownContent<DocFrontMatter>> Docs
+@inject ContentDictionary<Doc> Docs
 
 <PageHead Title="Documentation" Description="Guides for building a site with Kiji." />
 
 <h1>Documentation</h1>
 
 <ul class="doc-list">
-    @foreach (var (slug, doc) in Docs.OrderBy(entry => entry.Value.FrontMatter.Order))
+    @foreach (var doc in Docs.Values.OrderBy(doc => doc.Order))
     {
         <li>
-            <a href="@Site.Path($"docs/{slug}/")">
-                @doc.FrontMatter.Title
+            <a href="@Site.Path($"docs/{doc.Slug}/")">
+                @doc.Title
             </a>
-            <p>@doc.FrontMatter.Description</p>
+            <p>@doc.Description</p>
         </li>
     }
 </ul>

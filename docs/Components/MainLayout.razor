@@ -1,6 +1,6 @@
 ﻿@inherits LayoutComponentBase
 @inject SiteInfo Site
-@inject ContentDictionary<MarkdownContent<DocFrontMatter>> Docs
+@inject ContentDictionary<Doc> Docs
 
 <a class="skip-link" href="#main-content">Skip to content</a>
 
@@ -19,11 +19,11 @@
     <nav class="side-nav" aria-label="Documentation">
         <p class="side-nav-title">Documentation</p>
         <ul>
-            @foreach (var (slug, doc) in Docs.OrderBy(entry => entry.Value.FrontMatter.Order))
+            @foreach (var doc in Docs.Values.OrderBy(doc => doc.Order))
             {
                 <li>
-                    <a href="@Site.Path($"docs/{slug}/")">
-                        @doc.FrontMatter.Title
+                    <a href="@Site.Path($"docs/{doc.Slug}/")">
+                        @doc.Title
                     </a>
                 </li>
             }

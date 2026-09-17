@@ -4,7 +4,7 @@ using Kiji.Rendering;
 namespace Kiji.Markdown;
 
 /// <summary>A Markdown source with parsed front matter and a lazily rendered body.</summary>
-public sealed class MarkdownContent<TFrontMatter> : IContentSourceFile
+public sealed class MarkdownContent<TFrontMatter>
 {
     private readonly Func<MarkdownContent<TFrontMatter>, CancellationToken, Task<string>> _renderAsync;
 
@@ -14,37 +14,29 @@ public sealed class MarkdownContent<TFrontMatter> : IContentSourceFile
     private readonly ConcurrentDictionary<string, Lazy<Task<string>>> _renderTasksByRoute = new(StringComparer.Ordinal);
 
     internal MarkdownContent(
-        MarkdownFileInfo fileInfo,
+        FileInfo fileInfo,
         TFrontMatter frontMatter,
+        string body,
         Func<MarkdownContent<TFrontMatter>, CancellationToken, Task<string>> renderAsync)
     {
         ArgumentNullException.ThrowIfNull(fileInfo);
+        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(renderAsync);
 
         FileInfo = fileInfo;
         FrontMatter = frontMatter;
+        Body = body;
         _renderAsync = renderAsync;
     }
 
-    internal MarkdownContent(
-        MarkdownFileInfo fileInfo,
-        TFrontMatter frontMatter,
-        string body,
-        Func<MarkdownContent<TFrontMatter>, CancellationToken, Task<string>> renderAsync)
-        : this(fileInfo, frontMatter, renderAsync)
-    {
-        Body = body;
-    }
-
     /// <summary>The source file metadata.</summary>
-    public MarkdownFileInfo FileInfo { get; }
+    public FileInfo FileInfo { get; }
 
     /// <summary>
     /// The markdown body (front matter stripped) captured when the file was read for
-    /// parsing, so rendering does not read the file again. Null when constructed via
-    /// a body-less constructor; renderers must then read the file themselves.
+    /// parsing, so rendering does not read the file again.
     /// </summary>
-    internal string? Body { get; }
+    internal string Body { get; }
 
     /// <summary>The parsed front matter.</summary>
     public TFrontMatter FrontMatter
@@ -53,18 +45,16 @@ public sealed class MarkdownContent<TFrontMatter> : IContentSourceFile
         {
             // Reading front matter during a tracked render makes the page depend on
             // this file, so front-matter-only pages re-render when the file changes.
-            PageRenderContext.Current?.Dependencies?.AddFile(FileInfo.FilePath);
+            PageRenderContext.Current?.Dependencies?.AddFile(FileInfo.FullName);
             return field;
         }
     }
-
-    string IContentSourceFile.SourceFilePath => FileInfo.FilePath;
 
     /// <summary>Renders the Markdown body as HTML and writes referenced image variants beside the current page.</summary>
     public async ValueTask<string> RenderAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        PageRenderContext.Current?.Dependencies?.AddFile(FileInfo.FilePath);
+        PageRenderContext.Current?.Dependencies?.AddFile(FileInfo.FullName);
         // A tracked render must observe all dependencies and materialize its outputs
         // again, even if the same content instance was rendered in an earlier build.
         if (PageRenderContext.Current?.Dependencies is not null)

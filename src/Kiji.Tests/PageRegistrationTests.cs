@@ -27,6 +27,31 @@ public sealed class PageRegistrationTests
     }
 
     [Fact]
+    public async Task TypedRegistration_AcceptsStringDictionaryAndConvertsAnonymousValuesInvariantly()
+    {
+        await using var site = CreateSite();
+        site.AddPages<Parameterized>(static _ =>
+        [
+            new Dictionary<string, string> { ["Value"] = "dictionary" },
+            new { Value = 42 },
+        ]);
+
+        Assert.Equal(
+            ["/items/42/", "/items/dictionary/"],
+            site.CreateSnapshot().Pages.Select(static page => page.RoutePath).Order());
+    }
+
+    [Fact]
+    public async Task TypedRegistration_RejectsNullRouteValue()
+    {
+        await using var site = CreateSite();
+        site.AddPages<Parameterized>(static _ => [new { Value = (string?)null }]);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
+        Assert.Contains("null or whitespace", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task StaticDiscovery_CombinesAssembliesAndIgnoresRepeatedRegistration()
     {
         var first = CreatePageType("/first/", "/ignored/{Value}/");

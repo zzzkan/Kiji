@@ -61,7 +61,7 @@ non-empty, unique key, supplied where the source is declared.
 
 ```csharp
 app.UseMarkdownContent<PostFrontMatter>(
-    key: post => post.FileInfo.Slug,
+    key: post => post.FileInfo.FullName,
     configure: options => options.Directory = "posts");
 ```
 

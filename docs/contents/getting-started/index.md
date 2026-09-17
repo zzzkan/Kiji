@@ -40,7 +40,7 @@ app.Info = new SiteInfo
 };
 
 // The front matter shape is yours; Kiji does not define one.
-app.UseMarkdownContent<PostFrontMatter>(key: post => post.FileInfo.Slug);
+app.UseMarkdownContent<PostFrontMatter>(key: post => post.FileInfo.FullName);
 
 app.UseDefaultLayout<MainLayout>();
 app.AddStaticPages();
@@ -48,7 +48,11 @@ app.UseNotFoundPage<NotFoundPage>();
 
 app.AddPages<PostPage>(services => services
     .GetRequiredService<ContentDictionary<MarkdownContent<PostFrontMatter>>>()
-    .Select(post => new { Slug = post.Key, ContentKey = post.Key }));
+    .Select(post => new
+    {
+        Slug = Slug.Normalize(post.Value.FileInfo.Directory!.Name),
+        ContentKey = post.Key,
+    }));
 
 app.AddSitemap();
 

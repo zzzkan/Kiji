@@ -39,7 +39,7 @@ public sealed class MarkdownFrontMatterParserTests : IDisposable
             Body.
             """);
 
-        var frontMatter = MarkdownFrontMatterParser.Parse<FrontMatter>(markdownPath);
+        var frontMatter = MarkdownFrontMatterParser.ParseContent<FrontMatter>(File.ReadAllText(markdownPath));
 
         Assert.Equal("Test Post", frontMatter.Title);
         Assert.Equal("A sample post", frontMatter.Description);
@@ -59,7 +59,19 @@ public sealed class MarkdownFrontMatterParserTests : IDisposable
             No front matter.
             """);
 
-        Assert.Throws<InvalidOperationException>(() => MarkdownFrontMatterParser.Parse<FrontMatter>(markdownPath));
+        Assert.Throws<InvalidOperationException>(() =>
+            MarkdownFrontMatterParser.ParseContent<FrontMatter>(File.ReadAllText(markdownPath)));
+    }
+
+    [Fact]
+    public void ParseContentAndBody_ExtractsBothFromOneDelimiterScan()
+    {
+        var parsed = MarkdownFrontMatterParser.ParseContentAndBody<FrontMatter>(
+            "---\r\ntitle: Combined\r\n---\r\n\r\nBody.\r\n",
+            MarkdownFrontMatterParser.DefaultDeserializer);
+
+        Assert.Equal("Combined", parsed.FrontMatter.Title);
+        Assert.Equal("Body.\r\n", parsed.Body);
     }
 
     private string CreateMarkdownFile(string fileName, string contents)

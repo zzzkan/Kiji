@@ -22,8 +22,9 @@ public sealed class BlogIndexPage : ComponentBase
         builder.CloseElement();
 
         builder.OpenElement(5, "ul");
-        foreach (var (slug, post) in Posts)
+        foreach (var post in Posts.Values)
         {
+            var slug = PostSlug.From(post.FileInfo);
             builder.OpenRegion(6);
             builder.OpenElement(0, "li");
             builder.OpenElement(1, "a");

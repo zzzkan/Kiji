@@ -1,13 +1,13 @@
 @page "/docs/{Slug}/"
-@inject ContentDictionary<MarkdownContent<DocFrontMatter>> Docs
+@inject ContentDictionary<Doc> Docs
 
 @if (_doc is not null)
 {
-    <PageHead Title="@(_doc.FrontMatter.Title ?? string.Empty)"
-              Description="@(_doc.FrontMatter.Description ?? string.Empty)" />
+    <PageHead Title="@(_doc.Title ?? string.Empty)"
+              Description="@(_doc.Description ?? string.Empty)" />
 
     <article class="doc">
-        <h1>@_doc.FrontMatter.Title</h1>
+        <h1>@_doc.Title</h1>
         <div class="doc-content">@((MarkupString)_html)</div>
     </article>
 }
@@ -16,7 +16,7 @@
     [Parameter] public string Slug { get; set; } = string.Empty;
     [Parameter] public string ContentKey { get; set; } = string.Empty;
 
-    private MarkdownContent<DocFrontMatter>? _doc;
+    private Doc? _doc;
     private string _html = string.Empty;
 
     protected override async Task OnParametersSetAsync()

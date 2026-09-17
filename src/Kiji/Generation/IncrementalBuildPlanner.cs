@@ -18,7 +18,8 @@ internal sealed class IncrementalBuildPlanner(
     string rootPath,
     string cacheDirectory,
     SiteInfo site,
-    IReadOnlyList<KijiBuildInput> buildInputs,
+    IReadOnlyList<string> buildInputPaths,
+    IReadOnlyList<KeyValuePair<string, string>> buildInputValues,
     ContentFileRegistry? hashRegistry = null)
 {
     private readonly string _rootPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
@@ -374,8 +375,8 @@ internal sealed class IncrementalBuildPlanner(
         {
             var file = files[index];
             hashed[index] = (
-                Path.GetRelativePath(options.ContentDirectory, file.FullPath),
-                HashFileCached(file.FullPath, (file.Length, file.LastWriteTimeUtc)));
+                Path.GetRelativePath(options.ContentDirectory, file.FullName),
+                HashFileCached(file.FullName, (file.Length, file.LastWriteTimeUtc)));
         });
 
         return BuildFingerprint.HashFileSet(hashed);
@@ -387,19 +388,14 @@ internal sealed class IncrementalBuildPlanner(
     /// Enumerating <see cref="FileInfo"/> carries each stamp out of the walk, so the
     /// registry can validate its recorded hash without going back to disk.
     /// </summary>
-    private IReadOnlyList<ScannedFile> ScanContentFiles(string directory)
+    private IReadOnlyList<FileInfo> ScanContentFiles(string directory)
     {
         if (hashRegistry?.GetScan(directory) is { } scanned)
         {
             return scanned;
         }
 
-        return
-        [
-            .. new DirectoryInfo(directory)
-                .EnumerateFiles("*.md", SearchOption.AllDirectories)
-                .Select(static file => new ScannedFile(file.FullName, file.Length, file.LastWriteTimeUtc)),
-        ];
+        return [.. new DirectoryInfo(directory).EnumerateFiles("*.md", SearchOption.AllDirectories)];
     }
 
     private static HashSet<string> CollectOutputRelativePaths(BuildManifest manifest)
@@ -449,10 +445,16 @@ internal sealed class IncrementalBuildPlanner(
             BuildFingerprint.AppendPart(builder, value);
         }
 
-        foreach (var input in buildInputs)
+        foreach (var path in buildInputPaths)
         {
-            BuildFingerprint.AppendPart(builder, input.Key);
-            BuildFingerprint.AppendPart(builder, input.Path is not null ? HashBuildInputPath(input.Path) : input.Value);
+            BuildFingerprint.AppendPart(builder, $"path:{path}");
+            BuildFingerprint.AppendPart(builder, HashBuildInputPath(path));
+        }
+
+        foreach (var (key, value) in buildInputValues)
+        {
+            BuildFingerprint.AppendPart(builder, key);
+            BuildFingerprint.AppendPart(builder, value);
         }
 
         return BuildFingerprint.HashText(builder.ToString());

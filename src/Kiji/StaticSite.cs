@@ -11,6 +11,7 @@ using Kiji.Routing;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -22,7 +23,8 @@ public sealed class StaticSite : IAsyncDisposable
 {
     private readonly string[] _args;
     private readonly ContentRuntime _runtime = new();
-    private readonly List<KijiBuildInput> _buildInputs = [];
+    private readonly List<string> _buildInputPaths = [];
+    private readonly List<KeyValuePair<string, string>> _buildInputValues = [];
     private readonly HashSet<Type> _pageServiceTypes = [];
     private Func<IImageAssetProcessor> _imageAssetProcessorFactory = static () => new ImageProcessor();
     private bool _configurationFrozen;
@@ -105,9 +107,8 @@ public sealed class StaticSite : IAsyncDisposable
         return this;
     }
 
-    internal IEnumerable<string> WatchedBuildInputs => _buildInputs
-        .Where(static input => input.Path is not null)
-        .Select(input => Path.GetFullPath(input.Path!, Path.GetFullPath(Paths.RootDirectory)));
+    internal IEnumerable<string> WatchedBuildInputs => _buildInputPaths
+        .Select(path => Path.GetFullPath(path, Path.GetFullPath(Paths.RootDirectory)));
 
     /// <summary>
     /// The app's services. Deliberately not public: content must not be reachable while
@@ -144,7 +145,7 @@ public sealed class StaticSite : IAsyncDisposable
         EnsureConfigurable();
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-        _buildInputs.Add(new KijiBuildInput($"path:{path}", Value: null, Path: path));
+        _buildInputPaths.Add(path);
         return this;
     }
 
@@ -155,7 +156,7 @@ public sealed class StaticSite : IAsyncDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
         ArgumentNullException.ThrowIfNull(value);
 
-        _buildInputs.Add(new KijiBuildInput(key, value, Path: null));
+        _buildInputValues.Add(new KeyValuePair<string, string>(key, value));
         return this;
     }
 
@@ -176,18 +177,16 @@ public sealed class StaticSite : IAsyncDisposable
         configure?.Invoke(options);
 
         return UseContentSource(
-            services => new ContentSourceItems<T>(loader(services), Provenance: null),
+            services => [.. loader(services).Select(static item => (item, SourceFile: (string?)null))],
             key,
             options);
     }
 
     /// <summary>
-    /// The provenance-carrying form of <see cref="UseContentSource{T}(Func{IServiceProvider, IReadOnlyList{T}}, Func{T, string}, Action{ContentSourceOptions{T}})"/>,
-    /// for loaders that project items into a model no longer implementing
-    /// <see cref="IContentSourceFile"/> and must state the source file themselves.
+    /// The provenance-carrying form of <see cref="UseContentSource{T}(Func{IServiceProvider, IReadOnlyList{T}}, Func{T, string}, Action{ContentSourceOptions{T}})"/>.
     /// </summary>
     internal StaticSite UseContentSource<T>(
-        Func<IServiceProvider, ContentSourceItems<T>> loader,
+        Func<IServiceProvider, IReadOnlyList<(T Item, string? SourceFile)>> loader,
         Func<T, string> key,
         ContentSourceOptions<T> options,
         string contentSetScope = "")
@@ -265,8 +264,7 @@ public sealed class StaticSite : IAsyncDisposable
 
         _routeRegistrations.Add(new RouteRegistration(
             typeof(TPage),
-            () => [.. parameters(ServiceProvider).Select(static values => new StaticPageRouteEntry(
-                RouteValues.ToDictionary(values)))]));
+            () => [.. parameters(ServiceProvider).Select(ConvertRouteValues)]));
         return this;
     }
 
@@ -359,7 +357,8 @@ public sealed class StaticSite : IAsyncDisposable
             Paths.RootDirectory,
             Paths.ResolveCachePath(),
             Info,
-            _buildInputs,
+            _buildInputPaths,
+            _buildInputValues,
             _services!.GetService<ContentFileRegistry>());
 
         // Helpers and custom encoder factories may live outside the page assemblies.
@@ -541,15 +540,9 @@ public sealed class StaticSite : IAsyncDisposable
 
         var discovered = PageDiscovery.EnsureUniqueRoutes(ApplyNotFoundOverride(scanned));
 
-        var pagesByComponent = new Dictionary<string, PageDiscovery.DiscoveredPage>(StringComparer.OrdinalIgnoreCase);
-        foreach (var page in discovered)
-        {
-            pagesByComponent.Add(page.SourceIdentifier, page);
-        }
-
         snapshotPhases.Mark(BuildPhaseTimer.Discovery);
 
-        var dynamicRoutes = new Dictionary<string, IReadOnlyList<StaticPageRouteEntry>>(StringComparer.OrdinalIgnoreCase);
+        var dynamicRoutes = new Dictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>>(StringComparer.OrdinalIgnoreCase);
         foreach (var registration in _routeRegistrations)
         {
             var page = FindDynamicPage(discovered, registration.ComponentType);
@@ -568,32 +561,16 @@ public sealed class StaticSite : IAsyncDisposable
         snapshotPhases.Mark(BuildPhaseTimer.Routes);
 
         var plannedPages = StaticPagePlanner.PlanPages(
-            [.. discovered.Select(static page => page.PageDefinition)],
+            discovered,
             dynamicRoutes);
 
         var requests = plannedPages
-            .Select(planned => CreatePageRenderRequest(pagesByComponent[planned.SourceIdentifier], planned))
+            .Select(request => request with { RootParameters = CreateRootParameters(request) })
             .ToList();
 
         snapshotPhases.Mark(BuildPhaseTimer.Planning);
 
         return new SiteSnapshot(requests);
-    }
-
-    private PageRenderRequest CreatePageRenderRequest(PageDiscovery.DiscoveredPage page, PlannedPage planned)
-    {
-        var parameters = planned.Parameters
-            .ToDictionary(static pair => pair.Key, static pair => (object?)pair.Value, StringComparer.Ordinal);
-
-        var request = new PageRenderRequest(
-            planned.SourceIdentifier,
-            page.ComponentType,
-            parameters,
-            planned.RoutePath,
-            planned.OutputRelativePath,
-            ExcludeFromSitemap: planned.ExcludeFromSitemap);
-
-        return request with { RootParameters = CreateRootParameters(request) };
     }
 
     private static PageDiscovery.DiscoveredPage FindDynamicPage(
@@ -616,7 +593,7 @@ public sealed class StaticSite : IAsyncDisposable
 
     private static void ValidateRouteEntries(
         PageDiscovery.DiscoveredPage page,
-        IReadOnlyList<StaticPageRouteEntry> entries)
+        IReadOnlyList<IReadOnlyDictionary<string, string>> entries)
     {
         // Values naming a route-template parameter bind the URL and must be a single
         // usable segment. Everything else is an ordinary component parameter: it never
@@ -628,7 +605,7 @@ public sealed class StaticSite : IAsyncDisposable
 
         foreach (var entry in entries)
         {
-            var suppliedNames = entry.RouteValues.Keys.ToHashSet(StringComparer.Ordinal);
+            var suppliedNames = entry.Keys.ToHashSet(StringComparer.Ordinal);
             var missing = routeParameterNames
                 .Where(name => !suppliedNames.Contains(name))
                 .OrderBy(static name => name, StringComparer.Ordinal)
@@ -639,7 +616,7 @@ public sealed class StaticSite : IAsyncDisposable
                     $"Route mapping for '{page.ComponentType.FullName}' did not supply required route values for '{page.SourceIdentifier}': {string.Join(", ", missing.Select(static name => $"'{name}'"))}.");
             }
 
-            foreach (var (name, value) in entry.RouteValues)
+            foreach (var (name, value) in entry)
             {
                 if (routeParameterNames.Contains(name))
                 {
@@ -783,7 +760,10 @@ public sealed class StaticSite : IAsyncDisposable
 
         foreach (var artifact in _artifacts)
         {
-            var fullPath = ResolveArtifactPath(options.OutputDirectory, artifact.OutputRelativePath);
+            var fullPath = OutputPathValidator.ResolveUnderRoot(
+                options.OutputDirectory,
+                artifact.OutputRelativePath,
+                "Artifact output path");
             if (reservedPaths.TryGetValue(fullPath, out var collisionTarget))
             {
                 throw new InvalidOperationException(
@@ -806,7 +786,10 @@ public sealed class StaticSite : IAsyncDisposable
     private static Dictionary<string, string> CreateReservedArtifactPaths(ResolvedSitePaths options, SiteSnapshot snapshot)
     {
         var reservedPaths = snapshot.Pages.ToDictionary(
-            page => ResolveArtifactPath(options.OutputDirectory, page.OutputRelativePath),
+            page => OutputPathValidator.ResolveUnderRoot(
+                options.OutputDirectory,
+                page.OutputRelativePath,
+                "Page output path"),
             static _ => "a generated page output path",
             StringComparer.OrdinalIgnoreCase);
 
@@ -818,26 +801,14 @@ public sealed class StaticSite : IAsyncDisposable
         foreach (var file in Directory.EnumerateFiles(options.StaticDirectory, "*", SearchOption.AllDirectories))
         {
             var relativePath = Path.GetRelativePath(options.StaticDirectory, file);
-            var outputPath = ResolveArtifactPath(options.OutputDirectory, relativePath);
+            var outputPath = OutputPathValidator.ResolveUnderRoot(
+                options.OutputDirectory,
+                relativePath,
+                "Static file output path");
             reservedPaths.TryAdd(outputPath, "a static file output path");
         }
 
         return reservedPaths;
-    }
-
-    private static string ResolveArtifactPath(string outputPath, string relativePath)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
-
-        var outputRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(outputPath));
-        var fullPath = Path.GetFullPath(Path.Combine(outputRoot, relativePath));
-        if (!fullPath.StartsWith(outputRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                $"Artifact output path '{relativePath}' escapes the output directory.");
-        }
-
-        return fullPath;
     }
 
     /// <summary>
@@ -849,6 +820,30 @@ public sealed class StaticSite : IAsyncDisposable
     {
         _activeOptions ??= options;
         return _activeOptions;
+    }
+
+    private static IReadOnlyDictionary<string, string> ConvertRouteValues(object values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+
+        var entries = values is IReadOnlyDictionary<string, string> strings
+            ? strings.Select(static pair => new KeyValuePair<string, object?>(pair.Key, pair.Value))
+            : new RouteValueDictionary(values);
+
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (name, value) in entries)
+        {
+            var converted = Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture);
+            if (string.IsNullOrWhiteSpace(converted))
+            {
+                throw new InvalidOperationException(
+                    $"Route value '{name}' on '{values.GetType().Name}' resolved to null or whitespace.");
+            }
+
+            result.Add(name, converted);
+        }
+
+        return result;
     }
 
     private ResolvedSitePaths UseRunOptions(ResolvedSitePaths options)
@@ -956,5 +951,5 @@ public sealed class StaticSite : IAsyncDisposable
 
     private sealed record RouteRegistration(
         Type ComponentType,
-        Func<IReadOnlyList<StaticPageRouteEntry>> CreateEntries);
+        Func<IReadOnlyList<IReadOnlyDictionary<string, string>>> CreateEntries);
 }

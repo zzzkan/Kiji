@@ -4,10 +4,10 @@ on:
   push:
     branches: [main]
     paths:
-      - 'docs/**'
-      - 'src/Kiji/**'
-      - '.github/workflows/docs.yml'
+      - "docs/**"
+      - ".github/workflows/docs.yml"
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -32,14 +32,11 @@ jobs:
         with:
           global-json-file: global.json
 
-      # SiteInfo.BaseUrl carries the /kiji/ project-site path, so the generated links
-      # already resolve under it. Nothing here needs to know the base path.
       - name: Build site
         run: dotnet publish docs -c Release -o docs/dist
 
       - uses: actions/configure-pages@v5
 
-      # Deploying through Actions does not run Jekyll, so no .nojekyll is needed.
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs/dist

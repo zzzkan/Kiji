@@ -256,7 +256,7 @@ public sealed class DevServerTests : IAsyncDisposable
             var wsUri = new UriBuilder(baseAddress) { Scheme = "ws", Path = "/_kiji/reload" }.Uri;
             await socket.ConnectAsync(wsUri, CancellationToken.None);
 
-            Kiji.Hosting.DevServer.NotifyCodeUpdated();
+            await Kiji.Hosting.DevServer.NotifyCodeUpdated();
 
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             var buffer = new byte[64];

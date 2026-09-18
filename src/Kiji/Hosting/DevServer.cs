@@ -160,12 +160,9 @@ internal sealed class DevServer(StaticSite app) : IAsyncDisposable
     /// process: drops cached snapshots so updated components render fresh, then
     /// reloads connected browsers.
     /// </summary>
-    internal static void NotifyCodeUpdated()
+    internal static Task NotifyCodeUpdated()
     {
-        foreach (var server in ActiveServers.Keys)
-        {
-            _ = server.ReloadAfterCodeUpdateAsync();
-        }
+        return Task.WhenAll(ActiveServers.Keys.Select(static server => server.ReloadAfterCodeUpdateAsync()));
     }
 
     internal async Task ReloadAfterCodeUpdateAsync()

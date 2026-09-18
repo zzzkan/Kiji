@@ -153,6 +153,33 @@ constructor-shape changes may require restarting `dotnet watch`.
 one generated page per object. Property names are the page's `[Parameter]` names; those
 that also appear in the route template bind the URL, and the rest are passed through.
 
+Values keep their original .NET types. For example, with a `/items/{Id}/` route,
+`new { Id = 42, Featured = true }` supplies an `int` and a `bool` to matching public,
+writable `[Parameter]` properties. Only the URL uses the invariant string `"42"`.
+Anonymous objects and string/object-valued dictionaries (including read-only dictionaries)
+are supported through ASP.NET Core's `RouteValueDictionary`. Dictionary keys that differ
+only by case (such as `Id` and `id`) are rejected during normalization. Parameter names
+match route template names and component property names case-insensitively, as in Blazor.
+Non-route parameters may contain null, empty strings, whitespace, models,
+and collections; route values must still be nonempty, valid single path segments.
+
+There are no implicit parameter conversions: an `int` cannot populate a `string` or
+`long` property, and a string cannot populate an enum. Incorrect names, types, and
+non-public setters fail during planning. If upgrading code that relied on Kiji's former
+automatic string conversion, change the receiving property to the actual type or explicitly
+convert the supplied value using `CultureInfo.InvariantCulture`.
+
+Kiji copies the parameter dictionary, but keeps references to its values. Treat them as
+read-only for the snapshot's lifetime, including concurrent page renders and repeated dev
+server requests. Values are neither deep-cloned nor automatically disposed.
+
+Incremental builds can fingerprint null, string, bool, char, the fixed-width integer types
+from `sbyte` through `ulong`, enums, and `Guid`. Other values are accepted but make that
+page render on every build, including models, arrays, collections, dates, decimal, and
+floating-point numbers. Other pages can still be skipped; identical HTML is still not
+rewritten. To retain content-level incremental rendering, pass a `ContentKey` and look up
+the model inside the page, as below. Custom external inputs still need `AddBuildInput`.
+
 ```csharp
 app.AddPages<PostPage>(services => services
     .GetRequiredService<ContentDictionary<Post>>()

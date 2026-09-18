@@ -13,7 +13,7 @@ namespace Kiji.Routing;
 internal static class PageDiscovery
 {
     private static readonly ConcurrentDictionary<Assembly, IReadOnlyList<DiscoveredPage>> AssemblyCache = new();
-    private static readonly ConcurrentDictionary<Type, FrozenSet<string>> ParameterNameCache = new();
+    private static readonly ConcurrentDictionary<Type, FrozenDictionary<string, ComponentParameter>> ParameterCache = new();
     private static readonly ConcurrentDictionary<Type, IReadOnlyList<DiscoveredPage>> TypeCache = new();
 
     /// <summary>
@@ -38,26 +38,29 @@ internal static class PageDiscovery
     }
 
     /// <summary>
-    /// The <c>[Parameter]</c> property names a component declares. Route mappings may
+    /// The <c>[Parameter]</c> properties a component declares, including their types and setters. Route mappings may
     /// supply values beyond the route template's own parameters; those must name a real
     /// parameter, or the component would reject them at render time with no indication
     /// of which mapping was at fault.
     /// </summary>
-    internal static FrozenSet<string> ParameterNames(Type componentType)
+    internal static FrozenDictionary<string, ComponentParameter> Parameters(Type componentType)
     {
-        return ParameterNameCache.GetOrAdd(
+        return ParameterCache.GetOrAdd(
             componentType,
             static type => type
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(static property => property.IsDefined(typeof(ParameterAttribute), inherit: true))
-                .Select(static property => property.Name)
-                .ToFrozenSet(StringComparer.Ordinal));
+                .ToFrozenDictionary(
+                    static property => property.Name,
+                    static property => new ComponentParameter(property.PropertyType,
+                        property.SetMethod is { IsPublic: true } && property.GetIndexParameters().Length == 0),
+                    StringComparer.OrdinalIgnoreCase));
     }
 
     internal static void ClearCache()
     {
         AssemblyCache.Clear();
-        ParameterNameCache.Clear();
+        ParameterCache.Clear();
         TypeCache.Clear();
     }
 

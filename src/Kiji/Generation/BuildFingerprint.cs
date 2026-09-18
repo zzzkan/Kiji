@@ -71,7 +71,7 @@ internal static class BuildFingerprint
         return HashText(builder.ToString());
     }
 
-    internal static string HashParameters(IReadOnlyDictionary<string, object?> parameters)
+    internal static string? HashParameters(IReadOnlyDictionary<string, object?> parameters)
     {
         if (parameters.Count == 0)
         {
@@ -81,9 +81,16 @@ internal static class BuildFingerprint
         var builder = new StringBuilder();
         foreach (var pair in parameters.OrderBy(static pair => pair.Key, StringComparer.Ordinal))
         {
+            var value = pair.Value;
+            if (value is not (null or string or bool or char or sbyte or byte or short or ushort or int or uint or long or ulong or Enum or Guid))
+            {
+                return null;
+            }
             AppendPart(builder, pair.Key);
-            AppendPart(builder, pair.Value?.GetType().FullName);
-            AppendPart(builder, pair.Value is null ? null : Convert.ToString(pair.Value, CultureInfo.InvariantCulture));
+            AppendPart(builder, value?.GetType().AssemblyQualifiedName);
+            AppendPart(builder, value is Enum enumeration
+                ? enumeration.ToString("D")
+                : Convert.ToString(value, CultureInfo.InvariantCulture));
         }
 
         return HashText(builder.ToString());

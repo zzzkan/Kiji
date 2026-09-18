@@ -15,7 +15,7 @@ internal static class StaticPagePlanner
     /// <returns>A read-only list of planned pages ordered by their output relative path.</returns>
     public static IReadOnlyList<PageRenderRequest> PlanPages(
         IReadOnlyList<PageDiscovery.DiscoveredPage> pages,
-        IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>> dynamicRoutesByPage)
+        IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyDictionary<string, object?>>> dynamicRoutesByPage)
     {
         ArgumentNullException.ThrowIfNull(pages);
         ArgumentNullException.ThrowIfNull(dynamicRoutesByPage);
@@ -48,26 +48,50 @@ internal static class StaticPagePlanner
         return new PageRenderRequest(
             page.SourceIdentifier,
             page.ComponentType,
-            new Dictionary<string, object?>(StringComparer.Ordinal),
+            new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase),
             pathBinding.RoutePath,
             pathBinding.OutputRelativePath);
     }
 
     private static List<PageRenderRequest> CreateDynamicPages(
         PageDiscovery.DiscoveredPage page,
-        IReadOnlyList<IReadOnlyDictionary<string, string>> matches)
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> matches)
     {
-        return [.. matches.Select(match => new PageRenderRequest(
+        return [.. matches.Select(match =>
+        {
+            var routeValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var name in page.PageDefinition.ParameterNames)
+            {
+                var value = Convert.ToString(match[name], System.Globalization.CultureInfo.InvariantCulture);
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    throw new InvalidOperationException(
+                        $"Route value '{name}' on '{page.ComponentType.FullName}' ('{page.SourceIdentifier}') resolved to null or whitespace.");
+                }
+                if (value.Contains('/', StringComparison.Ordinal) || value.Contains('\\', StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"Route mapping for '{page.ComponentType.FullName}' supplied invalid route value '{name}' for '{page.SourceIdentifier}': '{value}'. Route values must be a single route segment and cannot contain '/' or '\\'.");
+                }
+                if (value.Trim() is "." or "..")
+                {
+                    throw new InvalidOperationException(
+                        $"Route mapping for '{page.ComponentType.FullName}' supplied invalid route value '{name}' for '{page.SourceIdentifier}': '{value}'. Route values cannot be '.' or '..'.");
+                }
+                routeValues.Add(name, value);
+            }
+            return new PageRenderRequest(
                 page.SourceIdentifier,
                 page.ComponentType,
-                match.ToDictionary(static pair => pair.Key, static pair => (object?)pair.Value, StringComparer.Ordinal),
-                page.PageDefinition.ResolveRoutePath(match),
-                page.PageDefinition.ResolveOutputRelativePath(match)))];
+                match,
+                page.PageDefinition.ResolveRoutePath(routeValues),
+                page.PageDefinition.ResolveOutputRelativePath(routeValues));
+        })];
     }
 
     private static void ValidateDynamicPageCoverage(
         IReadOnlyList<PageDiscovery.DiscoveredPage> pages,
-        IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>> dynamicRoutesByPage)
+        IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyDictionary<string, object?>>> dynamicRoutesByPage)
     {
         var pageSet = pages.Select(static page => page.SourceIdentifier)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);

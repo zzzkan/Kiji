@@ -10,7 +10,7 @@ namespace Kiji.Generation;
 internal sealed record BuildManifestPage(
     string OutputRelativePath,
     string RoutePath,
-    string ParametersHash,
+    string? ParametersHash,
     string OutputHash,
     IReadOnlyList<BuildManifestDependency> Dependencies,
     IReadOnlyList<string> AdditionalOutputs,

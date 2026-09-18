@@ -250,7 +250,12 @@ public sealed class StaticSite
 
     /// <summary>Registers parameter sets for a component declaring exactly one parameterized route.</summary>
     /// <param name="parameters">A deferred factory evaluated per snapshot; each object supplies route values and component parameters.</param>
-    /// <remarks>No assembly registration is required; multiple registrations concatenate their results, which may be empty.</remarks>
+    /// <remarks>
+    /// No assembly registration is required; multiple registrations concatenate their results, which may be empty.
+    /// Values retain their types and must be assignable to public writable component parameters; no implicit conversions occur.
+    /// Only URL segments are converted to invariant strings. Treat referenced values as read-only for the snapshot lifetime;
+    /// Kiji neither deep-clones nor disposes them. Parameters without a supported stable fingerprint force the page to render on each build.
+    /// </remarks>
     public StaticSite AddPages<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)
         where TPage : IComponent
     {
@@ -264,7 +269,7 @@ public sealed class StaticSite
 
         _routeRegistrations.Add(new RouteRegistration(
             typeof(TPage),
-            () => [.. parameters(ServiceProvider).Select(ConvertRouteValues)]));
+            () => [.. parameters(ServiceProvider).Select(ConvertParameters)]));
         return this;
     }
 
@@ -562,7 +567,7 @@ public sealed class StaticSite
 
         snapshotPhases.Mark(BuildPhaseTimer.Discovery);
 
-        var dynamicRoutes = new Dictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>>(StringComparer.OrdinalIgnoreCase);
+        var dynamicRoutes = new Dictionary<string, IReadOnlyList<IReadOnlyDictionary<string, object?>>>(StringComparer.OrdinalIgnoreCase);
         foreach (var registration in _routeRegistrations)
         {
             var page = FindDynamicPage(discovered, registration.ComponentType);
@@ -613,19 +618,14 @@ public sealed class StaticSite
 
     private static void ValidateRouteEntries(
         PageDiscovery.DiscoveredPage page,
-        IReadOnlyList<IReadOnlyDictionary<string, string>> entries)
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> entries)
     {
-        // Values naming a route-template parameter bind the URL and must be a single
-        // usable segment. Everything else is an ordinary component parameter: it never
-        // reaches the path, so segment rules do not apply — but it does have to name a
-        // real [Parameter], or the component rejects it at render time with no hint of
-        // which mapping produced it.
-        var routeParameterNames = page.PageDefinition.ParameterNames.ToHashSet(StringComparer.Ordinal);
-        var declaredParameterNames = PageDiscovery.ParameterNames(page.ComponentType);
+        var routeParameterNames = page.PageDefinition.ParameterNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var declaredParameters = PageDiscovery.Parameters(page.ComponentType);
 
         foreach (var entry in entries)
         {
-            var suppliedNames = entry.Keys.ToHashSet(StringComparer.Ordinal);
+            var suppliedNames = entry.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
             var missing = routeParameterNames
                 .Where(name => !suppliedNames.Contains(name))
                 .OrderBy(static name => name, StringComparer.Ordinal)
@@ -638,37 +638,26 @@ public sealed class StaticSite
 
             foreach (var (name, value) in entry)
             {
-                if (routeParameterNames.Contains(name))
+                if (!declaredParameters.TryGetValue(name, out var property))
                 {
-                    ValidateRouteValue(page, name, value);
+                    throw new InvalidOperationException(
+                        $"Route mapping for '{page.ComponentType.FullName}' ('{page.SourceIdentifier}') supplied '{name}', which is not a declared '[Parameter]' property.");
+                }
+                if (!property.IsWritable)
+                {
+                    throw new InvalidOperationException(
+                        $"Route mapping for '{page.ComponentType.FullName}' ('{page.SourceIdentifier}') supplied parameter '{name}', which must have a public setter and cannot be an indexer.");
+                }
+                var type = property.PropertyType;
+                var compatible = value is null
+                    ? !type.IsValueType || Nullable.GetUnderlyingType(type) is not null
+                    : type.IsInstanceOfType(value);
+                if (!compatible)
+                {
+                    throw new InvalidOperationException(
+                        $"Route mapping for '{page.ComponentType.FullName}' ('{page.SourceIdentifier}') supplied parameter '{name}': expected '{type.FullName}', actual '{value?.GetType().FullName ?? "null"}'. Implicit parameter conversions are not supported.");
                 }
             }
-
-            var undeclared = suppliedNames
-                .Where(name => !routeParameterNames.Contains(name) && !declaredParameterNames.Contains(name))
-                .OrderBy(static name => name, StringComparer.Ordinal)
-                .ToArray();
-            if (undeclared.Length > 0)
-            {
-                throw new InvalidOperationException(
-                    $"Route mapping for '{page.ComponentType.FullName}' ('{page.SourceIdentifier}') supplied values that are neither route parameters nor declared '[Parameter]' properties: {string.Join(", ", undeclared.Select(static name => $"'{name}'"))}.");
-            }
-        }
-    }
-
-    private static void ValidateRouteValue(PageDiscovery.DiscoveredPage page, string name, string value)
-    {
-        if (value.Contains('/', StringComparison.Ordinal) || value.Contains('\\', StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException(
-                $"Route mapping for '{page.ComponentType.FullName}' supplied invalid route value '{name}' for '{page.SourceIdentifier}': '{value}'. Route values must be a single route segment and cannot contain '/' or '\\'.");
-        }
-
-        var trimmed = value.Trim();
-        if (trimmed is "." or "..")
-        {
-            throw new InvalidOperationException(
-                $"Route mapping for '{page.ComponentType.FullName}' supplied invalid route value '{name}' for '{page.SourceIdentifier}': '{value}'. Route values cannot be '.' or '..'.");
         }
     }
 
@@ -840,28 +829,11 @@ public sealed class StaticSite
         return _activeOptions;
     }
 
-    private static IReadOnlyDictionary<string, string> ConvertRouteValues(object values)
+    private static IReadOnlyDictionary<string, object?> ConvertParameters(object values)
     {
         ArgumentNullException.ThrowIfNull(values);
-
-        var entries = values is IReadOnlyDictionary<string, string> strings
-            ? strings.Select(static pair => new KeyValuePair<string, object?>(pair.Key, pair.Value))
-            : new RouteValueDictionary(values);
-
-        var result = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var (name, value) in entries)
-        {
-            var converted = Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture);
-            if (string.IsNullOrWhiteSpace(converted))
-            {
-                throw new InvalidOperationException(
-                    $"Route value '{name}' on '{values.GetType().Name}' resolved to null or whitespace.");
-            }
-
-            result.Add(name, converted);
-        }
-
-        return result;
+        return new RouteValueDictionary(values)
+            .ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.OrdinalIgnoreCase);
     }
 
     private ResolvedSitePaths UseRunOptions(ResolvedSitePaths options)
@@ -970,5 +942,5 @@ public sealed class StaticSite
 
     private sealed record RouteRegistration(
         Type ComponentType,
-        Func<IReadOnlyList<IReadOnlyDictionary<string, string>>> CreateEntries);
+        Func<IReadOnlyList<IReadOnlyDictionary<string, object?>>> CreateEntries);
 }

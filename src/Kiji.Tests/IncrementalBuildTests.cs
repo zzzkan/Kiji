@@ -55,13 +55,14 @@ public sealed class IncrementalBuildTests : IDisposable
         var original = await File.ReadAllTextAsync(manifestPath);
         var expected = SnapshotDirectory(Path.Combine(root, "dist"));
 
-        foreach (var damage in new[] { "old-schema", "invalid-json", "null-pages", "null-page", "duplicate-page", "missing-dependencies", "outside-output" })
+        foreach (var damage in new[] { "old-schema", "invalid-json", "null-pages", "null-page", "duplicate-page", "missing-dependencies", "empty-parameter-hash", "outside-output" })
         {
             var json = System.Text.Json.Nodes.JsonNode.Parse(original)!;
             var pages = json["Pages"]!.AsArray();
             switch (damage)
             {
-                case "old-schema": json["SchemaVersion"] = 1; break;
+                case "old-schema": json["SchemaVersion"] = 2; break;
+                case "empty-parameter-hash": pages[0]!["ParametersHash"] = ""; break;
                 case "null-pages": json["Pages"] = null; break;
                 case "null-page": pages[0] = null; break;
                 case "duplicate-page": pages.Add(pages[0]!.DeepClone()); break;

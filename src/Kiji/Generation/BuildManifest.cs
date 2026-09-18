@@ -8,7 +8,7 @@ namespace Kiji.Generation;
 /// </summary>
 internal sealed record BuildManifest
 {
-    internal const int CurrentSchemaVersion = 2;
+    internal const int CurrentSchemaVersion = 3;
 
     public int SchemaVersion { get; init; }
 
@@ -35,7 +35,7 @@ internal sealed record BuildManifest
         foreach (var page in Pages)
         {
             if (page is null || !IsRelativeOutput(page.OutputRelativePath) || !outputs.Add(page.OutputRelativePath)
-                || string.IsNullOrEmpty(page.RoutePath) || string.IsNullOrEmpty(page.ParametersHash)
+                || string.IsNullOrEmpty(page.RoutePath) || page.ParametersHash is ""
                 || string.IsNullOrEmpty(page.OutputHash) || page.Dependencies is null || page.AdditionalOutputs is null
                 || page.AdditionalOutputs.Any(static path => !IsRelativeOutput(path))
                 || page.Dependencies.Any(static dependency => dependency is null || dependency.Key is null

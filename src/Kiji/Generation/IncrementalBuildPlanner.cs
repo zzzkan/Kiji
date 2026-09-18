@@ -84,8 +84,10 @@ internal sealed class IncrementalBuildPlanner(
 
     private bool CanSkip(PageRenderRequest request, BuildManifestPage oldPage)
     {
-        if (!string.Equals(oldPage.RoutePath, request.RoutePath, StringComparison.Ordinal)
-            || !string.Equals(oldPage.ParametersHash, BuildFingerprint.HashParameters(request.Parameters), StringComparison.Ordinal))
+        var parametersHash = BuildFingerprint.HashParameters(request.Parameters);
+        if (parametersHash is null || oldPage.ParametersHash is null
+            || !string.Equals(oldPage.RoutePath, request.RoutePath, StringComparison.Ordinal)
+            || !string.Equals(oldPage.ParametersHash, parametersHash, StringComparison.Ordinal))
         {
             return false;
         }

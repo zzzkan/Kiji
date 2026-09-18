@@ -113,7 +113,7 @@ public sealed class PageDiscoveryTests
 
         var exception = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());
 
-        Assert.Contains("neither route parameters nor declared", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("not a declared", exception.Message, StringComparison.Ordinal);
         Assert.Contains("'Wrong'", exception.Message, StringComparison.Ordinal);
         Assert.Contains("/tags/{TagSlug}/", exception.Message, StringComparison.Ordinal);
     }

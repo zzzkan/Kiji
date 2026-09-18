@@ -27,28 +27,44 @@ public sealed class PageRegistrationTests
     }
 
     [Fact]
-    public async Task TypedRegistration_AcceptsStringDictionaryAndConvertsAnonymousValuesInvariantly()
+    public async Task TypedRegistration_AcceptsStringDictionaryAndAnonymousStrings()
     {
         await using var site = CreateSite();
         site.AddPages<Parameterized>(static _ =>
         [
             new Dictionary<string, string> { ["Value"] = "dictionary" },
-            new { Value = 42 },
+            new { Value = "42" },
+            new System.Collections.ObjectModel.ReadOnlyDictionary<string, string>(new Dictionary<string, string> { ["Value"] = "readonly" }),
         ]);
 
         Assert.Equal(
-            ["/items/42/", "/items/dictionary/"],
+            ["/items/42/", "/items/dictionary/", "/items/readonly/"],
             site.CreateSnapshot().Pages.Select(static page => page.RoutePath).Order());
     }
 
-    [Fact]
-    public async Task TypedRegistration_RejectsNullRouteValue()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task TypedRegistration_RejectsNullOrWhitespaceRouteValue(string? value)
     {
         await using var site = CreateSite();
-        site.AddPages<Parameterized>(static _ => [new { Value = (string?)null }]);
+        site.AddPages<Parameterized>(_ => [new { Value = value }]);
 
         var exception = Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
         Assert.Contains("null or whitespace", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RouteName_AlsoRequiresADeclaredParameter()
+    {
+        await using var site = CreateSite();
+        var type = CreatePageType("/missing/{Value}/");
+        typeof(StaticSite).GetMethod(nameof(StaticSite.AddPages))!.MakeGenericMethod(type)
+            .Invoke(site, [new Func<IServiceProvider, IEnumerable<object>>(static _ => [new { Value = "one" }])]);
+        var error = Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
+        Assert.Contains("'Value'", error.Message, StringComparison.Ordinal);
+        Assert.Contains("not a declared", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]

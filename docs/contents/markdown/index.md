@@ -85,9 +85,15 @@ app.UseMarkdownContent<PostFrontMatter>(
 ```
 
 Use `ConfigureMarkdown` to customize Markdown parsing and rendering, such as adding
-syntax extensions or changing how a standalone link is rendered. Use
-`AddHtmlPostProcessor` to modify the resulting HTML instead. `ConfigureYaml` customizes
-front matter deserialization:
+syntax extensions or changing how a standalone link is rendered. `ConfigureYaml`
+customizes front matter deserialization:
+
+```csharp
+app.UseMarkdownContent<PostFrontMatter>(
+    options => options.ConfigureYaml(yaml => yaml.WithCaseInsensitivePropertyMatching()));
+```
+
+Use `AddHtmlPostProcessor` to modify the resulting HTML instead:
 
 ```csharp
 app.UseMarkdownContent<PostFrontMatter>(
@@ -129,6 +135,11 @@ To replace the encoder entirely, supply a factory for your `IImageProcessor`:
 ```csharp
 app.UseImageProcessor(() => new CustomProcessor());
 ```
+
+`IImageProcessor.ProcessAsync` receives the source path, page output directory, optional
+cache directory, and cancellation token. It writes the variants and returns their file
+names and widths in a `ProcessedImageInfo`. See [API reference](../api-reference/#image-processing)
+for the complete contract.
 
 Kiji calls the factory lazily and shares the processor for the site's lifetime. The
 last registration wins; a null factory or result is rejected. `RunAsync` disposes the

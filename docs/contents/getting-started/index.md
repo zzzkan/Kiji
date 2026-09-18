@@ -15,24 +15,34 @@ Requires the .NET 10 SDK. The initial release is a preview; pin its version expl
 ```powershell
 dotnet new console -f net10.0 -o MySite
 cd MySite
-dotnet add package Kiji --version 0.1.0-preview
 ```
 
-Then switch the project to the Razor SDK so you can write pages as `.razor` files:
+Replace `MySite.csproj` with the following. It switches the project to the Razor SDK so
+you can write `.razor` files and pins the preview package explicitly:
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Kiji" Version="0.1.0-preview" />
+  </ItemGroup>
+
+</Project>
 ```
 
-## Declare the site
+## Build the smallest site
 
 `Program.cs` builds the site the way a minimal-API app builds a web host:
 
 ```csharp
 using Kiji;
-using Kiji.Markdown;
-using Kiji.Sitemaps;
-using Microsoft.Extensions.DependencyInjection;
 
 var app = StaticSite.Create(args);
 app.Info = new SiteInfo
@@ -41,44 +51,26 @@ app.Info = new SiteInfo
     Name = "My Site",
 };
 
-// The front matter shape is yours; Kiji does not define one.
-app.UseMarkdownContent<PostFrontMatter, Post>(Post.Create);
-
-app.UseDefaultLayout<MainLayout>();
 app.AddStaticPages();
-app.UseNotFoundPage<NotFoundPage>();
-
-app.AddPages<PostPage>(services => services
-    .GetRequiredService<ContentDictionary<Post>>()
-    .Select(post => new
-    {
-        post.Value.Slug,
-        ContentKey = post.Key,
-    }));
-
-app.AddSitemap();
 
 return await app.RunAsync();
 ```
 
-Configure `app.Info`, `app.Paths`, and all `Add*` / `Use*` registrations
-before calling `RunAsync`. Starting the site makes those settings read-only; later
-changes throw. The dev server reloads changed content automatically.
-
-`Post.Create` is site code: it validates front matter and derives `Post.Slug` from the
-Markdown file name. Kiji's dictionary key remains an opaque lookup value and never becomes
-part of the URL.
-
-A page is any public component with a route:
+Create `Pages/HomePage.razor`:
 
 ```razor
 @page "/"
 
-<h1>Hello</h1>
+<h1>Hello from Kiji</h1>
+<p>This page is a Razor component rendered to static HTML.</p>
 ```
 
-`AddStaticPages()` finds parameterless routes in your assembly — writing `@page "/"` makes a
-component a fixed page. Register a parameterized page with `AddPages<TPage>`; it does not need assembly discovery.
+This is a complete site. `AddStaticPages()` finds public components with fixed routes in
+the entry assembly, so writing `@page "/"` makes `HomePage` the home page.
+
+Configure `app.Info`, `app.Paths`, and all `Add*` / `Use*` registrations
+before calling `RunAsync`. Starting the site makes those settings read-only; later
+changes throw. The dev server reloads changed content automatically.
 
 ## Run it
 
@@ -102,12 +94,27 @@ Upload the contents of `dist/` to your static host.
 `RunAsync` is the public execution boundary and can be called once. It chooses serving or
 publishing from the MSBuild environment and releases all owned resources before returning.
 
+## Add Markdown pages
+
+A Markdown-backed site adds four pieces to the minimal site:
+
+1. A front matter class defining the site's metadata fields.
+2. A model that validates each Markdown file and derives its URL slug.
+3. A parameterized Razor component such as `@page "/blog/{Slug}/"`.
+4. `UseMarkdownContent` and `AddPages` registrations connecting the content to that page.
+
+The repository's [complete site template](https://github.com/zzzkan/kiji/tree/main/templates/site)
+contains all four, including a layout, a not-found page, responsive images, and a sitemap.
+Start with that example when adding content rather than copying an isolated registration.
+Then read [Markdown and images](../markdown/) for file selection, front matter, rendering,
+and image behavior.
+
 ## Project layout
 
 | Path | What it is |
 | --- | --- |
 | `Pages/` | Components with an `@page` route |
-| `contents/` | Markdown, one directory per page, images beside them |
+| `contents/` | Markdown content; page bundles may keep one page and its images in each directory |
 | `wwwroot/` | Static assets, copied to the output as-is |
 | `dist/` | The generated site |
 | `.kiji/` | Build manifest and caches |

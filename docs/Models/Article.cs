@@ -4,11 +4,11 @@ using System.Text.RegularExpressions;
 namespace Kiji.Docs.Models;
 
 /// <summary>A documentation page with its site-specific route and presentation metadata.</summary>
-public sealed class Doc
+public sealed class Article
 {
-    private readonly MarkdownContent<DocFrontMatter> _content;
+    private readonly MarkdownContent<FrontMatter> _content;
 
-    private Doc(MarkdownContent<DocFrontMatter> content, string slug)
+    private Article(MarkdownContent<FrontMatter> content, string slug)
     {
         _content = content;
         Slug = slug;
@@ -27,7 +27,7 @@ public sealed class Doc
         return _content.RenderAsync(cancellationToken);
     }
 
-    public static Doc Create(MarkdownContent<DocFrontMatter> content)
+    public static Article Create(MarkdownContent<FrontMatter> content)
     {
         ArgumentNullException.ThrowIfNull(content);
 
@@ -39,7 +39,7 @@ public sealed class Doc
             throw new InvalidOperationException($"Cannot determine a slug for '{content.FileInfo.FullName}'.");
         }
 
-        return new Doc(content, NormalizeSlug(value));
+        return new Article(content, NormalizeSlug(value));
     }
 
     private static string NormalizeSlug(string value)

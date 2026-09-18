@@ -1,10 +1,9 @@
 @page "/docs/{Slug}/"
-@inject ContentDictionary<Doc> Docs
+@inject ContentDictionary<Article> Docs
 
 @if (_doc is not null)
 {
-    <PageHead Title="@(_doc.Title ?? string.Empty)"
-              Description="@(_doc.Description ?? string.Empty)" />
+    <PageHead Title="@(_doc.Title ?? string.Empty)" Description="@(_doc.Description ?? string.Empty)" />
 
     <article class="doc">
         <h1>@_doc.Title</h1>
@@ -16,7 +15,7 @@
     [Parameter] public string Slug { get; set; } = string.Empty;
     [Parameter] public string ContentKey { get; set; } = string.Empty;
 
-    private Doc? _doc;
+    private Article? _doc;
     private string _html = string.Empty;
 
     protected override async Task OnParametersSetAsync()

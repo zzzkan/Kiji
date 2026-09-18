@@ -1,4 +1,4 @@
-@page "/"
+﻿@page "/"
 @inject SiteInfo Site
 
 <PageHead Title="" Description="@Site.Description" />
@@ -6,10 +6,11 @@
 <div class="hero">
     <h1>Write pages as Razor components. Ship static HTML.</h1>
     <p class="lede">
-        Kiji is a static site generator framework for .NET. Use Razor components to build pages, with Markdown, layouts, and static assets.
+        Kiji is a static site generator for .NET. Use Razor components to build pages, with Markdown, layouts, and
+        static assets.
     </p>
     <p class="cta">
-        <a class="button" href="@(Site.BaseUrl.AbsolutePath + "docs/getting-started/")">Get started</a>
+        <a class="button" href="@($"{Site.BaseUrl.AbsolutePath}docs/getting-started/")">Get started</a>
         <a href="https://github.com/zzzkan/kiji">Source on GitHub</a>
     </p>
 </div>
@@ -27,7 +28,8 @@
     <article>
         <h2>Incremental by default</h2>
         <p>
-            Editing a post rebuilds the pages that depend on it. Kiji reuses unchanged output and rebuilds when its saved state is uncertain.
+            Editing a post rebuilds the pages that depend on it. Kiji reuses unchanged output and rebuilds when its
+            saved state is uncertain.
         </p>
     </article>
 
@@ -52,9 +54,9 @@
 
 <section class="quickstart">
     <h2>Getting started</h2>
-    <pre><code>dotnet add package Kiji --version 0.1.0-preview</code></pre>
+    <pre><code>dotnet add package Kiji --prerelease</code></pre>
     <p>
         Then declare your site. <a href="@(Site.BaseUrl.AbsolutePath + "docs/getting-started/")">The full
-        walkthrough</a> covers the project layout and the CLI.
+        walkthrough</a> covers the project layout and development workflow.
     </p>
 </section>

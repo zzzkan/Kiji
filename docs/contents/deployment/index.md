@@ -5,8 +5,9 @@ order: 40
 ---
 
 `dotnet publish -c Release -o dist` writes a plain directory of files to `dist/`. It holds
-the generated site alone — no assemblies, no `deps.json` — so any static host will serve it
-as-is.
+the generated site alone — no assemblies, no `deps.json`. Any static host can serve it,
+provided its clean-URL, trailing-slash, and not-found behavior is configured as described
+below.
 
 ## Set the published URL
 
@@ -86,7 +87,15 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
-      - run: dotnet publish src/MySite -c Release -o dist
+      - name: Restore the Kiji build cache
+        uses: actions/cache@v4
+        with:
+          path: MySite/.kiji
+          key: kiji-${{ runner.os }}-${{ hashFiles('MySite/**/*.cs', 'MySite/**/*.razor', 'MySite/**/*.csproj', 'MySite/contents/**', 'MySite/wwwroot/**') }}
+          restore-keys: |
+            kiji-${{ runner.os }}-
+
+      - run: dotnet publish MySite -c Release -o dist
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
@@ -117,4 +126,7 @@ Two things worth configuring on the host:
 
 `.kiji/` holds the build manifest and the image cache. Persisting it between CI runs lets
 incremental builds skip unchanged pages and skip re-encoding unchanged images. It is
-purely an optimization — a missing cache just means a full build.
+purely an optimization — a missing cache just means a full build. The Actions example
+above restores the most recent cache for the runner OS and saves the updated cache after
+a successful job. Adjust both `MySite/.kiji` and the `MySite/**` key inputs if your project
+lives somewhere else.

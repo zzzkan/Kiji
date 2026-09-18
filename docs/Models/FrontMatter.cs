@@ -1,10 +1,9 @@
 namespace Kiji.Docs.Models;
 
 /// <summary>
-/// Front matter for a documentation page. Kiji does not define this shape — the site
-/// does — so ordering and navigation titles live here rather than in the framework.
+/// Front matter for a documentation page.
 /// </summary>
-public sealed class DocFrontMatter
+public sealed class FrontMatter
 {
     /// <summary>The page heading and <c>&lt;title&gt;</c>.</summary>
     public string? Title { get; set; }

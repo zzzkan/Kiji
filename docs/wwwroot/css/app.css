@@ -61,6 +61,12 @@ pre code {
     padding: 0;
 }
 
+@media (prefers-color-scheme: dark) {
+    pre[class*="language-"] {
+        background: var(--surface);
+    }
+}
+
 blockquote {
     margin: 1.5rem 0;
     padding: 0.1rem 1.1rem;
@@ -184,7 +190,7 @@ main {
     min-width: 0;
 }
 
-main > :first-child {
+main> :first-child {
     margin-top: 0;
 }
 
@@ -204,12 +210,14 @@ h2 {
     border-top: 1px solid var(--rule);
     color: var(--ink-muted);
     font-size: 0.9rem;
+    text-align: center;
 }
 
 .site-footer p {
     max-width: 64rem;
     margin: 0 auto;
     padding: 1.25rem;
+    text-align: center;
 }
 
 /* ---------- home ---------- */

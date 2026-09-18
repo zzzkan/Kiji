@@ -1,6 +1,6 @@
 using Kiji;
-using Kiji.Docs.Models;
 using Kiji.Docs.Components;
+using Kiji.Docs.Models;
 using Kiji.Docs.Pages;
 using Kiji.Markdown;
 using Kiji.Sitemaps;
@@ -11,19 +11,19 @@ site.Info = new()
 {
     BaseUrl = new Uri("https://zzzkan.github.io/kiji/"),
     Name = "Kiji",
-    Description = "A static site generator framework for .NET. Write pages as Razor components.",
+    Description = "A static site generator for .NET. Write pages as Razor components.",
     Language = "en",
     Author = "zzzkan",
 };
 
-site.UseMarkdownContent<DocFrontMatter, Doc>(
-    select: static content => Doc.Create(content));
+site.UseMarkdownContent<FrontMatter, Article>(
+    select: static content => Article.Create(content));
 site.UseDefaultLayout<MainLayout>();
 site.UseNotFoundPage<NotFoundPage>();
 
 site.AddStaticPages();
-site.AddPages<DocPage>(static services => services
-    .GetRequiredService<ContentDictionary<Doc>>()
+site.AddPages<ArticlePage>(static services => services
+    .GetRequiredService<ContentDictionary<Article>>()
     .Select(static doc => new { doc.Value.Slug, ContentKey = doc.Key }));
 site.AddSitemap();
 

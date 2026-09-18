@@ -1,14 +1,13 @@
 ﻿@inherits LayoutComponentBase
 @inject SiteInfo Site
-@inject ContentDictionary<Doc> Docs
+@inject ContentDictionary<Article> Docs
 
 <a class="skip-link" href="#main-content">Skip to content</a>
 
 <header class="site-header">
     <div class="bar">
-        <a class="site-title" href="@Site.BaseUrl.AbsolutePath">@Site.Name</a>
+        <a class="site-title" href="@Site.BaseUrl.AbsolutePath">@($"📰{Site.Name}")</a>
         <nav aria-label="Main">
-            <a href="@(Site.BaseUrl.AbsolutePath + "docs/")">Docs</a>
             <a href="https://github.com/zzzkan/kiji">GitHub</a>
             <a href="https://www.nuget.org/packages/Kiji">NuGet</a>
         </nav>
@@ -35,7 +34,7 @@
 
 <footer class="site-footer">
     <p>
-        Kiji is MIT licensed. This site is
-        <a href="https://github.com/zzzkan/kiji/tree/main/src/Kiji.Docs">built with Kiji</a>.
+        © 2026 zzzkan, built with
+        <a href="https://github.com/zzzkan/kiji/tree/main/docs">Kiji</a>.
     </p>
 </footer>

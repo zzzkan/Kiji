@@ -8,11 +8,15 @@ Kiji is a library, not a CLI tool. Your site is an ordinary .NET project that re
 it, so there are no Kiji commands to learn: `dotnet watch` runs it, `dotnet publish`
 generates it.
 
+In a few minutes, this guide gives you a Razor page, a local development server, and a
+static publish output. Add Markdown content and optimized page-bundle images afterward;
+they are built into the same package rather than separate extensions.
+
 ## Install
 
 Requires the .NET 10 SDK. The initial release is a preview; pin its version explicitly.
 
-```powershell
+```pwsh
 dotnet new console -f net10.0 -o MySite
 cd MySite
 ```
@@ -25,9 +29,6 @@ you can write `.razor` files and pins the preview package explicitly:
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
   <ItemGroup>
@@ -68,31 +69,23 @@ Create `Pages/HomePage.razor`:
 This is a complete site. `AddStaticPages()` finds public components with fixed routes in
 the entry assembly, so writing `@page "/"` makes `HomePage` the home page.
 
+The small site definition is intentional: configure the site with `Create`, add behavior
+with `Add*` and `Use*`, and start it once with `RunAsync`. There is no separate Kiji
+configuration language or command-line interface to learn.
+
 Configure `app.Info`, `app.Paths`, and all `Add*` / `Use*` registrations
 before calling `RunAsync`. Starting the site makes those settings read-only; later
 changes throw. The dev server reloads changed content automatically.
 
 ## Run it
 
-| Command | What it does |
-| --- | --- |
-| `dotnet watch` | Dev server with live reload and hot reload |
-| `dotnet run` | Dev server without hot reload |
-| `dotnet publish -c Release -o dist` | Generates the site into `dist/`, incrementally |
-| `dotnet clean` | Deletes the build cache |
+| Command                             | What it does                               |
+| ----------------------------------- | ------------------------------------------ |
+| `dotnet watch`                      | Dev server with live reload and hot reload |
+| `dotnet publish -c Release -o dist` | Generates the site into `dist/`            |
+| `dotnet clean`                      | Deletes the build cache                    |
 
-Publishing takes `-p:KijiForce=true` for a full rebuild and `-p:KijiVerbose=true` for
-per-file output. The dev server listens on <http://localhost:8080> unless
-`ASPNETCORE_URLS` or a `launchSettings.json` profile says otherwise.
-
-The development server also watches file and directory inputs declared with
-`app.AddBuildInput(path)`. Changes invalidate loaded content and reload connected
-browsers. Razor and C# changes require `dotnet watch`.
-
-Upload the contents of `dist/` to your static host.
-
-`RunAsync` is the public execution boundary and can be called once. It chooses serving or
-publishing from the MSBuild environment and releases all owned resources before returning.
+The dev server listens on <http://localhost:8080> by default. Run `dotnet publish -c Release -o dist` to generate the site, then upload the contents of `dist/` to your static host.
 
 ## Add Markdown pages
 
@@ -103,21 +96,16 @@ A Markdown-backed site adds four pieces to the minimal site:
 3. A parameterized Razor component such as `@page "/blog/{Slug}/"`.
 4. `UseMarkdownContent` and `AddPages` registrations connecting the content to that page.
 
-The repository's [complete site template](https://github.com/zzzkan/kiji/tree/main/templates/site)
-contains all four, including a layout, a not-found page, responsive images, and a sitemap.
-Start with that example when adding content rather than copying an isolated registration.
-Then read [Markdown and images](../markdown/) for file selection, front matter, rendering,
-and image behavior.
+See [Markdown and images](../markdown/) for file selection, front matter, rendering, and image behavior.
 
 ## Project layout
 
-| Path | What it is |
-| --- | --- |
-| `Pages/` | Components with an `@page` route |
+| Path        | What it is                                                                        |
+| ----------- | --------------------------------------------------------------------------------- |
 | `contents/` | Markdown content; page bundles may keep one page and its images in each directory |
-| `wwwroot/` | Static assets, copied to the output as-is |
-| `dist/` | The generated site |
-| `.kiji/` | Build manifest and caches |
+| `wwwroot/`  | Static assets, copied to the output as-is                                         |
+| `dist/`     | The generated site                                                                |
+| `.kiji/`    | Build manifest and caches                                                         |
 
 Add `dist/` and `.kiji/` to your `.gitignore`.
 

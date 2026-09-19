@@ -1,7 +1,7 @@
 ---
 title: API reference
 description: The site-authoring API, its defaults, and when each registration runs.
-order: 45
+order: 100
 ---
 
 This page lists the public surface used to author a Kiji site. Registrations return the
@@ -17,41 +17,41 @@ app.Info = new SiteInfo { BaseUrl = new Uri("https://example.com/"), Name = "My 
 return await app.RunAsync();
 ```
 
-| Member | Purpose |
-| --- | --- |
-| `StaticSite.Create(string[] args)` | Creates one site. Arguments are forwarded to ASP.NET Core configuration while serving. |
-| `Info` | Required site metadata. Assign it before any operation that starts execution. |
-| `Paths` | Input paths, mutable until execution starts. |
-| `RunAsync(CancellationToken)` | Serves during `dotnet run` or `dotnet watch`, and generates during `dotnet publish`. A site can run once. |
+| Member                             | Purpose                                                                                                   |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `StaticSite.Create(string[] args)` | Creates one site. Arguments are forwarded to ASP.NET Core configuration while serving.                    |
+| `Info`                             | Required site metadata. Assign it before any operation that starts execution.                             |
+| `Paths`                            | Input paths, mutable until execution starts.                                                              |
+| `RunAsync(CancellationToken)`      | Serves during `dotnet run` or `dotnet watch`, and generates during `dotnet publish`. A site can run once. |
 
 ## SiteInfo and paths
 
 `SiteInfo.BaseUrl` and `Name` are required. `BaseUrl` must be an absolute HTTP or HTTPS
 URL without a query or fragment; Kiji normalizes it to a trailing slash.
 
-| Property | Default | Used for |
-| --- | --- | --- |
-| `SiteInfo.Description` | Empty | Site-defined metadata and feed description |
-| `SiteInfo.Language` | `"en"` | The generated `<html lang>` attribute and RSS language |
-| `SiteInfo.Author` | Empty | Site-defined metadata |
-| `SitePaths.RootDirectory` | Nearest project, then Git root, then current directory | Resolving all relative site paths |
-| `SitePaths.ContentDirectory` | `contents` | Content sources |
-| `SitePaths.StaticDirectory` | `wwwroot` when null | Files copied unchanged to the output |
+| Property                     | Default                                                | Used for                                               |
+| ---------------------------- | ------------------------------------------------------ | ------------------------------------------------------ |
+| `SiteInfo.Description`       | Empty                                                  | Site-defined metadata and feed description             |
+| `SiteInfo.Language`          | `"en"`                                                 | The generated `<html lang>` attribute and RSS language |
+| `SiteInfo.Author`            | Empty                                                  | Site-defined metadata                                  |
+| `SitePaths.RootDirectory`    | Nearest project, then Git root, then current directory | Resolving all relative site paths                      |
+| `SitePaths.ContentDirectory` | `contents`                                             | Content sources                                        |
+| `SitePaths.StaticDirectory`  | `wwwroot` when null                                    | Files copied unchanged to the output                   |
 
 ## Pages and layouts
 
-| Registration | Contract |
-| --- | --- |
-| `AddStaticPages()` | Finds public, non-abstract components with fixed routes in the entry assembly. |
-| `AddStaticPages(Assembly)` | Finds fixed routes in another assembly. Repeating the same assembly has no effect. |
-| `AddPages<TPage>(factory)` | Registers parameter sets for a component with exactly one parameterized route. The factory runs once per registration per snapshot. |
-| `UseDefaultLayout<TLayout>()` | Applies a `LayoutComponentBase` to pages without their own `@layout`. |
-| `UseNotFoundPage<TPage>()` | Writes the routed component as `/404.html`; it cannot also be registered with `AddPages`. |
-| `AddPageService<T>()` | Creates one concrete service instance per page render and disposes it afterward. |
+| Registration                  | Contract                                                                                                                            |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `AddStaticPages()`            | Finds public, non-abstract components with fixed routes in the entry assembly.                                                      |
+| `AddStaticPages(Assembly)`    | Finds fixed routes in another assembly. Repeating the same assembly has no effect.                                                  |
+| `AddPages<TPage>(factory)`    | Registers parameter sets for a component with exactly one parameterized route. The factory runs once per registration per snapshot. |
+| `UseDefaultLayout<TLayout>()` | Applies a `LayoutComponentBase` to pages without their own `@layout`.                                                               |
+| `UseNotFoundPage<TPage>()`    | Writes the routed component as `/404.html`; it cannot also be registered with `AddPages`.                                           |
+| `AddPageService<T>()`         | Creates one concrete service instance per page render and disposes it afterward.                                                    |
 
 `AddPages` accepts anonymous objects or string/object dictionaries. Names match route and
 component parameters case-insensitively. Values keep their .NET types; Kiji performs no
-implicit parameter conversion. See [Routes](../concepts/#routes) for binding and
+implicit parameter conversion. See [Routing](../concepts/#routing) for binding and
 incremental-build rules.
 
 Use `Kiji.Components.HeadContent` once per page to supply `<title>`, metadata, and links to
@@ -84,27 +84,27 @@ app.UseMarkdownContent<PostFrontMatter, Post>(Post.Create, options =>
 });
 ```
 
-| Member | Purpose |
-| --- | --- |
-| `UseMarkdownContent<TFrontMatter>(configure?)` | Registers `ContentDictionary<MarkdownContent<TFrontMatter>>`. |
-| `UseMarkdownContent<TFrontMatter,TModel>(select, configure?)` | Projects each file independently into a site model. |
-| `MarkdownOptions.Directory` | Limits the recursive scan to a directory below `contents`. |
-| `MarkdownOptions.FileFilter` | Includes or excludes files before loading. |
-| `ConfigureMarkdown` | Extends the default Markdig pipeline. |
-| `ConfigureYaml` | Extends the camel-case, ignore-unknown-properties YAML deserializer. |
-| `AddHtmlPostProcessor` | Applies a synchronous HTML transform after Markdown rendering, in registration order. |
-| `MarkdownContent<T>.FileInfo` | Source-file metadata. |
-| `MarkdownContent<T>.FrontMatter` | Parsed front matter. |
-| `MarkdownContent<T>.RenderAsync()` | Renders HTML and materializes referenced image variants beside the current page. |
+| Member                                                        | Purpose                                                                               |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `UseMarkdownContent<TFrontMatter>(configure?)`                | Registers `ContentDictionary<MarkdownContent<TFrontMatter>>`.                         |
+| `UseMarkdownContent<TFrontMatter,TModel>(select, configure?)` | Projects each file independently into a site model.                                   |
+| `MarkdownOptions.Directory`                                   | Limits the recursive scan to a directory below `contents`.                            |
+| `MarkdownOptions.FileFilter`                                  | Includes or excludes files before loading.                                            |
+| `ConfigureMarkdown`                                           | Extends the default Markdig pipeline.                                                 |
+| `ConfigureYaml`                                               | Extends the camel-case, ignore-unknown-properties YAML deserializer.                  |
+| `AddHtmlPostProcessor`                                        | Applies a synchronous HTML transform after Markdown rendering, in registration order. |
+| `MarkdownContent<T>.FileInfo`                                 | Source-file metadata.                                                                 |
+| `MarkdownContent<T>.FrontMatter`                              | Parsed front matter.                                                                  |
+| `MarkdownContent<T>.RenderAsync()`                            | Renders HTML and materializes referenced image variants beside the current page.      |
 
 See [Markdown and images](../markdown/) for examples and page-bundle URL behavior.
 
 ## Build inputs
 
-| Registration | Purpose |
-| --- | --- |
-| `AddBuildInput(path)` | Declares an external file or directory. Relative paths use `RootDirectory`. |
-| `AddBuildInput(key, value)` | Declares a named value such as a remote-data version or encoder setting. |
+| Registration                | Purpose                                                                     |
+| --------------------------- | --------------------------------------------------------------------------- |
+| `AddBuildInput(path)`       | Declares an external file or directory. Relative paths use `RootDirectory`. |
+| `AddBuildInput(key, value)` | Declares a named value such as a remote-data version or encoder setting.    |
 
 A changed declared input requires a full rebuild. In development, declared paths are also
 watched for content invalidation and browser reload. See [Performance](../performance/).

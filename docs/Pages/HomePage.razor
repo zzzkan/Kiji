@@ -4,46 +4,42 @@
 <PageHead Title="Home" Description="@Site.Description" />
 
 <div class="hero">
-    <h1>Write pages as Razor components. Ship static HTML.</h1>
+    <h1>Kiji</h1>
     <p class="lede">
-        Kiji is a static site generator for .NET. Use Razor components to build pages, with Markdown, layouts, and
-        static assets.
+        A static site generator for .NET that turns Razor components into static HTML.
+    </p>
+    <p class="hero-actions">
+        <a href="@($"{Site.BaseUrl.AbsolutePath}docs/getting-started/")">Getting started</a>
     </p>
 </div>
 
 <section class="pitch">
     <article>
-        <h2>One package</h2>
+        <h2><span class="heading-emoji" aria-hidden="true">🧰</span><span>Build with the .NET tools you know</span></h2>
         <p>
-            Markdown with YAML front matter, responsive WebP image optimization, RSS
-            feeds, sitemaps, and a live-reloading dev server are all in the
-            <code>Kiji</code> package. No hunting for extensions to combine.
+            Pages are Razor components with familiar routes, layouts, dependency injection,
+            and parameters. Define the site in one <code>Program.cs</code> with
+            <code>Create</code>, <code>Add*</code>, <code>Use*</code>, and <code>RunAsync</code>.
         </p>
     </article>
 
     <article>
-        <h2>Incremental by default</h2>
-        <p>
-            Editing a post rebuilds the pages that depend on it. Kiji reuses unchanged output and rebuilds when its
-            saved state is uncertain.
-        </p>
-    </article>
+        <h2><span class="heading-emoji" aria-hidden="true">📦</span><span>Get publishing essentials in one
+            package</span></h2>
+            <p>
+                Markdown with YAML front matter, responsive WebP image optimization, RSS,
+                sitemaps, and a live-reloading development server work together without a
+                collection of extensions to assemble.
+            </p>
+        </article>
 
-    <article>
-        <h2>Preview on demand</h2>
-        <p>
-            The dev server pre-generates nothing. It renders the page you
-            requested, through the same code path the build uses, so what you see is
-            what gets deployed.
-        </p>
-    </article>
-
-    <article>
-        <h2>Correctness first</h2>
-        <p>
-            Duplicate routes, output path collisions, missing route values, and paths
-            that escape the output directory all fail while planning, before a single
-            file is written.
-        </p>
-    </article>
-</section>
+        <article>
+            <h2><span class="heading-emoji" aria-hidden="true">🔄</span><span>A dependable development and publishing
+                loop</span></h2>
+                <p>
+                    <code>dotnet watch</code> reloads the browser as content changes and shares its
+                    rendering path with publishing. Kiji reuses valid output, rebuilds when state is
+                    uncertain, and lets you customize Markdown, HTML processing, and image processing.
+                </p>
+            </article>
+        </section>

@@ -15,7 +15,7 @@ description: Measure Kiji build performance and validate an optimization. Use wh
 **Adopt or reject with BenchmarkDotNet. Confirm with the end-to-end job. Explain with
 `--phases`.** A total that moved is not an explanation until a phase can be pinned on it.
 
-```powershell
+```pwsh
 # End-to-end, all scenarios and sizes. The authoritative number.
 dotnet run -c Release --project src/Kiji.Benchmarks -- --filter "*SiteBuildBenchmarks*"
 

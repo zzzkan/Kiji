@@ -4,7 +4,127 @@ description: Pages, the document shell, layouts, content dictionaries, and artif
 order: 20
 ---
 
-## The document shell
+## Site structure
+
+A Kiji site is assembled from a few core building blocks:
+
+- `StaticSite` — the site container that owns the generation pipeline
+- `SiteInfo` — site metadata such as the name, base URL, and language
+- `AddStaticPages()` / `AddPages<TPage>()` — register the pages to generate
+- `UseDefaultLayout<TLayout>()` — apply a common layout to pages
+- `UseMarkdownContent(...)` — load Markdown as a content source
+- `AddRssFeed(...)` / `AddSitemap()` — emit site-wide output artifacts
+
+For example, a site with fixed pages, Markdown-backed posts, a shared layout, and a sitemap
+can be defined like this:
+
+```csharp
+var site = StaticSite.Create(args);
+site.Info = new SiteInfo
+{
+    Name = "My site",
+    BaseUrl = new Uri("https://example.com/"),
+    Language = "en",
+};
+
+site.UseMarkdownContent<PostFrontMatter>();
+site.UseDefaultLayout<SiteLayout>();
+
+site.AddStaticPages();
+site.AddPages<PostPage>(services =>
+    services.GetRequiredService<ContentDictionary<MarkdownContent<PostFrontMatter>>>()
+        .Select(post => new
+        {
+            Slug = post.Value.FileInfo.Directory!.Name,
+            ContentKey = post.Key,
+        }));
+site.AddSitemap();
+
+return await site.RunAsync();
+```
+
+You can start small and grow the site from there: define the site, register pages and content,
+then run it.
+
+## Routing
+
+Kiji supports two ways to turn routed components into generated pages: `AddStaticPages` discovers
+fixed routes from an assembly, while `AddPages<TPage>` supplies the parameter sets for a
+parameterized route. Both forms write pages as `route/index.html`.
+
+### Fixed routes
+
+`AddStaticPages()` finds components with fixed routes in the entry assembly and registers them as
+pages. For example:
+
+```csharp
+site.AddStaticPages();
+```
+
+```razor
+@page "/about/"
+
+<h1>About</h1>
+```
+
+This generates `about/index.html`. Use `AddStaticPages(assembly)` when the pages are defined in
+another assembly. Parameterized routes use `AddPages<TPage>` instead.
+
+### Parameterized routes
+
+`AddPages<TPage>` registers parameter sets for a component with one parameterized route.
+No assembly scan is required. Route names bind to the component's `[Parameter]` properties;
+additional properties are passed to the component without appearing in the URL.
+
+For example, this creates one page per slug:
+
+```csharp
+site.AddPages<PostPage>(_ => new[]
+{
+    new { Slug = "first-post" },
+    new { Slug = "second-post" },
+});
+```
+
+```razor
+@page "/blog/{Slug}/"
+@code {
+    [Parameter] public string Slug { get; set; } = string.Empty;
+}
+```
+
+Values keep their original .NET types; Kiji does not perform implicit conversions. Route
+values must be nonempty and fit one path segment. Incorrect names, types, and non-public
+setters fail during page planning. Catch-all routes, constraints, optional parameters, and
+composite segments are not supported because a static site must know every output URL while
+it is being planned.
+
+`AddPages<TPage>` evaluates its parameter factory once per registration per snapshot, after
+execution paths are settled. Multiple registrations for the same type concatenate their
+results; an empty result is allowed. Invalid parameters and duplicate output paths fail
+during page planning.
+
+### Not-found pages
+
+Register a component as the site's not-found page with `UseNotFoundPage<TPage>()`:
+
+```csharp
+site.UseNotFoundPage<NotFoundPage>();
+```
+
+The component needs one route declaration, just like any other page:
+
+```razor
+@page "/not-found/"
+
+<h1>Page not found</h1>
+<p>The page you requested does not exist.</p>
+<a href="@Site.BaseUrl.AbsolutePath">Go to the home page</a>
+```
+
+Kiji writes this page to `404.html`. Do not register the same component with `AddPages`.
+
+## Document skeleton
 
 Kiji renders the document itself: the doctype, `<html lang>` from `SiteInfo.Language`,
 `<head>`, and `<body>`. You never write a layout file containing `<!DOCTYPE html>`.
@@ -12,39 +132,18 @@ Kiji renders the document itself: the doctype, `<html lang>` from `SiteInfo.Lang
 Pages contribute to `<head>` through the `Kiji.Components.HeadContent` component:
 
 ```razor
-<Kiji.Components.HeadContent>
+<HeadContent>
     <meta charset="utf-8" />
     <title>@Title</title>
     <link rel="canonical" href="@NavigationManager.Uri" />
-</Kiji.Components.HeadContent>
+</HeadContent>
 ```
 
 Render at most one per page — when several appear, the last one rendered wins.
 
-## Route-declared pages
-
-`AddStaticPages()` scans your assembly for public components carrying a parameterless route and
-registers each as a page; parameterized routes are ignored. Use `AddStaticPages(assembly)` for other assemblies. Repeating an assembly registration has no effect, and an assembly with no fixed pages is allowed.
-
-Routes are static or take parameters:
-
-```razor
-@page "/blog/{Slug}/"
-```
-
-Register parameterized pages directly with [`AddPages`](#routes); no assembly scan is required. The component must declare exactly one parameterized route, which is where
-the route set comes from. Catch-all routes, route constraints, optional parameters, and
-composite segments are rejected — a static site has to know every URL up front.
-
-Pages are written as `route/index.html`. The dev server redirects `/route` to
-`/route/`, preserving the query string, so document-relative images resolve beside
-the page. Canonical URLs use the trailing-slash form.
-
 ## Layouts
 
-`UseDefaultLayout<TLayout>()` applies a layout to every page. A page opts out or swaps
-with `@layout`, and layouts nest by declaring their own. A circular chain throws rather
-than hanging.
+`UseDefaultLayout<TLayout>()` applies a layout to every page. A page opts out or swaps with `@layout`, and layouts nest by declaring their own.
 
 ```razor
 @inherits LayoutComponentBase
@@ -53,176 +152,15 @@ than hanging.
 <main>@Body</main>
 ```
 
-## Content dictionaries
+## Markdown
 
-`UseMarkdownContent<TFrontMatter>(...)` and `UseContentSource<T>(...)` declare a
-`ContentDictionary<T>`, which materializes lazily. Kiji assigns each item an opaque key:
-Markdown uses the absolute source path, while a general source uses zero-based strings in
-loader order. These keys exist only to find an item again in the same dictionary; they are
-not URLs, slugs, domain identifiers, or persistent IDs.
+Markdown is an optional content source for pages, feeds, and other site features. Kiji
+reads Markdown files with front matter, renders their body to HTML, and can process local
+images as part of the page bundle. The resulting items are exposed as a typed content
+dictionary, so a site can decide how to map content to URLs and page components.
 
-```csharp
-app.UseMarkdownContent<PostFrontMatter>(
-    options => options.Directory = "posts");
-```
-
-There is no handle to pass around. **A dictionary is identified by its element type**, and
-it is resolved from services — by a component through injection, or by a route or feed
-factory through the provider it is handed.
-
-```razor
-@inject ContentDictionary<MarkdownContent<PostFrontMatter>> Posts
-```
-
-Two dictionaries therefore need two element types. Declaring the same one twice is an error
-rather than a silent overwrite.
-
-It is an `IReadOnlyDictionary<string, T>`. Sort explicitly for the display order you want:
-
-```razor
-@foreach (var post in Posts.Values.OrderByDescending(post => post.FrontMatter.CreatedAt))
-{
-    <a href="@(Site.BaseUrl.AbsolutePath + $"blog/{PostSlug(post)}/")">@post.FrontMatter.Title</a>
-}
-```
-
-**Look items up through the indexer, not with a search.** `Posts[key]` is a dictionary
-lookup, and it tells the incremental build that the page depends on that one source file.
-`Posts.Values.First(p => ...)` enumerates instead, which makes the page depend on the
-whole content set — so editing one post would re-render all of them.
-
-### Your own model
-
-Pass a projection to work with your own type instead of `MarkdownContent<T>`. That
-projection is also where content that does not belong gets rejected:
-
-```csharp
-app.UseMarkdownContent<PostFrontMatter, Post>(
-    select: Post.Create,
-    configure: options => options.FileFilter = file => !Path.GetFileNameWithoutExtension(file.Name).StartsWith('_'));
-```
-
-Validate required metadata inside `Post.Create` and include `content.FileInfo.FullName` in
-the exception. The projection owns site-specific rules such as slug generation; Kiji does
-not attach route meaning to `FileInfo` or the dictionary key.
-
-The projection runs per item, so each model keeps the source file of the markdown it came
-from — which is what lets a keyed lookup stay a single-file dependency. Do not let it
-depend on other items.
-
-### Derived data
-
-Tag lists, related posts and archives can share their definitions without sharing their
-computed results. Choose where the computation belongs:
-
-| Where | What is shared | When computation runs |
-| --- | --- | --- |
-| A static method | The definition | Each call |
-| A page service (`app.AddPageService<T>()`) | One instance within a page render | Each method call, unless the service caches within that render |
-| A derived content dictionary | The computed index across pages | First access, then first access after content invalidation |
-
-A method with only a few dependencies can stay static. Use a page service when constructor
-injection makes the dependencies easier to manage. The page, layout and child components
-share that instance; another page or another request gets a fresh one. Kiji disposes page
-services when rendering finishes, including asynchronous disposal and failed renders.
-
-Register a helper with `app.AddPageService<RelatedPosts>()` and inject it into the
-page or layout. For an index shared across pages, register a separate element type with
-`UseContentSource<T>`; its factory can resolve the source dictionary from the supplied
-service provider. Keep each projection local to its source item and put computations
-spanning multiple items in a derived dictionary.
-
-Markdown edits, additions and deletions detected by the dev server invalidate both source
-and derived dictionaries. Code hot reload also invalidates them. The next access rebuilds
-the index; previously returned objects are not updated in place. A publish invalidates
-content before planning its pages.
-
-Reading a derived dictionary during rendering conservatively depends on the whole
-content tree, including when the index is already cached.
-
-Page services must be concrete types with public constructors. Duplicate registrations,
-replacement of Kiji-managed services, and registration after execution starts are rejected.
-Constructor dependencies can include other page services. Missing dependencies and cycles
-are errors. Content loaders, route/feed factories and artifacts cannot resolve page services;
-use content dictionaries or ordinary methods in those contexts. Service registration and
-constructor-shape changes may require restarting `dotnet watch`.
-
-## Routes
-
-`AddPages<TPage>` supplies the parameter sets for a page with a dynamic route template —
-one generated page per object. Property names are the page's `[Parameter]` names; those
-that also appear in the route template bind the URL, and the rest are passed through.
-
-Values keep their original .NET types. For example, with a `/items/{Id}/` route,
-`new { Id = 42, Featured = true }` supplies an `int` and a `bool` to matching public,
-writable `[Parameter]` properties. Only the URL uses the invariant string `"42"`.
-Anonymous objects and string/object-valued dictionaries (including read-only dictionaries)
-are supported through ASP.NET Core's `RouteValueDictionary`. Dictionary keys that differ
-only by case (such as `Id` and `id`) are rejected during normalization. Parameter names
-match route template names and component property names case-insensitively, as in Blazor.
-Non-route parameters may contain null, empty strings, whitespace, models,
-and collections; route values must still be nonempty, valid single path segments.
-
-There are no implicit parameter conversions: an `int` cannot populate a `string` or
-`long` property, and a string cannot populate an enum. Incorrect names, types, and
-non-public setters fail during planning. If upgrading code that relied on Kiji's former
-automatic string conversion, change the receiving property to the actual type or explicitly
-convert the supplied value using `CultureInfo.InvariantCulture`.
-
-Kiji copies the parameter dictionary, but keeps references to its values. Treat them as
-read-only for the snapshot's lifetime, including concurrent page renders and repeated dev
-server requests. Values are neither deep-cloned nor automatically disposed.
-
-Incremental builds can fingerprint null, string, bool, char, the fixed-width integer types
-from `sbyte` through `ulong`, enums, and `Guid`. Other values are accepted but make that
-page render on every build, including models, arrays, collections, dates, decimal, and
-floating-point numbers. Other pages can still be skipped; identical HTML is still not
-rewritten. To retain content-level incremental rendering, pass a `ContentKey` and look up
-the model inside the page, as below. Custom external inputs still need `AddBuildInput`.
-
-```csharp
-app.AddPages<PostPage>(services => services
-    .GetRequiredService<ContentDictionary<Post>>()
-    .Select(post => new { post.Value.Slug, ContentKey = post.Key }));
-```
-
-This says nothing about content — the factory receives the app's services, and a content
-dictionary is just one thing you might resolve from them. Tag pages come from plain LINQ
-over the same one:
-
-```csharp
-app.AddPages<TagPage>(services => services
-    .GetRequiredService<ContentDictionary<Post>>().Values
-    .SelectMany(post => post.Tags).Distinct()
-    .Select(tag => new { TagSlug = tag }));
-```
-
-`Slug` and `ContentKey` are deliberately different: `Slug` is the model's route segment,
-while `ContentKey` is Kiji's opaque reference for finding that model in the dictionary.
-Only `Slug` appears in the URL.
-
-```razor
-@page "/blog/{Slug}/"
-@code {
-    [Parameter] public string Slug { get; set; } = string.Empty;
-    [Parameter] public string ContentKey { get; set; } = string.Empty;
-
-    protected override void OnParametersSet() => _post = Posts[ContentKey];
-}
-```
-
-Resolve content inside a loader, route/feed factory, artifact, or page. It is not
-available while declaring the site.
-
-`AddPages<TPage>` evaluates its parameter factory once per registration per snapshot, after
-execution paths are settled. Multiple registrations for the same type concatenate their
-results; an empty result is allowed. Invalid parameters and duplicate output paths fail
-during page planning.
-
-`UseNotFoundPage<TPage>()` registers the component directly, so it does not need an
-assembly scan either. It requires one route declaration and replaces any discovered
-route for that component with `404.html`, excluded from the sitemap. The same component
-cannot also be registered with `AddPages`.
+See [Markdown and images](../markdown/) for registration, front matter, rendering,
+content projections, image handling, and the extension points around them.
 
 ## Artifacts
 
@@ -230,47 +168,27 @@ RSS feeds and sitemaps are opt-in. The feed takes the entries themselves, in the
 they should be read:
 
 ```csharp
-app.AddRssFeed(services => services
+site.AddRssFeed(services => services
     .GetRequiredService<ContentDictionary<Post>>().Values
     .OrderByDescending(post => post.CreatedAt)
     .Select(post => new FeedItem(post.Title, post.Description, post.CreatedAt, RelativePath: $"blog/{post.Slug}/")));
 
-app.AddSitemap();
+site.AddSitemap();
 ```
 
 The sitemap excludes `404.html` by default. Pass site-relative paths to omit other
 generated pages:
 
 ```csharp
-app.AddSitemap(excludedPaths: [
+site.AddSitemap(excludedPaths: [
     "preview/",
     "internal/status/",
 ]);
 ```
 
-Exclusions match a page's relative path exactly and, like other site-relative paths, do
-not start with `/`.
-
-`RelativePath` is combined with `SiteInfo.BaseUrl`, so it carries a base path automatically —
-write it prefix-free, the same as an index page link.
-
 Anything else site-wide registers a writer delegate with
-`app.AddArtifact(outputRelativePath, write)`. Artifacts run after all pages and the writer
+`site.AddArtifact(outputRelativePath, write)`. Artifacts run after all pages and the writer
 receives every page's metadata through `SiteOutputContext`.
-
-## Base paths
-
-`SiteInfo.BaseUrl` may include a path segment, for a site published under a sub-path such
-as a GitHub Pages project site. Prefix site-root links with `BaseUrl.AbsolutePath`:
-
-```razor
-<a href="@(Site.BaseUrl.AbsolutePath + "docs/")">Docs</a>
-<link rel="stylesheet" href="@(Site.BaseUrl.AbsolutePath + "css/app.css")" />
-```
-
-Canonical, feed, and sitemap URLs already carry the prefix, since they derive from
-`BaseUrl`. So do markdown page-bundle images, which are relative to the page that uses
-them. See [Deployment](../deployment/) for the details.
 
 ## Interactivity
 

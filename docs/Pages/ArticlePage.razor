@@ -1,5 +1,5 @@
-@page "/docs/{Slug}/"
-@inject ContentDictionary<Article> Docs
+﻿@page "/docs/{Slug}/"
+@inject ContentDictionary<Article> Articles
 
 @if (_doc is not null)
 {
@@ -20,7 +20,7 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        _doc = Docs[ContentKey];
+        _doc = Articles[ContentKey];
         _html = await _doc.RenderAsync();
     }
 }

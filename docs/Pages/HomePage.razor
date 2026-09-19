@@ -1,17 +1,13 @@
 ﻿@page "/"
 @inject SiteInfo Site
 
-<PageHead Title="" Description="@Site.Description" />
+<PageHead Title="Home" Description="@Site.Description" />
 
 <div class="hero">
     <h1>Write pages as Razor components. Ship static HTML.</h1>
     <p class="lede">
         Kiji is a static site generator for .NET. Use Razor components to build pages, with Markdown, layouts, and
         static assets.
-    </p>
-    <p class="cta">
-        <a class="button" href="@($"{Site.BaseUrl.AbsolutePath}docs/getting-started/")">Get started</a>
-        <a href="https://github.com/zzzkan/kiji">Source on GitHub</a>
     </p>
 </div>
 
@@ -50,13 +46,4 @@
             file is written.
         </p>
     </article>
-</section>
-
-<section class="quickstart">
-    <h2>Getting started</h2>
-    <pre><code>dotnet add package Kiji --prerelease</code></pre>
-    <p>
-        Then declare your site. <a href="@(Site.BaseUrl.AbsolutePath + "docs/getting-started/")">The full
-        walkthrough</a> covers the project layout and development workflow.
-    </p>
 </section>

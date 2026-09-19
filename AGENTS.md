@@ -11,6 +11,9 @@ static HTML via Blazor's `HtmlRenderer`, assembled with a minimal-API style app.
 - `dotnet publish docs -c Release -o docs/dist` — generate the docs site; `dotnet watch --project docs` serves it
 - `dotnet run -c Release --project src/Kiji.SyntheticSite -- --pages 1000 --runs 3` — end-to-end build perf
 - `dotnet run -c Release --project src/Kiji.Benchmarks -- --filter "*"` — microbenchmarks
+- Any dev server or watch process started for verification must be shut down before
+  reporting completion. Terminate only processes started by the
+  current task, never a pre-existing user process.
 
 ## Design constraints
 

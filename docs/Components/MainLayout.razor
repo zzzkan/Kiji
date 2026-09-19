@@ -1,24 +1,45 @@
 ﻿@inherits LayoutComponentBase
 @inject SiteInfo Site
-@inject ContentDictionary<Article> Docs
+@inject ContentDictionary<Article> Articles
 
 <a class="skip-link" href="#main-content">Skip to content</a>
 
 <header class="site-header">
+    <input class="nav-toggle" type="checkbox" id="documentation-menu" aria-controls="mobile-documentation" />
     <div class="bar">
-        <a class="site-title" href="@Site.BaseUrl.AbsolutePath">@($"📰 {Site.Name}")</a>
+        <div class="brand">
+            <label class="nav-toggle-label" for="documentation-menu">
+                <span class="hamburger" aria-hidden="true"></span>
+                <span class="visually-hidden">Toggle documentation menu</span>
+            </label>
+            <a class="site-title" href="@Site.BaseUrl.AbsolutePath">@($"📰 {Site.Name}")</a>
+        </div>
         <nav aria-label="Main">
             <a href="https://github.com/zzzkan/kiji">GitHub</a>
             <a href="https://www.nuget.org/packages/Kiji">NuGet</a>
         </nav>
     </div>
+
+    <nav class="mobile-nav" id="mobile-documentation" aria-label="Documentation">
+        <p class="side-nav-title">@KijiVersion</p>
+        <ul>
+            @foreach (var doc in Articles.Values.OrderBy(doc => doc.Order))
+            {
+                <li>
+                    <a href="@(Site.BaseUrl.AbsolutePath + $"docs/{doc.Slug}/")">
+                        @doc.Title
+                    </a>
+                </li>
+            }
+        </ul>
+    </nav>
 </header>
 
 <div class="shell">
     <nav class="side-nav" aria-label="Documentation">
-        <p class="side-nav-title">Documentation</p>
+        <p class="side-nav-title">@KijiVersion</p>
         <ul>
-            @foreach (var doc in Docs.Values.OrderBy(doc => doc.Order))
+            @foreach (var doc in Articles.Values.OrderBy(doc => doc.Order))
             {
                 <li>
                     <a href="@(Site.BaseUrl.AbsolutePath + $"docs/{doc.Slug}/")">
@@ -35,6 +56,19 @@
 <footer class="site-footer">
     <p>
         © 2026 zzzkan, built with
-        <a href="https://github.com/zzzkan/kiji/tree/main/docs">Kiji</a>.
+        <a href="https://github.com/zzzkan/kiji/">Kiji</a>.
     </p>
 </footer>
+
+@code {
+    private static readonly string KijiVersion = GetKijiVersion();
+
+    private static string GetKijiVersion()
+    {
+        var informationalVersion = System.Reflection.CustomAttributeExtensions
+            .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(SiteInfo).Assembly)
+            ?.InformationalVersion;
+
+        return $"v{informationalVersion?.Split('+')[0] ?? "unknown"}";
+    }
+}

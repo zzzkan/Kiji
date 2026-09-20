@@ -1,201 +1,128 @@
 ---
 title: Concepts
-description: Pages, the document shell, layouts, content dictionaries, and artifacts.
+description: The building blocks and standard structure of a Kiji site.
 order: 20
 ---
 
-## Site structure
+A Kiji site is an ordinary .NET project. Razor components define the pages, `Program.cs`
+connects content to those pages, and the standard .NET commands preview or publish the
+result.
 
-A Kiji site is assembled from a few core building blocks:
+## Standard project structure
 
-- `StaticSite` — the site container that owns the generation pipeline
-- `SiteInfo` — site metadata such as the name, base URL, and language
-- `AddStaticPages()` / `AddPages<TPage>()` — register the pages to generate
-- `UseDefaultLayout<TLayout>()` — apply a common layout to pages
-- `UseMarkdownContent(...)` — load Markdown as a content source
-- `AddRssFeed(...)` / `AddSitemap()` — emit site-wide output artifacts
+```text
+MySite/
+├── Components/       layouts and reusable Razor components
+├── Pages/            components with @page routes
+├── Models/           data models
+├── contents/         Markdown and files that belong to content
+├── wwwroot/          CSS, JavaScript, fonts, and other static assets
+├── Program.cs        site metadata and registrations
+└── dist/             generated site after publishing
+```
 
-For example, a site with fixed pages, Markdown-backed posts, a shared layout, and a sitemap
-can be defined like this:
+These names are conventions rather than a separate Kiji project format. `contents/` and
+`wwwroot/` can be changed through `SitePaths`, and you can organize components however you
+prefer.
+
+## The site definition
+
+Every site follows the same small lifecycle:
 
 ```csharp
-var site = StaticSite.Create(args);
-site.Info = new SiteInfo
+var app = StaticSite.Create(args);
+
+app.Info = new SiteInfo
 {
     Name = "My site",
     BaseUrl = new Uri("https://example.com/"),
-    Language = "en",
 };
 
-site.UseMarkdownContent<PostFrontMatter>();
-site.UseDefaultLayout<SiteLayout>();
+// Use* selects site-wide behavior and content.
+// Add* registers pages and generated files.
 
-site.AddStaticPages();
-site.AddPages<PostPage>(services =>
-    services.GetRequiredService<ContentDictionary<MarkdownContent<PostFrontMatter>>>()
-        .Select(post => new
-        {
-            Slug = post.Value.FileInfo.Directory!.Name,
-            ContentKey = post.Key,
-        }));
-site.AddSitemap();
-
-return await site.RunAsync();
+return await app.RunAsync();
 ```
 
-You can start small and grow the site from there: define the site, register pages and content,
-then run it.
+Configure the site before `RunAsync`.
 
-## Routing
+## Develop and publish
 
-Kiji supports two ways to turn routed components into generated pages: `AddStaticPages` discovers
-fixed routes from an assembly, while `AddPages<TPage>` supplies the parameter sets for a
-parameterized route. Both forms write pages as `route/index.html`.
+Kiji uses the standard .NET commands; there is no separate Kiji CLI to learn.
 
-### Fixed routes
-
-`AddStaticPages()` finds components with fixed routes in the entry assembly and registers them as
-pages. For example:
-
-```csharp
-site.AddStaticPages();
+```pwsh
+dotnet watch
 ```
 
-```razor
-@page "/about/"
+`dotnet watch` starts the development server at <http://localhost:8080>. It renders pages
+as you visit them and refreshes the browser when components, content, or static assets
+change. This is a preview environment rather than deployable output.
 
-<h1>About</h1>
+```pwsh
+dotnet publish -c Release -o dist
 ```
 
-This generates `about/index.html`. Use `AddStaticPages(assembly)` when the pages are defined in
-another assembly. Parameterized routes use `AddPages<TPage>` instead.
+`dotnet publish` renders every registered page, copies static assets, and writes the
+complete site to `dist/`. The directory contains static files only and can be uploaded to
+any static host.
+Development and publishing
+share the same rendering path, so the pages you preview are the pages Kiji publishes. See
+[Deployment](../deployment/) for hosting and deployment sub-paths.
 
-### Parameterized routes
-
-`AddPages<TPage>` registers parameter sets for a component with one parameterized route.
-No assembly scan is required. Route names bind to the component's `[Parameter]` properties;
-additional properties are passed to the component without appearing in the URL.
-
-For example, this creates one page per slug:
-
-```csharp
-site.AddPages<PostPage>(_ => new[]
-{
-    new { Slug = "first-post" },
-    new { Slug = "second-post" },
-});
+```pwsh
+dotnet clean
 ```
 
-```razor
-@page "/blog/{Slug}/"
-@code {
-    [Parameter] public string Slug { get; set; } = string.Empty;
-}
-```
+`dotnet clean` removes the project's build output and Kiji's `.kiji/` build cache. The
+next publish rebuilds the complete site instead of reusing output from an earlier build.
+It does not serve or publish the site.
 
-Values keep their original .NET types; Kiji does not perform implicit conversions. Route
-values must be nonempty and fit one path segment. Incorrect names, types, and non-public
-setters fail during page planning. Catch-all routes, constraints, optional parameters, and
-composite segments are not supported because a static site must know every output URL while
-it is being planned.
+## Pages and routes
 
-`AddPages<TPage>` evaluates its parameter factory once per registration per snapshot, after
-execution paths are settled. Multiple registrations for the same type concatenate their
-results; an empty result is allowed. Invalid parameters and duplicate output paths fail
-during page planning.
+Pages are Razor components with `@page` routes. Fixed routes such as `/about/` are found by
+`AddStaticPages()`. A parameterized route such as `/posts/{Slug}/` uses `AddPages<TPage>`
+to provide one parameter set for every page to generate.
 
-### Not-found pages
+Kiji writes clean URLs as directories containing `index.html`: `/about/` becomes
+`about/index.html`. See [Routing](../routing/) for route mapping, parameters, and 404 pages.
 
-Register a component as the site's not-found page with `UseNotFoundPage<TPage>()`:
+## Layouts and the document head
 
-```csharp
-site.UseNotFoundPage<NotFoundPage>();
-```
+`UseDefaultLayout<TLayout>()` applies a shared Razor layout to pages that do not choose
+their own. Layouts render inside the `<body>` of the document Kiji creates.
 
-The component needs one route declaration, just like any other page:
-
-```razor
-@page "/not-found/"
-
-<h1>Page not found</h1>
-<p>The page you requested does not exist.</p>
-<a href="@Site.BaseUrl.AbsolutePath">Go to the home page</a>
-```
-
-Kiji writes this page to `404.html`. Do not register the same component with `AddPages`.
-
-## Document skeleton
-
-Kiji renders the document itself: the doctype, `<html lang>` from `SiteInfo.Language`,
-`<head>`, and `<body>`. You never write a layout file containing `<!DOCTYPE html>`.
-
-Pages contribute to `<head>` through the `Kiji.Components.HeadContent` component:
+Use `Kiji.Components.HeadContent` to contribute a title, metadata, or stylesheet links to
+the generated `<head>`:
 
 ```razor
 <HeadContent>
-    <meta charset="utf-8" />
     <title>@Title</title>
-    <link rel="canonical" href="@NavigationManager.Uri" />
+    <link rel="stylesheet" href="@(Site.BaseUrl.AbsolutePath + "css/app.css")" />
 </HeadContent>
 ```
 
-Render at most one per page — when several appear, the last one rendered wins.
+## Content and static assets
 
-## Layouts
+Content sources expose typed `ContentDictionary<T>` collections. Pages can inject a
+collection, list its items, or look up one item by the key supplied through `AddPages`.
+Markdown support parses YAML front matter and renders the body to HTML; your mapping code
+still decides which content becomes a page and what URL it receives.
 
-`UseDefaultLayout<TLayout>()` applies a layout to every page. A page opts out or swaps with `@layout`, and layouts nest by declaring their own.
+Files under `wwwroot/` are copied to the published site without modification. Use it for
+shared CSS, JavaScript, fonts, and images. Images referenced relative to a Markdown file
+can instead stay beside that file and be processed as responsive page-bundle images. See
+[Markdown and images](../markdown/) for both content registration and local images.
 
-```razor
-@inherits LayoutComponentBase
+## Site-wide output
 
-<header>…</header>
-<main>@Body</main>
-```
+RSS feeds and sitemaps are optional registrations. `AddRssFeed` creates a feed from the
+items you supply, and `AddSitemap` lists the generated pages. `AddArtifact` is available
+when a site needs another generated file. Their complete contracts are in the
+[API reference](../api-reference/).
 
-## Markdown
+## Static output
 
-Markdown is an optional content source for pages, feeds, and other site features. Kiji
-reads Markdown files with front matter, renders their body to HTML, and can process local
-images as part of the page bundle. The resulting items are exposed as a typed content
-dictionary, so a site can decide how to map content to URLs and page components.
-
-See [Markdown and images](../markdown/) for registration, front matter, rendering,
-content projections, image handling, and the extension points around them.
-
-## Artifacts
-
-RSS feeds and sitemaps are opt-in. The feed takes the entries themselves, in the order
-they should be read:
-
-```csharp
-site.AddRssFeed(services => services
-    .GetRequiredService<ContentDictionary<Post>>().Values
-    .OrderByDescending(post => post.CreatedAt)
-    .Select(post => new FeedItem(post.Title, post.Description, post.CreatedAt, RelativePath: $"blog/{post.Slug}/")));
-
-site.AddSitemap();
-```
-
-The sitemap excludes `404.html` by default. Pass site-relative paths to omit other
-generated pages:
-
-```csharp
-site.AddSitemap(excludedPaths: [
-    "preview/",
-    "internal/status/",
-]);
-```
-
-Anything else site-wide registers a writer delegate with
-`site.AddArtifact(outputRelativePath, write)`. Artifacts run after all pages and the writer
-receives every page's metadata through `SiteOutputContext`.
-
-## Interactivity
-
-There isn't any, by design. Kiji renders through `HtmlRenderer`, which is one-shot static
-rendering: `OnInitialized` and `OnParametersSet` run, `OnAfterRenderAsync` does not, and
-event handlers like `@onclick` do not survive into the output. The generated site is
-plain HTML with no Blazor runtime.
-
-If you want client-side behavior, write JavaScript and put it in `wwwroot/`. If you want
-a real Blazor app, you want Blazor WebAssembly, not a static site generator.
+Kiji produces HTML, CSS, JavaScript, images, and other files that a static host can serve.
+There is no Blazor runtime in the output: component event handlers such as `@onclick` do
+not remain interactive, and `OnAfterRenderAsync` does not run. Add client-side behavior
+with JavaScript in `wwwroot/`.

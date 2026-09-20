@@ -6,6 +6,16 @@ namespace Kiji.Tests;
 public sealed class ModelTests
 {
     [Fact]
+    public void SitePaths_StaticDirectoryDefaultsToWwwroot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"site-{Guid.NewGuid():N}");
+        var paths = new SitePaths(root);
+
+        Assert.Equal("wwwroot", paths.StaticDirectory);
+        Assert.Equal(Path.Combine(root, "wwwroot"), paths.ResolveForPlanning().StaticDirectory);
+    }
+
+    [Fact]
     public async Task MarkdownContent_FailedRenderCanBeRetried()
     {
         var attempts = 0;

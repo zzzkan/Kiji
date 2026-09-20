@@ -24,12 +24,12 @@ public sealed class SitePaths
         set { EnsureMutable(); field = value; }
     } = "contents";
 
-    /// <summary>The static assets directory relative to the root, defaulting to <c>wwwroot</c> when null.</summary>
-    public string? StaticDirectory
+    /// <summary>The static assets directory relative to the root, defaulting to <c>wwwroot</c>.</summary>
+    public string StaticDirectory
     {
         get;
         set { EnsureMutable(); field = value; }
-    }
+    } = "wwwroot";
 
     internal void Freeze() => _frozen = true;
 
@@ -89,14 +89,10 @@ public sealed class SitePaths
 
     private ResolvedSitePaths Resolve(string outputPath)
     {
-        var staticPath = StaticDirectory is not null
-            ? ResolveAgainstRoot(StaticDirectory)
-            : Path.Combine(Path.GetFullPath(RootDirectory), "wwwroot");
-
         return new ResolvedSitePaths
         {
             ContentDirectory = ResolveAgainstRoot(ContentDirectory),
-            StaticDirectory = staticPath,
+            StaticDirectory = ResolveAgainstRoot(StaticDirectory),
             OutputDirectory = outputPath,
             ImageCacheDirectory = Path.Combine(ResolveCachePath(), "images"),
         };

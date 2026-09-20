@@ -1,5 +1,6 @@
 :root {
     color-scheme: light dark;
+    scrollbar-gutter: stable;
 
     --plane: #fbfbfa;
     --surface: #ffffff;
@@ -64,6 +65,7 @@ pre code {
 }
 
 @media (max-width: 52rem) {
+
     pre,
     pre[class*="language-"] {
         font-size: 0.8125rem;

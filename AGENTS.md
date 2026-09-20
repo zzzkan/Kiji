@@ -53,6 +53,14 @@ static HTML via Blazor's `HtmlRenderer`, assembled with a minimal-API style app.
   site definition is a frozen benchmark workload — keep it separate so measurement stays
   comparable.
 
+## Public API changes
+
+- When adding, changing, or removing public API, review
+  `docs/contents/api-reference/index.md` and update it when the author-facing API changes.
+- Package validation compares `Kiji` with the published baseline during `dotnet pack`.
+  Do not disable it or broadly suppress its diagnostics. For an intentional breaking
+  change, check in only the applicable entries in `src/Kiji/CompatibilitySuppressions.xml`.
+
 ## Gotchas
 
 - Route templates reject catch-all segments, route constraints, optional parameters, and

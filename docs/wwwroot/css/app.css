@@ -48,17 +48,26 @@ code {
     border-radius: 3px;
 }
 
-pre {
+pre,
+pre[class*="language-"] {
     overflow-x: auto;
     padding: 0.9rem 1.1rem;
     background: var(--surface);
     border: 1px solid var(--rule);
     border-radius: 5px;
+    font-size: 0.875rem;
 }
 
 pre code {
     background: none;
     padding: 0;
+}
+
+@media (max-width: 52rem) {
+    pre,
+    pre[class*="language-"] {
+        font-size: 0.8125rem;
+    }
 }
 
 @media (prefers-color-scheme: dark) {

@@ -84,6 +84,20 @@
   </PropertyGroup>
 
   <!-- ==============================================================
+       Keep published output out of SDK evaluation
+       ============================================================== -->
+  <PropertyGroup Condition="'$(KijiGenerateOnPublish)' == 'true'">
+    <!-- dist is the documented project-local publish directory. Exclude it from
+         default items as well as dotnet watch: Watch=false alone still makes the
+         SDK enumerate and evaluate the generated site on every startup. Keep this
+         rooted at the project so wwwroot/dist and contents/dist remain inputs.
+         Explicit KijiSiteFile items below still publish the complete staged site.
+         Do not infer other output paths from PublishDir: a later watch invocation
+         does not retain a previous publish command's -o argument. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);dist/**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <!-- ==============================================================
        Keep dotnet watch off the files Kiji watches itself
        ============================================================== -->
   <ItemGroup Condition="'$(KijiGenerateOnPublish)' == 'true' and '$(KijiWatchStaticFiles)' != 'true'">

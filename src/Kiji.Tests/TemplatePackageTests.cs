@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using System.Xml.Linq;
 using Xunit;
 
@@ -50,7 +51,17 @@ public sealed class TemplatePackageTests
                 $"-p:Version={version}", "-p:MinVerSkip=true",
                 $"-p:NuspecOutputPath={Path.Combine(root, "nuspec")}");
             packageReference.SetAttributeValue("Version", version);
+            project.Root!.Add(new XElement("PropertyGroup",
+                new XElement("DefaultItemExcludes", "$(DefaultItemExcludes);ignored/**")));
             project.Save(projectPath);
+
+            Directory.CreateDirectory(Path.Combine(output, "ignored"));
+            await File.WriteAllTextAsync(Path.Combine(output, "ignored", "marker.txt"), "not a project item");
+            Directory.CreateDirectory(Path.Combine(output, "wwwroot", "dist"));
+            await File.WriteAllTextAsync(Path.Combine(output, "wwwroot", "dist", "nested.css"), "body { color: navy; }");
+            Directory.CreateDirectory(Path.Combine(output, "contents", "dist"));
+            await File.WriteAllTextAsync(Path.Combine(output, "contents", "dist", "index.md"),
+                "---\ntitle: Nested dist input\ncreatedAt: 2026-01-01\n---\n\nNested content remains published.");
 
             var nugetConfig = Path.Combine(root, "NuGet.Config");
             new XDocument(new XElement("configuration",
@@ -76,6 +87,41 @@ public sealed class TemplatePackageTests
             Assert.True(File.Exists(Path.Combine(publish, "sitemap.xml")));
             Assert.Empty(Directory.EnumerateFiles(publish, "*.dll", SearchOption.AllDirectories));
             Assert.True(Directory.Exists(Path.Combine(output, ".kiji")));
+            Assert.Contains("Nested content remains published.",
+                await File.ReadAllTextAsync(Path.Combine(publish, "dist", "index.html")), StringComparison.Ordinal);
+            Assert.Equal("body { color: navy; }", await File.ReadAllTextAsync(Path.Combine(publish, "dist", "nested.css")));
+
+            // Exercise real SDK evaluation through the packaged targets after a publish.
+            // Generated JSON and C# also must not become Content or Compile inputs.
+            var expected = Directory.EnumerateFiles(publish, "*", SearchOption.AllDirectories)
+                .ToDictionary(file => Path.GetRelativePath(publish, file), File.ReadAllBytes);
+            await File.WriteAllTextAsync(Path.Combine(publish, "generated.json"), "{}");
+            await File.WriteAllTextAsync(Path.Combine(publish, "generated.cs"), "this must never compile");
+            using (var items = JsonDocument.Parse(await RunDotnetAsync(output, "msbuild", projectPath,
+                "-getItem:None,Content,Compile,RazorComponent")))
+            {
+                var identities = items.RootElement.GetProperty("Items").EnumerateObject()
+                    .SelectMany(static item => item.Value.EnumerateArray())
+                    .Select(static item => item.GetProperty("Identity").GetString()!.Replace('\\', '/')).ToArray();
+                Assert.DoesNotContain(identities, static item => item.StartsWith("dist/", StringComparison.Ordinal));
+                Assert.DoesNotContain(identities, static item => item.StartsWith("ignored/", StringComparison.Ordinal));
+                Assert.Contains("contents/dist/index.md", identities);
+                Assert.Contains("wwwroot/dist/nested.css", identities);
+                Assert.Contains("Pages/PostPage.razor", identities);
+                Assert.Contains("Program.cs", identities);
+            }
+
+            // A second publish still copies every staged file, including nested dist
+            // assets, even though the previous destination is absent from SDK items.
+            var secondPublish = Path.Combine(root, "published-again");
+            await RunDotnetAsync(output, "publish", projectPath, "-c", "Release", "--no-restore", "-o", secondPublish);
+            var actual = Directory.EnumerateFiles(secondPublish, "*", SearchOption.AllDirectories)
+                .ToDictionary(file => Path.GetRelativePath(secondPublish, file), File.ReadAllBytes);
+            Assert.Equal(expected.Keys.Order(StringComparer.Ordinal), actual.Keys.Order(StringComparer.Ordinal));
+            foreach (var (path, bytes) in expected)
+            {
+                Assert.Equal(bytes, actual[path]);
+            }
             await RunDotnetAsync(output, "clean", projectPath, "-c", "Release");
             Assert.False(Directory.Exists(Path.Combine(output, ".kiji")));
         }
@@ -117,7 +163,7 @@ public sealed class TemplatePackageTests
         Assert.True(process.ExitCode == 0, await output + await error);
     }
 
-    private static async Task RunDotnetAsync(string workingDirectory, params string[] arguments)
+    private static async Task<string> RunDotnetAsync(string workingDirectory, params string[] arguments)
     {
         var start = new ProcessStartInfo("dotnet")
         {
@@ -142,6 +188,7 @@ public sealed class TemplatePackageTests
             throw;
         }
         Assert.True(process.ExitCode == 0, await output + await error);
+        return await output;
     }
 
     /// <summary>

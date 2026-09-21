@@ -52,7 +52,10 @@ public sealed class TemplatePackageTests
                 $"-p:NuspecOutputPath={Path.Combine(root, "nuspec")}");
             packageReference.SetAttributeValue("Version", version);
             project.Root!.Add(new XElement("PropertyGroup",
-                new XElement("DefaultItemExcludes", "$(DefaultItemExcludes);ignored/**")));
+                new XElement("DefaultItemExcludes", "$(DefaultItemExcludes);ignored/**"),
+                new XElement("PublishDir",
+                    new XAttribute("Condition", "'$(UseProjectPublishDir)' == 'true'"),
+                    "project-publish")));
             project.Save(projectPath);
 
             Directory.CreateDirectory(Path.Combine(output, "ignored"));
@@ -77,9 +80,33 @@ public sealed class TemplatePackageTests
                 .Save(nugetConfig);
             await RunDotnetAsync(output, "restore", projectPath, "--configfile", nugetConfig,
                 "--packages", Path.Combine(root, "packages"));
+
+            var defaultPublishDir = await GetMsBuildPropertyAsync(
+                output, projectPath, "PublishDir", "-p:Configuration=Release");
+            Assert.Equal(
+                ResolvePath(output, "dist"),
+                ResolvePath(output, defaultPublishDir));
+
+            var ordinaryPublishDir = await GetMsBuildPropertyAsync(
+                output, projectPath, "PublishDir", "-p:Configuration=Release", "-p:OutputType=Library");
+            Assert.Equal(
+                ResolvePath(output, Path.Combine("bin", "Release", "net10.0", "publish")),
+                ResolvePath(output, ordinaryPublishDir));
+
+            var explicitPublish = Path.Combine(root, "explicit-publish");
+            var explicitPublishDir = await GetMsBuildPropertyAsync(
+                output, projectPath, "PublishDir", "-p:Configuration=Release", $"-p:PublishDir={explicitPublish}");
+            Assert.Equal(ResolvePath(output, explicitPublish), ResolvePath(output, explicitPublishDir));
+
+            var projectPublishDir = await GetMsBuildPropertyAsync(
+                output, projectPath, "PublishDir", "-p:Configuration=Release", "-p:UseProjectPublishDir=true");
+            Assert.Equal(
+                ResolvePath(output, "project-publish"),
+                ResolvePath(output, projectPublishDir));
+
             await RunDotnetAsync(output, "build", projectPath, "-c", "Release", "--no-restore");
             var publish = Path.Combine(output, "dist");
-            await RunDotnetAsync(output, "publish", projectPath, "-c", "Release", "--no-restore", "-o", publish);
+            await RunDotnetAsync(output, "publish", projectPath, "--no-restore");
 
             Assert.True(File.Exists(Path.Combine(publish, "hello-world", "index.html")));
             var home = await File.ReadAllTextAsync(Path.Combine(publish, "index.html"));
@@ -189,6 +216,21 @@ public sealed class TemplatePackageTests
         }
         Assert.True(process.ExitCode == 0, await output + await error);
         return await output;
+    }
+
+    private static async Task<string> GetMsBuildPropertyAsync(
+        string workingDirectory,
+        string projectPath,
+        string propertyName,
+        params string[] arguments)
+    {
+        var allArguments = new[] { "msbuild", projectPath, $"-getProperty:{propertyName}" }.Concat(arguments).ToArray();
+        return (await RunDotnetAsync(workingDirectory, allArguments)).Trim();
+    }
+
+    private static string ResolvePath(string root, string path)
+    {
+        return Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.Combine(root, path)));
     }
 
     /// <summary>

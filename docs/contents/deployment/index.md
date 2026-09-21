@@ -4,7 +4,7 @@ description: Publish to GitHub Pages or another static host, including under a s
 order: 50
 ---
 
-`dotnet publish -c Release -o dist` writes the generated site to `dist/`. The directory
+`dotnet publish` writes the generated site to `dist/`. The directory
 contains static files only — no assemblies or .NET runtime — and can be uploaded to any
 static host.
 
@@ -84,12 +84,12 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
-      - run: dotnet publish MySite -c Release -o dist
+      - run: dotnet publish MySite
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: MySite/dist
       - id: deployment
         uses: actions/deploy-pages@v4
 ```
@@ -103,7 +103,7 @@ Netlify, Vercel, Cloudflare Pages, S3, and similar services can all deploy the g
 directory. Use this build command and configure `dist` as the directory to publish:
 
 ```pwsh
-dotnet publish -c Release -o dist
+dotnet publish
 ```
 
 Check two host behaviors:

@@ -4,7 +4,7 @@ A static site built with [Kiji](https://github.com/zzzkan/kiji).
 
 ```pwsh
 dotnet watch                         # dev server with live reload at http://localhost:8080
-dotnet publish -c Release -o dist    # generate the site into dist/
+dotnet publish                       # generate the site into dist/
 dotnet clean                         # delete the build cache
 ```
 

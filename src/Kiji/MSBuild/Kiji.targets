@@ -42,6 +42,25 @@
   </PropertyGroup>
 
   <!-- ==============================================================
+       Default publish output
+       ============================================================== -->
+  <PropertyGroup Condition="'$(KijiGenerateOnPublish)' == 'true' and
+                            '$(UseArtifactsOutput)' != 'true' and
+                            '$(PublishDirName)' == 'publish'">
+    <!-- Package targets are imported after the project and after the SDK has computed its
+         ordinary publish directory. Change only that exact SDK default: an explicit
+         PublishDir in the project or through `dotnet publish -o` remains untouched, as does
+         the opt-in artifacts output layout. The RID is already part of OutputPath unless
+         AppendRuntimeIdentifierToOutputPath was disabled, which is the SDK's one special
+         case when it constructs PublishDir. -->
+    <_KijiSdkDefaultPublishDir Condition="'$(AppendRuntimeIdentifierToOutputPath)' != 'true' and
+                                               '$(RuntimeIdentifier)' != '' and
+                                               '$(_UsingDefaultRuntimeIdentifier)' != 'true'">$(OutputPath)$(RuntimeIdentifier)\$(PublishDirName)\</_KijiSdkDefaultPublishDir>
+    <_KijiSdkDefaultPublishDir Condition="'$(_KijiSdkDefaultPublishDir)' == ''">$(OutputPath)$(PublishDirName)\</_KijiSdkDefaultPublishDir>
+    <PublishDir Condition="'$(PublishDir)' == '$(_KijiSdkDefaultPublishDir)'">$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', 'dist'))</PublishDir>
+  </PropertyGroup>
+
+  <!-- ==============================================================
        Where the site is staged, and the two execution-control knobs
        ============================================================== -->
   <PropertyGroup Condition="'$(KijiGenerateOnPublish)' == 'true'">

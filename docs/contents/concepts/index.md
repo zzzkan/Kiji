@@ -59,7 +59,7 @@ as you visit them and refreshes the browser when components, content, or static 
 change. This is a preview environment rather than deployable output.
 
 ```pwsh
-dotnet publish -c Release -o dist
+dotnet publish
 ```
 
 `dotnet publish` renders every registered page, copies static assets, and writes the

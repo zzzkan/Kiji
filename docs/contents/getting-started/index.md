@@ -236,7 +236,7 @@ Kiji loads Markdown into a typed collection; your route mapping decides which UR
 Stop the development server and publish:
 
 ```pwsh
-dotnet publish -c Release -o dist
+dotnet publish
 ```
 
 `dist/` now contains the generated HTML and `css/app.css`. It contains no .NET runtime or server application, so you can upload it to any static host.

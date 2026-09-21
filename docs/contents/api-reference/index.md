@@ -225,14 +225,6 @@ Declares a named value such as a remote-data version or encoder setting. Changin
 the key/value input set or a value requires a full rebuild. The key cannot be blank and
 the value cannot be null.
 
-Kiji also exposes these build controls through MSBuild:
-
-| Command                              | Effect                                                                               |
-| ------------------------------------ | ------------------------------------------------------------------------------------ |
-| `dotnet publish -p:KijiForce=true`   | Ignores the incremental plan and rebuilds all output.                                |
-| `dotnet publish -p:KijiVerbose=true` | Prints per-file build output.                                                        |
-| `dotnet clean`                       | Deletes Kiji's build manifest and persistent caches with the project's build output. |
-
 ## Feeds
 
 The public feed types are in `Kiji.Feeds`; `AddRssFeed` is declared by

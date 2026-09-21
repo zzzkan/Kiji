@@ -22,7 +22,7 @@ dotnet watch
 ```
 
 That scaffolds a working site and starts the dev server with live reload at
-<http://localhost:8080>. `dotnet publish -c Release -o dist` generates it into `dist`.
+<http://localhost:8080>. `dotnet publish` generates it into `dist`.
 
 The scaffold is deliberately minimal: a home page listing your posts, a post page, a 404
 page, one markdown post, and a sitemap. Feeds, tag pages, and image optimization are all

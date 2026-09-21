@@ -47,6 +47,7 @@ code {
     background: var(--sunk);
     padding: 0.1em 0.35em;
     border-radius: 3px;
+    overflow-wrap: anywhere;
 }
 
 pre,
@@ -62,6 +63,7 @@ pre[class*="language-"] {
 pre code {
     background: none;
     padding: 0;
+    overflow-wrap: normal;
 }
 
 @media (max-width: 52rem) {
@@ -88,7 +90,7 @@ blockquote {
 table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.94rem;
+    font-size: 0.875rem;
 }
 
 th,

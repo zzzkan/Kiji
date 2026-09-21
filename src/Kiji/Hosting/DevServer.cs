@@ -221,12 +221,14 @@ internal sealed class DevServer(StaticSite app) : IAsyncDisposable
 
         if (!snapshot.PagesByRoute.TryGetValue(path, out var page))
         {
-            // Directory-style pages must have a trailing slash in the browser:
-            // page-bundle URLs such as ./cover.webp resolve relative to that URL.
+            // Keep directory-style page URLs canonical and aligned with the generated
+            // route, even though page-bundle asset URLs do not depend on the slash.
             if (!path.EndsWith('/') && snapshot.PagesByRoute.TryGetValue(path + "/", out var slashPage))
             {
-                context.Response.Redirect(context.Request.PathBase.Add(PathString.FromUriComponent(slashPage.RoutePath)).ToUriComponent()
-                    + context.Request.QueryString);
+                await Results.LocalRedirect(
+                        context.Request.PathBase.Add(PathString.FromUriComponent(slashPage.RoutePath)).ToUriComponent()
+                        + context.Request.QueryString)
+                    .ExecuteAsync(context);
                 return;
             }
 

@@ -7,8 +7,8 @@ namespace Kiji.Markdown;
 /// <summary>
 /// Renders local markdown images as responsive images with lazy loading and CLS
 /// optimization. Variants live in the page's own output directory, so URLs are
-/// <c>./</c>-relative. Attached per renderer (not per pipeline) because its state
-/// is per document.
+/// rooted at that directory beneath the site's deployment base path. Attached per
+/// renderer (not per pipeline) because its state is per document.
 /// </summary>
 internal static class ResponsiveImageWriter
 {
@@ -53,14 +53,15 @@ internal static class ResponsiveImageWriter
 
         // Variants sit beside the page output, mirroring the reference's directory part.
         var directory = GetDirectoryPrefix(referenceKey);
+        var publicDirectory = context.OutputUrlDirectory + EncodeRelativePath(directory);
         var variants = imageInfo.Variants;
         var largest = variants[^1];
 
-        var srcset = string.Join(", ", variants.Select(variant => $"{CreateVariantUrl(directory, variant.FileName)} {variant.Width}w"));
+        var srcset = string.Join(", ", variants.Select(variant => $"{CreateVariantUrl(publicDirectory, variant.FileName)} {variant.Width}w"));
         var sizes = $"(max-width: {largest.Width}px) 100vw, {largest.Width}px";
 
         renderer.Write("<img src=\"");
-        renderer.WriteEscapeUrl(CreateVariantUrl(directory, largest.FileName));
+        renderer.WriteEscapeUrl(CreateVariantUrl(publicDirectory, largest.FileName));
         renderer.Write("\" srcset=\"");
         renderer.WriteEscape(srcset);
         renderer.Write("\" sizes=\"");
@@ -95,11 +96,16 @@ internal static class ResponsiveImageWriter
         return separatorIndex >= 0 ? referenceKey[..(separatorIndex + 1)] : string.Empty;
     }
 
-    private static string CreateVariantUrl(string directory, string fileName)
+    private static string CreateVariantUrl(string publicDirectory, string fileName)
     {
         // srcset uses spaces and commas as syntax, so HTML escaping alone is not
         // enough. Encode each path segment while preserving directory separators.
-        return "./" + string.Join('/', (directory + fileName).Split('/').Select(Uri.EscapeDataString));
+        return publicDirectory + EncodeRelativePath(fileName);
+    }
+
+    private static string EncodeRelativePath(string path)
+    {
+        return string.Join('/', path.Split('/').Select(Uri.EscapeDataString));
     }
 
     private static void WriteCommonImageAttributes(HtmlRenderer renderer, ResponsiveImageContext context)

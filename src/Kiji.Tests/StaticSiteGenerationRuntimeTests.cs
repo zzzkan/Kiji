@@ -108,7 +108,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
     }
 
     [Fact]
-    public async Task PublishAsync_MarkdownImages_BundledWithPageAndRelativelyReferenced()
+    public async Task PublishAsync_MarkdownImages_BundledWithPageAndRootRelativeUrls()
     {
         var postDir = Path.Combine(_contentsDir, "hello");
         Directory.CreateDirectory(Path.Combine(postDir, "images"));
@@ -150,9 +150,9 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         Assert.Contains("href=\"/kiji/css/app.css\"", home, StringComparison.Ordinal);
         Assert.Contains("href=\"https://example.com/kiji/\"", home, StringComparison.Ordinal);
 
-        // Page-bundle layout: variants beside index.html, referenced with ./ URLs.
-        Assert.Contains("src=\"./photo.png.", html, StringComparison.Ordinal);
-        Assert.Contains("src=\"./images/nested.png.", html, StringComparison.Ordinal);
+        // Page-bundle layout: variants stay beside index.html and their URLs include the deployment base path.
+        Assert.Contains("src=\"/kiji/md/hello-world/photo.png.", html, StringComparison.Ordinal);
+        Assert.Contains("src=\"/kiji/md/hello-world/images/nested.png.", html, StringComparison.Ordinal);
         Assert.DoesNotContain("/_assets/", html, StringComparison.Ordinal);
         Assert.NotEmpty(Directory.GetFiles(pageDir, "photo.png.*.webp"));
         Assert.NotEmpty(Directory.GetFiles(Path.Combine(pageDir, "images"), "nested.png.*.webp"));

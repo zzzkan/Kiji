@@ -1,3 +1,4 @@
+using Kiji.Rendering;
 using Xunit;
 
 namespace Kiji.Tests;
@@ -12,6 +13,22 @@ public sealed class SiteBasePathTests
     public void BaseUrl_AbsolutePathIsTheSiteRootWithTrailingSlash(string baseUrl, string expected)
     {
         Assert.Equal(expected, CreateSite(baseUrl).BaseUrl.AbsolutePath);
+    }
+
+    [Theory]
+    [InlineData("https://example.com/", "", "/")]
+    [InlineData("https://example.com/kiji/", "blog", "/kiji/blog/")]
+    [InlineData("https://example.com/%E6%97%A5%E6%9C%AC/", "articles/日本 語", "/%E6%97%A5%E6%9C%AC/articles/%E6%97%A5%E6%9C%AC%20%E8%AA%9E/")]
+    public void OutputUrlDirectory_IncludesEscapedBaseAndOutputPaths(
+        string baseUrl,
+        string outputRelativeDirectory,
+        string expected)
+    {
+        var platformPath = outputRelativeDirectory.Replace('/', Path.DirectorySeparatorChar);
+
+        Assert.Equal(
+            expected,
+            PageRenderContext.CreateOutputUrlDirectory(new Uri(baseUrl), platformPath));
     }
 
     [Theory]

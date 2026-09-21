@@ -724,12 +724,15 @@ public sealed class StaticSite
         }
     }
 
-    private static PageRenderContext CreatePageRenderContext(PageRenderRequest request, BuildDependencyRecorder? dependencies = null)
+    private PageRenderContext CreatePageRenderContext(PageRenderRequest request, BuildDependencyRecorder? dependencies = null)
     {
+        var outputRelativeDirectory = Path.GetDirectoryName(request.OutputRelativePath) ?? string.Empty;
+
         return new PageRenderContext
         {
             RoutePath = request.RoutePath,
-            OutputRelativeDirectory = Path.GetDirectoryName(request.OutputRelativePath) ?? string.Empty,
+            OutputRelativeDirectory = outputRelativeDirectory,
+            OutputUrlDirectory = PageRenderContext.CreateOutputUrlDirectory(Info.BaseUrl, outputRelativeDirectory),
             Dependencies = dependencies,
         };
     }

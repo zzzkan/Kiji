@@ -162,8 +162,7 @@ contents/
 
 For relative `.jpg`, `.jpeg`, `.png`, `.gif`, and `.webp` references, Kiji generates
 responsive WebP variants beside the page's `index.html` and emits an `<img>` with a
-`srcset`. The generated URLs are document-relative, so they also work when the site is
-deployed under a sub-path.
+`srcset`.
 
 The source image must exist inside the Markdown file's directory tree. A missing image or
 a path that escapes that tree fails the page render.

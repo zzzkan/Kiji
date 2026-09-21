@@ -8,9 +8,9 @@ public sealed class MarkdownContent<TFrontMatter>
 {
     private readonly Func<MarkdownContent<TFrontMatter>, CancellationToken, Task<string>> _renderAsync;
 
-    // Rendered HTML is cached per page route: the markup is identical everywhere, but
-    // rendering also materializes referenced images into the rendering page's output
-    // directory, so each page that embeds this content must run the pipeline once.
+    // Rendered HTML is cached per page route: local-image URLs and materialized variants
+    // belong to the rendering page's output directory, so each page that embeds this
+    // content must run the pipeline once.
     private readonly ConcurrentDictionary<string, Lazy<Task<string>>> _renderTasksByRoute = new(StringComparer.Ordinal);
 
     internal MarkdownContent(

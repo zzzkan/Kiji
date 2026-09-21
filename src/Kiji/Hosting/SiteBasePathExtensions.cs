@@ -30,10 +30,10 @@ internal static class SiteBasePathExtensions
         web.Use(async (context, next) =>
         {
             // Keep the redirect temporary so it cannot outlive a BaseUrl change.
-            if (context.Request.Path.Equals(prefix)
-                || !context.Request.Path.HasValue || context.Request.Path == "/")
+            if (context.Request.Path.Equals(prefix))
             {
-                context.Response.Redirect(prefix.ToUriComponent() + "/" + context.Request.QueryString);
+                await Results.LocalRedirect(prefix.ToUriComponent() + "/" + context.Request.QueryString)
+                    .ExecuteAsync(context);
                 return;
             }
 

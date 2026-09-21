@@ -43,12 +43,14 @@ public sealed class MarkdownProcessorTests : IDisposable
         var secondHtml = await WithPageContextAsync("/second/", "second", () => ProcessFileAsync(processor, second));
         Assert.Contains("loading=\"eager\"", firstHtml, StringComparison.Ordinal);
         Assert.Contains("loading=\"lazy\"", firstHtml, StringComparison.Ordinal);
+        Assert.Contains("src=\"/first/a.png.", firstHtml, StringComparison.Ordinal);
         Assert.Contains("loading=\"eager\"", secondHtml, StringComparison.Ordinal);
         Assert.DoesNotContain("loading=\"lazy\"", secondHtml, StringComparison.Ordinal);
+        Assert.Contains("src=\"/second/a.png.", secondHtml, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task ProcessAsync_ReferencedImage_MaterializedIntoPageOutputWithRelativeUrl()
+    public async Task ProcessAsync_ReferencedImage_MaterializedIntoPageOutputWithRootRelativeUrl()
     {
         var mdPath = CreateMarkdownFile("with-image.md", "![Used](used.png)");
         await CreateTestImageAsync(Path.Combine(_testFilesDir, "used.png"), 1200, 800);
@@ -65,7 +67,7 @@ public sealed class MarkdownProcessorTests : IDisposable
             .Cast<string>()
             .ToArray();
 
-        Assert.Contains("src=\"./used.png.", htmlContent, StringComparison.Ordinal);
+        Assert.Contains("src=\"/blog/with-image/used.png.", htmlContent, StringComparison.Ordinal);
         Assert.Contains(generatedFiles, static fileName => fileName.StartsWith("used.png.", StringComparison.Ordinal));
         Assert.DoesNotContain(generatedFiles, static fileName => fileName.StartsWith("unused.png.", StringComparison.Ordinal));
     }
@@ -76,8 +78,8 @@ public sealed class MarkdownProcessorTests : IDisposable
         var mdPath = CreateMarkdownFile("encoded.md", "![Photo](my%20photo.png?v=1#preview)");
         await CreateTestImageAsync(Path.Combine(_testFilesDir, "my photo.png"), 100, 60);
         var html = await WithPageContextAsync("/encoded/", "encoded", () => ProcessFileAsync(CreateProcessor(), mdPath));
-        Assert.Contains("src=\"./my%20photo.png.", html, StringComparison.Ordinal);
-        Assert.Contains("srcset=\"./my%20photo.png.", html, StringComparison.Ordinal);
+        Assert.Contains("src=\"/encoded/my%20photo.png.", html, StringComparison.Ordinal);
+        Assert.Contains("srcset=\"/encoded/my%20photo.png.", html, StringComparison.Ordinal);
         Assert.NotEmpty(Directory.GetFiles(Path.Combine(_outputDir, "encoded"), "my photo.png.*.webp"));
     }
 
@@ -156,6 +158,9 @@ public sealed class MarkdownProcessorTests : IDisposable
         {
             RoutePath = routePath,
             OutputRelativeDirectory = outputRelativeDirectory,
+            OutputUrlDirectory = outputRelativeDirectory.Length == 0
+                ? "/"
+                : "/" + outputRelativeDirectory.Replace('\\', '/').Trim('/') + "/",
         });
 
         try

@@ -35,16 +35,16 @@ BaseUrl = new Uri("https://your-name.github.io/my-site/"),
 Prefix links to site-root pages and static assets with `Site.BaseUrl.AbsolutePath`:
 
 ```razor
-<a href="@(Site.BaseUrl.AbsolutePath + "docs/")">Docs</a>
+<a href="@($"{Site.BaseUrl.AbsolutePath}docs/")">Docs</a>
 <link rel="stylesheet" href="@($"{Site.BaseUrl.AbsolutePath}css/app.css")" />
 ```
 
 `AbsolutePath` is `/my-site/` for that project site and `/` for a domain-root site, so the
 same markup works in both places.
 
-Kiji already applies `BaseUrl` to canonical, feed, and sitemap URLs. Markdown page-bundle
-images use document-relative URLs and need no prefix. A base path changes where the site
-is hosted; it does not add another directory inside `dist/`.
+Kiji already applies `BaseUrl` to, feed, sitemap, and generated Markdown image
+URLs. Page-bundle image URLs include the deployment base path, while their files remain
+beside the page inside `dist/`. A base path does not add another directory inside `dist/`.
 
 The development server uses the same base path and returns 404 outside it. This makes a
 missing prefix visible before deployment. See

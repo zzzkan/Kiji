@@ -13,7 +13,7 @@ namespace Kiji.Markdown;
 /// <summary>
 /// Processes markdown bodies into HTML through a shared Markdig pipeline. Referenced
 /// local images are materialized into the output directory of the page being rendered
-/// (see <see cref="PageRenderContext"/>) and rewritten to <c>./</c>-relative URLs.
+/// (see <see cref="PageRenderContext"/>) and rewritten to root-relative public URLs.
 /// </summary>
 internal sealed class MarkdownProcessor
 {
@@ -61,7 +61,9 @@ internal sealed class MarkdownProcessor
         var document = global::Markdig.Markdown.Parse(markdownBody, _pipeline);
 
         var imageInfoLookup = await MaterializeReferencedImagesAsync(filePath, document, cancellationToken);
-        var imageContext = new ResponsiveImageContext(imageInfoLookup);
+        var imageContext = new ResponsiveImageContext(
+            imageInfoLookup,
+            PageRenderContext.Current?.OutputUrlDirectory ?? "/");
 
         var html = Render(document, imageContext);
 

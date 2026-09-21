@@ -88,6 +88,12 @@ public sealed class DevServerTests : IAsyncDisposable
 
             Assert.Equal(HttpStatusCode.Found, response.StatusCode);
             Assert.Equal("/blog/?tag=a%20b", response.Headers.Location!.OriginalString);
+
+            var untrustedQuery = await client.GetAsync(new Uri(baseAddress, "/blog?//evil.example"));
+
+            Assert.Equal(HttpStatusCode.Found, untrustedQuery.StatusCode);
+            Assert.Equal("/blog/?//evil.example", untrustedQuery.Headers.Location!.OriginalString);
+            Assert.False(untrustedQuery.Headers.Location.IsAbsoluteUri);
         }
     }
 
@@ -344,10 +350,14 @@ public sealed class DevServerTests : IAsyncDisposable
                 HttpStatusCode.Found,
                 (await client.GetAsync(new Uri(baseAddress, "/kiji/blog/hello-world"))).StatusCode);
 
-            // The server root redirects rather than 404s, so the developer lands somewhere useful.
+            // The server root stays outside the configured base path, matching production.
             var root = await client.GetAsync(new Uri(baseAddress, "/"));
-            Assert.Equal(HttpStatusCode.Found, root.StatusCode);
-            Assert.Equal("/kiji/", root.Headers.Location!.ToString());
+            Assert.Equal(HttpStatusCode.NotFound, root.StatusCode);
+            Assert.Null(root.Headers.Location);
+
+            var rootWithUntrustedQuery = await client.GetAsync(new Uri(baseAddress, "/?//evil.example"));
+            Assert.Equal(HttpStatusCode.NotFound, rootWithUntrustedQuery.StatusCode);
+            Assert.Null(rootWithUntrustedQuery.Headers.Location);
 
             // Static assets resolve under the prefix exposed by Site.BaseUrl.AbsolutePath.
             await File.WriteAllTextAsync(Path.Combine(_staticDir, "site.css"), "body{}");

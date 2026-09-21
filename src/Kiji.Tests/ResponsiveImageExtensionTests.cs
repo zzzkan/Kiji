@@ -14,7 +14,8 @@ public sealed class ResponsiveImageExtensionTests
 
     private static string Render(
         string markdown,
-        IReadOnlyDictionary<string, ProcessedImageInfo> imageInfoLookup)
+        IReadOnlyDictionary<string, ProcessedImageInfo> imageInfoLookup,
+        string outputUrlDirectory = "/kiji/blog/test-post/")
     {
         var document = global::Markdig.Markdown.Parse(markdown, Pipeline);
         var writer = new StringWriter();
@@ -22,7 +23,7 @@ public sealed class ResponsiveImageExtensionTests
         Pipeline.Setup(renderer);
         var contextHolder = new ResponsiveImageContextHolder
         {
-            Current = new ResponsiveImageContext(imageInfoLookup),
+            Current = new ResponsiveImageContext(imageInfoLookup, outputUrlDirectory),
         };
         ResponsiveImageWriter.Attach(renderer, contextHolder);
         renderer.Render(document);
@@ -47,7 +48,7 @@ public sealed class ResponsiveImageExtensionTests
     }
 
     [Fact]
-    public void Process_LocalImage_GeneratesRelativeSrcAndSrcset()
+    public void Process_LocalImage_GeneratesRootRelativeSrcAndSrcset()
     {
         var imageInfoLookup = new Dictionary<string, ProcessedImageInfo>
         {
@@ -57,10 +58,10 @@ public sealed class ResponsiveImageExtensionTests
 
         var html = Render(markdown, imageInfoLookup);
 
-        Assert.Contains("src=\"./test-image.png.abc12345.1920w.webp\"", html);
+        Assert.Contains("src=\"/kiji/blog/test-post/test-image.png.abc12345.1920w.webp\"", html);
         Assert.Contains("srcset=\"", html);
-        Assert.Contains("./test-image.png.abc12345.320w.webp 320w", html);
-        Assert.Contains("./test-image.png.abc12345.1920w.webp 1920w", html);
+        Assert.Contains("/kiji/blog/test-post/test-image.png.abc12345.320w.webp 320w", html);
+        Assert.Contains("/kiji/blog/test-post/test-image.png.abc12345.1920w.webp 1920w", html);
         Assert.Contains("sizes=\"(max-width: 1920px) 100vw, 1920px\"", html);
         Assert.Contains("width=\"1920\"", html);
         Assert.Contains("height=\"1080\"", html);
@@ -69,8 +70,7 @@ public sealed class ResponsiveImageExtensionTests
         Assert.Contains("loading=\"eager\"", html);
         Assert.Contains("decoding=\"async\"", html);
         Assert.DoesNotContain("class=", html);
-        // No absolute URLs: page-bundle assets sit beside the page output.
-        Assert.DoesNotContain("src=\"/", html);
+        Assert.DoesNotContain("src=\"https://", html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -118,8 +118,8 @@ public sealed class ResponsiveImageExtensionTests
 
         var html = Render(markdown, imageInfoLookup);
 
-        Assert.Contains("./foo.jpg.jpg12345.", html);
-        Assert.Contains("./foo.png.png67890.", html);
+        Assert.Contains("/kiji/blog/test-post/foo.jpg.jpg12345.", html);
+        Assert.Contains("/kiji/blog/test-post/foo.png.png67890.", html);
     }
 
     [Fact]

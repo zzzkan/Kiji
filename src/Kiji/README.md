@@ -4,7 +4,7 @@ A static site generator for .NET that turns Razor components into static HTML.
 
 ## Documentation
 
-<https://zzzkan.github.io/kiji/>
+<https://kiji-docs.zzzkan.workers.dev/>
 
 ## License
 

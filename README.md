@@ -82,7 +82,7 @@ In addition to Razor and C# hot reload, changes to Markdown, images, and static 
 
 ## Documentation
 
-<https://zzzkan.github.io/kiji/>
+<https://kiji-docs.zzzkan.workers.dev/>
 
 The site is itself built with Kiji and lives in [`docs/`](docs), so it doubles as a worked example.
 

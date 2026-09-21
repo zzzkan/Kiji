@@ -1,0 +1,53 @@
+name: Docs Build
+
+on:
+  push:
+    branches: [main]
+    paths: &docs-paths
+      - "docs/**"
+      - "Directory.Build.props"
+      - "Directory.Packages.props"
+      - "global.json"
+      - "wrangler.jsonc"
+      - ".github/workflows/docs-build.yml"
+      - ".github/workflows/docs-deploy.yml"
+  pull_request:
+    branches: [main]
+    paths: *docs-paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-build-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Record pull request
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number || 0 }}
+        run: |
+          mkdir -p .docs-deploy
+          printf '%s\n' "$PR_NUMBER" > .docs-deploy/pr-number
+
+      - name: Build site
+        run: dotnet publish docs -c Release -o docs/dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: docs-site
+          path: |
+            docs/dist
+            .docs-deploy/pr-number
+          if-no-files-found: error
+          retention-days: 1

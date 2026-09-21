@@ -1,0 +1,13 @@
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: "/"
+    schedule:
+      interval: daily
+      time: "02:00"
+      timezone: Asia/Tokyo
+    cooldown:
+      default-days: 3
+      exclude:
+        - Kiji
+    open-pull-requests-limit: 1

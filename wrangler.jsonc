@@ -1,0 +1,11 @@
+{
+  "name": "kiji-docs",
+  "compatibility_date": "2026-09-21",
+  "workers_dev": true,
+  "preview_urls": true,
+  "assets": {
+    "directory": "./docs/dist",
+    "not_found_handling": "404-page",
+    "html_handling": "auto-trailing-slash"
+  }
+}

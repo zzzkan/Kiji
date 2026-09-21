@@ -9,7 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 var site = StaticSite.Create(args);
 site.Info = new()
 {
-    BaseUrl = new Uri("https://zzzkan.github.io/kiji/"),
+    BaseUrl = new Uri("https://kiji-docs.zzzkan.workers.dev/"),
     Name = "Kiji",
     Description = "A static site generator for .NET. Write pages as Razor components.",
     Language = "en",

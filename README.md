@@ -30,24 +30,18 @@ Rendering is one-shot and static, so `@onclick` and `OnAfterRenderAsync` do not 
 ## Quick start
 
 ```pwsh
-dotnet new console -o MySite
+dotnet new console -f net10.0 -o MySite
 cd MySite
+dotnet add package Kiji
 ```
 
-Replace `MySite.csproj` so the project can compile Razor components, then reference Kiji:
+Change the first line of `MySite.csproj` to use the Razor SDK:
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk.Razor">
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="Kiji" Version="0.1.0-preview" />
-  </ItemGroup>
-</Project>
 ```
 
-Then write the site definition and its first page:
+Replace `Program.cs` with the site definition and create `Pages/Home.razor`:
 
 ```csharp
 // Program.cs
@@ -65,20 +59,22 @@ return await app.RunAsync();
 ```
 
 ```razor
-@* Pages/HomePage.razor *@
+@* Pages/Home.razor *@
 @page "/"
 
 <h1>Hello from Kiji</h1>
-<p>This Razor component is rendered as static HTML.</p>
+<p>This page is a Razor component rendered to static HTML.</p>
 ```
 
-To preview the page locally, start the development server at <http://localhost:8080>:
+Start the development server and open <http://localhost:8080>:
 
 ```pwsh
 dotnet watch
 ```
 
-In addition to Razor and C# hot reload, changes to Markdown, images, and static assets are detected automatically and reflected in the browser.
+The server reloads the browser when you change a component or content file.
+
+For the complete walkthrough—including layouts, CSS, Markdown pages, and publishing—see [Getting started](https://kiji-docs.zzzkan.workers.dev/docs/getting-started/).
 
 ## Documentation
 

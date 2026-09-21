@@ -109,4 +109,3 @@ before working in that area:
 - `src/Kiji.Benchmarks` — BenchmarkDotNet microbenchmarks
 - `src/Kiji.SyntheticSite` — end-to-end build performance harness
 - `docs` — the documentation site, built with Kiji and deployed to GitHub Pages
-- `templates` — the `dotnet new kiji` template package.

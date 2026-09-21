@@ -84,25 +84,27 @@ public sealed class TemplatePackageTests
             var defaultPublishDir = await GetMsBuildPropertyAsync(
                 output, projectPath, "PublishDir", "-p:Configuration=Release");
             Assert.Equal(
-                ResolvePath(output, "dist"),
-                ResolvePath(output, defaultPublishDir));
+                ResolveMsBuildPath(output, "dist"),
+                ResolveMsBuildPath(output, defaultPublishDir));
 
             var ordinaryPublishDir = await GetMsBuildPropertyAsync(
                 output, projectPath, "PublishDir", "-p:Configuration=Release", "-p:OutputType=Library");
             Assert.Equal(
-                ResolvePath(output, Path.Combine("bin", "Release", "net10.0", "publish")),
-                ResolvePath(output, ordinaryPublishDir));
+                ResolveMsBuildPath(output, Path.Combine("bin", "Release", "net10.0", "publish")),
+                ResolveMsBuildPath(output, ordinaryPublishDir));
 
             var explicitPublish = Path.Combine(root, "explicit-publish");
             var explicitPublishDir = await GetMsBuildPropertyAsync(
                 output, projectPath, "PublishDir", "-p:Configuration=Release", $"-p:PublishDir={explicitPublish}");
-            Assert.Equal(ResolvePath(output, explicitPublish), ResolvePath(output, explicitPublishDir));
+            Assert.Equal(
+                ResolveMsBuildPath(output, explicitPublish),
+                ResolveMsBuildPath(output, explicitPublishDir));
 
             var projectPublishDir = await GetMsBuildPropertyAsync(
                 output, projectPath, "PublishDir", "-p:Configuration=Release", "-p:UseProjectPublishDir=true");
             Assert.Equal(
-                ResolvePath(output, "project-publish"),
-                ResolvePath(output, projectPublishDir));
+                ResolveMsBuildPath(output, "project-publish"),
+                ResolveMsBuildPath(output, projectPublishDir));
 
             await RunDotnetAsync(output, "build", projectPath, "-c", "Release", "--no-restore");
             var publish = Path.Combine(output, "dist");
@@ -228,9 +230,14 @@ public sealed class TemplatePackageTests
         return (await RunDotnetAsync(workingDirectory, allArguments)).Trim();
     }
 
-    private static string ResolvePath(string root, string path)
+    private static string ResolveMsBuildPath(string root, string path)
     {
-        return Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.Combine(root, path)));
+        // MSBuild paths can contain either separator on every platform. In particular,
+        // the SDK's default OutputPath contains backslashes on Linux, where System.IO
+        // otherwise treats them as ordinary filename characters.
+        var nativePath = path.Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar);
+        return Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.Combine(root, nativePath)));
     }
 
     /// <summary>

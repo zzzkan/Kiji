@@ -55,8 +55,8 @@
          case when it constructs PublishDir. -->
     <_KijiSdkDefaultPublishDir Condition="'$(AppendRuntimeIdentifierToOutputPath)' != 'true' and
                                                '$(RuntimeIdentifier)' != '' and
-                                               '$(_UsingDefaultRuntimeIdentifier)' != 'true'">$(OutputPath)$(RuntimeIdentifier)\$(PublishDirName)\</_KijiSdkDefaultPublishDir>
-    <_KijiSdkDefaultPublishDir Condition="'$(_KijiSdkDefaultPublishDir)' == ''">$(OutputPath)$(PublishDirName)\</_KijiSdkDefaultPublishDir>
+                                               '$(_UsingDefaultRuntimeIdentifier)' != 'true'">$(OutputPath)$(RuntimeIdentifier)$([System.IO.Path]::DirectorySeparatorChar)$(PublishDirName)$([System.IO.Path]::DirectorySeparatorChar)</_KijiSdkDefaultPublishDir>
+    <_KijiSdkDefaultPublishDir Condition="'$(_KijiSdkDefaultPublishDir)' == ''">$(OutputPath)$(PublishDirName)$([System.IO.Path]::DirectorySeparatorChar)</_KijiSdkDefaultPublishDir>
     <PublishDir Condition="'$(PublishDir)' == '$(_KijiSdkDefaultPublishDir)'">$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', 'dist'))</PublishDir>
   </PropertyGroup>
 

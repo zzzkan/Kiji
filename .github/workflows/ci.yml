@@ -16,7 +16,11 @@ permissions:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -31,4 +35,5 @@ jobs:
         run: dotnet test -c Release
 
       - name: Pack
+        if: matrix.os == 'ubuntu-latest'
         run: dotnet pack -c Release --no-build -o artifacts

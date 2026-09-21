@@ -2,9 +2,6 @@
   <Folder Name="/docs/">
     <Project Path="docs/Kiji.Docs.csproj" />
   </Folder>
-  <Folder Name="/templates/">
-    <Project Path="templates/Kiji.Templates.csproj" />
-  </Folder>
   <Folder Name="/src/">
     <Project Path="src/Kiji/Kiji.csproj" />
     <Project Path="src/Kiji.Tests/Kiji.Tests.csproj" />

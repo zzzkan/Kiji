@@ -1,6 +1,0 @@
-<!--
-  Stops MSBuild property inheritance at the site root, so the site builds the same way
-  wherever you put it — including inside a repository that has its own build props.
-  Delete this file to inherit from parent directories again.
--->
-<Project />

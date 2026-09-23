@@ -8,6 +8,19 @@ This page covers Kiji's complete public site-authoring API. All `StaticSite` reg
 methods return the same site instance and may be chained. Configure the site before
 `RunAsync`; execution makes its configuration read-only.
 
+- [StaticSite lifecycle](#staticsite-lifecycle)
+- [SiteInfo](#siteinfo)
+- [SitePaths](#sitepaths)
+- [Pages, layouts, and page services](#pages-layouts-and-page-services)
+- [HeadContent](#headcontent)
+- [Content sources and ContentDictionary](#content-sources-and-contentdictionary)
+- [Markdown APIs](#markdown-apis)
+- [Build inputs and controls](#build-inputs-and-controls)
+- [Feeds](#feeds)
+- [Sitemaps](#sitemaps)
+- [Custom artifacts](#custom-artifacts)
+- [Image processing](#image-processing)
+
 ## StaticSite lifecycle
 
 ```csharp
@@ -103,6 +116,12 @@ allowed. Duplicate output paths fail. Treat supplied objects as read-only for th
 Kiji does not clone or dispose them. See [Routing](../routing/) for examples and supported
 route templates.
 
+HTML can be reused when parameter values are `null` or have one of these types:
+`string`, `bool`, `char`, `sbyte`, `byte`, `short`, `ushort`, `int`, `uint`, `long`,
+`ulong`, enums, and `Guid`. Other types can be valid component parameters but disable
+HTML reuse for that page. Prefer passing a content key and looking up the item during
+rendering. See [Incremental builds](../incremental-builds/#pass-stable-page-parameters).
+
 ### `UseDefaultLayout<TLayout>()`
 
 Sets the `LayoutComponentBase` used by pages without their own `@layout`. A page's layout
@@ -133,12 +152,12 @@ inside the generated document `<head>`:
 <Kiji.Components.HeadContent>
     <meta charset="utf-8" />
     <title>@Title</title>
-    <link rel="canonical" href="@NavigationManager.Uri" />
 </Kiji.Components.HeadContent>
 ```
 
 It renders no markup at its position in the body. If more than one instance renders on a
-page, the most recently rendered instance supplies the head content.
+page, the most recently rendered instance supplies the entire head content; their
+contents are not merged.
 
 ## Content sources and ContentDictionary
 
@@ -155,7 +174,8 @@ reading its items are rendered on every publish.
 Registers a source with stable, source-local identities. Return
 `new ContentEntry<T>(id, value, digest)` for each item. The digest must change whenever
 any data affecting the value changes, including data obtained from HTTP or other sources.
-Use `null` when that guarantee cannot be made; only readers of that item lose HTML reuse.
+Use `null` when that guarantee cannot be made; readers of that item or its collection
+lose HTML reuse.
 Values are immutable for one build snapshot. Collection enumeration tracks item order,
 membership, and all item digests. A missing lookup tracks the collection too.
 
@@ -163,10 +183,18 @@ membership, and all item digests. A missing lookup tracks the collection too.
 
 Registers an external value evaluated once per build snapshot when needed.
 Inject `PageBuildInputs` and call `Read(key)` during rendering; only readers depend on it.
-Use `PageBuildInputs.ReadFile(path)` to read bytes and track their content, or
-`PageBuildInputs.DisableCache()` for untracked, nondeterministic inputs.
-File paths outside the site root disable portable HTML reuse for that page.
-`AddBuildInput` continues to declare dependencies shared by all pages.
+
+| Method                                | Behavior                                                                                                                                                                    |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `string Read(string key)`             | Instance method; reads a registered value and records it for the current page. An unknown key throws.                                                                       |
+| `static byte[] ReadFile(string path)` | Reads and records the exact file bytes consumed during rendering. Pass an absolute path resolved against the site root; a relative path uses the process working directory. |
+| `static void DisableCache()`          | Disables persistent HTML reuse for the current page render, for untracked or nondeterministic inputs.                                                                       |
+
+Call these methods during rendering to record dependencies for that page. File paths
+outside the site root disable persistent HTML reuse for that page. These APIs do not
+register file watchers or poll external systems. `AddBuildInput` continues to declare
+dependencies shared by all pages and watches declared paths in development. See the
+[input selection guide](../incremental-builds/#declare-inputs-outside-the-built-in-content-pipeline).
 
 ### `ContentDictionary<T>`
 
@@ -187,9 +215,10 @@ Keys do not determine public URLs.
 | `IEnumerator<KeyValuePair<string,T>> GetEnumerator()` | Enumerates entries in source order; non-generic enumeration uses the same entries.           |
 
 During a tracked page render, a successful keyed lookup observes that item. Inspecting the
-dictionary's shape through `Count`, `Keys`, `Values`, enumeration, or a missing lookup
-observes the collection, so incremental publishing can rebuild pages when that shape
-changes.
+dictionary through `Count`, `Keys`, `Values`, enumeration, or a missing lookup observes
+the collection's order, membership, and every item digest. A body-only edit can therefore
+invalidate a collection reader even when its count and keys stay the same. Reads from
+layouts and child components are dependencies of the page too.
 
 ## Markdown APIs
 
@@ -356,59 +385,3 @@ ordered by ascending width; the largest variant is used as the default image sou
 `ImageVariant(string FileName, int Width)` describes one generated file. `FileName` is
 relative to the output directory and `Width` is its pixel width. Both positional
 properties are read-only.
-
-
-## Incremental publishing cache
-
-Kiji stores page dependencies and SHA-256 hashes in `.kiji/cache/manifest.json`,
-with reusable HTML in the single `html-*.bin` file it references. Generated images use separate SHA-256 blobs under
-`.kiji/cache/images`; image generation records contain dimensions and variant mappings. Restoring `.kiji/cache`
-alone is sufficient to reuse unchanged outputs on a clean checkout. The publish staging
-directory stays under `obj`; static assets are copied from source, and RSS/sitemap are
-generated on each publish.
-
-Reuse compares content digests, route parameters, declared external inputs, and code
-dependencies. Code identity uses the compiler-generated module version ID (MVID) of
-the site and its referenced assemblies, including framework code. A changed MVID
-invalidates all HTML; content changes invalidate its readers. Dynamic assemblies or
-unavailable code identities cannot reuse HTML. Existing caches using binary or compilation-input
-hashes are rebuilt once when switching to MVIDs.
-
-Release site executables use deterministic compilation without PDBs, omit the source
-revision from informational versions, and map the project directory to `/_/source`.
-These settings stabilize code identity across checkouts and content-only commits.
-They apply to Release builds as well as publishes, including `build` followed by
-`publish --no-build`, independently of `KijiGenerateOnPublish`. Use Debug for source-level
-debugging; Debug builds, libraries, and tests keep their existing debug settings.
-Explicit MSBuild global properties retain their normal precedence.
-
-MSBuild owns recompilation. Kiji does not detect timestamp-preserving edits to C# or
-Razor sources before compilation, or post-compilation DLL edits that retain the MVID.
-Markdown and other content inputs are still checked by content hash. Referenced
-projects do not inherit the site's compilation settings: configure them separately
-when stable identities across checkouts are needed. Different compiler versions,
-generated code, assembly versions, or dependency MVIDs can require a full rebuild.
-
-Inputs and cached HTML are checked by content hash. Generated HTML and images are exclusively owned
-by Kiji: in the same output directory, matching size and last-write time allow reuse
-without reading it again. External edits that preserve both are outside this guarantee.
-Changed stamps or a different output directory trigger content verification. Restored
-image blobs are also checked by content hash before use.
-Missing or corrupt HTML is rendered again. Missing or corrupt images can be regenerated
-without rendering unchanged HTML. Custom code must declare external dependencies; Kiji
-cannot observe arbitrary file, HTTP, reflection, or clock access.
-
-Successful builds write a complete HTML bundle before atomically replacing the manifest,
-then collect the previous bundle, unreferenced blobs, and
-image records. Failed builds keep the last successful manifest. Build transactions sharing
-a cache are serialized; pages still render concurrently. Cache size follows the current
-site's reusable HTML and unique image outputs, rather than the number of builds. Pages
-share one HTML bundle to avoid thousands of small cache-file operations. Reused pages
-share slices of that bundle in memory. Code changes cause all pages to render and do
-not load the previous HTML bundle. Unchanged builds retain both files. Restoring output
-updates only the manifest's output stamps and retains the HTML bundle. Uncacheable pages store only metadata.
-
-The development mirror, including generated images, lives under `.kiji/dev-site`, separate from the publish cache in `.kiji/cache`.
-Development does not write to the publish cache in `.kiji/cache`.
-`-p:KijiForce=true` renders all pages; `dotnet clean` removes generated caches.
-Old manifest formats are not migrated.

@@ -11,10 +11,10 @@ the URLs it generates.
 ## Register Markdown content
 
 Each Markdown file starts with YAML front matter. The fields are defined by your own .NET
-class:
+class.
 
 ```csharp
-public sealed class PostFrontMatter
+public sealed class FrontMatter
 {
     public string? Title { get; set; }
     public string? Description { get; set; }
@@ -39,10 +39,10 @@ This is a Markdown-backed page.
 Register the source:
 
 ```csharp
-app.UseMarkdownContent<PostFrontMatter>();
+app.UseMarkdownContent<FrontMatter>();
 ```
 
-This makes a `ContentDictionary<MarkdownContent<PostFrontMatter>>` available through
+This makes a `ContentDictionary<MarkdownContent<FrontMatter>>` available through
 dependency injection. It does not automatically create routes; map the items with
 `AddPages<TPage>` as shown in [Getting started](../getting-started/#add-a-markdown-page).
 
@@ -57,7 +57,7 @@ By default, Kiji recursively loads `*.md` files from `contents/`. Set `Directory
 subdirectory, and `FileFilter` to exclude files before they are loaded:
 
 ```csharp
-app.UseMarkdownContent<PostFrontMatter>(options =>
+app.UseMarkdownContent<FrontMatter>(options =>
 {
     options.Directory = "posts";
     options.FileFilter = file => !file.Name.StartsWith('_');
@@ -71,27 +71,39 @@ decides the URL of every included item.
 ## Use a site-specific model
 
 The basic overload exposes `MarkdownContent<TFrontMatter>` directly. Use the projection
-overload when pages should consume a model that includes a slug or validated display
-values:
+overload instead when pages should consume a model that includes a slug or validated
+display values. Define a model in its own `Post.cs` file, using your site's model
+namespace:
 
 ```csharp
-app.UseMarkdownContent<PostFrontMatter, Post>(content => new Post(
-    Slug: Path.GetFileNameWithoutExtension(content.FileInfo.Name),
+public sealed record Post(
+    string Slug,
+    string Title,
+    MarkdownContent<FrontMatter> Content);
+```
+
+Replace the basic `UseMarkdownContent<FrontMatter>()` registration with this one.
+
+```csharp
+app.UseMarkdownContent<FrontMatter, Post>(content => new Post(
+    Slug: content.FileInfo.Directory!.Name,
     Title: content.FrontMatter.Title ?? "Untitled",
     Content: content));
 ```
 
 The projection runs independently for each file. Keep relationships such as tag indexes
 or related posts outside the projection so they can be built from the resulting
-collection.
+collection. See [Incremental builds](../incremental-builds/#declare-inputs-outside-the-built-in-content-pipeline)
+when a projection reads additional external data.
 
 ## Render a Markdown body
 
-Inject the registered dictionary, look up the item by the `ContentKey` supplied through
-`AddPages`, and call `RenderAsync()`:
+With the basic `UseMarkdownContent<FrontMatter>()` registration, inject the
+dictionary, look up the item by the `ContentKey` supplied through `AddPages`, and call
+`RenderAsync()`:
 
 ```razor
-@inject ContentDictionary<MarkdownContent<PostFrontMatter>> Posts
+@inject ContentDictionary<MarkdownContent<FrontMatter>> Posts
 
 <div>@((MarkupString)_html)</div>
 
@@ -106,6 +118,9 @@ Inject the registered dictionary, look up the item by the `ContentKey` supplied 
 }
 ```
 
+With the projected `Post` model above, replace the injection with
+`@inject ContentDictionary<Post> Posts`.
+
 The returned string contains HTML and must be rendered as `MarkupString`. Only render
 trusted Markdown, or add your own sanitization step before displaying it.
 
@@ -115,21 +130,21 @@ Kiji enables Markdig's advanced extensions. Add another Markdig configuration wi
 `ConfigureMarkdown`:
 
 ```csharp
-app.UseMarkdownContent<PostFrontMatter>(options =>
+app.UseMarkdownContent<FrontMatter>(options =>
     options.ConfigureMarkdown(pipeline => pipeline.UseEmojiAndSmiley()));
 ```
 
 Use `ConfigureYaml` to change front matter deserialization:
 
 ```csharp
-app.UseMarkdownContent<PostFrontMatter>(options =>
+app.UseMarkdownContent<FrontMatter>(options =>
     options.ConfigureYaml(yaml => yaml.WithCaseInsensitivePropertyMatching()));
 ```
 
 Use `AddHtmlPostProcessor` for a synchronous transformation of the rendered HTML:
 
 ```csharp
-app.UseMarkdownContent<PostFrontMatter>(options =>
+app.UseMarkdownContent<FrontMatter>(options =>
     options.AddHtmlPostProcessor(html => $"<div class=\"prose\">{html}</div>"));
 ```
 

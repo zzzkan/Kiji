@@ -66,6 +66,17 @@ pre code {
     overflow-wrap: normal;
 }
 
+pre[data-line] .line-highlight {
+    margin-top: 0.9rem;
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+    border-left: 3px solid var(--accent);
+}
+
+pre[data-line] .line-highlight::before,
+pre[data-line] .line-highlight::after {
+    content: none;
+}
+
 @media (max-width: 52rem) {
 
     pre,

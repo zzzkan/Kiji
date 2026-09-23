@@ -18,6 +18,7 @@ MySite/
 ├── contents/         Markdown and files that belong to content
 ├── wwwroot/          CSS, JavaScript, fonts, and other static assets
 ├── Program.cs        site metadata and registrations
+├── .kiji/            build cache and development output
 └── dist/             generated site after publishing
 ```
 
@@ -62,11 +63,12 @@ change. This is a preview environment rather than deployable output.
 dotnet publish
 ```
 
-`dotnet publish` renders every registered page, copies static assets, and writes the
-complete site to `dist/`. The directory contains static files only and can be uploaded to
-any static host.
-Development and publishing
-share the same rendering path, so the pages you preview are the pages Kiji publishes. See
+`dotnet publish` produces output for every registered page, reusing valid cached HTML
+where possible, copies static assets, and writes the complete site to `dist/`. See
+[Incremental builds](../incremental-builds/) for what causes pages to render again.
+The directory contains static files only and can be uploaded to any static host.
+Development and publishing share the same rendering path, so the pages you preview are
+the pages Kiji publishes. See
 [Deployment](../deployment/) for hosting and deployment sub-paths.
 
 ```pwsh
@@ -91,15 +93,10 @@ Kiji writes clean URLs as directories containing `index.html`: `/about/` becomes
 `UseDefaultLayout<TLayout>()` applies a shared Razor layout to pages that do not choose
 their own. Layouts render inside the `<body>` of the document Kiji creates.
 
-Use `Kiji.Components.HeadContent` to contribute a title, metadata, or stylesheet links to
-the generated `<head>`:
-
-```razor
-<HeadContent>
-    <title>@Title</title>
-    <link rel="stylesheet" href="@(Site.BaseUrl.AbsolutePath + "css/app.css")" />
-</HeadContent>
-```
+Use `Kiji.Components.HeadContent` to supply the generated `<head>`. Multiple instances
+do not merge: the most recently rendered instance supplies the entire head content.
+Keep shared tags and page-specific metadata in one component, as shown by `PageHead`
+in [Getting started](../getting-started/#add-a-layout-and-css).
 
 ## Content and static assets
 

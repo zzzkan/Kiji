@@ -10,8 +10,8 @@ static host.
 
 ## Set the published URL
 
-`SiteInfo.BaseUrl` is the public URL of the site. Kiji uses it for canonical URLs, RSS,
-sitemaps, and the development server's base path:
+`SiteInfo.BaseUrl` is the public URL of the site. Kiji uses it to resolve page URLs,
+RSS and sitemap links, and the development server's base path:
 
 ```csharp
 app.Info = new SiteInfo
@@ -42,12 +42,13 @@ Prefix links to site-root pages and static assets with `Site.BaseUrl.AbsolutePat
 `AbsolutePath` is `/my-site/` for that project site and `/` for a domain-root site, so the
 same markup works in both places.
 
-Kiji already applies `BaseUrl` to, feed, sitemap, and generated Markdown image
+Kiji already applies `BaseUrl` to feed, sitemap, and generated Markdown image
 URLs. Page-bundle image URLs include the deployment base path, while their files remain
 beside the page inside `dist/`. A base path does not add another directory inside `dist/`.
 
-The development server uses the same base path and returns 404 outside it. This makes a
-missing prefix visible before deployment. See
+The development server uses the same base path and returns 404 outside it. With the
+example above, open <http://localhost:8080/my-site/> after starting `dotnet watch`.
+This makes a missing prefix visible before deployment. See
 [Markdown and images](../markdown/#local-images-and-page-bundles) for image URL behavior.
 
 ## GitHub Pages with Actions
@@ -94,8 +95,13 @@ jobs:
         uses: actions/deploy-pages@v4
 ```
 
-This workflow publishes directly through Actions, so Jekyll and a `.nojekyll` file are
-not involved.
+The workflow works without a saved build cache.
+
+To preserve Kiji's incremental output
+between runs, restore `MySite/.kiji/cache` before publishing and save it after a successful
+publish. Caching `.kiji/cache` does not necessarily make CI builds faster. Restoring and saving
+the cache also takes time, and changes may leave little output to reuse. Compare total
+job time with and without caching for your site.
 
 ## Other static hosts
 

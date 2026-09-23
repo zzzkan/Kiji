@@ -10,18 +10,6 @@ namespace Kiji.Benchmarks;
 /// <summary>
 /// Measures whole-site builds over a frozen workload with warmup and isolated cases.
 /// </summary>
-/// <remarks>
-/// <para>
-/// <see cref="RunStrategy.Monitoring"/> with one invocation per iteration is the mode
-/// for expensive operations with side effects — a build writes to disk, so it cannot be
-/// invoked in a tight loop. Warmup is set explicitly rather than left to the strategy's
-/// default, because absorbing the JIT is the whole reason this exists.
-/// </para>
-/// <para>
-/// Each case owns a fresh deterministic corpus. Generation and cleanup are outside
-/// the measurement, and edits alternate between two equal-length bodies.
-/// </para>
-/// </remarks>
 [SimpleJob(RunStrategy.Monitoring, launchCount: 1, warmupCount: 2, iterationCount: 10, invocationCount: 1)]
 [MemoryDiagnoser]
 public class SiteBuildBenchmarks

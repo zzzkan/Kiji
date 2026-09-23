@@ -4,7 +4,6 @@ using System.Diagnostics.CodeAnalysis;
 using Kiji.Hosting;
 using Kiji.Generation;
 using System.Text;
-using Microsoft.Extensions.DependencyInjection;
 using Kiji.Rendering;
 
 namespace Kiji;
@@ -19,19 +18,17 @@ public sealed class ContentDictionary<T> : IReadOnlyDictionary<string, T>
     where T : class
 {
     private readonly string _sourceId;
-    private readonly Func<string, T, string?>? _digest;
     private readonly ContentRuntime _runtime;
-    private readonly Func<IServiceProvider, IReadOnlyList<(string Key, T Item, string? SourceFile)>> _load;
+    private readonly Func<IServiceProvider, IReadOnlyList<(string Key, T Item, string? Digest)>> _load;
 
     internal ContentDictionary(
         ContentRuntime runtime,
-        Func<IServiceProvider, IReadOnlyList<(string Key, T Item, string? SourceFile)>> load,
-        string contentSetScope = "", Func<string, T, string?>? digest = null)
+        Func<IServiceProvider, IReadOnlyList<(string Key, T Item, string? Digest)>> load,
+        string contentSetScope = "")
     {
         _runtime = runtime;
         _load = load;
         _sourceId = typeof(T).FullName + ":" + contentSetScope;
-        _digest = digest;
         runtime.Dependencies.Register(_sourceId, CollectionDigest);
         runtime.Dependencies.RegisterSource(_sourceId, key => Materialized.Index.GetValueOrDefault(key).Digest);
     }
@@ -141,16 +138,13 @@ public sealed class ContentDictionary<T> : IReadOnlyDictionary<string, T>
         var entries = new KeyValuePair<string, T>[loaded.Count];
         for (var i = 0; i < loaded.Count; i++)
         {
-            var (key, item, sourceFile) = loaded[i];
+            var (key, item, digest) = loaded[i];
             if (string.IsNullOrWhiteSpace(key))
             {
                 throw new InvalidOperationException(
                     $"The internal content loader for '{typeof(T).Name}' produced an empty key.");
             }
 
-            var digest = sourceFile is not null
-                ? services.GetService<ContentFileRegistry>()?.GetSnapshotHash(sourceFile) ?? BuildFingerprint.HashFile(sourceFile)
-                : _digest?.Invoke(key, item);
             if (!index.TryAdd(key, (item, digest)))
             {
                 throw new InvalidOperationException(

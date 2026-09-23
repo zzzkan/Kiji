@@ -1,118 +1,66 @@
 # Kiji
 
-A static site generator framework for .NET. Pages are Razor components rendered to
-static HTML via Blazor's `HtmlRenderer`, assembled with a minimal-API style app.
+A .NET static site generator: Razor components rendered with Blazor's HtmlRenderer.
 
-## Commands
+## Commands and layout
 
-- `dotnet build -c Release` and `dotnet test -c Release` — both operate on the whole solution
-- Pass no extra flags to `dotnet test`. Unrecognized ones (`--nologo`) reach the
-  Microsoft.Testing.Platform runner, which prints help and exits 5
-- `dotnet publish docs -c Release -o docs/dist` — generate the docs site; `dotnet watch --project docs` serves it
-- `dotnet run -c Release --project src/Kiji.SyntheticSite -- --pages 1000 --runs 3` — end-to-end build perf
-- `dotnet run -c Release --project src/Kiji.Benchmarks -- --filter "*"` — microbenchmarks
-- Any dev server or watch process started for verification must be shut down before
-  reporting completion. Terminate only processes started by the
-  current task, never a pre-existing user process.
+- `dotnet build -c Release` and `dotnet test -c Release` cover the whole solution.
+  Pass no extra flags to test: unsupported flags reach Microsoft.Testing.Platform.
+- `dotnet publish docs -c Release -o docs/dist` generates docs;
+  `dotnet watch --project docs` serves it. Docs references the published package;
+  use an isolated consumer of the local package to verify framework changes.
+- `src/Kiji` is the single package, including Markdown, images, feeds and hosting.
+  `MSBuild/Kiji.targets` integrates publish, watch and clean.
+- `src/Kiji.Tests` contains xUnit v3 tests and TestSite integration fixtures.
+  Classes run in parallel; never mutate process-wide state.
+- `src/Kiji.SyntheticSite` is the frozen end-to-end workload; `src/Kiji.Benchmarks`
+  contains BenchmarkDotNet measurements. Do not change the workload to improve results.
+- Stop any verification server/watch process before completion. Stop only processes
+  started by the current task.
 
-## Design constraints
+## Design
 
-- **One package.** Markdown, images, feeds, sitemaps, and the dev server all ship in
-  `Kiji`. Do not split into extension packages.
-- **Flagless API.** Build with `Create` → `Add*` / `Use*` → `RunAsync`. Prefer conventions
-  and a few explicit APIs over option flags. The app parses **no** command line of its own:
-  `dotnet watch` serves, `dotnet publish` generates, `dotnet clean` cleans. Execution
-  control lives on MSBuild (`-p:KijiForce`, `-p:KijiVerbose`) and the dev server's address
-  comes from ASP.NET Core configuration.
-- **The dev server and a publish share the rendering path.** Both go through
-  `StaticSite.RenderPageAsync`, so what the dev server shows is what a publish writes.
-  Keep it that way.
-- **Correctness outranks speed.** Every optimization, incremental builds included, lives
-  under "never emit stale output". Anything ambiguous falls back to a full rebuild.
-- **One type per file.**
+- Build with Create -> Add*/Use* -> RunAsync. Kiji parses no command line:
+  watch serves, publish generates, clean cleans. MSBuild owns KijiForce/KijiVerbose;
+  ASP.NET Core configuration owns the dev server address. Prefer conventions to flags.
+- Dev and publish share StaticSite.RenderPageAsync. Never emit stale output;
+  ambiguous incremental state requires rendering.
+- One type per file. Components in src are hand-written ComponentBase classes;
+  only docs uses .razor files and the Razor SDK.
+- Update `docs/contents/api-reference/index.md` for author-facing API changes.
+  Keep pack's baseline validation enabled; intentional breaks get only their specific
+  entries in `src/Kiji/CompatibilitySuppressions.xml`.
+- Tests must catch realistic regressions, not repeat library guarantees or visibility
+  checks already covered by compilation/pack. Keep experiments/reports in ignored artifacts.
 
-## Already evaluated and rejected — do not reintroduce
+## Constraints worth preserving
 
-| Idea                                   | Why not                                                                                                                    |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Pooling Blazor's `HtmlRenderer`        | Root component state cannot be reset via public API, per-page scoped services are captured at construction                 |
-| Blazor's `SectionOutlet` / `RouteView` | Their state lives on the renderer, out of Kiji's control; replaced by `HeadOutlet` / `PageView` with state on the DI scope |
-| Native AOT / trimming                  | `HtmlRenderer`, `ParameterView`, and YamlDotNet are reflection-based; SSG is throughput-bound so AOT's wins do not apply   |
-| Source-generated page discovery        | The cached assembly scan does not justify generated discovery                                                              |
-| Rendering to `IBufferWriter<byte>`     | `HtmlRootComponent` only exposes `WriteHtmlTo(TextWriter)`                                                                 |
-| Content-addressed image output         | Breaks the page-bundle layout and `./` references                                                                          |
-| Incremental RSS/sitemap                | They depend on all page metadata and are cheap to regenerate                                                               |
+- Routes allow literals and simple parameters only. UseNotFoundPage still requires
+  its component's own route. AddPages supplies the whole parameter set; non-route
+  values must name writable [Parameter] properties.
+- SitePaths chooses the nearest project ancestor, then Git ancestor, then cwd.
+  Content becomes accessible through factories/loaders/artifacts only after execution
+  paths settle. Do not expose a provider or content dictionary on StaticSite.
+- The dev server enforces BaseUrl's path prefix and uses `.kiji/dev-site`.
+  Only `.kiji/cache` is portable; planning creates no output directories.
+- AddPageService instances belong to one render and are disposed with its scope.
+  Loaders, route/feed factories and artifacts cannot resolve them. Derived indexes
+  use UseContentSource. There is no public service collection.
+- UseImageProcessor creates one lazy, site-owned processor, disposed with the site.
+  It must support concurrency and retain no page/content state. Reload does not recreate
+  it. Declare external configuration with AddBuildInput and version cache identities.
 
-## Conventions
-
-- Components in `src/` are hand-written `ComponentBase` subclasses with `BuildRenderTree`
-  and `[Route]`. `.razor` files exist only in `docs/`, which is the sole Razor SDK consumer.
-- Tests are xUnit v3 on Microsoft.Testing.Platform, with `InternalsVisibleTo` to
-  `Kiji.Tests`. Test classes run in parallel, so never mutate process-wide state.
-- Integration tests build against `src/Kiji.Tests/TestSite/`. `src/Kiji.SyntheticSite`'s
-  site definition is a frozen benchmark workload — keep it separate so measurement stays
-  comparable.
-
-## Public API changes
-
-- When adding, changing, or removing public API, review
-  `docs/contents/api-reference/index.md` and update it when the author-facing API changes.
-- Package validation compares `Kiji` with the published baseline during `dotnet pack`.
-  Do not disable it or broadly suppress its diagnostics. For an intentional breaking
-  change, check in only the applicable entries in `src/Kiji/CompatibilitySuppressions.xml`.
-
-## Gotchas
-
-- Route templates reject catch-all segments, route constraints, optional parameters, and
-  composite segments. A static site must know every URL up front.
-- `UseNotFoundPage<T>()`'s component still needs its own `@page`/`[Route]`, or it throws.
-- `SitePaths.RootDirectory` defaults to the nearest ancestor with a project file, then the nearest
-  with `.git`, then the current directory.
-- The dev server serves under `SiteInfo.BaseUrl`'s path and returns 404 outside it, on
-  purpose — a link that forgot to prepend `Site.BaseUrl.AbsolutePath` should fail locally,
-  not after deploy.
-- Development output lives in `.kiji/dev-site`; only `.kiji/cache` is a portable publish
-  cache. Planning resolves the same dev paths without creating directories.
-- Code identity uses compiler MVIDs, including framework assemblies. Release site executables
-  disable symbols and normalize source paths/revision metadata; Debug, libraries, and tests retain
-  their settings. MSBuild owns recompilation, including timestamp-based source change detection.
-- The object `AddPages` yields is the page's whole parameter set, not just route values.
-  Names matching the route template bind the URL; the rest must be declared `[Parameter]`
-  properties on the component, or planning fails naming them.
-- The `IServiceProvider` handed to a route factory, a feed factory, a content loader, or
-  a site artifact is the earliest point content can be reached. `StaticSite` exposes neither
-  a dictionary nor a provider on purpose: loading content resolves `ResolvedSitePaths`, a singleton
-  the run settles, so an earlier read would pin publish paths onto the dev server.
-- Register page helpers with `AddPageService<T>()`: one instance per page render, shared
-  by the page, layout, and children and disposed after rendering. Loaders, route/feed
-  factories, and artifacts cannot resolve page services. Share derived indexes through
-  `UseContentSource<T>`, not page services. There is no public service collection.
-- Replace image processing with `UseImageProcessor(() => new CustomProcessor())`.
-  The site owns one lazy processor, including disposal; it must support concurrent calls
-  and retain no page/content state. Reloading content does not recreate it. Declare
-  external configuration with `AddBuildInput` and version custom image cache identities.
+Do not reintroduce evaluated alternatives: pooled HtmlRenderer (root/scope state cannot
+reset), Blazor SectionOutlet/RouteView (renderer-owned state), AOT/trimming (reflection),
+source-generated page discovery (cached scanning suffices), IBufferWriter rendering
+(HtmlRootComponent exposes TextWriter), content-addressed image URLs (break page bundles),
+or incremental RSS/sitemap (depend on all metadata and are cheap to regenerate).
 
 ## Skills
 
-Longer procedures are kept out of this file so it stays short. Read the relevant one
-before working in that area:
+Read before working in the corresponding area; keep reusable verification here:
 
-Keep reusable verification in these skills and their scripts; temporary experiments
-and task reports belong in ignored `artifacts`. Tests should catch realistic regressions,
-not repeat library guarantees or assert API visibility already checked by compilation/pack.
-
-- `.agents/skills/measure-performance/SKILL.md` — which harness measures what, the
-  before/after protocol, and why numbers from different harnesses are not comparable.
-  Read before changing anything on the build hot path or writing a performance number.
-- `.agents/skills/incremental-build/SKILL.md` — what gets recorded as a dependency, the
-  five skip conditions, and what to do when adding a content source, artifact, option, or
-  output. Read before introducing a new build input or output.
-
-## Repository layout
-
-- `src/Kiji` — the framework. `src/Kiji/MSBuild/Kiji.targets` is what makes
-  `dotnet publish` generate the site and replaces the publish output with it
-- `src/Kiji.Tests` — unit and integration tests
-- `src/Kiji.Benchmarks` — BenchmarkDotNet microbenchmarks
-- `src/Kiji.SyntheticSite` — end-to-end build performance harness
-- `docs` — the documentation site, built with Kiji and deployed to GitHub Pages
+- `.agents/skills/measure-performance/SKILL.md`: required for hot-path changes and
+  performance claims; harness selection, saved baselines and interleaved comparisons.
+- `.agents/skills/incremental-build/SKILL.md`: required for new inputs/outputs or
+  reuse changes; dependency tracking, cache publication and portable-cache verification.

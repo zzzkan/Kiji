@@ -2,61 +2,16 @@ using System.Text.Encodings.Web;
 using System.Text.Unicode;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
-using Microsoft.AspNetCore.Components.Web.HtmlRendering;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Kiji.Rendering;
 
-/// <summary>
-/// Renders Razor components to static HTML strings using <see cref="HtmlRenderer"/>.
-/// </summary>
-internal sealed class ComponentRenderer : IAsyncDisposable
+internal sealed class ComponentRenderer(IServiceProvider services, Uri? baseUri)
 {
-    private readonly ServiceProvider _serviceProvider;
-    private readonly Uri? _baseUri;
-    private readonly bool _ownsProvider;
-
-    private ComponentRenderer(ServiceProvider serviceProvider, Uri? baseUri, bool ownsProvider)
-    {
-        _serviceProvider = serviceProvider;
-        _baseUri = baseUri;
-        _ownsProvider = ownsProvider;
-    }
-
-    /// <summary>
-    /// Creates a new <see cref="ComponentRenderer"/> with the specified service configuration.
-    /// </summary>
-    /// <param name="configureServices">Optional action to register services that components may depend on.</param>
-    /// <param name="baseUri">Optional site base URI used to initialize navigation for each render.</param>
-    public static ComponentRenderer Create(Action<IServiceCollection>? configureServices = null, Uri? baseUri = null)
-    {
-        var services = new ServiceCollection();
-        AddComponentRenderingServices(services);
-        configureServices?.Invoke(services);
-
-        var serviceProvider = services.BuildServiceProvider();
-
-        return new ComponentRenderer(serviceProvider, baseUri, ownsProvider: true);
-    }
-
-    /// <summary>
-    /// Wraps an existing provider without taking ownership of it. The provider must
-    /// contain the registrations added by <see cref="AddComponentRenderingServices"/>.
-    /// </summary>
-    internal static ComponentRenderer Attach(ServiceProvider serviceProvider, Uri? baseUri)
-    {
-        return new ComponentRenderer(serviceProvider, baseUri, ownsProvider: false);
-    }
-
-    /// <summary>
-    /// Registers the services component rendering depends on: logging, HTML encoding,
-    /// the per-render scoped navigation manager, and the per-render head registry.
-    /// </summary>
     internal static void AddComponentRenderingServices(IServiceCollection services)
     {
-        // No providers by default: each per-page HtmlRenderer resolves loggers, and
-        // provider-backed loggers add measurable setup cost across thousands of pages.
+        // Provider-backed logging adds setup cost to every page's HtmlRenderer.
         services.AddLogging();
         services.AddSingleton(_ => HtmlEncoder.Create(UnicodeRanges.All));
         services.AddScoped<StaticNavigationManager>();
@@ -64,104 +19,37 @@ internal sealed class ComponentRenderer : IAsyncDisposable
         services.AddScoped<HeadContentRegistry>();
     }
 
-    /// <summary>
-    /// Renders the specified component type to its final static HTML document.
-    /// </summary>
-    public Task<string> RenderComponentAsync<TComponent>(
+    internal async Task<string> RenderComponentAsync<TComponent>(
         IReadOnlyDictionary<string, object?>? parameters = null,
         Uri? currentUri = null)
         where TComponent : IComponent
     {
-        return RenderComponentAsync(typeof(TComponent), parameters, currentUri);
+        using var output = new StringWriter();
+        await RenderComponentToAsync<TComponent>(output, parameters, currentUri);
+        return output.ToString();
     }
 
-    /// <summary>
-    /// Renders the specified component type to its final static HTML document.
-    /// </summary>
-    /// <param name="componentType">The component type to render.</param>
-    /// <param name="parameters">Optional parameters passed to the component.</param>
-    /// <param name="currentUri">Optional absolute URI of the page being rendered; initializes the scoped navigation manager.</param>
-    public async Task<string> RenderComponentAsync(
-        Type componentType,
-        IReadOnlyDictionary<string, object?>? parameters = null,
-        Uri? currentUri = null)
-    {
-        string? html = null;
-        await RenderComponentCoreAsync(componentType, parameters, currentUri, document => html = document.ToHtmlString());
-        return html!;
-    }
-
-    /// <summary>
-    /// Renders the specified component type directly to a writer, avoiding an
-    /// intermediate full-page string.
-    /// </summary>
-    /// <param name="output">The destination writer; owned by the caller.</param>
-    /// <param name="parameters">Optional parameters passed to the component.</param>
-    /// <param name="currentUri">Optional absolute URI of the page being rendered; initializes the scoped navigation manager.</param>
-    public Task RenderComponentToAsync<TComponent>(
+    internal async Task RenderComponentToAsync<TComponent>(
         TextWriter output,
         IReadOnlyDictionary<string, object?>? parameters = null,
         Uri? currentUri = null)
         where TComponent : IComponent
     {
-        return RenderComponentToAsync(typeof(TComponent), output, parameters, currentUri);
-    }
-
-    /// <summary>
-    /// Renders the specified component type directly to a writer, avoiding an
-    /// intermediate full-page string.
-    /// </summary>
-    /// <param name="componentType">The component type to render.</param>
-    /// <param name="output">The destination writer; owned by the caller.</param>
-    /// <param name="parameters">Optional parameters passed to the component.</param>
-    /// <param name="currentUri">Optional absolute URI of the page being rendered; initializes the scoped navigation manager.</param>
-    public Task RenderComponentToAsync(
-        Type componentType,
-        TextWriter output,
-        IReadOnlyDictionary<string, object?>? parameters = null,
-        Uri? currentUri = null)
-    {
-        ArgumentNullException.ThrowIfNull(output);
-
-        return RenderComponentCoreAsync(componentType, parameters, currentUri, document => document.WriteHtmlTo(output));
-    }
-
-    private async Task RenderComponentCoreAsync(
-        Type componentType,
-        IReadOnlyDictionary<string, object?>? parameters,
-        Uri? currentUri,
-        Action<HtmlRootComponent> writeDocument)
-    {
-        ArgumentNullException.ThrowIfNull(componentType);
-
-        await using var scope = _serviceProvider.CreateAsyncScope();
-
+        await using var scope = services.CreateAsyncScope();
         if (currentUri is not null)
         {
-            var baseUri = _baseUri ?? new Uri(currentUri.GetLeftPart(UriPartial.Authority) + "/");
-            scope.ServiceProvider.GetRequiredService<StaticNavigationManager>().Initialize(baseUri, currentUri);
+            scope.ServiceProvider.GetRequiredService<StaticNavigationManager>().Initialize(
+                baseUri ?? new Uri(currentUri.GetLeftPart(UriPartial.Authority) + "/"), currentUri);
         }
 
+        // HtmlRenderer captures its scope and cannot reset root component state.
         await using var renderer = new HtmlRenderer(
-            scope.ServiceProvider,
-            scope.ServiceProvider.GetRequiredService<ILoggerFactory>());
-
-        // A renderer captures its scope and cannot reset root component state.
-        // Keep one renderer per page so navigation, head content, and services stay isolated.
+            scope.ServiceProvider, scope.ServiceProvider.GetRequiredService<ILoggerFactory>());
         await renderer.Dispatcher.InvokeAsync(async () =>
         {
-            var document = await renderer.RenderComponentAsync(componentType, CreateParameterView(parameters));
-            writeDocument(document);
+            var document = await renderer.RenderComponentAsync<TComponent>(CreateParameterView(parameters));
+            document.WriteHtmlTo(output);
         });
-    }
-
-    /// <inheritdoc/>
-    public async ValueTask DisposeAsync()
-    {
-        if (_ownsProvider)
-        {
-            await _serviceProvider.DisposeAsync();
-        }
     }
 
     private static ParameterView CreateParameterView(IReadOnlyDictionary<string, object?>? parameters)
@@ -171,14 +59,8 @@ internal sealed class ComponentRenderer : IAsyncDisposable
             return ParameterView.Empty;
         }
 
-        // ParameterView only reads the dictionary during the render call, so a
-        // dictionary-shaped argument can be wrapped without a defensive copy.
-        if (parameters is IDictionary<string, object?> dictionary)
-        {
-            return ParameterView.FromDictionary(dictionary);
-        }
-
-        return ParameterView.FromDictionary(
-            parameters.ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.Ordinal));
+        // ParameterView reads the dictionary only during rendering.
+        return ParameterView.FromDictionary(parameters as IDictionary<string, object?>
+            ?? parameters.ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.Ordinal));
     }
 }

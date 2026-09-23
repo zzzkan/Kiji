@@ -66,33 +66,30 @@ internal sealed record StaticPageDefinition
         return normalized;
     }
 
-    public BoundPagePath BindPath(
-        IReadOnlyDictionary<string, string>? parameters = null,
-        Func<string, string>? parameterValueTransformer = null)
+    public (string RoutePath, string OutputRelativePath) BindPath(IReadOnlyDictionary<string, string>? parameters = null)
     {
-        var transform = parameterValueTransformer ??= static value => value;
-        var boundSegments = ResolveBoundSegments(parameters, transform);
+        if (RoutePathOverride is not null && OutputRelativePathOverride is not null)
+        {
+            return (RoutePathOverride, OutputRelativePathOverride);
+        }
 
-        return new BoundPagePath(
-            BuildRoutePath(boundSegments),
-            BuildOutputRelativePath(boundSegments));
-    }
-
-    public string ResolveRoutePath(IReadOnlyDictionary<string, string>? parameters = null)
-    {
-        return BindPath(parameters, static value => Uri.EscapeDataString(value)).RoutePath;
-    }
-
-    public string ResolveOutputRelativePath(IReadOnlyDictionary<string, string>? parameters = null)
-    {
-        return BindPath(parameters).OutputRelativePath;
-    }
-
-    public BoundPagePath ResolveStaticPath()
-    {
-        return RoutePathOverride is not null && OutputRelativePathOverride is not null
-            ? new BoundPagePath(RoutePathOverride, OutputRelativePathOverride)
-            : BindPath();
+        var output = new string[Segments.Count + 1];
+        var route = new string[Segments.Count];
+        for (var i = 0; i < Segments.Count; i++)
+        {
+            switch (Segments[i])
+            {
+                case PageLiteralSegment literal:
+                    output[i] = route[i] = literal.Value;
+                    break;
+                case PageParameterSegment parameter:
+                    output[i] = GetParameterValue(parameter.Name, parameters);
+                    route[i] = Uri.EscapeDataString(output[i]);
+                    break;
+            }
+        }
+        output[^1] = "index.html";
+        return (route.Length == 0 ? "/" : '/' + string.Join('/', route) + '/', Path.Combine(output));
     }
 
     private static IReadOnlyList<PageSegment> ParseSegments(string routeTemplate)
@@ -178,23 +175,6 @@ internal sealed record StaticPageDefinition
             $"Route template '{routeTemplate}' uses unsupported {reason} in segment '{segment}'. Static generation supports only literal segments and simple route parameters like '{{Slug}}'.");
     }
 
-    private string[] ResolveBoundSegments(
-        IReadOnlyDictionary<string, string>? parameters,
-        Func<string, string> parameterValueTransformer)
-    {
-        if (Segments.Count == 0)
-        {
-            return [];
-        }
-
-        return [.. Segments.Select(segment => segment switch
-        {
-            PageLiteralSegment literal => literal.Value,
-            PageParameterSegment parameter => parameterValueTransformer(GetParameterValue(parameter.Name, parameters)),
-            _ => throw new InvalidOperationException($"Unknown page segment type '{segment.GetType().Name}'."),
-        })];
-    }
-
     private void ValidateConfiguration()
     {
         var hasPathOverrides = RoutePathOverride is not null || OutputRelativePathOverride is not null;
@@ -209,26 +189,6 @@ internal sealed record StaticPageDefinition
             throw new InvalidOperationException(
                 $"Dynamic route template '{SourceIdentifier}' cannot override its resolved route or output path.");
         }
-    }
-
-    private static string BuildRoutePath(string[] boundSegments)
-    {
-        if (boundSegments.Length == 0)
-        {
-            return "/";
-        }
-
-        return '/' + string.Join('/', boundSegments) + '/';
-    }
-
-    private static string BuildOutputRelativePath(string[] boundSegments)
-    {
-        if (boundSegments.Length == 0)
-        {
-            return "index.html";
-        }
-
-        return Path.Combine([.. boundSegments, "index.html"]);
     }
 
     private static string GetParameterValue(string name, IReadOnlyDictionary<string, string>? parameters)
@@ -247,5 +207,4 @@ internal sealed record StaticPageDefinition
 
     internal sealed record PageParameterSegment(string Name) : PageSegment;
 
-    internal sealed record BoundPagePath(string RoutePath, string OutputRelativePath);
 }

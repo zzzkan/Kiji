@@ -10,12 +10,14 @@ namespace Kiji.Markdown;
 /// rooted at that directory beneath the site's deployment base path. Attached per
 /// renderer (not per pipeline) because its state is per document.
 /// </summary>
-internal static class ResponsiveImageWriter
+internal sealed class ResponsiveImageWriter
 {
-    public static void Attach(HtmlRenderer renderer, ResponsiveImageContextHolder contextHolder)
+    internal ResponsiveImageContext? Context { get; set; }
+
+    internal ResponsiveImageWriter(HtmlRenderer renderer)
     {
         var linkRenderer = renderer.ObjectRenderers.FindExact<LinkInlineRenderer>();
-        linkRenderer?.TryWriters.Add((r, link) => TryWriteResponsiveImage(r, link, contextHolder.Current));
+        linkRenderer?.TryWriters.Add((r, link) => TryWriteResponsiveImage(r, link, Context));
     }
 
     private static bool TryWriteResponsiveImage(HtmlRenderer renderer, LinkInline link, ResponsiveImageContext? context)

@@ -113,14 +113,7 @@ public sealed class StaticSite
     internal IEnumerable<string> WatchedBuildInputs => _buildInputPaths
         .Select(path => Path.GetFullPath(path, Path.GetFullPath(Paths.RootDirectory)));
 
-    /// <summary>
-    /// The app's services. Deliberately not public: content must not be reachable while
-    /// the site is still being declared, because loading it resolves <see cref="ResolvedSitePaths"/>
-    /// — a singleton — and the running command is what decides those paths. Everything
-    /// that legitimately needs services is handed a provider at a point where the command
-    /// has already started: route and feed factories, content loaders, and
-    /// <see cref="SiteOutputContext.Services"/> for artifacts.
-    /// </summary>
+    // Content must not resolve execution paths before publish/serve has settled them.
     internal IServiceProvider ServiceProvider
     {
         get
@@ -172,11 +165,11 @@ public sealed class StaticSite
         EnsureConfigurable();
         ArgumentNullException.ThrowIfNull(loader);
 
-        return UseContentSource(
+        return RegisterContent(
             services =>
             {
                 var items = loader(services);
-                var keyed = new (string Key, T Item, string? SourceFile)[items.Count];
+                var keyed = new (string Key, T Item, string? Digest)[items.Count];
                 for (var i = 0; i < items.Count; i++)
                 {
                     keyed[i] = (i.ToString(System.Globalization.CultureInfo.InvariantCulture), items[i], null);
@@ -185,11 +178,8 @@ public sealed class StaticSite
             });
     }
 
-    /// <summary>
-    /// The provenance-carrying form used by file-backed content loaders.
-    /// </summary>
-    internal StaticSite UseContentSource<T>(
-        Func<IServiceProvider, IReadOnlyList<(string Key, T Item, string? SourceFile)>> loader,
+    internal StaticSite RegisterContent<T>(
+        Func<IServiceProvider, IReadOnlyList<(string Key, T Item, string? Digest)>> loader,
         string contentSetScope = "")
         where T : class
     {
@@ -215,18 +205,8 @@ public sealed class StaticSite
         EnsureConfigurable();
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceId);
         ArgumentNullException.ThrowIfNull(loader);
-        var digests = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-        _runtime.Register(new ContentDictionary<T>(_runtime, services =>
-        {
-            var items = loader(services);
-            digests.Clear();
-            return [.. items.Select(entry =>
-            {
-                digests.Add(entry.Id, entry.Digest);
-                return (entry.Id, entry.Value, (string?)null);
-            })];
-        }, sourceId, (key, _) => digests.GetValueOrDefault(key)));
-        return this;
+        return RegisterContent<T>(services => [.. loader(services)
+            .Select(static entry => (entry.Id, entry.Value, entry.Digest))], sourceId);
     }
 
     /// <summary>Registers the default layout for pages without their own <c>@layout</c>.</summary>
@@ -533,11 +513,6 @@ public sealed class StaticSite
             return;
         }
         _disposed = true;
-
-        if (_renderer is not null)
-        {
-            await _renderer.DisposeAsync();
-        }
 
         if (_services is not null)
         {
@@ -911,12 +886,7 @@ public sealed class StaticSite
         var services = new ServiceCollection();
         ComponentRenderer.AddComponentRenderingServices(services);
         services.AddSingleton(Info);
-        // Deliberately not defaulted: the run decides these paths (a publish writes to
-        // the directory dotnet publish chose, the dev server to its own mirror) and, as a
-        // singleton, the first resolution wins for the whole process. No public API hands
-        // out a provider before the run starts, so this is an invariant rather than a
-        // user-facing error — but a default here would silently pin publish paths onto
-        // the dev server.
+        // A default here would pin the singleton to the wrong execution mode.
         services.AddSingleton(_ => _activeOptions ?? throw new InvalidOperationException(
             "ResolvedSitePaths was resolved before a command settled the site's paths."));
         _runtime.ApplyRegistrations(services);
@@ -977,9 +947,7 @@ public sealed class StaticSite
 
         EnsureServices();
 
-        // The renderer shares the single app container, so components see the exact
-        // same registrations (options, content collections, image backend) as loaders.
-        _renderer = ComponentRenderer.Attach(_services!, Info.BaseUrl);
+        _renderer = new ComponentRenderer(_services!, Info.BaseUrl);
         return _renderer;
     }
 

@@ -48,12 +48,12 @@ public static class MarkdownStaticSiteExtensions
         // in the dev server; fresh hashes let it re-parse only changed files.
         var sourceCache = new MarkdownSourceCache<TFrontMatter>();
 
-        return app.UseContentSource(
+        return app.RegisterContent(
             services =>
             {
                 var options = services.GetRequiredService<ResolvedSitePaths>();
                 var imageProcessor = services.GetRequiredService<IImageProcessor>();
-                var markdownProcessor = new MarkdownProcessor(options, imageProcessor, contentOptions.Processing);
+                var markdownProcessor = new MarkdownProcessor(options, imageProcessor, contentOptions);
                 var sourceDirectory = contentOptions.ResolveContentsDirectory(options.ContentDirectory);
 
                 var sources = new MarkdownContentsBuilder<TFrontMatter>(
@@ -69,13 +69,11 @@ public static class MarkdownStaticSiteExtensions
                     contentOptions.FileFilter)
                     .Build();
 
-                // The projection is positional, so provenance is stated here rather than
-                // derived: TModel need not expose its source file for a keyed lookup to
-                // stay a single-file dependency.
-                var items = new (string Key, TModel Item, string? SourceFile)[sources.Count];
+                // Keep the parsed-byte hash even when the projection hides its source.
+                var items = new (string Key, TModel Item, string? Digest)[sources.Count];
                 for (var i = 0; i < sources.Count; i++)
                 {
-                    items[i] = (Path.GetRelativePath(sourceDirectory, sources[i].FileInfo.FullName).Replace('\\', '/'), select(sources[i]), sources[i].FileInfo.FullName);
+                    items[i] = (Path.GetRelativePath(sourceDirectory, sources[i].FileInfo.FullName).Replace('\\', '/'), select(sources[i]), sources[i].ContentHash);
                 }
 
                 return items;

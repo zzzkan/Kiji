@@ -14,7 +14,7 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
     Func<FileInfo, bool>? filter = null)
 {
     private readonly Func<IDeserializer> _frontMatterDeserializerFactory =
-        frontMatterDeserializerFactory ?? (static () => MarkdownFrontMatterParser.DefaultDeserializer);
+        frontMatterDeserializerFactory ?? (static () => MarkdownFrontMatterParser.CreateDeserializer(null));
 
     public IReadOnlyList<MarkdownContent<TFrontMatter>> Build()
     {

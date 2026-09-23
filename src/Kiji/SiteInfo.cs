@@ -63,7 +63,7 @@ public sealed class SiteInfo
             throw new ArgumentException("BaseUrl must not contain a fragment.", nameof(value));
         }
 
-        return value.ToTrailingSlashUri();
+        return value.AbsoluteUri.EndsWith('/') ? value : new Uri(value.AbsoluteUri + '/');
     }
 
     private static string ValidateRequiredText(string value)

@@ -132,7 +132,7 @@ public sealed class MarkdownProcessorTests : IDisposable
 
     private static Task<string> ProcessFileAsync(MarkdownProcessor processor, string path)
     {
-        var body = MarkdownFrontMatterParser.RemoveFrontMatter(File.ReadAllText(path));
+        var body = MarkdownSourceReader.Read<FrontMatter>(new FileInfo(path), MarkdownFrontMatterParser.CreateDeserializer(null)).Body;
         return processor.ProcessBodyAsync(path, body);
     }
 

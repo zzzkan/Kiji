@@ -6,7 +6,9 @@ namespace Kiji.Markdown;
 /// <summary>Configures Markdown file selection and rendering.</summary>
 public sealed class MarkdownOptions
 {
-    internal MarkdownProcessingOptions Processing { get; } = new();
+    internal List<Action<MarkdownPipelineBuilder>> PipelineConfigurations { get; } = [];
+
+    internal List<Func<string, string>> HtmlPostProcessors { get; } = [];
 
     internal List<Action<DeserializerBuilder>> FrontMatterConfigurations { get; } = [];
 
@@ -19,13 +21,15 @@ public sealed class MarkdownOptions
     /// <summary>Registers a Markdig configuration applied after the default pipeline is configured.</summary>
     public void ConfigureMarkdown(Action<MarkdownPipelineBuilder> configure)
     {
-        Processing.ConfigureMarkdown(configure);
+        ArgumentNullException.ThrowIfNull(configure);
+        PipelineConfigurations.Add(configure);
     }
 
     /// <summary>Registers an HTML post-processor applied after Markdown rendering, in registration order.</summary>
     public void AddHtmlPostProcessor(Func<string, string> postProcessor)
     {
-        Processing.AddHtmlPostProcessor(postProcessor);
+        ArgumentNullException.ThrowIfNull(postProcessor);
+        HtmlPostProcessors.Add(postProcessor);
     }
 
     /// <summary>Registers a YAML deserializer configuration after the camelCase and ignore-unmatched-properties defaults.</summary>

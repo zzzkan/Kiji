@@ -27,7 +27,7 @@ internal sealed class MarkdownProcessor
     public MarkdownProcessor(
         ResolvedSitePaths options,
         IImageProcessor imageProcessor,
-        MarkdownProcessingOptions? contentOptions = null)
+        MarkdownOptions? contentOptions = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(imageProcessor);
@@ -165,7 +165,7 @@ internal sealed class MarkdownProcessor
         return html;
     }
 
-    private static MarkdownPipeline BuildPipeline(MarkdownProcessingOptions? contentOptions)
+    private static MarkdownPipeline BuildPipeline(MarkdownOptions? contentOptions)
     {
         var builder = new MarkdownPipelineBuilder()
             .UseAdvancedExtensions()

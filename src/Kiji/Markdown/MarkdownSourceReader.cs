@@ -5,10 +5,7 @@ using YamlDotNet.Serialization;
 namespace Kiji.Markdown;
 
 /// <summary>
-/// Reads a markdown file once and derives everything the build needs from that
-/// single read: front matter, body, and the incremental-build content hash. This
-/// replaces three independent reads of the same file (front matter parse, content
-/// set fingerprint, render).
+/// Reads front matter, body and dependency hash from the same bytes.
 /// </summary>
 internal static class MarkdownSourceReader
 {

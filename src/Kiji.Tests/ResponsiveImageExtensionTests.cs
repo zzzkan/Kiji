@@ -1,5 +1,4 @@
 using Markdig;
-using Markdig.Renderers;
 using Xunit;
 using Kiji.Markdown;
 using Kiji.Assets;
@@ -18,17 +17,8 @@ public sealed class ResponsiveImageExtensionTests
         string outputUrlDirectory = "/kiji/blog/test-post/")
     {
         var document = global::Markdig.Markdown.Parse(markdown, Pipeline);
-        var writer = new StringWriter();
-        var renderer = new HtmlRenderer(writer);
-        Pipeline.Setup(renderer);
-        var contextHolder = new ResponsiveImageContextHolder
-        {
-            Current = new ResponsiveImageContext(imageInfoLookup, outputUrlDirectory),
-        };
-        ResponsiveImageWriter.Attach(renderer, contextHolder);
-        renderer.Render(document);
-        writer.Flush();
-        return writer.ToString();
+        return PooledMarkdigRenderer.Create(Pipeline).Render(
+            document, new ResponsiveImageContext(imageInfoLookup, outputUrlDirectory));
     }
 
     private static ProcessedImageInfo CreateImageInfo(

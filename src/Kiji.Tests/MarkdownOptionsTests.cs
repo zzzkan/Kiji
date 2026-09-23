@@ -88,7 +88,7 @@ public sealed class MarkdownOptionsTests : IDisposable
             Body.
             """);
 
-        var frontMatter = MarkdownFrontMatterParser.ParseContent<FrontMatter>(File.ReadAllText(mdPath), deserializer);
+        var frontMatter = MarkdownSourceReader.Read<FrontMatter>(new FileInfo(mdPath), deserializer).FrontMatter;
 
         Assert.Equal("Snake Case", frontMatter.Title);
         Assert.True(frontMatter.CreatedAt.HasValue);
@@ -112,9 +112,9 @@ public sealed class MarkdownOptionsTests : IDisposable
         }
     }
 
-    private MarkdownProcessor CreateProcessor(Action<MarkdownProcessingOptions>? configure = null)
+    private MarkdownProcessor CreateProcessor(Action<MarkdownOptions>? configure = null)
     {
-        var contentOptions = new MarkdownProcessingOptions();
+        var contentOptions = new MarkdownOptions();
         configure?.Invoke(contentOptions);
 
         return new MarkdownProcessor(
@@ -130,7 +130,7 @@ public sealed class MarkdownOptionsTests : IDisposable
 
     private static Task<string> ProcessFileAsync(MarkdownProcessor processor, string path)
     {
-        var body = MarkdownFrontMatterParser.RemoveFrontMatter(File.ReadAllText(path));
+        var body = MarkdownSourceReader.Read<FrontMatter>(new FileInfo(path), MarkdownFrontMatterParser.CreateDeserializer(null)).Body;
         return processor.ProcessBodyAsync(path, body);
     }
 

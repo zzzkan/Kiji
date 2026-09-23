@@ -41,14 +41,14 @@ internal static class StaticPagePlanner
 
     private static PageRenderRequest CreateStaticPage(PageDiscovery.DiscoveredPage page)
     {
-        var pathBinding = page.PageDefinition.ResolveStaticPath();
+        var (routePath, outputRelativePath) = page.PageDefinition.BindPath();
 
         return new PageRenderRequest(
             page.SourceIdentifier,
             page.ComponentType,
             new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase),
-            pathBinding.RoutePath,
-            pathBinding.OutputRelativePath);
+            routePath,
+            outputRelativePath);
     }
 
     private static List<PageRenderRequest> CreateDynamicPages(
@@ -78,12 +78,13 @@ internal static class StaticPagePlanner
                 }
                 routeValues.Add(name, value);
             }
+            var (routePath, outputRelativePath) = page.PageDefinition.BindPath(routeValues);
             return new PageRenderRequest(
                 page.SourceIdentifier,
                 page.ComponentType,
                 match,
-                page.PageDefinition.ResolveRoutePath(routeValues),
-                page.PageDefinition.ResolveOutputRelativePath(routeValues));
+                routePath,
+                outputRelativePath);
         })];
     }
 

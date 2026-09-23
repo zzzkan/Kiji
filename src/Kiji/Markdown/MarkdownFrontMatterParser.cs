@@ -5,27 +5,6 @@ namespace Kiji.Markdown;
 
 internal static class MarkdownFrontMatterParser
 {
-    internal static readonly IDeserializer DefaultDeserializer = CreateDeserializer(configurations: null);
-
-    internal static TFrontMatter ParseContent<TFrontMatter>(string content)
-    {
-        return ParseContent<TFrontMatter>(content, DefaultDeserializer);
-    }
-
-    internal static TFrontMatter ParseContent<TFrontMatter>(string content, IDeserializer deserializer)
-    {
-        if (!TryExtractFrontMatter(content, out var yaml, out _))
-        {
-            throw new InvalidOperationException("YAML front matter not found.");
-        }
-
-        var frontMatter = deserializer.Deserialize<TFrontMatter>(content[yaml]);
-
-        return frontMatter is not null
-            ? frontMatter
-            : throw new InvalidOperationException("Failed to deserialize YAML front matter.");
-    }
-
     internal static (TFrontMatter FrontMatter, string Body) ParseContentAndBody<TFrontMatter>(
         string content,
         IDeserializer deserializer)
@@ -57,21 +36,11 @@ internal static class MarkdownFrontMatterParser
         return builder.Build();
     }
 
-    internal static string RemoveFrontMatter(string content)
-    {
-        if (!TryExtractFrontMatter(content, out _, out var body))
-        {
-            throw new InvalidOperationException("YAML front matter not found.");
-        }
-
-        return content[body];
-    }
-
     /// <summary>
     /// Locates the YAML front matter block without allocating: an opening <c>---</c>
     /// line, the YAML payload, and a closing <c>---</c> line (each delimiter may carry
-    /// trailing whitespace; the closer greedily absorbs following blank lines, matching
-    /// the regex this replaced). Returns the payload and body as ranges into
+    /// trailing whitespace; the closer absorbs following blank lines).
+    /// Returns the payload and body as ranges into
     /// <paramref name="content"/>.
     /// </summary>
     internal static bool TryExtractFrontMatter(ReadOnlySpan<char> content, out Range yaml, out Range body)
@@ -105,7 +74,7 @@ internal static class MarkdownFrontMatterParser
 
         // Closing delimiter: the first line starting with '---' whose remainder is
         // whitespace containing a newline. The block ends at the last newline of that
-        // whitespace run (the regex's greedy `\s*\r?\n` also swallowed blank lines).
+        // whitespace run, including blank lines.
         var searchFrom = yamlStart;
         while (true)
         {

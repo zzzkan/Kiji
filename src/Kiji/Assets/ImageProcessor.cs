@@ -7,8 +7,7 @@ using SixLabors.ImageSharp.Processing;
 namespace Kiji.Assets;
 
 /// <summary>Generates responsive WebP image variants.</summary>
-/// <param name="options">Image settings, or null to use the defaults.</param>
-internal sealed class ImageProcessor(ImageOptions? options = null) : IImageProcessor
+internal sealed class ImageProcessor : IImageProcessor
 {
     /// <summary>
     /// Caps the number of decoded images alive across pages. ImageSharp retains
@@ -16,22 +15,22 @@ internal sealed class ImageProcessor(ImageOptions? options = null) : IImageProce
     /// </summary>
     private static readonly SemaphoreSlim ConcurrencyGate = new(Environment.ProcessorCount);
 
-    private readonly ImageOptions _options = options ?? new ImageOptions();
-    private readonly SemaphoreSlim _generationGate = ConcurrencyGate;
+    private static readonly int[] Widths = [320, 640, 960, 1280];
+    private const int MaxSourceWidth = 1920;
+    private const int Quality = 80;
+    private readonly SemaphoreSlim _generationGate;
     private readonly Configuration _configuration = Configuration.Default.Clone();
     internal Func<string, CancellationToken, Task>? BeforeEncodeAsync { get; init; }
 
-    internal ImageProcessor(ImageOptions? options, SemaphoreSlim generationGate, int innerParallelism)
-        : this(options)
+    internal ImageProcessor(SemaphoreSlim? generationGate = null)
     {
-        _generationGate = generationGate;
-        _configuration.MaxDegreeOfParallelism = innerParallelism;
+        _generationGate = generationGate ?? ConcurrencyGate;
     }
 
     private static readonly string EncoderIdentity = $"mvid:{typeof(WebpEncoder).Assembly.ManifestModule.ModuleVersionId:N}";
 
     public string CacheIdentity => BuildFingerprint.HashText(FormattableString.Invariant(
-        $"webp-v2:{_options.Quality}:{_options.MaxSourceWidth}:{string.Join(",", _options.Widths)}:{EncoderIdentity}"));
+        $"webp-v2:{Quality}:{MaxSourceWidth}:{string.Join(",", Widths)}:{EncoderIdentity}"));
 
     /// <inheritdoc/>
     public async Task<ProcessedImageInfo> ProcessAsync(
@@ -52,15 +51,6 @@ internal sealed class ImageProcessor(ImageOptions? options = null) : IImageProce
         string outputDirectory, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        ArgumentNullException.ThrowIfNull(_options.Widths);
-        ArgumentOutOfRangeException.ThrowIfLessThan(_options.MaxSourceWidth, 1);
-        ArgumentOutOfRangeException.ThrowIfLessThan(_options.Quality, 0);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(_options.Quality, 100);
-        foreach (var width in _options.Widths)
-        {
-            ArgumentOutOfRangeException.ThrowIfLessThan(width, 1);
-        }
-
         var contentHash = BuildFingerprint.HashText(CacheIdentity + ":" + sourceHash);
         using var source = new MemoryStream(bytes, writable: false);
         var identity = await Image.IdentifyAsync(source, cancellationToken);
@@ -72,9 +62,9 @@ internal sealed class ImageProcessor(ImageOptions? options = null) : IImageProce
         // Another page may still reference an older variant with this basename.
         // Only output reconciliation knows which files are safe to remove.
 
-        var targetWidths = _options.Widths
+        var targetWidths = Widths
             .Where(width => width < originalWidth)
-            .Append(Math.Min(originalWidth, _options.MaxSourceWidth))
+            .Append(Math.Min(originalWidth, MaxSourceWidth))
             .Distinct()
             .Order()
             .ToArray();
@@ -145,7 +135,7 @@ internal sealed class ImageProcessor(ImageOptions? options = null) : IImageProce
         return image;
     }
 
-    private async Task EncodeVariantAsync(
+    private static async Task EncodeVariantAsync(
         Image image,
         int originalWidth,
         int originalHeight,
@@ -155,7 +145,7 @@ internal sealed class ImageProcessor(ImageOptions? options = null) : IImageProce
     {
         var encoder = new WebpEncoder
         {
-            Quality = _options.Quality,
+            Quality = Quality,
             FileFormat = WebpFileFormatType.Lossy,
         };
 

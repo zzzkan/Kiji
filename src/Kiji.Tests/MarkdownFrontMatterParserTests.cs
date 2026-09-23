@@ -8,7 +8,7 @@ public sealed class MarkdownFrontMatterParserTests
     [Fact]
     public void Parse_RequestedFrontMatterType_ParsesYaml()
     {
-        var frontMatter = MarkdownFrontMatterParser.ParseContent<FrontMatter>(
+        var (frontMatter, body) = MarkdownFrontMatterParser.ParseContentAndBody<FrontMatter>(
             """
             ---
             title: Test Post
@@ -20,20 +20,22 @@ public sealed class MarkdownFrontMatterParserTests
             ---
 
             Body.
-            """);
+            """, MarkdownFrontMatterParser.CreateDeserializer(null));
 
         Assert.Equal("Test Post", frontMatter.Title);
         Assert.Equal("A sample post", frontMatter.Description);
         Assert.True(frontMatter.CreatedAt.HasValue);
         Assert.Equal(new DateTime(2024, 1, 15), frontMatter.CreatedAt.Value.DateTime);
         Assert.Equal(["test", "sample"], frontMatter.Tags);
+        Assert.Equal("Body.", body);
     }
 
     [Fact]
     public void Parse_MissingFrontMatter_ThrowsInvalidOperationException()
     {
         Assert.Throws<InvalidOperationException>(() =>
-            MarkdownFrontMatterParser.ParseContent<FrontMatter>("# Missing\n\nNo front matter."));
+            MarkdownFrontMatterParser.ParseContentAndBody<FrontMatter>("# Missing\n\nNo front matter.",
+                MarkdownFrontMatterParser.CreateDeserializer(null)));
     }
 
     [Fact]
@@ -41,7 +43,7 @@ public sealed class MarkdownFrontMatterParserTests
     {
         var parsed = MarkdownFrontMatterParser.ParseContentAndBody<FrontMatter>(
             "---\r\ntitle: Combined\r\n---\r\n\r\nBody.\r\n",
-            MarkdownFrontMatterParser.DefaultDeserializer);
+            MarkdownFrontMatterParser.CreateDeserializer(null));
 
         Assert.Equal("Combined", parsed.FrontMatter.Title);
         Assert.Equal("Body.\r\n", parsed.Body);

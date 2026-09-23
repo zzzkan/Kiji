@@ -13,13 +13,13 @@ internal sealed class PooledMarkdigRenderer
 {
     private readonly StringWriter _writer;
     private readonly HtmlRenderer _renderer;
-    private readonly ResponsiveImageContextHolder _contextHolder;
+    private readonly ResponsiveImageWriter _imageWriter;
 
-    private PooledMarkdigRenderer(StringWriter writer, HtmlRenderer renderer, ResponsiveImageContextHolder contextHolder)
+    private PooledMarkdigRenderer(StringWriter writer, HtmlRenderer renderer)
     {
         _writer = writer;
         _renderer = renderer;
-        _contextHolder = contextHolder;
+        _imageWriter = new ResponsiveImageWriter(renderer);
     }
 
     internal static PooledMarkdigRenderer Create(MarkdownPipeline pipeline)
@@ -28,17 +28,14 @@ internal sealed class PooledMarkdigRenderer
         var renderer = new HtmlRenderer(writer);
         pipeline.Setup(renderer);
 
-        var contextHolder = new ResponsiveImageContextHolder();
-        ResponsiveImageWriter.Attach(renderer, contextHolder);
-
-        return new PooledMarkdigRenderer(writer, renderer, contextHolder);
+        return new PooledMarkdigRenderer(writer, renderer);
     }
 
     internal string Render(MarkdownDocument document, ResponsiveImageContext imageContext)
     {
         var builder = _writer.GetStringBuilder();
         builder.Clear();
-        _contextHolder.Current = imageContext;
+        _imageWriter.Context = imageContext;
         try
         {
             _renderer.Render(document);
@@ -47,7 +44,7 @@ internal sealed class PooledMarkdigRenderer
         }
         finally
         {
-            _contextHolder.Current = null;
+            _imageWriter.Context = null;
         }
     }
 }

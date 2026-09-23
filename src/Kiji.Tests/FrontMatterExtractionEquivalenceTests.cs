@@ -29,8 +29,9 @@ public sealed class FrontMatterExtractionEquivalenceTests
     [Fact]
     public void LeadingBlankLineInFrontMatter_Deserializes()
     {
-        var frontMatter = MarkdownFrontMatterParser.ParseContent<FrontMatter>(
-            "---\n\ntitle: Blank Lead\ncreatedAt: 2024-01-15\n---\nBody\n");
+        var (frontMatter, _) = MarkdownFrontMatterParser.ParseContentAndBody<FrontMatter>(
+            "---\n\ntitle: Blank Lead\ncreatedAt: 2024-01-15\n---\nBody\n",
+            MarkdownFrontMatterParser.CreateDeserializer(null));
         Assert.Equal("Blank Lead", frontMatter.Title);
     }
 }

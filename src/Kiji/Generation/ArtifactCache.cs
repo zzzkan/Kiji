@@ -57,9 +57,7 @@ internal sealed class ArtifactCache(string root)
                 var bytes = File.ReadAllBytes(path);
                 if (BuildFingerprint.HashBytes(bytes) != hash) { return false; }
                 _stored.TryAdd(path, 0);
-                // Publish staging is private until the entire build succeeds. Like
-                // freshly rendered HTML, restored output need not be renamed twice.
-                // Persistent blobs and the manifest still use atomic replacement.
+                // Only persistent cache blobs and the manifest need atomic replacement.
                 Directory.CreateDirectory(Path.GetDirectoryName(output)!);
                 File.WriteAllBytes(output, bytes);
                 return true;

@@ -181,19 +181,4 @@ public sealed class ImageProcessorTests : IDisposable
         }
     }
 
-    [Fact]
-    public async Task ProcessImage_ChangedQuality_DoesNotReuseOldEncodedBytes()
-    {
-        var imagePath = Path.Combine(_sourceDir, "quality.png");
-        await CreateTestImageAsync(imagePath, 200, 100);
-        var low = new ImageProcessor(new ImageOptions { Quality = 10 });
-        var high = new ImageProcessor(new ImageOptions { Quality = 95 });
-
-        var first = Assert.Single((await ImageArtifactProcessor.ProcessAsync(low, imagePath, _outputDir, _cacheDir, default)).Variants);
-        var second = Assert.Single((await ImageArtifactProcessor.ProcessAsync(high, imagePath, _outputDir, _cacheDir, default)).Variants);
-        Assert.NotEqual(first.FileName, second.FileName);
-        Assert.NotEqual(await File.ReadAllBytesAsync(Path.Combine(_outputDir, first.FileName)),
-            await File.ReadAllBytesAsync(Path.Combine(_outputDir, second.FileName)));
-    }
-
 }

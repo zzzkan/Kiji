@@ -3,11 +3,12 @@ using Kiji.Markdown;
 
 namespace Kiji.Benchmarks;
 
-/// <summary>Compares front matter extraction and deserialization strategies.</summary>
+/// <summary>Measures front matter and body parsing.</summary>
 [MemoryDiagnoser]
 public class FrontMatterParserBenchmarks
 {
     private string _content = string.Empty;
+    private readonly YamlDotNet.Serialization.IDeserializer _deserializer = MarkdownFrontMatterParser.CreateDeserializer(null);
 
     [GlobalSetup]
     public void Setup()
@@ -27,14 +28,8 @@ public class FrontMatterParserBenchmarks
     }
 
     [Benchmark]
-    public BenchFrontMatter ParseContent()
+    public (BenchFrontMatter FrontMatter, string Body) ParseContentAndBody()
     {
-        return MarkdownFrontMatterParser.ParseContent<BenchFrontMatter>(_content);
-    }
-
-    [Benchmark]
-    public string RemoveFrontMatter()
-    {
-        return MarkdownFrontMatterParser.RemoveFrontMatter(_content);
+        return MarkdownFrontMatterParser.ParseContentAndBody<BenchFrontMatter>(_content, _deserializer);
     }
 }

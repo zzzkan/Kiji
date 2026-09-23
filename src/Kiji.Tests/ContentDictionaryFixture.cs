@@ -14,6 +14,6 @@ internal static class ContentDictionaryFixture
         runtime.Attach(new ServiceCollection().BuildServiceProvider());
         return new ContentDictionary<T>(
             runtime,
-            _ => [.. items.Select(item => (key(item), item, SourceFile: (string?)null))]);
+            _ => [.. items.Select(item => (key(item), item, Digest: (string?)null))]);
     }
 }

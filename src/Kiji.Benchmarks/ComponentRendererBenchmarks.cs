@@ -25,14 +25,11 @@ public class ComponentRendererBenchmarks
             Name = "Kiji Bench",
         };
 
-        _renderer = ComponentRenderer.Create(
-            services => services.AddSingleton(site),
-            site.BaseUrl);
-
         var services = new ServiceCollection();
         ComponentRenderer.AddComponentRenderingServices(services);
         services.AddSingleton(site);
         _serviceProvider = services.BuildServiceProvider();
+        _renderer = new ComponentRenderer(_serviceProvider, site.BaseUrl);
 
         _rootParameters = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
@@ -46,7 +43,6 @@ public class ComponentRendererBenchmarks
     [GlobalCleanup]
     public async Task Cleanup()
     {
-        await _renderer.DisposeAsync();
         await _serviceProvider.DisposeAsync();
     }
 

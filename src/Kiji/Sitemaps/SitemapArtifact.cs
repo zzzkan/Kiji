@@ -12,13 +12,9 @@ internal sealed class SitemapArtifact
     private const string SitemapNamespace = "http://www.sitemaps.org/schemas/sitemap/0.9";
     private readonly HashSet<string> _excludedPaths;
 
-    /// <param name="outputRelativePath">The output path relative to the output directory.</param>
     /// <param name="excludedPaths">Site-relative page paths to omit in addition to <c>404.html</c>.</param>
-    public SitemapArtifact(string outputRelativePath = "sitemap.xml", IEnumerable<string>? excludedPaths = null)
+    public SitemapArtifact(IEnumerable<string>? excludedPaths = null)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(outputRelativePath);
-
-        OutputRelativePath = outputRelativePath;
         _excludedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             NotFoundRelativePath,
@@ -35,9 +31,6 @@ internal sealed class SitemapArtifact
             _excludedPaths.Add(path);
         }
     }
-
-    /// <inheritdoc/>
-    public string OutputRelativePath { get; }
 
     /// <inheritdoc/>
     public async Task WriteAsync(Stream output, SiteOutputContext context, CancellationToken cancellationToken)
@@ -70,7 +63,6 @@ internal sealed class SitemapArtifact
                 cancellationToken.ThrowIfCancellationRequested();
 
                 await writer.WriteStartElementAsync(prefix: null, "url", ns: null);
-                RelativePath.Validate(page.RelativePath, nameof(page.RelativePath));
                 await writer.WriteElementStringAsync(prefix: null, "loc", ns: null, new Uri(context.Site.BaseUrl, page.RelativePath).AbsoluteUri);
                 await writer.WriteEndElementAsync();
             }

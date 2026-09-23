@@ -3,13 +3,14 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using Kiji.Rendering;
+using Kiji.Assets;
 
 namespace Kiji.Generation;
 
 /// <summary>
 /// Drives the incremental build: loads the previous manifest, fingerprints the
 /// current inputs (options, assemblies, content files), decides per page whether the
-/// existing output is still valid, syncs static files by stamp, reconciles the output
+/// existing output is still valid, syncs static files by content hash, reconciles the output
 /// directory against what the build produced, and writes the new manifest. Every
 /// ambiguous situation falls back to re-rendering — a stale output is never acceptable.
 /// </summary>
@@ -20,14 +21,18 @@ internal sealed class IncrementalBuildPlanner(
     SiteInfo site,
     IReadOnlyList<string> buildInputPaths,
     IReadOnlyList<KeyValuePair<string, string>> buildInputValues,
-    ContentFileRegistry? hashRegistry = null)
+    ContentFileRegistry? hashRegistry = null,
+    DependencyCatalog? catalog = null,
+    IImageProcessor? imageProcessor = null)
 {
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Assembly, IReadOnlyList<string>> CodeDependencies = [];
+    private readonly ArtifactCache _cache = new(cacheDirectory);
     private readonly string _rootPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
-    private readonly string _manifestPath = Path.Combine(cacheDirectory, "build-manifest.json");
+    private readonly string _manifestPath = Path.Combine(cacheDirectory, "manifest.json");
+    private readonly string _outputDirectoryHash = BuildFingerprint.HashText(Path.GetFullPath(options.OutputDirectory));
+    private bool _stampsChanged;
+    internal bool OutputStampsValid { get; private set; }
     private readonly ConcurrentDictionary<string, Lazy<string>> _fileFingerprints = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, Lazy<string>> _contentSetFingerprints = new(StringComparer.OrdinalIgnoreCase);
-    internal Action<string>? BeforeContentSetHash { get; init; }
-    internal Action<string>? BeforeFileHash { get; init; }
 
     internal async Task<IncrementalBuildPlan> CreatePlanAsync(
         IReadOnlyList<PageRenderRequest> pages,
@@ -36,31 +41,38 @@ internal sealed class IncrementalBuildPlanner(
         CancellationToken cancellationToken)
     {
         var optionsHash = ComputeOptionsHash();
-        var assemblyMvids = CollectAssemblyMvids(assemblies);
+        var codeDependencies = CollectCodeDependencies(assemblies);
 
-        var oldManifest = force ? null : await LoadManifestAsync(cancellationToken);
+        var oldManifest = force ? null : LoadManifest(cancellationToken);
+        OutputStampsValid = oldManifest?.OutputDirectoryHash == _outputDirectoryHash;
 
         // Without a manifest nothing about the previous build can be proven, so every
         // page renders. Unrecognized files in the output directory are not a reason to
         // re-render anything: the reconciliation pass at the end of the build deletes
         // whatever this build did not produce.
         if (oldManifest is null
+            || codeDependencies.Any(static input => input.EndsWith(":unavailable", StringComparison.Ordinal))
             || oldManifest.OptionsHash != optionsHash
-            || !oldManifest.AssemblyMvids.SequenceEqual(assemblyMvids, StringComparer.Ordinal))
+            || !oldManifest.CodeDependencies.SequenceEqual(codeDependencies, StringComparer.Ordinal))
         {
-            return new IncrementalBuildPlan(pages, [], oldManifest, optionsHash, assemblyMvids);
+            return new IncrementalBuildPlan(pages, [], oldManifest, optionsHash, codeDependencies);
         }
 
         var oldPages = oldManifest.Pages.ToDictionary(
             static page => page.OutputRelativePath,
             StringComparer.OrdinalIgnoreCase);
 
+        // Code changes need only the old output hashes. Load HTML only after the
+        // global code/options check has established that pages may be reused.
+        LoadHtml(oldManifest);
+
         var decisions = new (PageRenderRequest? Render, BuildManifestPage? Carried)[pages.Count];
-        Parallel.For(0, pages.Count, index =>
+        var outputDirectoryExists = Directory.Exists(options.OutputDirectory);
+        await Parallel.ForEachAsync(Enumerable.Range(0, pages.Count), cancellationToken, async (index, ct) =>
         {
             var request = pages[index];
             decisions[index] = oldPages.TryGetValue(request.OutputRelativePath, out var oldPage)
-                && CanSkip(request, oldPage)
+                && await CanSkipAsync(request, oldPage, outputDirectoryExists, ct)
                     ? (null, oldPage)
                     : (request, null);
         });
@@ -79,10 +91,10 @@ internal sealed class IncrementalBuildPlanner(
             }
         }
 
-        return new IncrementalBuildPlan(pagesToRender, carriedPages, oldManifest, optionsHash, assemblyMvids);
+        return new IncrementalBuildPlan(pagesToRender, carriedPages, oldManifest, optionsHash, codeDependencies);
     }
 
-    private bool CanSkip(PageRenderRequest request, BuildManifestPage oldPage)
+    private async Task<bool> CanSkipAsync(PageRenderRequest request, BuildManifestPage oldPage, bool outputDirectoryExists, CancellationToken cancellationToken)
     {
         var parametersHash = BuildFingerprint.HashParameters(request.Parameters);
         if (parametersHash is null || oldPage.ParametersHash is null
@@ -92,36 +104,12 @@ internal sealed class IncrementalBuildPlanner(
             return false;
         }
 
-        // The existing output (and everything the page materialized beside it) must
-        // still be exactly what the previous build wrote. A matching stamp
-        // (length + last write time) lets the recorded hash be trusted without
-        // re-reading the file; on any stamp mismatch the hash is recomputed.
-        var outputPath = Path.Combine(options.OutputDirectory, oldPage.OutputRelativePath);
-        if (!StampMatches(outputPath, oldPage.OutputLength, oldPage.OutputLastWriteTimeUtc)
-            && !string.Equals(HashFileCached(outputPath), oldPage.OutputHash, StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        foreach (var additionalOutput in oldPage.AdditionalOutputs)
-        {
-            if (!File.Exists(Path.Combine(options.OutputDirectory, additionalOutput)))
-            {
-                return false;
-            }
-        }
-
         foreach (var dependency in oldPage.Dependencies)
         {
             switch (dependency.Kind)
             {
                 case BuildManifestDependency.FileKind:
                     var dependencyPath = ResolveDependencyPath(dependency.Key);
-                    if (StampMatches(dependencyPath, dependency.Length, dependency.LastWriteTimeUtc))
-                    {
-                        continue;
-                    }
-
                     if (!string.Equals(HashFileCached(dependencyPath), dependency.Fingerprint, StringComparison.Ordinal))
                     {
                         return false;
@@ -129,12 +117,8 @@ internal sealed class IncrementalBuildPlanner(
 
                     break;
 
-                case BuildManifestDependency.ContentSetKind:
-                    if (!string.Equals(ContentSetFingerprint(dependency.Key), dependency.Fingerprint, StringComparison.Ordinal))
-                    {
-                        return false;
-                    }
-
+                case "value":
+                    if (catalog?.Resolve(dependency.Key) is not { } value || BuildFingerprint.HashText(value) != dependency.Fingerprint) { return false; }
                     break;
 
                 default:
@@ -142,92 +126,97 @@ internal sealed class IncrementalBuildPlanner(
             }
         }
 
-        return true;
-    }
-
-    private static bool StampMatches(string path, long? length, DateTime? lastWriteTimeUtc)
-    {
-        if (length is null || lastWriteTimeUtc is null)
+        if (!oldPage.AdditionalOutputs.All(RestoreImageOutput))
+        {
+            if (imageProcessor is null) { return false; }
+            foreach (var image in oldPage.ImageRequests)
+            {
+                await ImageArtifactProcessor.ProcessAsync(imageProcessor, ResolveDependencyPath(image.Source),
+                    Path.Combine(options.OutputDirectory, image.OutputDirectory), options.ImageCacheDirectory, cancellationToken);
+            }
+            if (!oldPage.AdditionalOutputs.All(output =>
+                BuildFingerprint.HashFile(Path.Combine(options.OutputDirectory, output.RelativePath)) == output.Hash))
+            {
+                return false;
+            }
+        }
+        // Verify cached bytes even when output remains: successful publication must
+        // leave a usable cache for the next clean checkout as well.
+        if (oldPage.Html is not { } html || BuildFingerprint.HashBytes(html.Span) != oldPage.OutputHash)
         {
             return false;
         }
-
-        var info = new FileInfo(path);
-        return info.Exists && info.Length == length && info.LastWriteTimeUtc == lastWriteTimeUtc;
+        var outputPath = Path.Combine(options.OutputDirectory, oldPage.OutputRelativePath);
+        var stamp = outputDirectoryExists ? OutputStamp.Read(outputPath) : null;
+        if (!(OutputStampsValid && stamp is not null && stamp == oldPage.Stamp)
+            && (!outputDirectoryExists || !BuildFingerprint.FileEquals(outputPath, html.Span)))
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+            File.WriteAllBytes(outputPath, html.Span);
+        }
+        return true;
     }
 
-    private static (long Length, DateTime LastWriteTimeUtc)? ReadStamp(string path)
+    private bool RestoreImageOutput(BuildManifestOutput output)
     {
-        var info = new FileInfo(path);
-        return info.Exists ? (info.Length, info.LastWriteTimeUtc) : null;
+        var path = Path.Combine(options.OutputDirectory, output.RelativePath);
+        return (OutputStampsValid && output.Stamp is { } stamp && OutputStamp.Read(path) == stamp)
+            || _cache.Restore(output.Hash, path);
     }
 
     internal BuildManifestPage CreatePageEntry(
         PageRenderRequest request,
         string outputHash,
-        BuildDependencyRecorder recorder)
+        BuildDependencyRecorder recorder,
+        byte[] html)
     {
-        // The recorder hands back sorted snapshots, so the manifest's order is settled
-        // without a LINQ chain per page.
-        var files = recorder.Files;
-        var scopes = recorder.ContentSetScopes;
-        var dependencies = new List<BuildManifestDependency>(files.Length + scopes.Length);
+        // A deterministic dependency order makes cache records reproducible.
+        var dependencies = new List<BuildManifestDependency>();
 
-        foreach (var file in files)
+        foreach (var (file, recorded) in recorder.FileInputs.OrderBy(static entry => entry.Key, StringComparer.OrdinalIgnoreCase))
         {
-            var stamp = ReadStamp(file);
+            var key = ToDependencyKey(file);
+            if (!BuildManifest.IsRelativeOutput(key)) { recorder.DisableCache(); }
             dependencies.Add(new BuildManifestDependency(
                 BuildManifestDependency.FileKind,
-                ToDependencyKey(file),
-                HashFileCached(file, stamp),
-                stamp?.Length,
-                stamp?.LastWriteTimeUtc));
+                BuildManifest.IsRelativeOutput(key) ? key : "untracked-external-file",
+                recorded));
         }
 
-        foreach (var scope in scopes)
-        {
-            dependencies.Add(new BuildManifestDependency(
-                BuildManifestDependency.ContentSetKind,
-                scope,
-                ContentSetFingerprint(scope)));
-        }
-
-        var additionalOutputs = recorder.AdditionalOutputs;
-        for (var i = 0; i < additionalOutputs.Length; i++)
-        {
-            additionalOutputs[i] = Path.GetRelativePath(options.OutputDirectory, additionalOutputs[i]);
-        }
-
-        Array.Sort(additionalOutputs, StringComparer.OrdinalIgnoreCase);
-
-        var outputStamp = ReadStamp(Path.Combine(options.OutputDirectory, request.OutputRelativePath));
+        dependencies.AddRange(recorder.Values);
+        var additionalOutputs = recorder.AdditionalOutputs.Select(path => new BuildManifestOutput(
+            Path.GetRelativePath(options.OutputDirectory, path),
+            _cache.Store(path))).ToArray();
+        var parametersHash = recorder.Cacheable ? BuildFingerprint.HashParameters(request.Parameters) : null;
         return new BuildManifestPage(
             request.OutputRelativePath,
             request.RoutePath,
-            BuildFingerprint.HashParameters(request.Parameters),
+            parametersHash,
             outputHash,
             dependencies,
-            additionalOutputs,
-            outputStamp?.Length,
-            outputStamp?.LastWriteTimeUtc);
+            additionalOutputs)
+        {
+            Html = html,
+            Images = recorder.Images,
+            // Pages that always render need no repair recipes. In particular,
+            // external sources have no portable, root-relative identity.
+            ImageRequests = parametersHash is null ? [] : [.. recorder.ImageRequests.Select(image => new BuildManifestImage(
+                ToDependencyKey(image.Source), Path.GetRelativePath(options.OutputDirectory, image.OutputDirectory)))],
+        };
     }
 
     /// <summary>
-    /// Copies static files whose source or destination stamp changed since the last
-    /// build; untouched files are skipped entirely.
+    /// Copies static files whose source and destination content hashes differ.
     /// </summary>
-    internal async Task<IReadOnlyList<BuildManifestStaticFile>> SyncStaticFilesAsync(IncrementalBuildPlan plan)
+    internal async Task<IReadOnlyList<string>> SyncStaticFilesAsync()
     {
         if (!Directory.Exists(options.StaticDirectory))
         {
             return [];
         }
 
-        var oldEntries = (plan.OldManifest?.StaticFiles ?? [])
-            .ToDictionary(static entry => entry.RelativePath, StringComparer.OrdinalIgnoreCase);
-
         var files = new DirectoryInfo(options.StaticDirectory).EnumerateFiles("*", SearchOption.AllDirectories).ToArray();
-        var entries = new BuildManifestStaticFile[files.Length];
+        var entries = new string[files.Length];
         var copied = 0;
 
         await Parallel.ForEachAsync(
@@ -238,32 +227,17 @@ internal sealed class IncrementalBuildPlanner(
                 var source = files[index];
                 var relativePath = Path.GetRelativePath(options.StaticDirectory, source.FullName);
                 var destinationPath = Path.Combine(options.OutputDirectory, relativePath);
+                entries[index] = relativePath;
 
-                if (oldEntries.TryGetValue(relativePath, out var oldEntry)
-                    && oldEntry.SourceLength == source.Length
-                    && oldEntry.SourceLastWriteTimeUtc == source.LastWriteTimeUtc)
+                if (BuildFingerprint.HashFile(source.FullName) == BuildFingerprint.HashFile(destinationPath))
                 {
-                    var destination = new FileInfo(destinationPath);
-                    if (destination.Exists
-                        && destination.Length == oldEntry.DestinationLength
-                        && destination.LastWriteTimeUtc == oldEntry.DestinationLastWriteTimeUtc)
-                    {
-                        entries[index] = oldEntry;
-                        return ValueTask.CompletedTask;
-                    }
+                    return ValueTask.CompletedTask;
                 }
 
                 Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
                 File.Copy(source.FullName, destinationPath, overwrite: true);
                 Interlocked.Increment(ref copied);
 
-                var copiedInfo = new FileInfo(destinationPath);
-                entries[index] = new BuildManifestStaticFile(
-                    relativePath,
-                    source.Length,
-                    source.LastWriteTimeUtc,
-                    copiedInfo.Length,
-                    copiedInfo.LastWriteTimeUtc);
                 return ValueTask.CompletedTask;
             });
 
@@ -288,17 +262,46 @@ internal sealed class IncrementalBuildPlanner(
         }
 
         var expected = CollectOutputRelativePaths(manifest);
+        var images = manifest.Pages.SelectMany(page => page.AdditionalOutputs)
+            .ToLookup(output => output.RelativePath, StringComparer.OrdinalIgnoreCase);
         var removed = 0;
 
-        foreach (var file in Directory.EnumerateFiles(options.OutputDirectory, "*", SearchOption.AllDirectories))
+        DirectoryInfo[] directories = [new(options.OutputDirectory)];
+        while (directories.Length > 0)
         {
-            if (expected.Contains(Path.GetRelativePath(options.OutputDirectory, file)))
+            // Scan independent directories together. A recursive enumerator opens
+            // every page bundle serially even when no output needs changing.
+            var children = new ConcurrentBag<DirectoryInfo>();
+            Parallel.ForEach(directories, directory =>
             {
-                continue;
-            }
+                foreach (var entry in directory.EnumerateFileSystemInfos())
+                {
+                    if (entry is DirectoryInfo child) { children.Add(child); continue; }
+                    var file = (FileInfo)entry;
+                    var relativePath = Path.GetRelativePath(options.OutputDirectory, file.FullName);
+                    if (expected.TryGetValue(relativePath, out var page))
+                    {
+                        // Enumeration already supplies size and time; no second stat.
+                        var stamp = new OutputStamp(file.Length, file.LastWriteTimeUtc);
+                        if (page is not null)
+                        {
+                            if (page.Stamp != stamp) { _stampsChanged = true; page.Stamp = stamp; }
+                        }
+                        else
+                        {
+                            foreach (var image in images[relativePath])
+                            {
+                                if (image.Stamp != stamp) { _stampsChanged = true; image.Stamp = stamp; }
+                            }
+                        }
+                        continue;
+                    }
 
-            File.Delete(file);
-            removed++;
+                    file.Delete();
+                    Interlocked.Increment(ref removed);
+                }
+            });
+            directories = [.. children];
         }
 
         if (removed > 0)
@@ -308,24 +311,94 @@ internal sealed class IncrementalBuildPlanner(
         }
     }
 
-    internal async Task SaveManifestAsync(BuildManifest manifest, CancellationToken cancellationToken)
+    internal void SaveManifest(BuildManifest manifest, BuildManifest? previous, CancellationToken cancellationToken)
     {
+        manifest = manifest with { OutputDirectoryHash = _outputDirectoryHash };
         Directory.CreateDirectory(Path.GetDirectoryName(_manifestPath)!);
 
-        // Straight to the file: a thousand-page manifest serialized to a string first
-        // would be half a megabyte of UTF-16 that then has to be transcoded on the way out.
-        var stream = new FileStream(_manifestPath, FileMode.Create, FileAccess.Write, FileShare.None);
-        await using (stream)
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!manifest.IsValid(requireHtmlFile: false)) { throw new InvalidDataException("Invalid or conflicting build outputs."); }
+        foreach (var page in manifest.Pages)
         {
-            await JsonSerializer.SerializeAsync(
-                stream,
-                manifest,
-                BuildManifestJsonContext.Default.BuildManifest,
-                cancellationToken);
+            foreach (var output in page.AdditionalOutputs)
+            {
+                _cache.EnsureStored(output.Hash, Path.Combine(options.OutputDirectory, output.RelativePath));
+            }
         }
+        // Carried entries are the same objects loaded from the verified manifest.
+        // Restoring output changes only its stamps; retain the HTML bundle on
+        // no-change builds, including a clean CI checkout.
+        if (previous is null || manifest.OptionsHash != previous.OptionsHash
+            || !manifest.CodeDependencies.SequenceEqual(previous.CodeDependencies)
+            || !manifest.Pages.SequenceEqual(previous.Pages)
+            || !manifest.StaticFiles.SequenceEqual(previous.StaticFiles)
+            || !manifest.Artifacts.SequenceEqual(previous.Artifacts))
+        {
+            // The manifest publishes a complete immutable bundle. Until its atomic
+            // replacement succeeds, the previous bundle remains usable.
+            var htmlFile = "html-" + Guid.NewGuid().ToString("N") + ".bin";
+            var htmlPath = Path.Combine(cacheDirectory, htmlFile);
+            try
+            {
+                using (var stream = new FileStream(htmlPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 64 * 1024))
+                {
+                    foreach (var page in manifest.Pages)
+                    {
+                        page.HtmlOffset = checked((int)stream.Position);
+                        // An explicitly uncacheable page must render on every build.
+                        // Keep its output metadata for reconciliation, but not its HTML.
+                        if (page.ParametersHash is null) { page.HtmlLength = 0; continue; }
+                        var html = page.Html ?? throw new InvalidDataException("Missing rendered HTML.");
+                        page.HtmlLength = html.Length;
+                        stream.Write(html.Span);
+                    }
+                }
+                manifest = manifest with { HtmlFile = htmlFile };
+                ArtifactCache.WriteAtomic(_manifestPath,
+                    JsonSerializer.SerializeToUtf8Bytes(manifest, BuildManifestJsonContext.Default.BuildManifest));
+            }
+            catch { File.Delete(htmlPath); throw; }
+        }
+        else
+        {
+            manifest = manifest with { HtmlFile = previous.HtmlFile };
+            if (_stampsChanged || !OutputStampsValid)
+            {
+                ArtifactCache.WriteAtomic(_manifestPath,
+                    JsonSerializer.SerializeToUtf8Bytes(manifest, BuildManifestJsonContext.Default.BuildManifest));
+            }
+        }
+        Collect(manifest);
     }
 
-    internal async Task<BuildManifest?> LoadManifestAsync(CancellationToken cancellationToken)
+    private void Collect(BuildManifest manifest)
+    {
+        File.Delete(Path.Combine(cacheDirectory, "build-manifest.json")); // Retired legacy manifest.
+        foreach (var path in Directory.EnumerateFiles(cacheDirectory, "html-*.bin"))
+        {
+            if (Path.GetFileName(path) != manifest.HtmlFile) { File.Delete(path); }
+        }
+        var work = Path.GetFullPath(Path.Combine(cacheDirectory, "work"));
+        var cacheRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(cacheDirectory));
+        if (work.StartsWith(cacheRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) && Directory.Exists(work))
+        {
+            Directory.Delete(work, recursive: true);
+        }
+        var records = Path.Combine(cacheDirectory, "image-records");
+        var live = manifest.Pages.SelectMany(p => p.Images).ToHashSet(StringComparer.Ordinal);
+        if (Directory.Exists(records))
+        {
+            foreach (var path in Directory.EnumerateFiles(records))
+            {
+                if (!live.Contains(Path.GetFileNameWithoutExtension(path))) { File.Delete(path); }
+            }
+        }
+        var retiredPages = Path.Combine(cacheRoot, "pages");
+        if (Directory.Exists(retiredPages)) { Directory.Delete(retiredPages, recursive: true); }
+        _cache.Collect(manifest.Pages.SelectMany(p => p.AdditionalOutputs.Select(o => o.Hash)));
+    }
+
+    private BuildManifest? LoadManifest(CancellationToken cancellationToken)
     {
         if (!File.Exists(_manifestPath))
         {
@@ -334,8 +407,8 @@ internal sealed class IncrementalBuildPlanner(
 
         try
         {
-            var json = await File.ReadAllTextAsync(_manifestPath, cancellationToken);
-            var manifest = JsonSerializer.Deserialize(json, BuildManifestJsonContext.Default.BuildManifest);
+            cancellationToken.ThrowIfCancellationRequested();
+            var manifest = JsonSerializer.Deserialize(File.ReadAllBytes(_manifestPath), BuildManifestJsonContext.Default.BuildManifest);
             return manifest?.IsValid() == true ? manifest : null;
         }
         catch (JsonException)
@@ -348,78 +421,68 @@ internal sealed class IncrementalBuildPlanner(
         }
     }
 
-    /// <summary>
-    /// The digest of every <c>*.md</c> under a content-set scope — a contents-relative
-    /// directory, or empty for the whole tree. Computed once per scope per build.
-    /// </summary>
-    internal string ContentSetFingerprint(string scope)
+    private void LoadHtml(BuildManifest manifest)
     {
-        return _contentSetFingerprints.GetOrAdd(scope, static (key, self) =>
-            new Lazy<string>(() => self.ComputeContentSetFingerprint(key), LazyThreadSafetyMode.ExecutionAndPublication), this).Value;
+        try
+        {
+            var bytes = File.ReadAllBytes(Path.Combine(cacheDirectory, manifest.HtmlFile));
+            foreach (var page in manifest.Pages)
+            {
+                if (page.HtmlOffset >= 0 && page.HtmlLength >= 0 && page.HtmlOffset <= bytes.Length
+                    && page.HtmlLength <= bytes.Length - page.HtmlOffset)
+                {
+                    page.Html = bytes.AsMemory(page.HtmlOffset, page.HtmlLength);
+                }
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
     }
 
-    private string ComputeContentSetFingerprint(string scope)
+    // Validate every consumed file once after rendering. An index page may read
+    // thousands of files; parallelizing by file also keeps a one-page edit cheap.
+    internal static void VerifyInputs(IEnumerable<BuildDependencyRecorder> recorders)
     {
-        BeforeContentSetHash?.Invoke(scope);
-        var scopePath = scope.Length == 0
-            ? options.ContentDirectory
-            : Path.GetFullPath(Path.Combine(options.ContentDirectory, scope));
-
-        if (!Directory.Exists(scopePath))
+        var inputs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var recorder in recorders)
         {
-            return BuildFingerprint.Missing;
+            foreach (var (path, digest) in recorder.FileInputs)
+            {
+                if (inputs.TryGetValue(path, out var previous) && previous != digest)
+                {
+                    throw new IOException("An input changed during rendering: " + path);
+                }
+                inputs[path] = digest;
+            }
         }
-
-        var files = ScanContentFiles(scopePath);
-
-        var hashed = new (string RelativePath, string ContentHash)[files.Count];
-        Parallel.For(0, files.Count, index =>
+        Parallel.ForEach(inputs, input =>
         {
-            var file = files[index];
-            hashed[index] = (
-                Path.GetRelativePath(options.ContentDirectory, file.FullName),
-                HashFileCached(file.FullName, (file.Length, file.LastWriteTimeUtc)));
+            if (input.Value != BuildFingerprint.Missing && BuildFingerprint.HashFile(input.Key) != input.Value)
+            {
+                throw new IOException("An input changed during the build: " + input.Key);
+            }
         });
-
-        return BuildFingerprint.HashFileSet(hashed);
     }
 
-    /// <summary>
-    /// The markdown files under a directory. Reuses the listing the content pass
-    /// already walked when it covered exactly this directory; otherwise walks it.
-    /// Enumerating <see cref="FileInfo"/> carries each stamp out of the walk, so the
-    /// registry can validate its recorded hash without going back to disk.
-    /// </summary>
-    private IReadOnlyList<FileInfo> ScanContentFiles(string directory)
+    private static Dictionary<string, BuildManifestPage?> CollectOutputRelativePaths(BuildManifest manifest)
     {
-        if (hashRegistry?.GetScan(directory) is { } scanned)
-        {
-            return scanned;
-        }
-
-        return [.. new DirectoryInfo(directory).EnumerateFiles("*.md", SearchOption.AllDirectories)];
-    }
-
-    private static HashSet<string> CollectOutputRelativePaths(BuildManifest manifest)
-    {
-        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var paths = new Dictionary<string, BuildManifestPage?>(StringComparer.OrdinalIgnoreCase);
         foreach (var page in manifest.Pages)
         {
-            paths.Add(page.OutputRelativePath);
+            paths.Add(page.OutputRelativePath, page);
             foreach (var additionalOutput in page.AdditionalOutputs)
             {
-                paths.Add(additionalOutput);
+                paths.TryAdd(additionalOutput.RelativePath, null);
             }
         }
 
         foreach (var staticFile in manifest.StaticFiles)
         {
-            paths.Add(staticFile.RelativePath);
+            paths.TryAdd(staticFile, null);
         }
 
         foreach (var artifact in manifest.Artifacts)
         {
-            paths.Add(artifact);
+            paths.TryAdd(artifact, null);
         }
 
         return paths;
@@ -441,15 +504,14 @@ internal sealed class IncrementalBuildPlanner(
     {
         var builder = new StringBuilder();
         foreach (var value in new[] { site.BaseUrl.AbsoluteUri, site.Name, site.Description,
-            site.Language, site.Author, ToDependencyKey(options.ContentDirectory),
-            ToDependencyKey(options.StaticDirectory), ToDependencyKey(options.OutputDirectory) })
+            site.Language, site.Author })
         {
             BuildFingerprint.AppendPart(builder, value);
         }
 
         foreach (var path in buildInputPaths)
         {
-            BuildFingerprint.AppendPart(builder, $"path:{path}");
+            BuildFingerprint.AppendPart(builder, "file-input");
             BuildFingerprint.AppendPart(builder, HashBuildInputPath(path));
         }
 
@@ -475,25 +537,41 @@ internal sealed class IncrementalBuildPlanner(
         return BuildFingerprint.HashFile(fullPath);
     }
 
-    internal static IReadOnlyList<string> CollectAssemblyMvids(IEnumerable<Assembly> roots)
+    internal static IReadOnlyList<string> CollectCodeDependencies(IEnumerable<Assembly> roots)
+    {
+        // A loaded assembly's references and code identity cannot change. Reuse
+        // its complete dependency list across publishes, including framework code.
+        return [.. roots.Distinct().SelectMany(root => CodeDependencies.GetValue(root, CollectAssemblyDependencies))
+            .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
+    }
+
+    private static IReadOnlyList<string> CollectAssemblyDependencies(Assembly root)
     {
         var visited = new HashSet<string>(StringComparer.Ordinal);
-        var mvids = new List<string>();
-        var queue = new Queue<Assembly>(roots.Distinct());
+        var fingerprints = new List<string>();
+        var queue = new Queue<Assembly>([root]);
 
         while (queue.TryDequeue(out var assembly))
         {
             var name = assembly.GetName().Name ?? string.Empty;
-            if (!visited.Add(name) || IsFrameworkAssembly(name))
+            if (!visited.Add(name))
             {
                 continue;
             }
 
-            mvids.Add($"{name}:{assembly.ManifestModule.ModuleVersionId:N}");
+            if (assembly.IsDynamic || string.IsNullOrEmpty(assembly.Location))
+            {
+                fingerprints.Add($"{name}:unavailable");
+                continue;
+            }
+            // Trust the compiler's module identity. Recompilation belongs to MSBuild;
+            // Kiji does not reconstruct compiler inputs or inspect binary contents.
+            var mvid = assembly.ManifestModule.ModuleVersionId;
+            fingerprints.Add(mvid == Guid.Empty ? $"{name}:unavailable" : $"{name}:mvid:{mvid:N}");
 
             foreach (var reference in assembly.GetReferencedAssemblies())
             {
-                if (visited.Contains(reference.Name ?? string.Empty) || IsFrameworkAssembly(reference.Name ?? string.Empty))
+                if (visited.Contains(reference.Name ?? string.Empty))
                 {
                     continue;
                 }
@@ -504,43 +582,26 @@ internal sealed class IncrementalBuildPlanner(
                 }
                 catch (Exception exception) when (exception is FileNotFoundException or FileLoadException or BadImageFormatException)
                 {
-                    // Unresolvable references still participate deterministically.
+                    // An unreadable dependency cannot establish code equivalence.
                     visited.Add(reference.Name ?? string.Empty);
-                    mvids.Add($"{reference.Name}:unresolved");
+                    fingerprints.Add($"{reference.Name}:unavailable");
                 }
             }
         }
 
-        mvids.Sort(StringComparer.Ordinal);
-        return mvids;
+        fingerprints.Sort(StringComparer.Ordinal);
+        return fingerprints;
     }
 
-    private static bool IsFrameworkAssembly(string name)
+    private string HashFileCached(string path)
     {
-        // Framework assemblies change only with SDK updates; excluding them keeps the
-        // fingerprint small. Use -p:KijiForce=true after an SDK update if in doubt.
-        return name.StartsWith("System.", StringComparison.Ordinal)
-            || name.StartsWith("Microsoft.", StringComparison.Ordinal)
-            || name is "System" or "mscorlib" or "netstandard" or "WindowsBase";
-    }
-
-    /// <param name="stamp">
-    /// The file's size and last write time when the caller already has them, so the
-    /// registry can validate its recorded hash without a filesystem round trip.
-    /// </param>
-    internal string HashFileCached(string path, (long Length, DateTime LastWriteTimeUtc)? stamp = null)
-    {
-        // Content files parsed during materialization already carry a stamp-validated
-        // hash in the registry; only files nobody read yet are hashed from disk.
+        // Cache fresh hashes only within this plan, never across build snapshots.
         return _fileFingerprints.GetOrAdd(
             Path.GetFullPath(path),
-            static (fullPath, state) => new Lazy<string>(() =>
-            {
-                state.Self.BeforeFileHash?.Invoke(fullPath);
-                return state.Registry?.GetValidatedHash(fullPath, state.Stamp) ?? BuildFingerprint.HashFile(fullPath);
-            },
+            static (fullPath, registry) => new Lazy<string>(
+                () => registry?.GetSnapshotHash(fullPath) ?? BuildFingerprint.HashFile(fullPath),
                 LazyThreadSafetyMode.ExecutionAndPublication),
-            (Registry: hashRegistry, Stamp: stamp, Self: this)).Value;
+            hashRegistry).Value;
     }
 
     private string ToDependencyKey(string absolutePath)

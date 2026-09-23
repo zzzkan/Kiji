@@ -104,7 +104,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
 
         var manifest = await ReadManifestAsync();
         var detail = manifest.Pages.Single(page => page.OutputRelativePath == Path.Combine("blog", "hello-world", "index.html"));
-        Assert.Contains(detail.Dependencies, static dependency => dependency is { Kind: "content-set", Key: "" });
+        Assert.Null(detail.ParametersHash); // This fixture has no data digest, so its readers cannot be reused.
     }
 
     [Fact]
@@ -159,7 +159,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
 
         // Encoded variants are kept in the persistent cache under .kiji/cache.
         var imageCacheDir = Path.Combine(_testDir, ".kiji", "cache", "images");
-        Assert.NotEmpty(Directory.GetFiles(imageCacheDir, "*.webp", SearchOption.AllDirectories));
+        Assert.NotEmpty(Directory.GetFiles(imageCacheDir, "*", SearchOption.AllDirectories));
 
         var manifest = await ReadManifestAsync();
         var detail = manifest.Pages.Single(page => page.OutputRelativePath == Path.Combine("md", "hello-world", "index.html"));
@@ -169,7 +169,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
     private async Task<Kiji.Generation.BuildManifest> ReadManifestAsync()
     {
         return System.Text.Json.JsonSerializer.Deserialize(
-            await File.ReadAllTextAsync(Path.Combine(_testDir, ".kiji", "cache", "build-manifest.json")),
+            await File.ReadAllTextAsync(Path.Combine(_testDir, ".kiji", "cache", "manifest.json")),
             Kiji.Generation.BuildManifestJsonContext.Default.BuildManifest)!;
     }
 

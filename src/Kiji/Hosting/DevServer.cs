@@ -11,7 +11,7 @@ namespace Kiji.Hosting;
 /// <c>HtmlRenderer</c> pipeline used by the static build; the only additions are
 /// post-render live-reload script injection and content watching.
 /// </summary>
-internal sealed class DevServer(StaticSite app) : IAsyncDisposable
+internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporter = null) : IAsyncDisposable
 {
     private const string DefaultUrl = "http://127.0.0.1:8080";
 
@@ -22,7 +22,7 @@ internal sealed class DevServer(StaticSite app) : IAsyncDisposable
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<DevServer, byte> ActiveServers = new();
 
     private readonly LiveReloadHub _hub = new();
-    private readonly DevServerStatusReporter _reporter = DevServerStatusReporter.CreateForCurrentProcess();
+    private readonly DevServerStatusReporter _reporter = reporter ?? DevServerStatusReporter.CreateForCurrentProcess();
     private readonly string _displayRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Directory.GetCurrentDirectory()));
     private readonly Lock _snapshotLock = new();
     private readonly List<FileSystemWatcher> _watchers = [];
@@ -33,12 +33,6 @@ internal sealed class DevServer(StaticSite app) : IAsyncDisposable
     private WebApplication? _webApplication;
     private Task? _warmupTask;
     private bool _disposed;
-
-    internal DevServer(StaticSite app, DevServerStatusReporter? reporter = null)
-        : this(app)
-    {
-        _reporter = reporter ?? DevServerStatusReporter.CreateForCurrentProcess();
-    }
 
     internal async Task<WebApplication> StartAsync(ResolvedSitePaths options, string[] args, CancellationToken cancellationToken)
     {

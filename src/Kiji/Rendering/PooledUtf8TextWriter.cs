@@ -50,7 +50,7 @@ internal sealed class PooledUtf8TextWriter(int initialCapacity = 64 * 1024) : Te
     }
 
     /// <summary>
-    /// XxHash128 fingerprint of the accumulated UTF-8 bytes; the incremental build
+    /// SHA-256 fingerprint of the accumulated UTF-8 bytes; the incremental build
     /// records it as the page's output hash without re-reading the file.
     /// </summary>
     public string GetContentHash()
@@ -59,9 +59,21 @@ internal sealed class PooledUtf8TextWriter(int initialCapacity = 64 * 1024) : Te
         return Generation.BuildFingerprint.HashBytes(_buffer.AsSpan(0, _written));
     }
 
+    internal byte[] ToArray()
+    {
+        FlushPendingSurrogate();
+        return _buffer.AsSpan(0, _written).ToArray();
+    }
+
+    internal bool MatchesFile(string path)
+    {
+        FlushPendingSurrogate();
+        return Generation.BuildFingerprint.FileEquals(path, _buffer.AsSpan(0, _written));
+    }
+
     /// <summary>
     /// Writes the accumulated UTF-8 bytes to <paramref name="path"/> in a single
-    /// preallocated write, replacing any existing file.
+    /// write, replacing any existing file.
     /// </summary>
     public void WriteToFile(string path)
     {
@@ -72,8 +84,7 @@ internal sealed class PooledUtf8TextWriter(int initialCapacity = 64 * 1024) : Te
             FileMode.Create,
             FileAccess.Write,
             FileShare.None,
-            FileOptions.None,
-            preallocationSize: _written);
+            FileOptions.None);
         RandomAccess.Write(handle, _buffer.AsSpan(0, _written), fileOffset: 0);
     }
 

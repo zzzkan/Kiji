@@ -136,19 +136,20 @@ public sealed class ImageProcessorTests : IDisposable
         var imagePath = Path.Combine(_sourceDir, "cached.png");
         await CreateTestImageAsync(imagePath, 800, 600);
 
-        await processor.ProcessAsync(imagePath, _outputDir, _cacheDir);
+        await ImageArtifactProcessor.ProcessAsync(processor, imagePath, _outputDir, _cacheDir, default);
         var initialEncodes = encodes;
         Assert.True(initialEncodes > 0);
 
         // Simulate a clean build: output is wiped, cache survives.
         Directory.Delete(_outputDir, recursive: true);
 
-        var info = await processor.ProcessAsync(imagePath, _outputDir, _cacheDir);
+        var info = await ImageArtifactProcessor.ProcessAsync(processor, imagePath, _outputDir, _cacheDir, default);
 
         foreach (var variant in info.Variants)
         {
             Assert.True(File.Exists(Path.Combine(_outputDir, variant.FileName)));
-            Assert.True(File.Exists(Path.Combine(_cacheDir, variant.FileName)));
+            var hash = Generation.BuildFingerprint.HashFile(Path.Combine(_outputDir, variant.FileName));
+            Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(_cacheDir)!, "images", hash)));
         }
 
         Assert.Equal(initialEncodes, encodes);
@@ -188,8 +189,8 @@ public sealed class ImageProcessorTests : IDisposable
         var low = new ImageProcessor(new ImageOptions { Quality = 10 });
         var high = new ImageProcessor(new ImageOptions { Quality = 95 });
 
-        var first = Assert.Single((await low.ProcessAsync(imagePath, _outputDir, _cacheDir)).Variants);
-        var second = Assert.Single((await high.ProcessAsync(imagePath, _outputDir, _cacheDir)).Variants);
+        var first = Assert.Single((await ImageArtifactProcessor.ProcessAsync(low, imagePath, _outputDir, _cacheDir, default)).Variants);
+        var second = Assert.Single((await ImageArtifactProcessor.ProcessAsync(high, imagePath, _outputDir, _cacheDir, default)).Variants);
         Assert.NotEqual(first.FileName, second.FileName);
         Assert.NotEqual(await File.ReadAllBytesAsync(Path.Combine(_outputDir, first.FileName)),
             await File.ReadAllBytesAsync(Path.Combine(_outputDir, second.FileName)));

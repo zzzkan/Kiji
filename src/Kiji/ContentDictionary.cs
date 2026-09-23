@@ -2,6 +2,9 @@ using System.Collections;
 using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 using Kiji.Hosting;
+using Kiji.Generation;
+using System.Text;
+using Microsoft.Extensions.DependencyInjection;
 using Kiji.Rendering;
 
 namespace Kiji;
@@ -15,17 +18,22 @@ namespace Kiji;
 public sealed class ContentDictionary<T> : IReadOnlyDictionary<string, T>
     where T : class
 {
+    private readonly string _sourceId;
+    private readonly Func<string, T, string?>? _digest;
     private readonly ContentRuntime _runtime;
     private readonly Func<IServiceProvider, IReadOnlyList<(string Key, T Item, string? SourceFile)>> _load;
 
     internal ContentDictionary(
         ContentRuntime runtime,
         Func<IServiceProvider, IReadOnlyList<(string Key, T Item, string? SourceFile)>> load,
-        string contentSetScope = "")
+        string contentSetScope = "", Func<string, T, string?>? digest = null)
     {
         _runtime = runtime;
         _load = load;
-        ContentSetScope = contentSetScope;
+        _sourceId = typeof(T).FullName + ":" + contentSetScope;
+        _digest = digest;
+        runtime.Dependencies.Register(_sourceId, CollectionDigest);
+        runtime.Dependencies.RegisterSource(_sourceId, key => Materialized.Index.GetValueOrDefault(key).Digest);
     }
 
     /// <summary>
@@ -52,13 +60,6 @@ public sealed class ContentDictionary<T> : IReadOnlyDictionary<string, T>
         : throw new KeyNotFoundException($"Content item with key '{key}' was not found.");
 
     /// <summary>
-    /// The content directory this dictionary reads, relative to the contents root;
-    /// empty for the whole tree. Pages that enumerate it depend on this
-    /// subtree rather than on every content file in the site.
-    /// </summary>
-    internal string ContentSetScope { get; }
-
-    /// <summary>
     /// Finds an item by its key, compared case-insensitively.
     /// </summary>
     public bool TryGetValue(string key, [NotNullWhen(true)] out T? item)
@@ -66,15 +67,23 @@ public sealed class ContentDictionary<T> : IReadOnlyDictionary<string, T>
         ArgumentNullException.ThrowIfNull(key);
 
         var materialized = Materialized;
-        if (!materialized.Index.TryGetValue(key, out item))
+        if (!materialized.Index.TryGetValue(key, out var entry))
         {
             // A miss still observed the key set, so it is only valid while the key set
             // holds — that is the content set, not any one file.
             MarkContentSetDependency();
+            item = null;
             return false;
         }
 
-        RecordItemDependency(materialized, key);
+        item = entry.Item;
+        var dependencies = PageRenderContext.Current?.Dependencies;
+        if (dependencies is not null)
+        {
+            // The lookup depends on collection membership as well as file contents:
+            // a loader can filter out an unchanged file in the next snapshot.
+            dependencies.AddValue(_sourceId + "/" + key.ToUpperInvariant(), entry.Digest);
+        }
         return true;
     }
 
@@ -116,35 +125,19 @@ public sealed class ContentDictionary<T> : IReadOnlyDictionary<string, T>
 
     private void MarkContentSetDependency()
     {
-        PageRenderContext.Current?.Dependencies?.MarkContentSetDependency(ContentSetScope);
+        PageRenderContext.Current?.Dependencies?.AddValue(_sourceId, CollectionDigest());
     }
 
-    private void RecordItemDependency(MaterializedContent materialized, string key)
+    private string? CollectionDigest()
     {
-        var dependencies = PageRenderContext.Current?.Dependencies;
-        if (dependencies is null)
-        {
-            return;
-        }
-
-        // A keyed lookup depends only on that item's source file when known;
-        // untracked items fall back to the whole content set (conservative).
-        if (materialized.ProvenanceByKey.TryGetValue(key, out var sourceFile) && sourceFile is not null)
-        {
-            dependencies.AddFile(sourceFile);
-        }
-        else
-        {
-            dependencies.MarkContentSetDependency(ContentSetScope);
-        }
+        return Materialized.CollectionDigest.Value;
     }
 
     private MaterializedContent Materialize(IServiceProvider services)
     {
         var loaded = _load(services);
 
-        var index = new Dictionary<string, T>(loaded.Count, StringComparer.OrdinalIgnoreCase);
-        var provenanceByKey = new Dictionary<string, string?>(loaded.Count, StringComparer.OrdinalIgnoreCase);
+        var index = new Dictionary<string, (T Item, string? Digest)>(loaded.Count, StringComparer.OrdinalIgnoreCase);
         var entries = new KeyValuePair<string, T>[loaded.Count];
         for (var i = 0; i < loaded.Count; i++)
         {
@@ -155,31 +148,41 @@ public sealed class ContentDictionary<T> : IReadOnlyDictionary<string, T>
                     $"The internal content loader for '{typeof(T).Name}' produced an empty key.");
             }
 
-            if (!index.TryAdd(key, item))
+            var digest = sourceFile is not null
+                ? services.GetService<ContentFileRegistry>()?.GetSnapshotHash(sourceFile) ?? BuildFingerprint.HashFile(sourceFile)
+                : _digest?.Invoke(key, item);
+            if (!index.TryAdd(key, (item, digest)))
             {
                 throw new InvalidOperationException(
                     $"The internal content loader for '{typeof(T).Name}' produced duplicate key '{key}'.");
             }
 
-            provenanceByKey[key] = sourceFile;
             entries[i] = new KeyValuePair<string, T>(key, item);
         }
 
         return new MaterializedContent(
             entries,
-            index.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase),
-            provenanceByKey.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase));
+            index.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase));
     }
 
     private sealed class MaterializedContent(
         IReadOnlyList<KeyValuePair<string, T>> entries,
-        FrozenDictionary<string, T> index,
-        FrozenDictionary<string, string?> provenanceByKey)
+        FrozenDictionary<string, (T Item, string? Digest)> index)
     {
+        public Lazy<string?> CollectionDigest { get; } = new(() =>
+        {
+            var builder = new StringBuilder();
+            foreach (var entry in entries)
+            {
+                if (index[entry.Key].Digest is not { } digest) { return null; }
+                BuildFingerprint.AppendPart(builder, entry.Key);
+                BuildFingerprint.AppendPart(builder, digest);
+            }
+            return BuildFingerprint.HashText(builder.ToString());
+        });
         public IReadOnlyList<KeyValuePair<string, T>> Entries { get; } = entries;
 
-        public FrozenDictionary<string, T> Index { get; } = index;
+        public FrozenDictionary<string, (T Item, string? Digest)> Index { get; } = index;
 
-        public FrozenDictionary<string, string?> ProvenanceByKey { get; } = provenanceByKey;
     }
 }

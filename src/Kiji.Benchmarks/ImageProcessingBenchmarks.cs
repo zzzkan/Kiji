@@ -9,8 +9,7 @@ namespace Kiji.Benchmarks;
 public class ImageProcessingBenchmarks : IDisposable
 {
     private ImageWorkload _workload = null!;
-    private readonly ImageProcessor _candidate = new();
-    private readonly BaselineImageProcessor _baseline = new();
+    private readonly ImageProcessor _processor = new();
     [Params(640, 2400)] public int Width { get; set; }
     [Params(false, true)] public bool Shared { get; set; }
     [Params(false, true)] public bool Cold { get; set; }
@@ -20,20 +19,10 @@ public class ImageProcessingBenchmarks : IDisposable
     {
         _workload = new ImageWorkload();
         await _workload.SetupAsync(Width, Shared);
-        // The original has a shared-cache race on Windows. Establish reference
-        // bytes sequentially so it cannot prevent measuring the fixed method.
-        await _workload.RunSequentialAsync(_baseline);
-        var expected = _workload.OutputBytes();
-        _workload.Reset(true);
-        await _workload.RunAsync(_candidate);
-        foreach (var (key, bytes) in _workload.OutputBytes())
-        {
-            if (!bytes.AsSpan().SequenceEqual(expected[key])) { throw new InvalidOperationException("Image bytes differ."); }
-        }
+        await _workload.RunAsync(_processor);
     }
     [IterationSetup] public void Reset() => _workload.Reset(Cold);
-    [Benchmark(Baseline = true)] public Task Original() => _workload.RunAsync(_baseline);
-    [Benchmark] public Task Deduplicated() => _workload.RunAsync(_candidate);
+    [Benchmark] public Task ProcessImages() => _workload.RunAsync(_processor);
     [GlobalCleanup]
     public void Dispose()
     {

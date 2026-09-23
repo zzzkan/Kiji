@@ -5,26 +5,24 @@ namespace Kiji.Markdown;
 
 /// <summary>
 /// Reuses parsed markdown sources (front matter, body, content hash) across content
-/// re-materializations as long as the source file's timestamp and length are
-/// unchanged.
+/// re-materializations when a fresh content hash proves the bytes are unchanged.
 /// </summary>
 internal sealed class MarkdownSourceCache<TFrontMatter>
 {
-    private readonly ConcurrentDictionary<string, Entry> _entries = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, MarkdownSource<TFrontMatter>> _entries = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <remarks>The enumerated file carries a pre-cached size and last-write time, keeping cache hits free of filesystem calls.</remarks>
+    /// <remarks>File timestamps alone never establish equivalence.</remarks>
     internal MarkdownSource<TFrontMatter> GetOrRead(
         FileInfo file,
         IDeserializer deserializer)
     {
-        var stamp = (file.Length, file.LastWriteTimeUtc);
-        if (_entries.TryGetValue(file.FullName, out var entry) && entry.Stamp == stamp)
+        if (_entries.TryGetValue(file.FullName, out var entry) && entry.ContentHash == Generation.BuildFingerprint.HashFile(file.FullName))
         {
-            return entry.Source;
+            return entry;
         }
 
         var source = MarkdownSourceReader.Read<TFrontMatter>(file, deserializer);
-        _entries[file.FullName] = new Entry(stamp, source);
+        _entries[file.FullName] = source;
         return source;
     }
 
@@ -42,6 +40,4 @@ internal sealed class MarkdownSourceCache<TFrontMatter>
             }
         }
     }
-
-    private sealed record Entry((long Length, DateTime LastWriteTimeUtc) Stamp, MarkdownSource<TFrontMatter> Source);
 }

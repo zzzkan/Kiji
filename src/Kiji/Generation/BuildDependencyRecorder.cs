@@ -1,67 +1,61 @@
-using System.Collections.Concurrent;
-
 namespace Kiji.Generation;
 
-/// <summary>
-/// Collects the inputs a page render actually touched (content files, whole content
-/// sets) and the extra files it materialized (e.g. image variants).
-/// Attached to <see cref="Rendering.PageRenderContext"/> during incremental builds;
-/// the recorded set becomes the page's dependency list in the build manifest.
-/// </summary>
+/// <summary>Inputs and outputs observed by one page. Read after its render completes.</summary>
 internal sealed class BuildDependencyRecorder
 {
-    private readonly ConcurrentDictionary<string, byte> _files = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, byte> _additionalOutputs = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, byte> _contentSetScopes = new(StringComparer.OrdinalIgnoreCase);
+    // Concurrent work within one page shares a lock; separate pages never contend.
+    // Pages without images allocate no image collections.
+    private readonly Lock _gate = new();
+    private readonly Dictionary<string, string> _files = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _values = new(StringComparer.Ordinal);
+    private HashSet<BuildManifestImage>? _imageRequests;
+    private HashSet<string>? _images;
+    private HashSet<string>? _outputs;
 
-    /// <summary>Records that the render read the given source file.</summary>
-    internal void AddFile(string absolutePath)
+    internal bool Cacheable { get; private set; } = true;
+    internal void DisableCache() { lock (_gate) { Cacheable = false; } }
+
+    internal void AddFile(string absolutePath, string digest)
     {
-        _files.TryAdd(absolutePath, 0);
+        lock (_gate)
+        {
+            if (digest == BuildFingerprint.Missing) { Cacheable = false; }
+            if (_files.TryGetValue(absolutePath, out var previous) && previous != digest)
+            {
+                throw new IOException("An input changed during rendering: " + absolutePath);
+            }
+            _files[absolutePath] = digest;
+        }
     }
 
-    /// <summary>Records a file the render wrote in addition to the page HTML.</summary>
+    internal void AddValue(string key, string? digest)
+    {
+        lock (_gate)
+        {
+            if (digest is null) { Cacheable = false; return; }
+            _values[key] = BuildFingerprint.HashText(digest);
+        }
+    }
+
+    internal void AddImageRequest(string source, string output)
+    {
+        lock (_gate) { (_imageRequests ??= []).Add(new(source, output)); }
+    }
+
+    internal void AddImage(string key)
+    {
+        lock (_gate) { (_images ??= new(StringComparer.Ordinal)).Add(key); }
+    }
+
     internal void AddOutput(string absolutePath)
     {
-        _additionalOutputs.TryAdd(absolutePath, 0);
+        lock (_gate) { (_outputs ??= new(StringComparer.OrdinalIgnoreCase)).Add(absolutePath); }
     }
 
-    /// <summary>
-    /// Records that the render observed the shape of a content set (e.g. enumerated a
-    /// collection), making it dependent on every content file under
-    /// <paramref name="scope"/> — a contents-relative directory, empty for the whole tree.
-    /// </summary>
-    internal void MarkContentSetDependency(string scope)
-    {
-        _contentSetScopes.TryAdd(scope, 0);
-    }
-
-    /// <summary>
-    /// The recorded content-set scopes in deterministic order.
-    /// </summary>
-    internal string[] ContentSetScopes => Snapshot(_contentSetScopes, StringComparer.OrdinalIgnoreCase);
-
-    internal string[] Files => Snapshot(_files, StringComparer.OrdinalIgnoreCase);
-
-    internal string[] AdditionalOutputs => Snapshot(_additionalOutputs, StringComparer.OrdinalIgnoreCase);
-
-    private static string[] Snapshot(ConcurrentDictionary<string, byte> source, StringComparer comparer)
-    {
-        if (source.IsEmpty)
-        {
-            return [];
-        }
-
-        // Enumerating the dictionary itself avoids the copy Keys makes; the recorder is
-        // only read once its page has finished rendering, so nothing is being added.
-        var values = new List<string>(source.Count);
-        foreach (var pair in source)
-        {
-            values.Add(pair.Key);
-        }
-
-        var snapshot = values.ToArray();
-        Array.Sort(snapshot, comparer);
-        return snapshot;
-    }
+    internal IEnumerable<KeyValuePair<string, string>> FileInputs => _files;
+    internal IEnumerable<BuildManifestDependency> Values => _values.OrderBy(p => p.Key, StringComparer.Ordinal)
+        .Select(p => new BuildManifestDependency("value", p.Key, p.Value));
+    internal IEnumerable<BuildManifestImage> ImageRequests => _imageRequests ?? [];
+    internal string[] Images => _images is null ? [] : [.. _images.Order(StringComparer.Ordinal)];
+    internal string[] AdditionalOutputs => _outputs is null ? [] : [.. _outputs.Order(StringComparer.OrdinalIgnoreCase)];
 }

@@ -1,13 +1,11 @@
 using System.Globalization;
-using System.Buffers;
-using System.IO.Hashing;
-using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace Kiji.Generation;
 
 /// <summary>
-/// XxHash128-based fingerprints for incremental build inputs and outputs.
+/// SHA-256-based fingerprints for incremental build inputs and outputs.
 /// </summary>
 internal static class BuildFingerprint
 {
@@ -19,21 +17,7 @@ internal static class BuildFingerprint
         try
         {
             using var stream = File.OpenRead(path);
-            var buffer = ArrayPool<byte>.Shared.Rent(64 * 1024);
-            try
-            {
-                var hash = new XxHash128();
-                int read;
-                while ((read = stream.Read(buffer)) != 0)
-                {
-                    hash.Append(buffer.AsSpan(0, read));
-                }
-                return Convert.ToHexStringLower(hash.GetCurrentHash());
-            }
-            finally
-            {
-                ArrayPool<byte>.Shared.Return(buffer);
-            }
+            return Convert.ToHexStringLower(SHA256.HashData(stream));
         }
         catch (IOException)
         {
@@ -47,12 +31,37 @@ internal static class BuildFingerprint
 
     internal static string HashText(string value)
     {
-        return Convert.ToHexStringLower(XxHash128.Hash(MemoryMarshal.AsBytes(value.AsSpan())));
+        var count = Encoding.UTF8.GetByteCount(value);
+        Span<byte> bytes = count <= 1024 ? stackalloc byte[count] : new byte[count];
+        Encoding.UTF8.GetBytes(value, bytes);
+        return HashBytes(bytes);
     }
 
     internal static string HashBytes(ReadOnlySpan<byte> value)
     {
-        return Convert.ToHexStringLower(XxHash128.Hash(value));
+        Span<byte> hash = stackalloc byte[SHA256.HashSizeInBytes];
+        SHA256.HashData(value, hash);
+        return Convert.ToHexStringLower(hash);
+    }
+
+    /// <summary>Compares an output with already verified or freshly rendered bytes.</summary>
+    internal static bool FileEquals(string path, ReadOnlySpan<byte> expected)
+    {
+        try
+        {
+            using var handle = File.OpenHandle(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            if (RandomAccess.GetLength(handle) != expected.Length) { return false; }
+            Span<byte> buffer = stackalloc byte[4096];
+            var offset = 0;
+            while (offset < expected.Length)
+            {
+                var read = RandomAccess.Read(handle, buffer[..Math.Min(buffer.Length, expected.Length - offset)], offset);
+                if (read == 0 || !buffer[..read].SequenceEqual(expected.Slice(offset, read))) { return false; }
+                offset += read;
+            }
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { return false; }
     }
 
     /// <summary>

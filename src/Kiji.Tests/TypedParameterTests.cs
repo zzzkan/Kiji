@@ -166,7 +166,7 @@ public sealed class TypedParameterTests : IDisposable
             var relative = Path.GetRelativePath(Path.Combine(siteRoot, "dist"), file);
             Assert.Equal(await File.ReadAllBytesAsync(Path.Combine(_root, "scratch", "dist", relative)), await File.ReadAllBytesAsync(file));
         }
-        var manifestPath = Path.Combine(siteRoot, ".kiji", "cache", "build-manifest.json");
+        var manifestPath = Path.Combine(siteRoot, ".kiji", "cache", "manifest.json");
         var json = JsonNode.Parse(await File.ReadAllTextAsync(manifestPath))!;
         Assert.Null(json["Pages"]!.AsArray().Single(page => page!["RoutePath"]!.GetValue<string>() == "/typed/1/")!["ParametersHash"]);
         json["SchemaVersion"] = 2;
@@ -200,7 +200,7 @@ public sealed class TypedParameterTests : IDisposable
         site.Paths.RootDirectory = Path.Combine(_root, directory);
         Directory.CreateDirectory(Path.Combine(site.Paths.RootDirectory, "contents"));
         Directory.CreateDirectory(Path.Combine(site.Paths.RootDirectory, "wwwroot"));
-        site.UseContentSource<ParameterRenderLog>(_ => [log]);
+        site.UseContentSource<ParameterRenderLog>("render-log", _ => [new("0", log, "observer")]);
         return site;
     }
 }

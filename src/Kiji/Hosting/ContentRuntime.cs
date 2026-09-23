@@ -10,6 +10,7 @@ namespace Kiji.Hosting;
 /// </summary>
 internal sealed class ContentRuntime
 {
+    internal Generation.DependencyCatalog Dependencies { get; } = new();
     private readonly List<Action<IServiceCollection>> _registrations = [];
     private readonly HashSet<Type> _registeredElementTypes = [];
     private readonly ConcurrentDictionary<object, object> _materialized = new();
@@ -58,6 +59,7 @@ internal sealed class ContentRuntime
         lock (_materializationLock)
         {
             _materialized.Clear();
+            Dependencies.Invalidate();
         }
     }
 
@@ -104,7 +106,9 @@ internal sealed class ContentRuntime
         chain.Add(name);
         try
         {
-            return (TMaterialized)_materialized.GetOrAdd(handle, _ => factory(services));
+            var materialized = factory(services);
+            _materialized[handle] = materialized;
+            return materialized;
         }
         finally
         {

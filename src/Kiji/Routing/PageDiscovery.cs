@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Collections.Frozen;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using Microsoft.AspNetCore.Components;
 
 namespace Kiji.Routing;
@@ -91,55 +90,22 @@ internal static class PageDiscovery
     }
 
     /// <summary>
-    /// Resolves the given page component types into pages. Every type must be a
+    /// Resolves one registered component into pages. The type must be a
     /// non-abstract <see cref="IComponent"/> declaring at least one <c>@page</c> route template.
-    /// Duplicate types are tolerated; duplicate route templates are an error.
     /// </summary>
-    public static IReadOnlyList<DiscoveredPage> FromTypes(IEnumerable<Type> pageTypes)
+    internal static IReadOnlyList<DiscoveredPage> FromType(Type pageType)
     {
-        ArgumentNullException.ThrowIfNull(pageTypes);
-
-        var pages = new List<DiscoveredPage>();
-        var seenTypes = new HashSet<Type>();
-
-        foreach (var pageType in pageTypes)
+        if (pageType is not { IsClass: true, IsAbstract: false } || !typeof(IComponent).IsAssignableFrom(pageType))
         {
-            if (pageType is null)
-            {
-                throw new ArgumentException("Page type collection contains a null entry.", nameof(pageTypes));
-            }
-
-            if (!seenTypes.Add(pageType))
-            {
-                continue;
-            }
-
-            // Closures and other compiler-generated nested types report the namespace
-            // of their declaring type, so namespace-based LINQ queries pick them up.
-            if (pageType.IsDefined(typeof(CompilerGeneratedAttribute), inherit: false))
-            {
-                continue;
-            }
-
-            if (pageType is not { IsClass: true, IsAbstract: false } || !typeof(IComponent).IsAssignableFrom(pageType))
-            {
-                throw new InvalidOperationException(
-                    $"Type '{pageType.FullName}' is not a routable Razor component. Map only non-abstract classes implementing '{nameof(IComponent)}'.");
-            }
-
-            var typePages = TypeCache.GetOrAdd(pageType, static type =>
-                [.. type.GetCustomAttributes<RouteAttribute>(inherit: false)
-                    .Select(attribute => CreateDiscoveredPage(attribute.Template, type))]);
-            if (typePages.Count == 0)
-            {
-                throw new InvalidOperationException(
-                    $"Page component '{pageType.FullName}' does not declare a '@page' route template.");
-            }
-
-            pages.AddRange(typePages);
+            throw new InvalidOperationException(
+                $"Type '{pageType.FullName}' is not a routable Razor component. Map only non-abstract classes implementing '{nameof(IComponent)}'.");
         }
 
-        return EnsureUniqueRoutes(pages);
+        var pages = TypeCache.GetOrAdd(pageType, static type => EnsureUniqueRoutes(
+            [.. type.GetCustomAttributes<RouteAttribute>(inherit: false)
+                .Select(attribute => CreateDiscoveredPage(attribute.Template, type))]));
+        return pages.Count > 0 ? pages : throw new InvalidOperationException(
+            $"Page component '{pageType.FullName}' does not declare a '@page' route template.");
     }
 
     /// <summary>
@@ -157,15 +123,14 @@ internal static class PageDiscovery
     /// <summary>
     /// Creates a <see cref="DiscoveredPage"/> for the route template declared by the component.
     /// </summary>
-    public static DiscoveredPage CreateDiscoveredPage(
+    private static DiscoveredPage CreateDiscoveredPage(
         string routeTemplate,
         Type componentType)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(routeTemplate);
         ArgumentNullException.ThrowIfNull(componentType);
 
-        var normalizedTemplate = StaticPageDefinition.NormalizeRouteTemplate(routeTemplate);
-        var pageDefinition = StaticPageDefinition.Create(normalizedTemplate);
+        var pageDefinition = StaticPageDefinition.Create(routeTemplate);
 
         return new DiscoveredPage(
             pageDefinition.SourceIdentifier,

@@ -1,4 +1,5 @@
 using Kiji.Generation;
+using System.Text;
 using YamlDotNet.Serialization;
 
 namespace Kiji.Markdown;
@@ -37,9 +38,15 @@ internal static class MarkdownSourceReader
             contentHash);
     }
 
-    private static string DecodeText(byte[] bytes)
+    internal static string DecodeText(byte[] bytes)
     {
-        // Matches File.ReadAllText semantics: UTF-8 by default with BOM detection.
+        // UTF-8 needs no stream or intermediate decoder buffers. Keep StreamReader
+        // for UTF-16/32 BOMs so its encoding detection and fallback remain intact.
+        if (bytes is [0xEF, 0xBB, 0xBF, ..]) { return Encoding.UTF8.GetString(bytes.AsSpan(3)); }
+        if (bytes is not ([0xFF, 0xFE, ..] or [0xFE, 0xFF, ..] or [0, 0, 0xFE, 0xFF, ..]))
+        {
+            return Encoding.UTF8.GetString(bytes);
+        }
         using var reader = new StreamReader(new MemoryStream(bytes), detectEncodingFromByteOrderMarks: true);
         return reader.ReadToEnd();
     }

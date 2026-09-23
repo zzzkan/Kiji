@@ -69,14 +69,14 @@ public sealed class MarkdownContentSourceTests : IDisposable
         var notes = app.ServiceProvider.GetRequiredService<ContentDictionary<ProjectedNote>>();
 
         Assert.Equal(
-            [Path.Combine(_testDir, "contents", "first.md"), Path.Combine(_testDir, "contents", "second.md")],
+            ["first.md", "second.md"],
             notes.Keys);
         Assert.Equal(["first", "second"], notes.Values.Select(static note => note.Key));
         Assert.Equal("First", notes.Values.Single(static note => note.Key == "first").Title);
     }
 
     [Fact]
-    public void RawMarkdown_UsesTheAbsoluteSourcePathAsItsOpaqueKey()
+    public void RawMarkdown_UsesPortableSourceRelativeKeys()
     {
         WriteMarkdown("nested/post.md", "Post");
         var app = CreateApp();
@@ -85,7 +85,7 @@ public sealed class MarkdownContentSourceTests : IDisposable
 
         var content = app.ServiceProvider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>();
 
-        Assert.Equal(Path.Combine(_testDir, "contents", "nested", "post.md"), Assert.Single(content.Keys));
+        Assert.Equal("nested/post.md", Assert.Single(content.Keys));
     }
 
     private sealed record ProjectedNote(string Key, string? Title);

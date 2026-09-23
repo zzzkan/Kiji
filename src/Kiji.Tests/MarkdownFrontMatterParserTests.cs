@@ -3,29 +3,12 @@ using Xunit;
 
 namespace Kiji.Tests;
 
-public sealed class MarkdownFrontMatterParserTests : IDisposable
+public sealed class MarkdownFrontMatterParserTests
 {
-    private readonly string _testDir;
-
-    public MarkdownFrontMatterParserTests()
-    {
-        _testDir = Path.Combine(Path.GetTempPath(), $"MarkdownFrontMatterParserTests_{Guid.NewGuid():N}");
-        Directory.CreateDirectory(_testDir);
-    }
-
-    public void Dispose()
-    {
-        if (Directory.Exists(_testDir))
-        {
-            Directory.Delete(_testDir, recursive: true);
-        }
-    }
-
     [Fact]
     public void Parse_RequestedFrontMatterType_ParsesYaml()
     {
-        var markdownPath = CreateMarkdownFile(
-            "front-matter.md",
+        var frontMatter = MarkdownFrontMatterParser.ParseContent<FrontMatter>(
             """
             ---
             title: Test Post
@@ -39,8 +22,6 @@ public sealed class MarkdownFrontMatterParserTests : IDisposable
             Body.
             """);
 
-        var frontMatter = MarkdownFrontMatterParser.ParseContent<FrontMatter>(File.ReadAllText(markdownPath));
-
         Assert.Equal("Test Post", frontMatter.Title);
         Assert.Equal("A sample post", frontMatter.Description);
         Assert.True(frontMatter.CreatedAt.HasValue);
@@ -51,16 +32,8 @@ public sealed class MarkdownFrontMatterParserTests : IDisposable
     [Fact]
     public void Parse_MissingFrontMatter_ThrowsInvalidOperationException()
     {
-        var markdownPath = CreateMarkdownFile(
-            "missing.md",
-            """
-            # Missing
-
-            No front matter.
-            """);
-
         Assert.Throws<InvalidOperationException>(() =>
-            MarkdownFrontMatterParser.ParseContent<FrontMatter>(File.ReadAllText(markdownPath)));
+            MarkdownFrontMatterParser.ParseContent<FrontMatter>("# Missing\n\nNo front matter."));
     }
 
     [Fact]
@@ -72,13 +45,6 @@ public sealed class MarkdownFrontMatterParserTests : IDisposable
 
         Assert.Equal("Combined", parsed.FrontMatter.Title);
         Assert.Equal("Body.\r\n", parsed.Body);
-    }
-
-    private string CreateMarkdownFile(string fileName, string contents)
-    {
-        var path = Path.Combine(_testDir, fileName);
-        File.WriteAllText(path, contents);
-        return path;
     }
 
 }

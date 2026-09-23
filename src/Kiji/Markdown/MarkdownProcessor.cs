@@ -1,7 +1,4 @@
 using System.Collections.Concurrent;
-using System.Globalization;
-using System.IO.Hashing;
-using System.Text;
 using Markdig;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
@@ -56,8 +53,9 @@ internal sealed class MarkdownProcessor
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        PageRenderContext.Current?.Dependencies?.AddFile(Path.GetFullPath(filePath));
-
+        // MarkdownContent records the source hash of this already-read body.
+        // Reopening the file here would duplicate input verification and could
+        // fingerprint bytes different from the body being converted.
         var document = global::Markdig.Markdown.Parse(markdownBody, _pipeline);
 
         var imageInfoLookup = await MaterializeReferencedImagesAsync(filePath, document, cancellationToken);
@@ -103,14 +101,10 @@ internal sealed class MarkdownProcessor
 
             var relativeDirectory = GetDirectoryPart(referenceKey);
             var outputDirectory = Path.Combine(pageOutputDirectory, relativeDirectory.Replace('/', Path.DirectorySeparatorChar));
-            var cacheDirectory = _imageCachePath is null
-                ? null
-                : Path.Combine(_imageCachePath, CreateCacheKey(Path.GetDirectoryName(sourceFile)!));
+            var cacheDirectory = pageContext.Dependencies is null ? null : _imageCachePath;
 
-            pageContext.Dependencies?.AddFile(sourceFile);
-
-            var processed = await _imageProcessor.ProcessAsync(
-                sourceFile,
+            var processed = await ImageArtifactProcessor.ProcessAsync(
+                _imageProcessor, sourceFile,
                 outputDirectory,
                 cacheDirectory,
                 cancellationToken);
@@ -146,26 +140,16 @@ internal sealed class MarkdownProcessor
                 "Place images beside the markdown file (or in a subdirectory next to it).");
         }
 
-        if (!File.Exists(sourceFile))
-        {
-            throw new InvalidOperationException(
-                $"Image '{url}' referenced by '{filePath}' was not found at '{sourceFile}'.");
-        }
-
-        return sourceFile;
+        return !File.Exists(sourceFile)
+            ? throw new InvalidOperationException(
+                $"Image '{url}' referenced by '{filePath}' was not found at '{sourceFile}'.")
+            : sourceFile;
     }
 
     private static string GetDirectoryPart(string referenceKey)
     {
         var separatorIndex = referenceKey.LastIndexOf('/');
         return separatorIndex >= 0 ? referenceKey[..separatorIndex] : string.Empty;
-    }
-
-    private static string CreateCacheKey(string sourceDirectory)
-    {
-        // Groups cache entries per source directory. Not a security boundary.
-        var hash = XxHash3.HashToUInt64(Encoding.UTF8.GetBytes(Path.GetFullPath(sourceDirectory).ToUpperInvariant()));
-        return hash.ToString("x16", CultureInfo.InvariantCulture);
     }
 
     private string Render(MarkdownDocument document, ResponsiveImageContext imageContext)

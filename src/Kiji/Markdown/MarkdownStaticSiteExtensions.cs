@@ -45,7 +45,7 @@ public static class MarkdownStaticSiteExtensions
         }
 
         // Created once per registration so it survives content re-materializations
-        // in the dev server; a file save re-reads only the files that changed.
+        // in the dev server; fresh hashes let it re-parse only changed files.
         var sourceCache = new MarkdownSourceCache<TFrontMatter>();
 
         return app.UseContentSource(
@@ -54,6 +54,7 @@ public static class MarkdownStaticSiteExtensions
                 var options = services.GetRequiredService<ResolvedSitePaths>();
                 var imageProcessor = services.GetRequiredService<IImageProcessor>();
                 var markdownProcessor = new MarkdownProcessor(options, imageProcessor, contentOptions.Processing);
+                var sourceDirectory = contentOptions.ResolveContentsDirectory(options.ContentDirectory);
 
                 var sources = new MarkdownContentsBuilder<TFrontMatter>(
                     options.ContentDirectory,
@@ -64,7 +65,7 @@ public static class MarkdownStaticSiteExtensions
                     CreateFrontMatterDeserializer,
                     sourceCache,
                     services.GetService<ContentFileRegistry>(),
-                    contentOptions.ResolveContentsDirectory(options.ContentDirectory),
+                    sourceDirectory,
                     contentOptions.FileFilter)
                     .Build();
 
@@ -74,7 +75,7 @@ public static class MarkdownStaticSiteExtensions
                 var items = new (string Key, TModel Item, string? SourceFile)[sources.Count];
                 for (var i = 0; i < sources.Count; i++)
                 {
-                    items[i] = (sources[i].FileInfo.FullName, select(sources[i]), sources[i].FileInfo.FullName);
+                    items[i] = (Path.GetRelativePath(sourceDirectory, sources[i].FileInfo.FullName).Replace('\\', '/'), select(sources[i]), sources[i].FileInfo.FullName);
                 }
 
                 return items;

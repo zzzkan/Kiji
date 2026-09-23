@@ -3,7 +3,6 @@ using Kiji.Rendering;
 using Kiji.Tests.TestSite.Pages;
 using Kiji.Tests.TestSite;
 using Microsoft.Extensions.DependencyInjection;
-using System.Text.RegularExpressions;
 
 namespace Kiji.Tests;
 
@@ -36,23 +35,11 @@ internal static class TestArticleContents
         };
     }
 
-    public static ContentDictionary<Post> CreateContentDictionary(params (Post Metadata, string Html)[] entries)
-    {
-        return ContentDictionaryFromItems([.. entries.Select(static entry => ClonePost(entry.Metadata, entry.Html))]);
-    }
-
-    public static ContentDictionary<Post> CreateContentDictionary(IEnumerable<Post> posts)
-    {
-        ArgumentNullException.ThrowIfNull(posts);
-
-        return ContentDictionaryFromItems([.. posts.Select(static post => ClonePost(post, $"<p>{post.Title}</p>"))]);
-    }
-
     /// <summary>
     /// Creates a StaticSite wired exactly like the real site (pages, not-found, content
     /// and tag route mappings) over the given posts.
     /// </summary>
-    public static (StaticSite App, ContentDictionary<Post> Posts) CreateApp(params (Post Metadata, string Html)[] entries)
+    private static StaticSite CreateApp(params (Post Metadata, string Html)[] entries)
     {
         var app = StaticSite.Create([]);
         app.Info = CreateSiteInfo();
@@ -60,13 +47,11 @@ internal static class TestArticleContents
         IReadOnlyList<Post> items = [.. entries.Select(static entry => ClonePost(entry.Metadata, entry.Html))];
         app.UseContentSource(_ => items);
         MapSite(app);
-        return (app, app.ServiceProvider.GetRequiredService<ContentDictionary<Post>>());
+        return app;
     }
 
     /// <summary>
-    /// Registers the test assembly's pages via the scan API and neutralizes the
-    /// test-only dynamic templates with empty route sets, so callers only map the
-    /// templates they actually exercise.
+    /// Registers the test assembly's static pages; callers map dynamic routes explicitly.
     /// </summary>
     public static StaticSite MapTestAssemblyPages(StaticSite app)
     {
@@ -84,60 +69,17 @@ internal static class TestArticleContents
 
         app.AddPages<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
-        app.AddPages<TagsPage>(static services => CreateTagNameMap(
-                services.GetRequiredService<ContentDictionary<Post>>().Values
-                    .SelectMany(static post => post.Tags.Select(static tag => tag.Name)))
-            .OrderBy(static pair => pair.Value, StringComparer.OrdinalIgnoreCase)
-            .Select(static pair => new { TagSlug = pair.Key }));
+        app.AddPages<TagsPage>(static services => services.GetRequiredService<ContentDictionary<Post>>().Values
+            .SelectMany(static post => post.Tags.Select(static tag => tag.UrlSlug))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(static slug => new { TagSlug = slug }));
 
         return app;
     }
 
-    /// <summary>
-    /// Site-side taxonomy helper: maps canonical tag slugs to their display names,
-    /// rejecting tags whose slugs collide.
-    /// </summary>
-    public static IReadOnlyDictionary<string, string> CreateTagNameMap(IEnumerable<string> tagNames)
-    {
-        var namesBySlug = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var tagName in tagNames
-            .Where(static value => !string.IsNullOrWhiteSpace(value))
-            .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
-            .Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            var slug = NormalizeSlug(tagName);
-            if (namesBySlug.TryGetValue(slug, out var existingValue) &&
-                !string.Equals(existingValue, tagName, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException(
-                    $"Tags '{existingValue}' and '{tagName}' both normalize to canonical tag slug '{slug}'. Rename one of the tags so each tag keeps a unique canonical URL.");
-            }
-
-            namesBySlug[slug] = tagName;
-        }
-
-        return namesBySlug;
-    }
-
-    private static string NormalizeSlug(string value)
-    {
-        var trimmed = value.Trim().Trim('/', '\\');
-        if (trimmed.Length == 0 || trimmed.Contains('/') || trimmed.Contains('\\'))
-        {
-            throw new InvalidOperationException($"Slug '{value}' must be a non-empty single route segment.");
-        }
-
-        var normalized = Regex.Replace(trimmed.ToLowerInvariant(), @"[^a-z0-9\-]", "-");
-        normalized = Regex.Replace(normalized, "-+", "-").Trim('-');
-        return normalized.Length > 0
-            ? normalized
-            : throw new InvalidOperationException($"Slug '{value}' cannot be normalized to an empty value.");
-    }
-
     public static IReadOnlyList<PageRenderRequest> CreatePageRequests(params (Post Metadata, string Html)[] entries)
     {
-        var (app, _) = CreateApp(entries);
+        var app = CreateApp(entries);
         return app.CreateSnapshot().Pages;
     }
 
@@ -150,11 +92,6 @@ internal static class TestArticleContents
         params string[] tags)
     {
         return Post.Create(CreateMarkdownContent(slug, title, description, ToDateTimeOffset(createdAt), updatedAt.HasValue ? ToDateTimeOffset(updatedAt.Value) : null, $"<p>{title}</p>", tags));
-    }
-
-    private static ContentDictionary<Post> ContentDictionaryFromItems(IReadOnlyList<Post> posts)
-    {
-        return ContentDictionaryFixture.FromItems(posts, key: static post => post.Slug);
     }
 
     private static Post ClonePost(Post post, string html)

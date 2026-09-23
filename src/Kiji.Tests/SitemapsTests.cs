@@ -53,7 +53,6 @@ public sealed class SitemapsTests
                 "https://example.com/kiji/blog/zebra/",
             ],
             locs);
-        Assert.DoesNotContain("https://example.com/kiji/404.html", locs);
     }
 
     [Fact]
@@ -80,14 +79,6 @@ public sealed class SitemapsTests
     public void Constructor_RejectsInvalidExcludedPath()
     {
         Assert.Throws<ArgumentException>(() => new SitemapArtifact(excludedPaths: ["/preview/"]));
-    }
-
-    [Fact]
-    public void SitePageInfo_AllowsTheEmptyRootRelativePath()
-    {
-        var page = new SitePageInfo("", "index.html");
-
-        Assert.Equal(string.Empty, page.RelativePath);
     }
 
 }

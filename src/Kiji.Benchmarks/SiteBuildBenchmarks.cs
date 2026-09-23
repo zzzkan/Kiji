@@ -1,5 +1,5 @@
 using System.Globalization;
-using System.Text.RegularExpressions;
+using System.Text.Json.Nodes;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
 using Kiji.Generation;
@@ -24,7 +24,7 @@ namespace Kiji.Benchmarks;
 /// </remarks>
 [SimpleJob(RunStrategy.Monitoring, launchCount: 1, warmupCount: 2, iterationCount: 10, invocationCount: 1)]
 [MemoryDiagnoser]
-public partial class SiteBuildBenchmarks
+public class SiteBuildBenchmarks
 {
     private readonly Dictionary<string, TimeSpan> _phaseTotals = [];
     private string _root = string.Empty;
@@ -37,7 +37,7 @@ public partial class SiteBuildBenchmarks
     [Params(200, 1000)]
     public int Pages { get; set; }
 
-    [Params(BuildScenario.Full, BuildScenario.NoChange, BuildScenario.OneEdited, BuildScenario.CodeChanged)]
+    [Params(BuildScenario.Full, BuildScenario.NoChange, BuildScenario.CacheOnly, BuildScenario.OneEdited, BuildScenario.CodeChanged)]
     public BuildScenario Scenario { get; set; }
 
     [GlobalSetup]
@@ -45,7 +45,7 @@ public partial class SiteBuildBenchmarks
     {
         _root = Path.Combine(Path.GetTempPath(), $"kiji-bdn-{Pages}-{Scenario}-{Guid.NewGuid():N}");
         _editedPost = Path.Combine(_root, "contents", "post-00000", "index.md");
-        _manifestPath = Path.Combine(_root, ".kiji", "cache", "build-manifest.json");
+        _manifestPath = Path.Combine(_root, ".kiji", "cache", "manifest.json");
 
         if (!Directory.Exists(Path.Combine(_root, "contents")))
         {
@@ -114,15 +114,16 @@ public partial class SiteBuildBenchmarks
                 break;
 
             case BuildScenario.CodeChanged:
-                // An assembly's module version ID is how the planner sees a code change,
-                // and it cannot be changed from inside the running process. Rewriting the
-                // one the manifest recorded produces exactly the same decision: every page
-                // re-renders, with the manifest still intact and still trusted.
-                var manifest = File.ReadAllText(_manifestPath);
-                File.WriteAllText(_manifestPath, MvidPattern().Replace(
-                    manifest,
-                    $":{Guid.NewGuid():N}\"",
-                    count: 1));
+                // Change a recorded code dependency while retaining valid output hashes.
+                // This simulates a code update without changing the frozen workload.
+                var manifest = JsonNode.Parse(File.ReadAllText(_manifestPath))!;
+                manifest["CodeDependencies"]!.AsArray()[0] = "benchmark-code-change";
+                File.WriteAllText(_manifestPath, manifest.ToJsonString());
+                break;
+
+            case BuildScenario.CacheOnly:
+                var output = Path.Combine(_root, "dist");
+                if (Directory.Exists(output)) { Directory.Delete(output, recursive: true); }
                 break;
 
             case BuildScenario.NoChange:
@@ -138,7 +139,4 @@ public partial class SiteBuildBenchmarks
         return BuildRunner.BuildSiteAsync(_root);
     }
 
-    /// <summary>Matches the hex module version ID in a manifest's assembly entry.</summary>
-    [GeneratedRegex(":[0-9a-f]{32}\"")]
-    private static partial Regex MvidPattern();
 }

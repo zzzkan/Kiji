@@ -1,16 +1,10 @@
-using System.Collections.Frozen;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
 using Kiji.Markdown;
 
 namespace Kiji.Benchmarks;
 
-/// <summary>Separately measures reading/parsing sources and constructing the content dictionary.</summary>
-/// <remarks>
-/// Reading and parsing the files is parallel; turning them into a keyed dictionary is
-/// not. This measures both so the next optimization goes where the time actually is
-/// rather than where it looks like it should be.
-/// </remarks>
+/// <summary>Measures Markdown loading against its file I/O cost.</summary>
 [SimpleJob(RunStrategy.Monitoring, launchCount: 1, warmupCount: 2, iterationCount: 10, invocationCount: 1)]
 [MemoryDiagnoser]
 public class ContentLoadBenchmarks
@@ -18,7 +12,6 @@ public class ContentLoadBenchmarks
     private const int Files = 1000;
 
     private string _contentsDirectory = string.Empty;
-    private IReadOnlyList<MarkdownContent<BenchFrontMatter>> _contents = [];
 
     [GlobalSetup]
     public void Setup()
@@ -43,7 +36,6 @@ public class ContentLoadBenchmarks
                 Body text with some *emphasis* and a [link](/). {new string('x', 2000)}
                 """);
         }
-        _contents = LoadContents();
     }
 
     [GlobalCleanup]
@@ -66,57 +58,11 @@ public class ContentLoadBenchmarks
         return total;
     }
 
-    /// <summary>Walking the tree for stamps only — what a cache hit would cost.</summary>
-    [Benchmark]
-    public long StampsOnly()
-    {
-        long total = 0;
-        foreach (var file in new DirectoryInfo(_contentsDirectory).EnumerateFiles("*.md", SearchOption.AllDirectories))
-        {
-            total += file.Length + file.LastWriteTimeUtc.Ticks;
-        }
-
-        return total;
-    }
-
     /// <summary>Reading, hashing and front-matter parsing — the parallel part.</summary>
     [Benchmark(Baseline = true)]
     public int ReadAndParse()
     {
         return LoadContents().Count;
-    }
-
-    /// <summary>
-    /// The same, plus what turns the result into a keyed dictionary: key selection, a
-    /// duplicate check, two <see cref="FrozenDictionary{TKey, TValue}"/> builds and an
-    /// ordered entry array. All of that runs on one thread.
-    /// </summary>
-    [Benchmark]
-    public int ReadAndParseThenIndex()
-    {
-        return Index(LoadContents());
-    }
-
-    [Benchmark]
-    public int IndexOnly() => Index(_contents);
-
-    private static int Index(IReadOnlyList<MarkdownContent<BenchFrontMatter>> contents)
-    {
-
-        var index = new Dictionary<string, MarkdownContent<BenchFrontMatter>>(contents.Count, StringComparer.OrdinalIgnoreCase);
-        var provenance = new Dictionary<string, string?>(contents.Count, StringComparer.OrdinalIgnoreCase);
-        foreach (var content in contents)
-        {
-            var key = content.FileInfo.FullName;
-            index[key] = content;
-            provenance[key] = content.FileInfo.FullName;
-        }
-
-        var entries = index.OrderBy(static entry => entry.Key, StringComparer.Ordinal).ToArray();
-        var frozen = index.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
-        var frozenProvenance = provenance.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
-
-        return entries.Length + frozen.Count + frozenProvenance.Count;
     }
 
     private IReadOnlyList<MarkdownContent<BenchFrontMatter>> LoadContents()

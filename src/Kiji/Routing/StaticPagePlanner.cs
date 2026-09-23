@@ -20,8 +20,6 @@ internal static class StaticPagePlanner
         ArgumentNullException.ThrowIfNull(pages);
         ArgumentNullException.ThrowIfNull(dynamicRoutesByPage);
 
-        ValidateDynamicPageCoverage(pages, dynamicRoutesByPage);
-
         var plannedPages = new List<PageRenderRequest>();
         foreach (var page in pages.OrderBy(static page => page.SourceIdentifier, StringComparer.OrdinalIgnoreCase))
         {
@@ -87,38 +85,6 @@ internal static class StaticPagePlanner
                 page.PageDefinition.ResolveRoutePath(routeValues),
                 page.PageDefinition.ResolveOutputRelativePath(routeValues));
         })];
-    }
-
-    private static void ValidateDynamicPageCoverage(
-        IReadOnlyList<PageDiscovery.DiscoveredPage> pages,
-        IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyDictionary<string, object?>>> dynamicRoutesByPage)
-    {
-        var pageSet = pages.Select(static page => page.SourceIdentifier)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        var missingRoutes = pages
-            .Where(static page => page.PageDefinition.IsDynamic)
-            .Select(static page => page.SourceIdentifier)
-            .Where(sourceIdentifier => !dynamicRoutesByPage.ContainsKey(sourceIdentifier))
-            .OrderBy(static sourceIdentifier => sourceIdentifier, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        if (missingRoutes.Length > 0)
-        {
-            throw new InvalidOperationException(
-                $"Dynamic route templates require a static route provider: {string.Join(", ", missingRoutes.Select(route => $"'{route}'"))}.");
-        }
-
-        var extraRoutes = dynamicRoutesByPage.Keys
-            .Where(route => !pageSet.Contains(route))
-            .OrderBy(static route => route, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        if (extraRoutes.Length > 0)
-        {
-            throw new InvalidOperationException(
-                $"Static route providers returned entries for undeclared routes: {string.Join(", ", extraRoutes.Select(route => $"'{route}'"))}.");
-        }
     }
 
     private static void ValidateUniqueOutputPaths(IReadOnlyList<PageRenderRequest> pages)

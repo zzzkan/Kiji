@@ -1,5 +1,4 @@
-using System.IO.Hashing;
-using System.Text;
+using Kiji.Generation;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Formats.Webp;
@@ -29,18 +28,30 @@ internal sealed class ImageProcessor(ImageOptions? options = null) : IImageProce
         _configuration.MaxDegreeOfParallelism = innerParallelism;
     }
 
+    private static readonly string EncoderIdentity = $"mvid:{typeof(WebpEncoder).Assembly.ManifestModule.ModuleVersionId:N}";
+
+    public string CacheIdentity => BuildFingerprint.HashText(FormattableString.Invariant(
+        $"webp-v2:{_options.Quality}:{_options.MaxSourceWidth}:{string.Join(",", _options.Widths)}:{EncoderIdentity}"));
+
     /// <inheritdoc/>
     public async Task<ProcessedImageInfo> ProcessAsync(
         string sourceFilePath,
         string outputDirectory,
-        string? cacheDirectory = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceFilePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
 
         cancellationToken.ThrowIfCancellationRequested();
+        var bytes = await File.ReadAllBytesAsync(sourceFilePath, cancellationToken);
+        return await ProcessBytesAsync(bytes, Path.GetFileName(sourceFilePath), BuildFingerprint.HashBytes(bytes),
+            outputDirectory, cancellationToken);
+    }
 
+    internal async Task<ProcessedImageInfo> ProcessBytesAsync(byte[] bytes, string fileNameBase, string sourceHash,
+        string outputDirectory, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(_options.Widths);
         ArgumentOutOfRangeException.ThrowIfLessThan(_options.MaxSourceWidth, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(_options.Quality, 0);
@@ -50,14 +61,14 @@ internal sealed class ImageProcessor(ImageOptions? options = null) : IImageProce
             ArgumentOutOfRangeException.ThrowIfLessThan(width, 1);
         }
 
-        var contentHash = await ComputeFileHashAsync(sourceFilePath, cancellationToken);
-        var identity = await Image.IdentifyAsync(sourceFilePath, cancellationToken);
+        var contentHash = BuildFingerprint.HashText(CacheIdentity + ":" + sourceHash);
+        using var source = new MemoryStream(bytes, writable: false);
+        var identity = await Image.IdentifyAsync(source, cancellationToken);
+        source.Position = 0;
         var originalWidth = identity.Width;
         var originalHeight = identity.Height;
 
-        var fileNameBase = Path.GetFileName(sourceFilePath);
-        var materializeDirectory = cacheDirectory ?? outputDirectory;
-        Directory.CreateDirectory(materializeDirectory);
+        Directory.CreateDirectory(outputDirectory);
         // Another page may still reference an older variant with this basename.
         // Only output reconciliation knows which files are safe to remove.
 
@@ -73,7 +84,7 @@ internal sealed class ImageProcessor(ImageOptions? options = null) : IImageProce
         // global slot so duplicate callers never hold scarce generation capacity.
         var variants = new List<ImageVariant>(targetWidths.Length);
         using (await ImageGenerationLock.AcquireAsync(
-            Path.Combine(materializeDirectory, $"{fileNameBase}.{contentHash}"), cancellationToken))
+            Path.Combine(outputDirectory, $"{fileNameBase}.{contentHash}"), cancellationToken))
         {
             Image? image = null;
             var ownsSlot = false;
@@ -82,7 +93,7 @@ internal sealed class ImageProcessor(ImageOptions? options = null) : IImageProce
                 foreach (var targetWidth in targetWidths)
                 {
                     var fileName = $"{fileNameBase}.{contentHash}.{targetWidth}w.webp";
-                    var materializedPath = Path.Combine(materializeDirectory, fileName);
+                    var materializedPath = Path.Combine(outputDirectory, fileName);
 
                     if (!File.Exists(materializedPath))
                     {
@@ -93,7 +104,7 @@ internal sealed class ImageProcessor(ImageOptions? options = null) : IImageProce
                         }
                         if (!File.Exists(materializedPath))
                         {
-                            image ??= await LoadImageWithoutMetadataAsync(sourceFilePath, cancellationToken);
+                            image ??= await LoadImageWithoutMetadataAsync(source, cancellationToken);
                             if (BeforeEncodeAsync is { } beforeEncode)
                             {
                                 await beforeEncode(materializedPath, cancellationToken);
@@ -114,16 +125,6 @@ internal sealed class ImageProcessor(ImageOptions? options = null) : IImageProce
             }
         }
 
-        // The cached bytes are complete. Page-local copying neither holds the
-        // image-family lock nor keeps a decoded image/global slot alive.
-        if (cacheDirectory is not null)
-        {
-            foreach (var variant in variants)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                CopyIntoOutput(Path.Combine(materializeDirectory, variant.FileName), outputDirectory, variant.FileName);
-            }
-        }
         return new ProcessedImageInfo
         {
             OriginalWidth = originalWidth,
@@ -132,9 +133,9 @@ internal sealed class ImageProcessor(ImageOptions? options = null) : IImageProce
         };
     }
 
-    private async Task<Image> LoadImageWithoutMetadataAsync(string sourceFilePath, CancellationToken cancellationToken)
+    private async Task<Image> LoadImageWithoutMetadataAsync(Stream source, CancellationToken cancellationToken)
     {
-        var image = await Image.LoadAsync(new DecoderOptions { Configuration = _configuration }, sourceFilePath, cancellationToken);
+        var image = await Image.LoadAsync(new DecoderOptions { Configuration = _configuration }, source, cancellationToken);
 
         // Remove metadata for privacy/security.
         image.Metadata.ExifProfile = null;
@@ -190,36 +191,4 @@ internal sealed class ImageProcessor(ImageOptions? options = null) : IImageProce
         }
     }
 
-    private static void CopyIntoOutput(string materializedPath, string outputDirectory, string fileName)
-    {
-        Directory.CreateDirectory(outputDirectory);
-        var outputPath = Path.Combine(outputDirectory, fileName);
-        if (File.Exists(outputPath))
-        {
-            return;
-        }
-
-        var temporaryPath = $"{outputPath}.{Guid.NewGuid():N}.tmp";
-        try
-        {
-            File.Copy(materializedPath, temporaryPath, overwrite: false);
-            try { File.Move(temporaryPath, outputPath, overwrite: false); }
-            catch (IOException) when (File.Exists(outputPath))
-            {
-                // The other caller published complete bytes, never a partial copy.
-            }
-        }
-        finally { File.Delete(temporaryPath); }
-    }
-
-    private async Task<string> ComputeFileHashAsync(string filePath, CancellationToken cancellationToken)
-    {
-        using var stream = File.OpenRead(filePath);
-        var hasher = new XxHash128();
-        // Encoding settings and encoder upgrades must not reuse earlier bytes.
-        hasher.Append(Encoding.UTF8.GetBytes(FormattableString.Invariant(
-            $"webp-v1:{_options.Quality}:{typeof(WebpEncoder).Assembly.ManifestModule.ModuleVersionId:N}:")));
-        await hasher.AppendAsync(stream, cancellationToken);
-        return Convert.ToHexStringLower(hasher.GetCurrentHash());
-    }
 }

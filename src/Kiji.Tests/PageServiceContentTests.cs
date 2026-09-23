@@ -35,10 +35,15 @@ public sealed class PageServiceContentTests : IDisposable
         Assert.Contains(change == "add" ? "related:second,third" : "related:</p>",
             incremental[Path.Combine("related", "first", "index.html")], StringComparison.Ordinal);
 
-        // A different output has no matching manifest and must render from scratch.
+        // A different output can restore the portable cache. Force a clean render.
         await using var fresh = CreateApp(new RelatedProbe());
         var full = Path.Combine(_root, "full");
-        await fresh.PublishAsync(full);
+        await fresh.RunAsync(name => name switch
+        {
+            "KIJI_OUTPUT" => full,
+            "KIJI_FORCE" => "true",
+            _ => null,
+        }, CancellationToken.None);
         var expected = ReadHtml(full);
         Assert.Equal(expected.Keys.Order(), incremental.Keys.Order());
         foreach (var (key, html) in expected)
@@ -110,8 +115,9 @@ public sealed class PageServiceContentTests : IDisposable
         app.Info = new SiteInfo { Name = "Related", BaseUrl = new Uri("https://example.test/") };
         app.Paths.RootDirectory = _root;
         app.UseMarkdownContent<FrontMatter>();
-        app.UseContentSource<RelatedTag>(provider => includeTags?.Invoke() == false ? []
-            : RelatedTag.Collect(provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>(), probe));
+        app.UseContentSource<RelatedTag>("tags", provider => includeTags?.Invoke() == false ? []
+            : [.. RelatedTag.Collect(provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>(), probe)
+                .Select(tag => new ContentEntry<RelatedTag>(tag.Name, tag, string.Join("|", tag.Keys)))]);
         app.AddPageService<RelatedPosts>();
         app.AddPages<RelatedPage>(provider => provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
             .Select(post => new

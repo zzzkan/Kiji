@@ -54,13 +54,6 @@ public sealed class ContentDictionaryTests
         Assert.Equal(1, found.Order);
         Assert.True(dictionary.ContainsKey("B"));
         Assert.False(dictionary.ContainsKey("missing"));
-    }
-
-    [Fact]
-    public void Indexer_UnknownKey_Throws()
-    {
-        var dictionary = ContentDictionaryFixture.FromItems<Item>([new("a", 1)], static item => item.Slug);
-
         Assert.Throws<KeyNotFoundException>(() => dictionary["missing"]);
     }
 

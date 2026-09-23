@@ -4,12 +4,13 @@ namespace Kiji.Tests.TestSite.PageServices;
 
 public sealed class TrackingImageProcessor : IImageProcessor, IAsyncDisposable
 {
+    public string CacheIdentity => "tracking-svg-v1";
     private int _calls;
     public int Calls => _calls;
     public int DisposeCount { get; private set; }
 
     public async Task<ProcessedImageInfo> ProcessAsync(string sourceFilePath, string outputDirectory,
-        string? cacheDirectory = null, CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default)
     {
         Interlocked.Increment(ref _calls);
         Directory.CreateDirectory(outputDirectory);

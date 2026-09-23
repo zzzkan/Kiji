@@ -26,21 +26,16 @@ dotnet run -c Release --project src/Kiji.Benchmarks -- --filter "*Markdown*"
 dotnet run -c Release --project src/Kiji.SyntheticSite -- --pages 1000 --runs 5 --full --phases --root <dir>
 ```
 
-`SiteBuildBenchmarks` covers 200 / 1000 pages × `Full` / `NoChange` /
+`SiteBuildBenchmarks` covers 200 / 1000 pages × `Full` / `NoChange` / `CacheOnly` /
 `OneEdited` / `CodeChanged`. Each case generates a unique deterministic corpus in
 `GlobalSetup` and deletes it in `GlobalCleanup`, outside measurement. Edits alternate
 between equal-length bodies in `IterationSetup`; never append repeatedly.
 
-`ImageProcessingBenchmarks` uses a separate generated image workload (shared/distinct,
-cold/warm, ordinary/high-resolution). The exact original can fail with a shared-cache
-publication race. `ImageDuplicateAllocationBenchmarks` guards only the old publication
-and copy steps so duplicate-work allocations can be compared; its elapsed time is not
-the exact original's elapsed time. `ImageParallelismBenchmarks` compares outer and inner
-parallelism, but its four requests cannot establish a general optimum above four slots.
-
-`ContentLoadBenchmarks` separates reads, stamps and index-only construction;
-`MarkdownEventBenchmarks` separates event parsing, encoding, conversion and snapshot I/O.
-The syntax cache under the benchmark project is experimental, not a shipped cache.
+`ImageProcessingBenchmarks` measures the current image pipeline with a separate generated
+workload (shared/distinct, cold/warm, ordinary/high-resolution). `ContentLoadBenchmarks`
+separates file reads from actual Markdown loading. Benchmark current production paths;
+keep temporary comparison implementations and rejected experiments under ignored
+`artifacts`, not in the maintained benchmark suite.
 
 `SyntheticSite` flags: `--pages N`, `--runs N`, `--images` (adds a cover image to every
 tenth post), `--full` (delete `.kiji` before every run, so every run is a full build),
@@ -68,6 +63,10 @@ hundreds of milliseconds between sessions on the same binary. **Only an interlea
 comparison within a single session is valid.**
 
 1. Preserve the requested starting state, including uncommitted changes. Save the baseline binaries before editing; do not substitute HEAD for a dirty baseline. Build both in Release.
+   A BenchmarkDotNet comparison of saved binaries must load both through equivalent
+   AssemblyLoadContexts and verify equal output in setup. A project reference to the
+   current tree is not a saved baseline. Do not mix default-context and saved-context
+   timings or normalize output differences unless the change explicitly permits them.
 2. Generate the corpus once and share it: both sides run with the same `--root`.
 3. Alternate baseline / candidate for at least three rounds, `--runs 5 --full`.
 4. Drop run 1 of every invocation; compare medians of what is left, per phase.

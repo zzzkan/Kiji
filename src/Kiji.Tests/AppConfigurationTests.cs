@@ -50,10 +50,12 @@ public sealed class AppConfigurationTests : IDisposable
         var loads = 0;
         var routeCalls = 0;
         string? observedOutput = null;
+        string? observedCache = null;
         app.UseContentSource<Post>(provider =>
         {
             loads++;
             observedOutput = provider.GetRequiredService<ResolvedSitePaths>().OutputDirectory;
+            observedCache = provider.GetRequiredService<ResolvedSitePaths>().ImageCacheDirectory;
             Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<object>());
             return [];
         });
@@ -90,7 +92,10 @@ public sealed class AppConfigurationTests : IDisposable
         }
 
         Assert.True(routeCalls > 0);
-        Assert.Equal(serve ? Path.Combine(_root, ".kiji", "cache", "site") : output, observedOutput);
+        Assert.Equal(serve ? Path.Combine(_root, ".kiji", "dev-site") : output, observedOutput);
+        Assert.Equal(serve ? null
+            : Path.Combine(_root, ".kiji", "cache", "images"), observedCache);
+        if (serve) { Assert.False(Directory.Exists(Path.Combine(_root, ".kiji", "cache"))); }
 
         void AssertFrozen()
         {

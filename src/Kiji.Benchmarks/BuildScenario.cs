@@ -1,7 +1,7 @@
 namespace Kiji.Benchmarks;
 
 /// <summary>
-/// The three builds a site author actually waits on.
+/// The build scenarios a site author waits on.
 /// </summary>
 public enum BuildScenario
 {
@@ -15,6 +15,9 @@ public enum BuildScenario
     /// Nothing changed since the last build: the cost of proving that.
     /// </summary>
     NoChange,
+
+    /// <summary>Only the portable cache survives; all outputs are restored.</summary>
+    CacheOnly,
 
     /// <summary>
     /// One post edited — the number a site author feels while writing.

@@ -15,7 +15,6 @@
   the file by hand, as the last element of the project.
 -->
 <Project>
-
   <!-- ==============================================================
        Does this project host a site?
        ============================================================== -->
@@ -39,6 +38,17 @@
 
     <!-- The one opt-out: -p:KijiGenerateOnPublish=false publishes the app normally. -->
     <KijiGenerateOnPublish Condition="'$(KijiGenerateOnPublish)' == ''">$(_KijiIsSiteApp)</KijiGenerateOnPublish>
+  </PropertyGroup>
+
+  <!-- Release sites are build tools whose deliverable is HTML. Keep their MVIDs
+       stable across checkouts and content-only commits, including build followed
+       by a publish without building. Debug builds, libraries, and tests retain SDK defaults. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' and '$(_KijiIsSiteApp)' == 'true'">
+    <DebugType>none</DebugType>
+    <Deterministic>true</Deterministic>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <PathMap Condition="'$(PathMap)' != ''">$(PathMap),</PathMap>
+    <PathMap>$(PathMap)$(MSBuildProjectDirectory)=/_/source</PathMap>
   </PropertyGroup>
 
   <!-- ==============================================================

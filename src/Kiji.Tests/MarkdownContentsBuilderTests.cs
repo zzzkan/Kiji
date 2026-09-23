@@ -177,48 +177,9 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
             Assert.Single(third, static item => Path.GetFileNameWithoutExtension(item.FileInfo.Name) == "stable").FrontMatter);
     }
 
-    [Fact]
-    public async Task Build_WithSourceCache_ReloadsWhenLengthChangesAtSameTimestamp()
-    {
-        var path = Path.Combine(_contentsDir, "changing.md");
-        await File.WriteAllTextAsync(path, CreateValidMarkdown("Short", new DateTime(2024, 1, 15)));
-        var timestamp = File.GetLastWriteTimeUtc(path);
-        var builder = CreateCachedBuilder();
-
-        _ = builder.Build();
-        await File.WriteAllTextAsync(path, CreateValidMarkdown("A much longer title", new DateTime(2024, 1, 15)));
-        File.SetLastWriteTimeUtc(path, timestamp);
-
-        Assert.Equal("A much longer title", Assert.Single(builder.Build()).FrontMatter.Title);
-    }
-
-    [Fact]
-    public async Task Build_WithSourceCache_ReloadsWhenTimestampChangesAtSameLength()
-    {
-        var path = Path.Combine(_contentsDir, "changing.md");
-        await File.WriteAllTextAsync(path, CreateValidMarkdown("Before", new DateTime(2024, 1, 15)));
-        var timestamp = File.GetLastWriteTimeUtc(path);
-        var builder = CreateCachedBuilder();
-
-        _ = builder.Build();
-        await File.WriteAllTextAsync(path, CreateValidMarkdown("After!", new DateTime(2024, 1, 15)));
-        File.SetLastWriteTimeUtc(path, timestamp.AddSeconds(10));
-
-        Assert.Equal("After!", Assert.Single(builder.Build()).FrontMatter.Title);
-    }
-
     private MarkdownContentsBuilder<FrontMatter> CreateBuilder()
     {
         return new MarkdownContentsBuilder<FrontMatter>(_contentsDir, RenderAsync);
-    }
-
-    private MarkdownContentsBuilder<FrontMatter> CreateCachedBuilder()
-    {
-        return new MarkdownContentsBuilder<FrontMatter>(
-            _contentsDir,
-            RenderAsync,
-            static () => MarkdownFrontMatterParser.CreateDeserializer(null),
-            new MarkdownSourceCache<FrontMatter>());
     }
 
     private Task<string> RenderAsync(MarkdownContent<FrontMatter> content, CancellationToken cancellationToken)

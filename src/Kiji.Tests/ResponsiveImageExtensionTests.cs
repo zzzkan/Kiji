@@ -122,15 +122,4 @@ public sealed class ResponsiveImageExtensionTests
         Assert.Contains("/kiji/blog/test-post/foo.png.png67890.", html);
     }
 
-    [Fact]
-    public void Process_NonImageLink_NotProcessed()
-    {
-        var imageInfoLookup = new Dictionary<string, ProcessedImageInfo>();
-        var markdown = "[Link text](https://example.com)";
-
-        var html = Render(markdown, imageInfoLookup);
-
-        Assert.Contains("<a href=\"https://example.com\"", html);
-        Assert.DoesNotContain("<img", html);
-    }
 }

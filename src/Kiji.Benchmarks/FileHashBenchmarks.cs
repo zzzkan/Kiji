@@ -1,4 +1,3 @@
-using System.IO.Hashing;
 using BenchmarkDotNet.Attributes;
 using Kiji.Generation;
 
@@ -24,7 +23,7 @@ public class FileHashBenchmarks
     [GlobalCleanup]
     public void Cleanup() => File.Delete(_path);
     [Benchmark(Baseline = true)]
-    public string ReadAll() => Convert.ToHexStringLower(XxHash128.Hash(File.ReadAllBytes(_path)));
+    public string ReadAll() => BuildFingerprint.HashBytes(File.ReadAllBytes(_path));
     [Benchmark]
     public string Streaming() => BuildFingerprint.HashFile(_path);
 }

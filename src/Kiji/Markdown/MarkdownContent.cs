@@ -11,23 +11,27 @@ public sealed class MarkdownContent<TFrontMatter>
     // Rendered HTML is cached per page route: local-image URLs and materialized variants
     // belong to the rendering page's output directory, so each page that embeds this
     // content must run the pipeline once.
-    private readonly ConcurrentDictionary<string, Lazy<Task<string>>> _renderTasksByRoute = new(StringComparer.Ordinal);
+    private ConcurrentDictionary<string, Lazy<Task<string>>>? _renderTasksByRoute;
 
     internal MarkdownContent(
         FileInfo fileInfo,
         TFrontMatter frontMatter,
         string body,
-        Func<MarkdownContent<TFrontMatter>, CancellationToken, Task<string>> renderAsync)
+        Func<MarkdownContent<TFrontMatter>, CancellationToken, Task<string>> renderAsync,
+        string? contentHash = null)
     {
         ArgumentNullException.ThrowIfNull(fileInfo);
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(renderAsync);
 
         FileInfo = fileInfo;
+        ContentHash = contentHash ?? Generation.BuildFingerprint.HashFile(fileInfo.FullName);
         FrontMatter = frontMatter;
         Body = body;
         _renderAsync = renderAsync;
     }
+
+    internal string ContentHash { get; }
 
     /// <summary>The source file metadata.</summary>
     public FileInfo FileInfo { get; }
@@ -45,7 +49,7 @@ public sealed class MarkdownContent<TFrontMatter>
         {
             // Reading front matter during a tracked render makes the page depend on
             // this file, so front-matter-only pages re-render when the file changes.
-            PageRenderContext.Current?.Dependencies?.AddFile(FileInfo.FullName);
+            PageRenderContext.Current?.Dependencies?.AddFile(FileInfo.FullName, ContentHash);
             return field;
         }
     }
@@ -54,7 +58,7 @@ public sealed class MarkdownContent<TFrontMatter>
     public async ValueTask<string> RenderAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        PageRenderContext.Current?.Dependencies?.AddFile(FileInfo.FullName);
+        PageRenderContext.Current?.Dependencies?.AddFile(FileInfo.FullName, ContentHash);
         // A tracked render must observe all dependencies and materialize its outputs
         // again, even if the same content instance was rendered in an earlier build.
         if (PageRenderContext.Current?.Dependencies is not null)
@@ -63,7 +67,9 @@ public sealed class MarkdownContent<TFrontMatter>
         }
 
         var cacheKey = PageRenderContext.Current?.RoutePath ?? string.Empty;
-        var cached = _renderTasksByRoute.GetOrAdd(cacheKey,
+        var tasks = LazyInitializer.EnsureInitialized(ref _renderTasksByRoute,
+            static () => new(StringComparer.Ordinal));
+        var cached = tasks.GetOrAdd(cacheKey,
             _ => new Lazy<Task<string>>(() => _renderAsync(this, CancellationToken.None)));
         try
         {
@@ -77,7 +83,7 @@ public sealed class MarkdownContent<TFrontMatter>
             // Do not evict a shared render merely because one waiting request left.
             if (!cached.IsValueCreated || cached.Value.IsCompleted)
             {
-                _renderTasksByRoute.TryRemove(new KeyValuePair<string, Lazy<Task<string>>>(cacheKey, cached));
+                tasks.TryRemove(new KeyValuePair<string, Lazy<Task<string>>>(cacheKey, cached));
             }
             throw;
         }

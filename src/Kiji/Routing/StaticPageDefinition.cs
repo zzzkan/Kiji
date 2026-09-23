@@ -45,7 +45,7 @@ internal sealed record StaticPageDefinition
             outputRelativePathOverride);
     }
 
-    public static string NormalizeRouteTemplate(string routeTemplate)
+    private static string NormalizeRouteTemplate(string routeTemplate)
     {
         if (string.IsNullOrWhiteSpace(routeTemplate))
         {
@@ -97,13 +97,12 @@ internal sealed record StaticPageDefinition
 
     private static IReadOnlyList<PageSegment> ParseSegments(string routeTemplate)
     {
-        var normalizedTemplate = NormalizeRouteTemplate(routeTemplate);
-        if (string.Equals(normalizedTemplate, "/", StringComparison.Ordinal))
+        if (string.Equals(routeTemplate, "/", StringComparison.Ordinal))
         {
             return [];
         }
 
-        return [.. normalizedTemplate
+        return [.. routeTemplate
             .Trim('/')
             .Split('/', StringSplitOptions.RemoveEmptyEntries)
             .Select(segment => ParseSegment(routeTemplate, segment))];

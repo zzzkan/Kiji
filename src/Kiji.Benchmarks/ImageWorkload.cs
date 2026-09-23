@@ -42,18 +42,9 @@ internal sealed class ImageWorkload : IDisposable
     }
 
     internal Task RunAsync(IImageProcessor processor) => Task.WhenAll(_sources.Select((source, i) =>
-        processor.ProcessAsync(source, Path.Combine(Output, i.ToString(System.Globalization.CultureInfo.InvariantCulture)), Cache)));
-
-    internal async Task RunSequentialAsync(IImageProcessor processor)
-    {
-        for (var i = 0; i < _sources.Length; i++)
-        {
-            await processor.ProcessAsync(_sources[i], Path.Combine(Output, i.ToString(System.Globalization.CultureInfo.InvariantCulture)), Cache);
-        }
-    }
-
-    internal Dictionary<string, byte[]> OutputBytes() => Directory.GetFiles(Output, "*", SearchOption.AllDirectories)
-        .ToDictionary(p => Path.GetRelativePath(Output, p), File.ReadAllBytes);
+        ImageArtifactProcessor.ProcessAsync(processor, source,
+            Path.Combine(Output, i.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+            Path.Combine(Cache, "images"), default)));
 
     public void Dispose()
     {

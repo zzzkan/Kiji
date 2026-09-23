@@ -26,18 +26,6 @@ public sealed class MarkdownOptionsTests : IDisposable
     }
 
     [Fact]
-    public async Task Default_ExternalLink_GetsSecureAttributes()
-    {
-        var mdPath = CreateMarkdownFile("secure.md", "[External](https://example.com)");
-        var processor = CreateProcessor();
-
-        var html = await ProcessFileAsync(processor, mdPath);
-
-        Assert.Contains("target=\"_blank\"", html);
-        Assert.Contains("rel=\"noopener noreferrer\"", html);
-    }
-
-    [Fact]
     public async Task ConfigureMarkdown_CanRemoveSecureLinkExtension()
     {
         var mdPath = CreateMarkdownFile("insecure.md", "[External](https://example.com)");
@@ -48,6 +36,9 @@ public sealed class MarkdownOptionsTests : IDisposable
 
         Assert.DoesNotContain("target=\"_blank\"", html);
         Assert.Contains("href=\"https://example.com\"", html);
+        var defaultHtml = await ProcessFileAsync(CreateProcessor(), mdPath);
+        Assert.Contains("target=\"_blank\"", defaultHtml);
+        Assert.Contains("rel=\"noopener noreferrer\"", defaultHtml);
     }
 
     [Fact]

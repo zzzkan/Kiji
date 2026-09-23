@@ -217,9 +217,9 @@ public sealed class PageRegistrationTests
             }
 
             await site.PublishAsync("dist");
-            using var manifest = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(root, ".kiji", "cache", "build-manifest.json")));
-            var identity = $"{type.Assembly.GetName().Name}:{type.Module.ModuleVersionId:N}";
-            Assert.Contains(manifest.RootElement.GetProperty("AssemblyMvids").EnumerateArray(), item => item.GetString() == identity);
+            using var manifest = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(root, ".kiji", "cache", "manifest.json")));
+            var identity = $"{type.Assembly.GetName().Name}:unavailable";
+            Assert.Contains(manifest.RootElement.GetProperty("CodeDependencies").EnumerateArray(), item => item.GetString() == identity);
         }
         finally
         {
@@ -235,11 +235,11 @@ public sealed class PageRegistrationTests
     {
         var type = CreatePageType("/fixed/", "/items/{Value}/");
         var scanned = PageDiscovery.FromAssembly(type.Assembly);
-        var typed = PageDiscovery.FromTypes([type]);
+        var typed = PageDiscovery.FromType(type);
         HotReloadHandler.ClearCache([type]);
 
         Assert.NotSame(scanned, PageDiscovery.FromAssembly(type.Assembly));
-        var refreshed = PageDiscovery.FromTypes([type]);
+        var refreshed = PageDiscovery.FromType(type);
         Assert.NotSame(typed[0], refreshed[0]);
         Assert.Equal(typed.Select(page => page.SourceIdentifier), refreshed.Select(page => page.SourceIdentifier));
     }

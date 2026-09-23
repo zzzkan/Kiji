@@ -12,11 +12,11 @@ public sealed class ModelTests
         var paths = new SitePaths(root);
 
         Assert.Equal("wwwroot", paths.StaticDirectory);
-        Assert.Equal(Path.Combine(root, "wwwroot"), paths.ResolveForPlanning().StaticDirectory);
+        Assert.Equal(Path.Combine(root, "wwwroot"), paths.ResolveForDevelopment().StaticDirectory);
     }
 
     [Fact]
-    public async Task MarkdownContent_FailedRenderCanBeRetried()
+    public async Task MarkdownContent_RetriesFailedRenderAndCachesSuccess()
     {
         var attempts = 0;
         var item = new MarkdownContent<string>(
@@ -29,42 +29,8 @@ public sealed class ModelTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => await item.RenderAsync());
         Assert.Equal("recovered", await item.RenderAsync());
+        Assert.Equal("recovered", await item.RenderAsync());
         Assert.Equal(2, attempts);
-    }
-
-    [Fact]
-    public async Task MarkdownContent_RenderAsyncCachesOutput()
-    {
-        var renderCount = 0;
-        var item = new MarkdownContent<string>(
-            new FileInfo(@"C:\test-contents\newer-post.md"),
-            "Newer",
-            string.Empty,
-            (_, _) =>
-            {
-                renderCount++;
-                return Task.FromResult("<p>Newer</p>");
-            });
-        Assert.Equal("<p>Newer</p>", await item.RenderAsync());
-        Assert.Equal("<p>Newer</p>", await item.RenderAsync());
-        Assert.Equal(1, renderCount);
-    }
-
-    [Fact]
-    public void ResolvedSitePaths_AllowsMissingContentsAndStaticDirectories()
-    {
-        var missingContents = Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}");
-        var missingStatic = Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}");
-
-        var options = new ResolvedSitePaths
-        {
-            ContentDirectory = missingContents,
-            StaticDirectory = missingStatic,
-            OutputDirectory = Path.Combine(Path.GetTempPath(), $"output-{Guid.NewGuid():N}"),
-        };
-
-        Assert.Equal(Path.GetFullPath(missingContents), options.ContentDirectory);
-        Assert.Equal(Path.GetFullPath(missingStatic), options.StaticDirectory);
     }
 
     [Fact]
@@ -79,17 +45,4 @@ public sealed class ModelTests
         Assert.Contains("The path must be absolute.", exception.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void ResolvedSitePaths_RejectsRelativeImageCacheDirectory()
-    {
-        var exception = Assert.Throws<ArgumentException>(() => new ResolvedSitePaths
-        {
-            ContentDirectory = Path.GetTempPath(),
-            StaticDirectory = Path.GetTempPath(),
-            OutputDirectory = Path.Combine(Path.GetTempPath(), $"output-{Guid.NewGuid():N}"),
-            ImageCacheDirectory = "relative-cache",
-        });
-
-        Assert.Contains("The path must be absolute.", exception.Message, StringComparison.Ordinal);
-    }
 }

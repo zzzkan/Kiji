@@ -29,10 +29,10 @@ public sealed class ImageConcurrencyTests : IDisposable
         {
             BeforeEncodeAsync = async (_, ct) => { Interlocked.Increment(ref count); entered.TrySetResult(); await release.Task.WaitAsync(ct); },
         };
-        var first = processor.ProcessAsync(source, Path.Combine(_root, "a"), Path.Combine(_root, "cache"));
+        var first = ImageArtifactProcessor.ProcessAsync(processor, source, Path.Combine(_root, "a"), Path.Combine(_root, "cache"), default);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        var others = Enumerable.Range(0, 12).Select(i => processor.ProcessAsync(source,
-            Path.Combine(_root, "page" + i), Path.Combine(_root, "cache"))).ToArray();
+        var others = Enumerable.Range(0, 12).Select(i => ImageArtifactProcessor.ProcessAsync(processor, source,
+            Path.Combine(_root, "page" + i), Path.Combine(_root, "cache"), default)).ToArray();
         release.SetResult();
         var info = await first;
         await Task.WhenAll(others);
@@ -112,10 +112,10 @@ public sealed class ImageConcurrencyTests : IDisposable
                 }
             },
         };
-        var first = processor.ProcessAsync(source, Path.Combine(_root, "first"),
+        var first = ImageArtifactProcessor.ProcessAsync(processor, source, Path.Combine(_root, "first"),
             Path.Combine(_root, "cache"), canceled.Token);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        var second = processor.ProcessAsync(source, Path.Combine(_root, "second"), Path.Combine(_root, "cache"));
+        var second = ImageArtifactProcessor.ProcessAsync(processor, source, Path.Combine(_root, "second"), Path.Combine(_root, "cache"), default);
         canceled.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
         var result = await second.WaitAsync(TimeSpan.FromSeconds(10));

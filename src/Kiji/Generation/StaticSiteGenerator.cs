@@ -14,7 +14,8 @@ internal static class StaticSiteGenerator
         IReadOnlyList<PageRenderRequest> pageRequests,
         Func<PageRenderRequest, TextWriter, CancellationToken, Task> renderPageAsync,
         IReadOnlyDictionary<string, BuildManifestPage>? previousOutputs,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool outputStampsValid = false)
     {
         // Resolve every output path once and create the directory set up front, so
         // the parallel render loop issues no per-page directory syscalls.
@@ -53,7 +54,7 @@ internal static class StaticSiteGenerator
                     && previousOutputs.TryGetValue(request.OutputRelativePath, out var recorded)
                         ? recorded
                         : null;
-                rendered[index] = await WritePageAsync(request, fullPath, renderPageAsync, previous, ct);
+                rendered[index] = await WritePageAsync(request, fullPath, renderPageAsync, previous, outputStampsValid, ct);
             });
 
         return rendered;
@@ -64,44 +65,27 @@ internal static class StaticSiteGenerator
         string fullPath,
         Func<PageRenderRequest, TextWriter, CancellationToken, Task> renderPageAsync,
         BuildManifestPage? previous,
+        bool outputStampsValid,
         CancellationToken cancellationToken)
     {
-        // Render into a pooled UTF-8 buffer, then persist with one preallocated write:
+        // Render into a pooled UTF-8 buffer, then persist with one write:
         // no StreamWriter/FileStream buffers and no chunked async writes per page.
         using var writer = new PooledUtf8TextWriter();
         await renderPageAsync(pageRequest, writer, cancellationToken);
         var outputHash = writer.GetContentHash();
 
-        // Rendering may produce identical HTML. Skip rewriting only when its hash
-        // and the existing output stamp still match the previous build.
-        var written = !AlreadyOnDisk(fullPath, previous, outputHash);
+        // Kiji owns generated outputs. Matching stamps avoid reopening unchanged
+        // files, but newly rendered bytes must still match the recorded hash.
+        var stamp = previous?.OutputHash == outputHash ? OutputStamp.Read(fullPath) : null;
+        var written = previous?.OutputHash != outputHash
+            || (!(outputStampsValid && stamp is not null && stamp == previous.Stamp) && !writer.MatchesFile(fullPath));
         if (written)
         {
             writer.WriteToFile(fullPath);
         }
 
         BuildOutput.Detail($"{(written ? "Generated" : "Unchanged")}: {fullPath}");
-        return new RenderedPage(pageRequest, outputHash, written);
-    }
-
-    /// <summary>
-    /// Whether the file already holds the bytes just rendered. The previous build's
-    /// recorded hash is trusted only while the file's stamp (length and last write
-    /// time) still matches what was recorded with it — the same short-circuit the skip
-    /// checks use, so this reads no files.
-    /// </summary>
-    private static bool AlreadyOnDisk(string fullPath, BuildManifestPage? previous, string outputHash)
-    {
-        if (previous is null
-            || !string.Equals(previous.OutputHash, outputHash, StringComparison.Ordinal)
-            || previous.OutputLength is not { } length
-            || previous.OutputLastWriteTimeUtc is not { } lastWriteTimeUtc)
-        {
-            return false;
-        }
-
-        var info = new FileInfo(fullPath);
-        return info.Exists && info.Length == length && info.LastWriteTimeUtc == lastWriteTimeUtc;
+        return new RenderedPage(pageRequest, outputHash, written, writer.ToArray());
     }
 
     internal static void ValidateNoStaticFileCollisions(ResolvedSitePaths options, IReadOnlyList<PageRenderRequest> pageRequests)

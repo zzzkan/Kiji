@@ -16,4 +16,4 @@ internal sealed record IncrementalBuildPlan(
     IReadOnlyList<BuildManifestPage> CarriedPages,
     BuildManifest? OldManifest,
     string OptionsHash,
-    IReadOnlyList<string> AssemblyMvids);
+    IReadOnlyList<string> CodeDependencies);

@@ -7,49 +7,24 @@ namespace Kiji.Markdown;
 internal sealed class MarkdownContentsBuilder<TFrontMatter>(
     string contentsDirectory,
     Func<MarkdownContent<TFrontMatter>, CancellationToken, Task<string>> renderAsync,
-    Func<IDeserializer>? frontMatterDeserializerFactory = null)
+    Func<IDeserializer>? frontMatterDeserializerFactory = null,
+    MarkdownSourceCache<TFrontMatter>? sourceCache = null,
+    ContentFileRegistry? hashRegistry = null,
+    string? scanDirectory = null,
+    Func<FileInfo, bool>? filter = null)
 {
-    private readonly string _contentsDirectory = contentsDirectory;
-    private readonly Func<MarkdownContent<TFrontMatter>, CancellationToken, Task<string>> _renderAsync = renderAsync;
     private readonly Func<IDeserializer> _frontMatterDeserializerFactory =
         frontMatterDeserializerFactory ?? (static () => MarkdownFrontMatterParser.DefaultDeserializer);
-    private readonly MarkdownSourceCache<TFrontMatter>? _sourceCache;
-    private readonly ContentFileRegistry? _hashRegistry;
-
-    /// <summary>
-    /// The directory actually scanned. Defaults to the content directory; a source
-    /// reading a subdirectory narrows it.
-    /// </summary>
-    private readonly string? _scanDirectory;
-
-    private readonly Func<FileInfo, bool>? _filter;
-
-    internal MarkdownContentsBuilder(
-        string contentsDirectory,
-        Func<MarkdownContent<TFrontMatter>, CancellationToken, Task<string>> renderAsync,
-        Func<IDeserializer> frontMatterDeserializerFactory,
-        MarkdownSourceCache<TFrontMatter> sourceCache,
-        ContentFileRegistry? hashRegistry = null,
-        string? scanDirectory = null,
-        Func<FileInfo, bool>? filter = null)
-        : this(contentsDirectory, renderAsync, frontMatterDeserializerFactory)
-    {
-        _sourceCache = sourceCache;
-        _hashRegistry = hashRegistry;
-        _scanDirectory = scanDirectory;
-        _filter = filter;
-    }
 
     public IReadOnlyList<MarkdownContent<TFrontMatter>> Build()
     {
-        var scanDirectory = _scanDirectory ?? _contentsDirectory;
-        if (!Directory.Exists(scanDirectory))
+        var directory = scanDirectory ?? contentsDirectory;
+        if (!Directory.Exists(directory))
         {
-            throw new DirectoryNotFoundException($"Contents directory not found: {scanDirectory}");
+            throw new DirectoryNotFoundException($"Contents directory not found: {directory}");
         }
 
-        // Reuse the size and timestamp returned by directory enumeration.
-        var markdownFiles = new DirectoryInfo(scanDirectory)
+        var markdownFiles = new DirectoryInfo(directory)
             .EnumerateFiles("*.md", SearchOption.AllDirectories)
             .OrderBy(static file => file.FullName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -62,7 +37,7 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
         var items = new MarkdownContent<TFrontMatter>[markdownFiles.Length];
         var errors = new Exception?[markdownFiles.Length];
         // Only allocated when filtering, so the common path keeps the array as-is.
-        var included = _filter is null ? null : new bool[markdownFiles.Length];
+        var included = filter is null ? null : new bool[markdownFiles.Length];
         using var deserializers = new ThreadLocal<IDeserializer>(_frontMatterDeserializerFactory);
 
         Parallel.For(0, markdownFiles.Length, index =>
@@ -70,9 +45,9 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
             try
             {
                 var fileInfo = markdownFiles[index];
-                if (_filter is not null)
+                if (filter is not null)
                 {
-                    if (!_filter(fileInfo))
+                    if (!filter(fileInfo))
                     {
                         return;
                     }
@@ -80,11 +55,11 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
                     included![index] = true;
                 }
 
-                var source = _sourceCache is not null
-                    ? _sourceCache.GetOrRead(fileInfo, deserializers.Value!)
+                var source = sourceCache is not null
+                    ? sourceCache.GetOrRead(fileInfo, deserializers.Value!)
                     : MarkdownSourceReader.Read<TFrontMatter>(fileInfo, deserializers.Value!);
-                items[index] = new MarkdownContent<TFrontMatter>(fileInfo, source.FrontMatter, source.Body, _renderAsync);
-                _hashRegistry?.Record(fileInfo, source.ContentHash);
+                items[index] = new MarkdownContent<TFrontMatter>(fileInfo, source.FrontMatter, source.Body, renderAsync, source.ContentHash);
+                hashRegistry?.Record(fileInfo, source.ContentHash);
             }
             catch (Exception exception)
             {
@@ -100,13 +75,7 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
             ExceptionDispatchInfo.Capture(firstError).Throw();
         }
 
-        _sourceCache?.Prune(markdownFiles.Select(static file => file.FullName).ToHashSet(StringComparer.OrdinalIgnoreCase));
-
-        // The planner fingerprints the same tree; handing it this listing spares it a
-        // second walk, which is the largest single cost left in a no-change build.
-        _hashRegistry?.RecordScan(
-            scanDirectory,
-            markdownFiles);
+        sourceCache?.Prune(markdownFiles.Select(static file => file.FullName).ToHashSet(StringComparer.OrdinalIgnoreCase));
 
         // Filtered-out slots were never assigned; compacting keeps the order above.
         return included is null

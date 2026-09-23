@@ -52,6 +52,7 @@ public sealed class StaticSite
     private StaticSite(string[] args)
     {
         _args = [.. args];
+        _runtime.Dependencies.Register("image-processor", () => ImageProcessorIdentity.Get(ServiceProvider.GetRequiredService<IImageProcessor>()));
         Paths = new SitePaths(SitePaths.ResolveDefaultRoot(AppContext.BaseDirectory, Directory.GetCurrentDirectory()));
     }
 
@@ -194,6 +195,37 @@ public sealed class StaticSite
     {
         EnsureConfigurable();
         _runtime.Register(new ContentDictionary<T>(_runtime, loader, contentSetScope));
+        return this;
+    }
+
+    /// <summary>Registers an external value; only pages reading it through PageBuildInputs depend on it.</summary>
+    public StaticSite AddPageInput(string key, Func<string> read)
+    {
+        EnsureConfigurable();
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        ArgumentNullException.ThrowIfNull(read);
+        _runtime.Dependencies.Register("external:" + key, read);
+        return this;
+    }
+
+    /// <summary>Registers a content source with stable identities and explicit data digests.</summary>
+    public StaticSite UseContentSource<T>(string sourceId, Func<IServiceProvider, IReadOnlyList<ContentEntry<T>>> loader)
+        where T : class
+    {
+        EnsureConfigurable();
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceId);
+        ArgumentNullException.ThrowIfNull(loader);
+        var digests = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        _runtime.Register(new ContentDictionary<T>(_runtime, services =>
+        {
+            var items = loader(services);
+            digests.Clear();
+            return [.. items.Select(entry =>
+            {
+                digests.Add(entry.Id, entry.Digest);
+                return (entry.Id, entry.Value, (string?)null);
+            })];
+        }, sourceId, (key, _) => digests.GetValueOrDefault(key)));
         return this;
     }
 
@@ -359,6 +391,7 @@ public sealed class StaticSite
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
         FreezeConfiguration();
 
+        await using var cacheLease = await CacheLease.AcquireAsync(Paths.ResolveCachePath(), cancellationToken);
         var options = Paths.ResolveForPublish(outputPath);
         OutputPathValidator.Validate(options, Paths.RootDirectory, Paths.ResolveKijiPath());
         UseRunOptions(options);
@@ -379,7 +412,8 @@ public sealed class StaticSite
             Info,
             _buildInputPaths,
             _buildInputValues,
-            _services!.GetService<ContentFileRegistry>());
+            _services!.GetService<ContentFileRegistry>(), _runtime.Dependencies,
+            _services!.GetRequiredService<IImageProcessor>());
 
         // Helpers and custom encoder factories may live outside the page assemblies.
         // Their code is a build input even when pages only reach it through injection.
@@ -401,7 +435,7 @@ public sealed class StaticSite
         Directory.CreateDirectory(options.OutputDirectory);
         phases.Mark(BuildPhaseTimer.Clean);
 
-        var staticFiles = await planner.SyncStaticFilesAsync(plan);
+        var staticFiles = await planner.SyncStaticFilesAsync();
         phases.Mark(BuildPhaseTimer.Static);
 
         // Render only the pages the plan could not prove unchanged, recording what
@@ -420,45 +454,58 @@ public sealed class StaticSite
             plan.OldManifest?.Pages.ToDictionary(
                 static page => page.OutputRelativePath,
                 StringComparer.OrdinalIgnoreCase),
-            cancellationToken);
+            cancellationToken,
+            planner.OutputStampsValid);
         phases.Mark(BuildPhaseTimer.Render);
 
         var artifacts = await GenerateArtifactsAsync(options, snapshot, cancellationToken);
         phases.Mark(BuildPhaseTimer.Artifacts);
 
-        // One entry per rendered page, each stat-ing its own dependencies: independent
-        // work, so it runs in parallel and lands at its own index to keep the manifest
-        // order deterministic.
-        var renderedEntries = new BuildManifestPage[rendered.Count];
-        Parallel.For(0, rendered.Count, index =>
+        // Input verification is independent of output reconciliation and entry
+        // construction. Join it before publishing the cache, including on failure.
+        var verification = recorders.IsEmpty ? Task.CompletedTask : Task.Run(
+            () => IncrementalBuildPlanner.VerifyInputs(recorders.Values), cancellationToken);
+        BuildManifest manifest;
+        try
         {
-            var page = rendered[index];
-            renderedEntries[index] = planner.CreatePageEntry(
-                page.Request,
-                page.OutputHash,
-                recorders[page.Request.OutputRelativePath]);
-        });
+            // One entry per rendered page, verifying its dependencies: independent
+            // work, so it runs in parallel and lands at its own index to keep the manifest
+            // order deterministic.
+            var renderedEntries = new BuildManifestPage[rendered.Count];
+            Parallel.For(0, rendered.Count, index =>
+            {
+                var page = rendered[index];
+                renderedEntries[index] = planner.CreatePageEntry(
+                    page.Request,
+                    page.OutputHash,
+                    recorders[page.Request.OutputRelativePath],
+                    page.Html);
+            });
 
-        var pageEntries = new List<BuildManifestPage>(plan.CarriedPages.Count + rendered.Count);
-        pageEntries.AddRange(plan.CarriedPages);
-        pageEntries.AddRange(renderedEntries);
+            var pageEntries = new List<BuildManifestPage>(plan.CarriedPages.Count + rendered.Count);
+            pageEntries.AddRange(plan.CarriedPages);
+            pageEntries.AddRange(renderedEntries);
+            pageEntries.Sort(static (left, right) => StringComparer.OrdinalIgnoreCase.Compare(
+                left.OutputRelativePath, right.OutputRelativePath));
 
-        phases.Mark(BuildPhaseTimer.Entries);
+            phases.Mark(BuildPhaseTimer.Entries);
 
-        var manifest = new BuildManifest
-        {
-            SchemaVersion = BuildManifest.CurrentSchemaVersion,
-            OptionsHash = plan.OptionsHash,
-            AssemblyMvids = plan.AssemblyMvids,
-            Pages = pageEntries,
-            StaticFiles = staticFiles,
-            Artifacts = artifacts,
-        };
+            manifest = new BuildManifest
+            {
+                SchemaVersion = BuildManifest.CurrentSchemaVersion,
+                OptionsHash = plan.OptionsHash,
+                CodeDependencies = plan.CodeDependencies,
+                Pages = pageEntries,
+                StaticFiles = staticFiles,
+                Artifacts = artifacts,
+            };
 
-        planner.ReconcileOutputs(manifest);
+            planner.ReconcileOutputs(manifest);
+        }
+        finally { await verification; }
         phases.Mark(BuildPhaseTimer.Reconcile);
 
-        await planner.SaveManifestAsync(manifest, cancellationToken);
+        planner.SaveManifest(manifest, plan.OldManifest, cancellationToken);
         phases.Mark(BuildPhaseTimer.Manifest);
 
         var written = rendered.Count(static page => page.Written);
@@ -517,7 +564,7 @@ public sealed class StaticSite
         DevServerStatusReporter? reporter = null)
     {
         FreezeConfiguration();
-        var options = UseRunOptions(Paths.ResolveForServe());
+        var options = UseRunOptions(Paths.ResolveForDevelopment());
         EnsureServices();
 
         var devServer = new DevServer(this, reporter);
@@ -541,6 +588,7 @@ public sealed class StaticSite
     internal void InvalidateContent()
     {
         _runtime.Invalidate();
+        _services?.GetService<ContentFileRegistry>()?.Invalidate();
     }
 
     internal SiteSnapshot CreateSnapshot()
@@ -548,7 +596,7 @@ public sealed class StaticSite
         FreezeConfiguration();
         // Planning expands route factories, which read content. If nothing has settled
         // the options yet, fall back to paths that cannot be mistaken for a deliverable.
-        UseOptions(Paths.ResolveForPlanning());
+        UseOptions(Paths.ResolveForDevelopment());
         EnsureServices();
 
         var snapshotPhases = new BuildPhaseTimer();
@@ -560,7 +608,7 @@ public sealed class StaticSite
 
         foreach (var componentType in _routeRegistrations.Select(static registration => registration.ComponentType).Distinct())
         {
-            scanned.Add(FindDynamicPage(PageDiscovery.FromTypes([componentType]), componentType));
+            scanned.Add(FindDynamicPage(PageDiscovery.FromType(componentType), componentType));
         }
 
         var discovered = PageDiscovery.EnsureUniqueRoutes(ApplyNotFoundOverride(scanned));
@@ -585,6 +633,7 @@ public sealed class StaticSite
         // loading and parsing every markdown file lands.
         snapshotPhases.Mark(BuildPhaseTimer.Routes);
 
+        // Each dynamic page and its entries come from the same registrations above.
         var plannedPages = StaticPagePlanner.PlanPages(
             discovered,
             dynamicRoutes);
@@ -669,7 +718,7 @@ public sealed class StaticSite
             return discovered;
         }
 
-        var candidates = PageDiscovery.FromTypes([_notFoundComponentType]);
+        var candidates = PageDiscovery.FromType(_notFoundComponentType);
         if (candidates.Count != 1)
         {
             throw new InvalidOperationException(
@@ -686,19 +735,9 @@ public sealed class StaticSite
 
     private async Task<string> RenderPageAsync(ComponentRenderer renderer, PageRenderRequest request, CancellationToken cancellationToken)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        PageRenderContext.SetCurrent(CreatePageRenderContext(request));
-        try
-        {
-            return await renderer.RenderComponentAsync<KijiRoot>(
-                request.RootParameters ?? CreateRootParameters(request),
-                new Uri(Info.BaseUrl, request.RoutePath.TrimStart('/')));
-        }
-        finally
-        {
-            PageRenderContext.SetCurrent(null);
-        }
+        using var output = new StringWriter();
+        await RenderPageAsync(renderer, request, output, dependencies: null, cancellationToken);
+        return output.ToString();
     }
 
     private async Task RenderPageAsync(
@@ -857,7 +896,7 @@ public sealed class StaticSite
     internal void UsePlanningOptions()
     {
         FreezeConfiguration();
-        UseOptions(Paths.ResolveForPlanning());
+        UseOptions(Paths.ResolveForDevelopment());
     }
 
     private void EnsureServices()
@@ -885,6 +924,7 @@ public sealed class StaticSite
         services.AddSingleton<IImageProcessor>(_ => _imageProcessorFactory()
             ?? throw new InvalidOperationException("The image processor factory returned null."));
         services.AddSingleton<ContentFileRegistry>();
+        services.AddSingleton(new PageBuildInputs(_runtime.Dependencies));
 
         foreach (var type in _pageServiceTypes)
         {

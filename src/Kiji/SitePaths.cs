@@ -57,34 +57,19 @@ public sealed class SitePaths
     /// </summary>
     internal ResolvedSitePaths ResolveForPublish(string outputPath)
     {
-        return Resolve(ResolveAgainstRoot(outputPath));
+        return Resolve(ResolveAgainstRoot(outputPath)) with
+        {
+            ImageCacheDirectory = Path.Combine(ResolveCachePath(), "images"),
+        };
     }
 
     /// <summary>
-    /// Paths for the dev server: pages render on demand into a mirror under <c>.kiji</c>,
-    /// never into a publish directory.
+    /// Paths for development and route planning. Only the dev server creates the mirror;
+    /// the persistent publish cache is never used here.
     /// </summary>
-    internal ResolvedSitePaths ResolveForServe()
+    internal ResolvedSitePaths ResolveForDevelopment()
     {
-        var siteMirrorPath = ResolveSiteMirrorPath();
-        Directory.CreateDirectory(siteMirrorPath);
-        return Resolve(siteMirrorPath);
-    }
-
-    /// <summary>
-    /// Paths for expanding routes without producing anything — the fallback when page
-    /// planning runs before a command settled the options. Points at the same mirror as
-    /// <see cref="ResolveForServe"/> so nothing can be mistaken for a deliverable, and
-    /// creates no directories.
-    /// </summary>
-    internal ResolvedSitePaths ResolveForPlanning()
-    {
-        return Resolve(ResolveSiteMirrorPath());
-    }
-
-    private string ResolveSiteMirrorPath()
-    {
-        return Path.Combine(ResolveCachePath(), "site");
+        return Resolve(Path.Combine(ResolveKijiPath(), "dev-site"));
     }
 
     private ResolvedSitePaths Resolve(string outputPath)
@@ -94,7 +79,6 @@ public sealed class SitePaths
             ContentDirectory = ResolveAgainstRoot(ContentDirectory),
             StaticDirectory = ResolveAgainstRoot(StaticDirectory),
             OutputDirectory = outputPath,
-            ImageCacheDirectory = Path.Combine(ResolveCachePath(), "images"),
         };
     }
 
@@ -107,24 +91,23 @@ public sealed class SitePaths
 
     internal static string ResolveDefaultRoot(string appBaseDirectory, string currentDirectory)
     {
-        var projectRoot = FindNearestProjectDirectory(appBaseDirectory)
-            ?? FindNearestProjectDirectory(currentDirectory);
-        if (projectRoot is not null)
+        static bool HasProject(DirectoryInfo directory)
         {
-            return projectRoot;
+            return directory.EnumerateFiles("*.csproj").Any() || directory.EnumerateFiles("*.fsproj").Any();
+        }
+        static bool HasGit(DirectoryInfo directory)
+        {
+            return Directory.Exists(Path.Combine(directory.FullName, ".git")) || File.Exists(Path.Combine(directory.FullName, ".git"));
         }
 
-        try
-        {
-            return SsgPathResolver.ResolveRepositoryRoot(appBaseDirectory, currentDirectory);
-        }
-        catch (DirectoryNotFoundException)
-        {
-            return currentDirectory;
-        }
+        return FindAncestor(appBaseDirectory, HasProject)
+            ?? FindAncestor(currentDirectory, HasProject)
+            ?? FindAncestor(appBaseDirectory, HasGit)
+            ?? FindAncestor(currentDirectory, HasGit)
+            ?? currentDirectory;
     }
 
-    private static string? FindNearestProjectDirectory(string startPath)
+    private static string? FindAncestor(string startPath, Func<DirectoryInfo, bool> matches)
     {
         if (string.IsNullOrWhiteSpace(startPath))
         {
@@ -134,7 +117,7 @@ public sealed class SitePaths
         var directory = new DirectoryInfo(Path.GetFullPath(startPath));
         while (directory is not null)
         {
-            if (directory.EnumerateFiles("*.csproj").Any() || directory.EnumerateFiles("*.fsproj").Any())
+            if (matches(directory))
             {
                 return directory.FullName;
             }

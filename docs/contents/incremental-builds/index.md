@@ -135,8 +135,8 @@ their own build settings.
 Use these commands from the site project directory:
 
 ```pwsh
-# Include per-file output details.
-dotnet publish -p:KijiVerbose=true
+# Include per-file output details. Disable the .NET Terminal Logger so it shows them.
+dotnet publish -p:KijiVerbose=true --tl:off
 
 # Render all pages regardless of the previous HTML reuse decision.
 dotnet publish -p:KijiForce=true

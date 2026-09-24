@@ -78,7 +78,13 @@ dotnet watch
 
 The server reloads the browser when you change a component or content file.
 
+Stop the development server, then run `dotnet publish` to generate the static site in `dist/`.
+
 For the complete walkthrough—including layouts, CSS, Markdown pages, and publishing—see [Getting started](https://kiji-docs.zzzkan.workers.dev/docs/getting-started/).
+
+## Contributing
+
+Contributions to Kiji and its documentation are welcome. [Open an issue](https://github.com/zzzkan/kiji/issues) to report a bug or suggest a feature.
 
 ## License
 

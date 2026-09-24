@@ -5,6 +5,10 @@
 
 A static site generator for .NET that turns Razor components into static HTML.
 
+<p align="center">
+    <img width="720" alt="kiji demo" src="https://github.com/user-attachments/assets/85bffb06-7001-4d41-95e8-c8b92a412b2f" />
+</p>
+
 ## Demo
 
 The [documentation site](https://kiji-docs.zzzkan.workers.dev/) is built with Kiji. Its [source](docs/) is a working example.
@@ -76,11 +80,13 @@ Start the development server and open <http://localhost:8080>:
 dotnet watch
 ```
 
-The server reloads the browser when you change a component or content file.
+Generate the static site in `dist/`:
 
-Stop the development server, then run `dotnet publish` to generate the static site in `dist/`.
+```pwsh
+dotnet publish
+```
 
-For the complete walkthrough—including layouts, CSS, Markdown pages, and publishing—see [Getting started](https://kiji-docs.zzzkan.workers.dev/docs/getting-started/).
+For the complete walkthrough—including layouts, CSS, and Markdown—see [Getting started](https://kiji-docs.zzzkan.workers.dev/docs/getting-started/).
 
 ## Contributing
 

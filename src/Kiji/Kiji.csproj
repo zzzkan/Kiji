@@ -5,8 +5,8 @@
     <IsPackable>true</IsPackable>
     <PackageId>Kiji</PackageId>
     <EnablePackageValidation>true</EnablePackageValidation>
-    <PackageValidationBaselineVersion>0.1.0-preview.1</PackageValidationBaselineVersion>
-    <Description>Kiji is a static site generator framework for .NET. Pages are Razor components rendered to static HTML via HtmlRenderer and registered on a StaticSite. Includes a markdown content pipeline with YAML front matter, responsive WebP image optimization, RSS feed and sitemap artifacts, and a built-in on-demand dev server.</Description>
+    <PackageValidationBaselineVersion>0.1.0</PackageValidationBaselineVersion>
+    <Description>A static site generator for .NET. Use Razor components to build pages, with Markdown, layouts, and static assets.</Description>
     <PackageTags>static-site-generator;ssg;razor;blazor;markdown</PackageTags>
   </PropertyGroup>
 

@@ -5,6 +5,10 @@
 
 A static site generator for .NET that turns Razor components into static HTML.
 
+## Demo
+
+The [documentation site](https://kiji-docs.zzzkan.workers.dev/) is built with Kiji. Its [source](docs/) is a working example.
+
 ## Why Kiji
 
 ### 🧰Build with the .NET tools you know
@@ -75,12 +79,6 @@ dotnet watch
 The server reloads the browser when you change a component or content file.
 
 For the complete walkthrough—including layouts, CSS, Markdown pages, and publishing—see [Getting started](https://kiji-docs.zzzkan.workers.dev/docs/getting-started/).
-
-## Documentation
-
-<https://kiji-docs.zzzkan.workers.dev/>
-
-The site is itself built with Kiji and lives in [`docs/`](docs), so it doubles as a worked example.
 
 ## License
 

@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Kiji documentation
+    url: https://kiji-docs.zzzkan.workers.dev/
+    about: Read the guides and API reference before opening an issue.

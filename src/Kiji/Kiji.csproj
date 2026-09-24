@@ -17,8 +17,6 @@
   <ItemGroup>
     <PackageReference Include="Markdig" />
     <PackageReference Include="SixLabors.ImageSharp" />
-    <!-- Only the published validation baseline uses Hashing. Do not ship it to consumers. -->
-    <PackageReference Include="System.IO.Hashing" PrivateAssets="all" ExcludeAssets="runtime" />
     <PackageReference Include="YamlDotNet" />
   </ItemGroup>
 

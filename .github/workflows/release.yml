@@ -36,6 +36,17 @@ jobs:
       - name: Pack
         run: dotnet pack src/Kiji/Kiji.csproj -c Release --no-build -o artifacts
 
+      - name: Build docs
+        run: dotnet publish docs -c Release --no-build -o docs/dist
+
+      # Docs Deploy consumes this artifact only after NuGet publishing succeeds.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: docs-site
+          path: docs/dist
+          if-no-files-found: error
+          retention-days: 1
+
       - name: NuGet login
         uses: NuGet/login@v1
         id: login

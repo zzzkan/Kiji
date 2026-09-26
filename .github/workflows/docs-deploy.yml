@@ -2,55 +2,126 @@ name: Docs Deploy
 
 on:
   workflow_run:
-    workflows: [Docs Build]
+    workflows: [CI, Release]
     types: [completed]
 
 permissions:
   actions: read
   contents: read
-  pull-requests: write
+  pull-requests: read
 
 jobs:
   deploy:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
-      (github.event.workflow_run.event == 'push' ||
-       github.event.workflow_run.event == 'workflow_dispatch' ||
-       (github.event.workflow_run.event == 'pull_request' &&
-        github.event.workflow_run.head_repository.full_name == github.repository))
+      ((github.event.workflow_run.name == 'CI' &&
+        github.event.workflow_run.event == 'pull_request') ||
+       (github.event.workflow_run.name == 'Release' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_repository.id == github.event.repository.id))
     runs-on: ubuntu-latest
+    # Keep non-deploying CI runs out of the production deployment queue.
+    concurrency:
+      group: ${{ github.event.workflow_run.event == 'pull_request' && format('docs-preview-{0}-{1}', github.event.workflow_run.head_repository.id, github.event.workflow_run.head_branch) || 'docs-production' }}
+      cancel-in-progress: ${{ github.event.workflow_run.event == 'pull_request' }}
+    outputs:
+      pr_number: ${{ steps.target.outputs.pr_number }}
     steps:
+      - name: Resolve deployment target
+        id: target
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const headRepo = run.head_repository;
+
+            // Release runs only on v* tag pushes. A PR must never select production,
+            // even if it renames its workflow to Release.
+            if (run.name === 'Release' && run.event === 'push' &&
+                headRepo?.id === context.payload.repository.id) {
+              core.setOutput('command', 'deploy --config wrangler.jsonc');
+              return;
+            }
+            if (run.name !== 'CI' || run.event !== 'pull_request') {
+              core.info('Unsupported deployment source; skipping');
+              return;
+            }
+
+            if (!headRepo?.owner?.login || !run.head_branch || !run.head_sha) {
+              core.setFailed("Missing pull request source in workflow run");
+              return;
+            }
+
+            // Fork runs may have an empty workflow_run.pull_requests list.
+            const pulls = await github.paginate(github.rest.pulls.list, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              base: context.payload.repository.default_branch,
+              head: `${headRepo.owner.login}:${run.head_branch}`,
+              per_page: 100,
+            });
+            const pull = pulls.find(pr =>
+              pr.head.repo?.id === headRepo.id && pr.head.sha === run.head_sha);
+            if (!pull) {
+              core.info("Pull request was closed or updated; skipping stale preview");
+              return;
+            }
+            core.setOutput('pr_number', String(pull.number));
+            core.setOutput('command', `versions upload --preview-alias pr-${pull.number} --config wrangler.jsonc`);
+
       - uses: actions/checkout@v7
+        if: steps.target.outputs.command != ''
         with:
           ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: wrangler.jsonc
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
 
       - uses: actions/download-artifact@v8
+        if: steps.target.outputs.command != ''
         with:
           name: docs-site
-          path: .
+          path: ${{ runner.temp }}/docs-site
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Resolve deployment target
-        id: target
+      - name: Prepare static assets
+        if: steps.target.outputs.command != ''
+        uses: actions/github-script@v9
         env:
-          EVENT_NAME: ${{ github.event.workflow_run.event }}
-        shell: bash
-        run: |
-          if [[ "$EVENT_NAME" == "pull_request" ]]; then
-            pr_number="$(tr -d '\r\n' < .docs-deploy/pr-number)"
-            if [[ ! "$pr_number" =~ ^[1-9][0-9]*$ ]]; then
-              echo "Invalid pull request number: $pr_number" >&2
-              exit 1
-            fi
-            echo "command=versions upload --preview-alias pr-$pr_number --config wrangler.jsonc" >> "$GITHUB_OUTPUT"
-            echo "preview_url=https://pr-${pr_number}-kiji-docs.zzzkan.workers.dev/" >> "$GITHUB_OUTPUT"
-            echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
-          else
-            echo "command=deploy --config wrangler.jsonc" >> "$GITHUB_OUTPUT"
-          fi
+          DOCS_ARTIFACT_PATH: ${{ runner.temp }}/docs-site
+        with:
+          script: |
+            const fs = require('node:fs/promises');
+            const path = require('node:path');
+            const source = process.env.DOCS_ARTIFACT_PATH;
+            const destination = path.join(process.env.GITHUB_WORKSPACE, 'docs', 'dist');
+
+            // PR artifacts are untrusted. Never copy them over the deploy config or
+            // execute their files; even config/package files stay inside assets.
+            async function copyStaticFiles(from, to) {
+              const stat = await fs.lstat(from);
+              if (stat.isDirectory()) {
+                await fs.mkdir(to, { recursive: true });
+                for (const name of await fs.readdir(from)) {
+                  await copyStaticFiles(path.join(from, name), path.join(to, name));
+                }
+              } else if (stat.isFile()) {
+                await fs.copyFile(from, to, fs.constants.COPYFILE_EXCL);
+              } else {
+                throw new Error(`Unsupported asset type: ${from}`);
+              }
+            }
+
+            if (!(await fs.lstat(source)).isDirectory() ||
+                !(await fs.lstat(path.join(source, 'index.html'))).isFile()) {
+              throw new Error('Expected a static site with index.html at the artifact root');
+            }
+            await copyStaticFiles(source, destination);
 
       - name: Deploy to Cloudflare Workers
+        if: steps.target.outputs.command != ''
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -58,17 +129,22 @@ jobs:
           wranglerVersion: "4.135.0"
           command: ${{ steps.target.outputs.command }}
 
+  comment:
+    needs: deploy
+    if: needs.deploy.outputs.pr_number != ''
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
       - name: Add preview link to pull request
-        if: github.event.workflow_run.event == 'pull_request'
         uses: actions/github-script@v9
         env:
-          PR_NUMBER: ${{ steps.target.outputs.pr_number }}
-          PREVIEW_URL: ${{ steps.target.outputs.preview_url }}
+          PR_NUMBER: ${{ needs.deploy.outputs.pr_number }}
         with:
           script: |
             const marker = "<!-- kiji-docs-preview -->";
             const issue_number = Number(process.env.PR_NUMBER);
-            const body = `${marker}\nDocs preview: ${process.env.PREVIEW_URL}`;
+            const body = `${marker}\nDocs preview: https://pr-${issue_number}-kiji-docs.zzzkan.workers.dev/`;
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,

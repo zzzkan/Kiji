@@ -23,6 +23,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # MinVer derives the package version from git tags and history.
+          fetch-depth: 0
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -37,3 +40,16 @@ jobs:
       - name: Pack
         if: matrix.os == 'ubuntu-latest'
         run: dotnet pack -c Release --no-build -o artifacts
+
+      - name: Build docs
+        if: matrix.os == 'ubuntu-latest'
+        run: dotnet publish docs -c Release --no-build -o docs/dist
+
+      # Upload once per PR run; Docs Deploy waits for the entire CI matrix.
+      - uses: actions/upload-artifact@v7
+        if: matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request'
+        with:
+          name: docs-site
+          path: docs/dist
+          if-no-files-found: error
+          retention-days: 1

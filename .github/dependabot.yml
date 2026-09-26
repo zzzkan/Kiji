@@ -8,6 +8,4 @@ updates:
       timezone: Asia/Tokyo
     cooldown:
       default-days: 3
-      exclude:
-        - Kiji
     open-pull-requests-limit: 1

@@ -12,7 +12,7 @@ methods return the same site instance and may be chained. Configure the site bef
 - [SiteInfo](#siteinfo)
 - [SitePaths](#sitepaths)
 - [Pages, layouts, and page services](#pages-layouts-and-page-services)
-- [HeadContent](#headcontent)
+- [StaticHeadContent](#staticheadcontent)
 - [Content sources and ContentDictionary](#content-sources-and-contentdictionary)
 - [Markdown APIs](#markdown-apis)
 - [Build inputs and controls](#build-inputs-and-controls)
@@ -143,21 +143,25 @@ The type must be a non-abstract class with a public constructor and may be regis
 once. Page services are unavailable to content loaders, route/feed factories, and artifact
 writers.
 
-## HeadContent
+## StaticHeadContent
 
-`Kiji.Components.HeadContent` is a component that places its `RenderFragment? ChildContent`
+`Kiji.Components.StaticHeadContent` is a component that places its `RenderFragment? ChildContent`
 inside the generated document `<head>`:
 
 ```razor
-<Kiji.Components.HeadContent>
+<StaticHeadContent>
     <meta charset="utf-8" />
     <title>@Title</title>
-</Kiji.Components.HeadContent>
+</StaticHeadContent>
 ```
 
-It renders no markup at its position in the body. If more than one instance renders on a
-page, the most recently rendered instance supplies the entire head content; their
-contents are not merged.
+It renders no markup at its position in the body. All instances append in registration
+order. Updating an instance preserves its position; removing it removes only its own
+contribution. Content is neither replaced nor automatically deduplicated.
+
+Blazor's `Microsoft.AspNetCore.Components.Web.PageTitle`, `HeadContent`, and `HeadOutlet`
+are unsupported and throw an actionable error during rendering (publish and development).
+Use `StaticHeadContent` with a plain `<title>` element.
 
 ## Content sources and ContentDictionary
 

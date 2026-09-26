@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Suppressions>
+  <!-- Intentional rename to StaticHeadContent: retaining HeadContent keeps Razor imports ambiguous. -->
+  <Suppression>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:Kiji.Components.HeadContent</Target>
+    <Left>lib/net10.0/Kiji.dll</Left>
+    <Right>lib/net10.0/Kiji.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+</Suppressions>

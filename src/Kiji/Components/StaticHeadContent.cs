@@ -4,8 +4,8 @@ using Microsoft.AspNetCore.Components;
 namespace Kiji.Components;
 
 /// <summary>Places child content in the generated document head.</summary>
-/// <remarks>When several instances render on one page, the most recently rendered instance takes effect.</remarks>
-public sealed class HeadContent : IComponent, IDisposable
+/// <remarks>All instances contribute content in registration order, without replacement or deduplication.</remarks>
+public sealed class StaticHeadContent : IComponent, IDisposable
 {
     [Inject]
     internal HeadContentRegistry Registry { get; set; } = default!;

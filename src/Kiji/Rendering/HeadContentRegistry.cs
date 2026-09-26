@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Components;
 namespace Kiji.Rendering;
 
 /// <summary>
-/// Per-page-render channel connecting <see cref="HeadContent"/> providers to the
+/// Per-page-render channel connecting <see cref="StaticHeadContent"/> providers to the
 /// head outlet in the built-in root document. Registered scoped so each page render
 /// gets isolated head state. All members are Dispatcher-confined: they are only
 /// called while components render on the renderer's dispatcher, so no locking is
@@ -12,7 +12,7 @@ namespace Kiji.Rendering;
 /// </summary>
 internal sealed class HeadContentRegistry
 {
-    private readonly List<HeadContent> _providers = [];
+    private readonly List<StaticHeadContent> _providers = [];
     private Action<RenderFragment?>? _subscriber;
 
     /// <summary>
@@ -40,35 +40,56 @@ internal sealed class HeadContentRegistry
 
     /// <summary>
     /// Adds the provider on first call and republishes its content on updates.
-    /// The most recently added provider wins, matching document render order.
+    /// Providers compose in registration order; updates preserve that order.
     /// </summary>
-    public void SetContent(HeadContent provider)
+    public void SetContent(StaticHeadContent provider)
     {
         if (!_providers.Contains(provider))
         {
             _providers.Add(provider);
         }
 
-        if (ReferenceEquals(_providers[^1], provider))
-        {
-            _subscriber?.Invoke(provider.ChildContent);
-        }
+        _subscriber?.Invoke(CurrentContent);
     }
 
     /// <summary>
-    /// Removes a disposed provider; if it was the current one, the previously
-    /// rendered provider's content takes effect again.
+    /// Removes only the disposed provider's contribution.
     /// </summary>
-    public void RemoveProvider(HeadContent provider)
+    public void RemoveProvider(StaticHeadContent provider)
     {
-        var wasCurrent = _providers.Count > 0 && ReferenceEquals(_providers[^1], provider);
-        _providers.Remove(provider);
-
-        if (wasCurrent)
+        if (_providers.Remove(provider))
         {
             _subscriber?.Invoke(CurrentContent);
         }
     }
 
-    private RenderFragment? CurrentContent => _providers.Count > 0 ? _providers[^1].ChildContent : null;
+    private RenderFragment? CurrentContent
+    {
+        get
+        {
+            if (_providers.Count == 0)
+            {
+                return null;
+            }
+
+            if (_providers.Count == 1)
+            {
+                return _providers[0].ChildContent;
+            }
+
+            var fragments = new RenderFragment?[_providers.Count];
+            for (var i = 0; i < _providers.Count; i++)
+            {
+                fragments[i] = _providers[i].ChildContent;
+            }
+
+            return builder =>
+            {
+                foreach (var fragment in fragments)
+                {
+                    builder.AddContent(0, fragment);
+                }
+            };
+        }
+    }
 }

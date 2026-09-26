@@ -93,10 +93,11 @@ Kiji writes clean URLs as directories containing `index.html`: `/about/` becomes
 `UseDefaultLayout<TLayout>()` applies a shared Razor layout to pages that do not choose
 their own. Layouts render inside the `<body>` of the document Kiji creates.
 
-Use `Kiji.Components.HeadContent` to supply the generated `<head>`. Multiple instances
-do not merge: the most recently rendered instance supplies the entire head content.
-Keep shared tags and page-specific metadata in one component, as shown by `PageHead`
-in [Getting started](../getting-started/#add-a-layout-and-css).
+Use `Kiji.Components.StaticHeadContent` to supply the generated `<head>`. All instances
+append, preserving shared CSS and metadata. Keep shared tags in the layout and
+page-specific metadata in the page. Tags are not replaced or deduplicated, so supply
+the document title only once. See the
+[head API](../api-reference/#staticheadcontent) for composition and migration examples.
 
 ## Content and static assets
 

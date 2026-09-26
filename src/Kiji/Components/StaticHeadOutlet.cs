@@ -5,11 +5,11 @@ namespace Kiji.Components;
 
 /// <summary>
 /// Renders, inside the root document's <c>&lt;head&gt;</c>, the content provided by
-/// the page's <see cref="HeadContent"/>. The outlet renders before the page body, so
+/// the page's <see cref="StaticHeadContent"/>. The outlet renders before the page body, so
 /// it starts empty and re-renders when content is published; the queued re-render is
 /// processed before the renderer reaches quiescence, all on the renderer's dispatcher.
 /// </summary>
-internal sealed class HeadOutlet : IComponent, IDisposable
+internal sealed class StaticHeadOutlet : IComponent, IDisposable
 {
     private RenderHandle _renderHandle;
     private RenderFragment? _content;
@@ -48,7 +48,7 @@ internal sealed class HeadOutlet : IComponent, IDisposable
     {
         _content = content;
 
-        // No re-render once disposal has begun (e.g. a HeadContent provider being
+        // No re-render once disposal has begun (e.g. a StaticHeadContent provider being
         // removed during renderer teardown); the renderer itself also disregards
         // render requests after it is disposed.
         if (!_disposed)

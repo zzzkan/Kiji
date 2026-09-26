@@ -113,13 +113,13 @@ link together:
 @inject SiteInfo Site
 @inject NavigationManager NavigationManager
 
-<HeadContent>
+<StaticHeadContent>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@Title - @Site.Name</title>
     <link rel="canonical" href="@NavigationManager.Uri" />
     <link rel="stylesheet" href="@($"{Site.BaseUrl.AbsolutePath}css/app.css")" />
-</HeadContent>
+</StaticHeadContent>
 
 @code {
     [Parameter] public string Title { get; set; } = string.Empty;

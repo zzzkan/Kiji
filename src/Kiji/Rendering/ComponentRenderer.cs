@@ -17,6 +17,7 @@ internal sealed class ComponentRenderer(IServiceProvider services, Uri? baseUri)
         services.AddScoped<StaticNavigationManager>();
         services.AddScoped<NavigationManager>(static provider => provider.GetRequiredService<StaticNavigationManager>());
         services.AddScoped<HeadContentRegistry>();
+        services.AddScoped<IComponentActivator, StaticComponentActivator>();
     }
 
     internal async Task<string> RenderComponentAsync<TComponent>(

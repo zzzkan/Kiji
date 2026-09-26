@@ -63,7 +63,7 @@ public sealed class PageViewTests
     }
 
     [Fact]
-    public async Task HeadContentInLayoutAndPage_PageWins()
+    public async Task StaticHeadContentInLayoutAndPage_CombinesSharedCssAndPageMetadata()
     {
         await using var app = CreateApp();
         var renderer = new ComponentRenderer(app.ServiceProvider, app.Info.BaseUrl);
@@ -72,7 +72,9 @@ public sealed class PageViewTests
             CreateRootParameters(typeof(PageWithTitle), defaultLayout: typeof(LayoutWithHead)));
 
         Assert.Contains("<title>Page Title</title>", html, StringComparison.Ordinal);
-        Assert.DoesNotContain("Layout Title", html, StringComparison.Ordinal);
+        Assert.Contains("<link rel=\"stylesheet\" href=\"/site.css\"", html, StringComparison.Ordinal);
+        Assert.Contains("<meta name=\"description\" content=\"Page description\"", html, StringComparison.Ordinal);
+        Assert.True(html.IndexOf("Page description", StringComparison.Ordinal) < html.IndexOf("</head>", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -82,10 +84,26 @@ public sealed class PageViewTests
         var renderer = new ComponentRenderer(app.ServiceProvider, app.Info.BaseUrl);
 
         var html = await renderer.RenderComponentAsync<KijiRoot>(
-            CreateRootParameters(typeof(AsyncPage), defaultLayout: null));
+            CreateRootParameters(typeof(AsyncPage), defaultLayout: typeof(LayoutWithHead)));
 
         Assert.Contains("<title>Async Title</title>", html, StringComparison.Ordinal);
         Assert.Contains("async-page-body", html, StringComparison.Ordinal);
+        Assert.Contains("/site.css", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("Layout Title", html, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(typeof(Microsoft.AspNetCore.Components.Web.PageTitle))]
+    [InlineData(typeof(Microsoft.AspNetCore.Components.Web.HeadContent))]
+    [InlineData(typeof(Microsoft.AspNetCore.Components.Web.HeadOutlet))]
+    public async Task StandardBlazorHeadComponents_ThrowActionableDiagnostic(Type componentType)
+    {
+        await using var app = CreateApp();
+        var renderer = new ComponentRenderer(app.ServiceProvider, app.Info.BaseUrl);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            renderer.RenderComponentAsync<KijiRoot>(CreateRootParameters(componentType, null)));
+        Assert.Contains(componentType.FullName!, error.Message, StringComparison.Ordinal);
+        Assert.Contains("Kiji.Components.StaticHeadContent", error.Message, StringComparison.Ordinal);
     }
 
     private static StaticSite CreateApp()
@@ -191,16 +209,16 @@ public sealed class PageViewTests
     {
         protected override void BuildRenderTree(RenderTreeBuilder builder)
         {
-            builder.OpenComponent<HeadContent>(0);
-            builder.AddAttribute(1, nameof(HeadContent.ChildContent), (RenderFragment)(static headBuilder =>
+            builder.OpenComponent<StaticHeadContent>(2);
+            builder.AddAttribute(3, nameof(StaticHeadContent.ChildContent), (RenderFragment)(static headBuilder =>
             {
-                headBuilder.OpenElement(0, "title");
-                headBuilder.AddContent(1, "Layout Title");
+                headBuilder.OpenElement(0, "link");
+                headBuilder.AddAttribute(1, "rel", "stylesheet");
+                headBuilder.AddAttribute(2, "href", "/site.css");
                 headBuilder.CloseElement();
             }));
             builder.CloseComponent();
-
-            builder.AddContent(2, Body);
+            builder.AddContent(4, Body);
         }
     }
 
@@ -208,11 +226,20 @@ public sealed class PageViewTests
     {
         protected override void BuildRenderTree(RenderTreeBuilder builder)
         {
-            builder.OpenComponent<HeadContent>(0);
-            builder.AddAttribute(1, nameof(HeadContent.ChildContent), (RenderFragment)(static headBuilder =>
+            builder.OpenComponent<StaticHeadContent>(0);
+            builder.AddAttribute(1, nameof(StaticHeadContent.ChildContent), (RenderFragment)(static headBuilder =>
             {
                 headBuilder.OpenElement(0, "title");
                 headBuilder.AddContent(1, "Page Title");
+                headBuilder.CloseElement();
+            }));
+            builder.CloseComponent();
+            builder.OpenComponent<StaticHeadContent>(2);
+            builder.AddAttribute(3, nameof(StaticHeadContent.ChildContent), (RenderFragment)(static headBuilder =>
+            {
+                headBuilder.OpenElement(0, "meta");
+                headBuilder.AddAttribute(1, "name", "description");
+                headBuilder.AddAttribute(2, "content", "Page description");
                 headBuilder.CloseElement();
             }));
             builder.CloseComponent();
@@ -236,8 +263,8 @@ public sealed class PageViewTests
                 return;
             }
 
-            builder.OpenComponent<HeadContent>(0);
-            builder.AddAttribute(1, nameof(HeadContent.ChildContent), (RenderFragment)(static headBuilder =>
+            builder.OpenComponent<StaticHeadContent>(0);
+            builder.AddAttribute(1, nameof(StaticHeadContent.ChildContent), (RenderFragment)(static headBuilder =>
             {
                 headBuilder.OpenElement(0, "title");
                 headBuilder.AddContent(1, "Async Title");

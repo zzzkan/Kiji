@@ -25,7 +25,7 @@ public sealed class StaticSite
     private readonly ContentRuntime _runtime = new();
     private readonly List<string> _buildInputPaths = [];
     private readonly List<KeyValuePair<string, string>> _buildInputValues = [];
-    private readonly HashSet<Type> _pageServiceTypes = [];
+    private readonly Dictionary<Type, Type> _pageServices = [];
     private Func<IImageProcessor> _imageProcessorFactory = static () => new ImageProcessor();
     private bool _configurationFrozen;
     private readonly List<RouteRegistration> _routeRegistrations = [];
@@ -78,17 +78,30 @@ public sealed class StaticSite
     /// cannot resolve page services. Registration does not cache method results.
     /// </remarks>
     public StaticSite AddPageService<T>() where T : class
+        => AddPageService<T, T>();
+
+    /// <summary>Registers an implementation of a service shared by components within one page render.</summary>
+    /// <remarks>
+    /// Only TService is registered. Constructor dependencies are resolved automatically.
+    /// Each render gets a fresh instance, disposed when that render finishes. Content loaders,
+    /// route/feed factories and artifacts cannot resolve page services. Each service type
+    /// may be registered only once, including registrations through AddPageService&lt;T&gt;().
+    /// </remarks>
+    public StaticSite AddPageService<TService, TImplementation>()
+        where TService : class
+        where TImplementation : class, TService
     {
         EnsureConfigurable();
-        var type = typeof(T);
-        if (type.IsAbstract || type.IsInterface || type.GetConstructors().Length == 0)
+        var serviceType = typeof(TService);
+        var implementationType = typeof(TImplementation);
+        if (implementationType.IsAbstract || implementationType.IsInterface || implementationType.GetConstructors().Length == 0)
         {
-            throw new ArgumentException($"Page service '{type.FullName}' must be a concrete type with a public constructor.");
+            throw new ArgumentException($"Page service '{implementationType.FullName}' must be a concrete type with a public constructor.");
         }
 
-        if (!_pageServiceTypes.Add(type))
+        if (!_pageServices.TryAdd(serviceType, implementationType))
         {
-            throw new InvalidOperationException($"Page service '{type.FullName}' is already registered.");
+            throw new InvalidOperationException($"Page service '{serviceType.FullName}' is already registered.");
         }
 
         return this;
@@ -401,7 +414,8 @@ public sealed class StaticSite
             snapshot.Pages,
             [.. _pageAssemblies,
                 .. _routeRegistrations.Select(static registration => registration.ComponentType.Assembly),
-                .. _pageServiceTypes.Select(static type => type.Assembly),
+                .. _pageServices.Keys.Select(static type => type.Assembly),
+                .. _pageServices.Values.Select(static type => type.Assembly),
                 _imageProcessorFactory.Method.Module.Assembly,
                 .. _notFoundComponentType is { } notFound ? new[] { notFound.Assembly } : [],
                 typeof(StaticSite).Assembly],
@@ -895,7 +909,7 @@ public sealed class StaticSite
         services.AddSingleton<ContentFileRegistry>();
         services.AddSingleton(new PageBuildInputs(_runtime.Dependencies));
 
-        foreach (var type in _pageServiceTypes)
+        foreach (var type in _pageServices.Keys)
         {
             if (services.Any(descriptor => descriptor.ServiceType == type
                 || (type.IsGenericType && descriptor.ServiceType == type.GetGenericTypeDefinition())))
@@ -904,9 +918,9 @@ public sealed class StaticSite
             }
         }
 
-        foreach (var type in _pageServiceTypes)
+        foreach (var (serviceType, implementationType) in _pageServices)
         {
-            services.AddScoped(type);
+            services.AddScoped(serviceType, implementationType);
         }
 
         _services = services.BuildServiceProvider(new ServiceProviderOptions

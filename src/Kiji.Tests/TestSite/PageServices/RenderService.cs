@@ -1,6 +1,6 @@
 namespace Kiji.Tests.TestSite.PageServices;
 
-public sealed class RenderService : IAsyncDisposable
+public sealed class RenderService : IRenderService, IAsyncDisposable
 {
     public RenderService(ContentDictionary<ServiceProbe> probes, RenderDependency dependency, PageInfo page)
     {

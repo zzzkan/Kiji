@@ -26,6 +26,9 @@ internal sealed class StaticNavigationManager : NavigationManager
     /// <inheritdoc/>
     protected override void NavigateToCore(string uri, NavigationOptions options)
     {
-        // Static rendering does not support navigation.
+        throw new NotSupportedException(
+            $"NavigationManager.NavigateTo('{uri}') is not supported during Kiji static rendering. "
+            + "Render a link or configure a redirect in your hosting platform instead. "
+            + "NavigationManager URI access and conversion remain available.");
     }
 }

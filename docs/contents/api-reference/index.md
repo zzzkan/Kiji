@@ -143,6 +143,16 @@ The type must be a non-abstract class with a public constructor and may be regis
 once. Page services are unavailable to content loaders, route/feed factories, and artifact
 writers.
 
+### `NavigationManager`
+
+Components can inject `Microsoft.AspNetCore.Components.NavigationManager` to read
+`BaseUri` and `Uri` or convert URIs with `ToAbsoluteUri` and `ToBaseRelativePath`.
+Each page render has its own navigation state, including the site's base path.
+
+All `NavigateTo` overloads throw `NotSupportedException` during static rendering
+(publish and development), with the requested destination in the diagnostic.
+Render a link or configure a redirect in your hosting platform instead.
+
 ## StaticHeadContent
 
 `Kiji.Components.StaticHeadContent` is a component that places its `RenderFragment? ChildContent`

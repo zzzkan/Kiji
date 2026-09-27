@@ -2,6 +2,7 @@ using Kiji.Feeds;
 using Kiji.Markdown;
 using Kiji.Sitemaps;
 using Kiji.Tests.TestSite;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp;
@@ -31,6 +32,25 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         {
             Directory.Delete(_testDir, recursive: true);
         }
+    }
+
+    [Fact]
+    public async Task PublishAsync_NavigateToFailsWithoutPublishingOriginalPage()
+    {
+        await using var app = StaticSite.Create([]);
+        app.Info = TestArticleContents.CreateSiteInfoWithBasePath();
+        app.Paths.RootDirectory = _testDir;
+        app.AddPages<NavigationTestPage>(_ => [new
+        {
+            Id = "original",
+            InspectNavigation = (Action<NavigationManager>)(navigation => navigation.NavigateTo("target/")),
+        }]);
+
+        var exception = await Assert.ThrowsAsync<NotSupportedException>(() => app.PublishAsync(_outputDir));
+
+        Assert.Contains("NavigationManager.NavigateTo", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("target/", exception.Message, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(_outputDir, "navigation", "original", "index.html")));
     }
 
     [Fact]

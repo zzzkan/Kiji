@@ -12,6 +12,7 @@ methods return the same site instance and may be chained. Configure the site bef
 - [SiteInfo](#siteinfo)
 - [SitePaths](#sitepaths)
 - [Pages, layouts, and page services](#pages-layouts-and-page-services)
+- [PageInfo](#pageinfo)
 - [StaticHeadContent](#staticheadcontent)
 - [Content sources and ContentDictionary](#content-sources-and-contentdictionary)
 - [Markdown APIs](#markdown-apis)
@@ -143,15 +144,55 @@ The type must be a non-abstract class with a public constructor and may be regis
 once. Page services are unavailable to content loaders, route/feed factories, and artifact
 writers.
 
-### `NavigationManager`
+## PageInfo
 
-Components can inject `Microsoft.AspNetCore.Components.NavigationManager` to read
-`BaseUri` and `Uri` or convert URIs with `ToAbsoluteUri` and `ToBaseRelativePath`.
-Each page render has its own navigation state, including the site's base path.
+Inject `Kiji.PageInfo` to read the page's public URL. Kiji creates this immutable object;
+it has no public constructor. Each render has its own instance, shared by the page,
+layouts, child components, and page services. It is unavailable to content loaders,
+route/feed factories, artifact writers, or components rendered without a page context.
 
-All `NavigateTo` overloads throw `NotSupportedException` during static rendering
-(publish and development), with the requested destination in the diagnostic.
-Render a link or configure a redirect in your hosting platform instead.
+| Property | Behavior |
+| --- | --- |
+| `Uri Url` | Read-only absolute public URL, resolved from `SiteInfo.BaseUrl` and the page's route, including the deployment base path. |
+
+Development uses the same public URL as publishing, rather than the local request URL.
+Request query strings do not change it. The configured not-found page has the public URL
+ending in `404.html`.
+
+```razor
+@inject PageInfo Page
+@inject SiteInfo Site
+
+<StaticHeadContent>
+    <link rel="canonical" href="@Page.Url.AbsoluteUri" />
+</StaticHeadContent>
+<a href="@(new Uri(Site.BaseUrl, "about/").AbsolutePath)">About</a>
+```
+
+Use `System.Uri` for conversion, with an explicit base:
+
+```csharp
+// Resolve from the site root, including its deployment base path.
+var about = new Uri(Site.BaseUrl, "about/");
+
+// Resolve from the current page's URL.
+var image = new Uri(Page.Url, "image.png");
+
+// Express the page's URL relative to the site root.
+var relative = Site.BaseUrl.MakeRelativeUri(Page.Url);
+```
+
+Use `AbsoluteUri` for full public URLs and `AbsolutePath` for links that should stay on
+the current host during development. Relative input must not start with `/` when the
+deployment base path should be retained. `MakeRelativeUri` returns a `Uri`, not a string;
+use `OriginalString` for its escaped relative representation. It does not enforce site
+containment: results can contain `../` or remain absolute for another origin.
+
+Blazor's `NavigationManager` is not registered. Component property injection (`@inject`
+or `[Inject]`) throws `NotSupportedException` with guidance to use `PageInfo`, `SiteInfo`,
+and `System.Uri`. Kiji provides no runtime
+navigation, refresh, history, or navigation events. Render links or configure redirects
+in your hosting platform instead.
 
 ## StaticHeadContent
 

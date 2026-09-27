@@ -7,42 +7,38 @@ using Microsoft.Extensions.Logging;
 
 namespace Kiji.Rendering;
 
-internal sealed class ComponentRenderer(IServiceProvider services, Uri? baseUri)
+internal sealed class ComponentRenderer(IServiceProvider services)
 {
     internal static void AddComponentRenderingServices(IServiceCollection services)
     {
         // Provider-backed logging adds setup cost to every page's HtmlRenderer.
         services.AddLogging();
         services.AddSingleton(_ => HtmlEncoder.Create(UnicodeRanges.All));
-        services.AddScoped<StaticNavigationManager>();
-        services.AddScoped<NavigationManager>(static provider => provider.GetRequiredService<StaticNavigationManager>());
+        services.AddScoped(static provider =>
+        {
+            var context = PageRenderContext.Current ?? throw new InvalidOperationException(
+                "PageInfo is only available during page rendering.");
+            return new PageInfo(new Uri(provider.GetRequiredService<SiteInfo>().BaseUrl, context.RoutePath.TrimStart('/')));
+        });
         services.AddScoped<HeadContentRegistry>();
         services.AddScoped<IComponentActivator, StaticComponentActivator>();
     }
 
     internal async Task<string> RenderComponentAsync<TComponent>(
-        IReadOnlyDictionary<string, object?>? parameters = null,
-        Uri? currentUri = null)
+        IReadOnlyDictionary<string, object?>? parameters = null)
         where TComponent : IComponent
     {
         using var output = new StringWriter();
-        await RenderComponentToAsync<TComponent>(output, parameters, currentUri);
+        await RenderComponentToAsync<TComponent>(output, parameters);
         return output.ToString();
     }
 
     internal async Task RenderComponentToAsync<TComponent>(
         TextWriter output,
-        IReadOnlyDictionary<string, object?>? parameters = null,
-        Uri? currentUri = null)
+        IReadOnlyDictionary<string, object?>? parameters = null)
         where TComponent : IComponent
     {
         await using var scope = services.CreateAsyncScope();
-        if (currentUri is not null)
-        {
-            scope.ServiceProvider.GetRequiredService<StaticNavigationManager>().Initialize(
-                baseUri ?? new Uri(currentUri.GetLeftPart(UriPartial.Authority) + "/"), currentUri);
-        }
-
         // HtmlRenderer captures its scope and cannot reset root component state.
         await using var renderer = new HtmlRenderer(
             scope.ServiceProvider, scope.ServiceProvider.GetRequiredService<ILoggerFactory>());

@@ -14,7 +14,6 @@ public class ComponentRendererBenchmarks
     private ComponentRenderer _renderer = default!;
     private ServiceProvider _serviceProvider = default!;
     private Dictionary<string, object?> _rootParameters = default!;
-    private Uri _pageUri = default!;
 
     [GlobalSetup]
     public void Setup()
@@ -29,7 +28,7 @@ public class ComponentRendererBenchmarks
         ComponentRenderer.AddComponentRenderingServices(services);
         services.AddSingleton(site);
         _serviceProvider = services.BuildServiceProvider();
-        _renderer = new ComponentRenderer(_serviceProvider, site.BaseUrl);
+        _renderer = new ComponentRenderer(_serviceProvider);
 
         _rootParameters = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
@@ -37,7 +36,6 @@ public class ComponentRendererBenchmarks
             [nameof(KijiRoot.PageParameters)] = new Dictionary<string, object?>(StringComparer.Ordinal),
             [nameof(KijiRoot.DefaultLayout)] = null,
         };
-        _pageUri = new Uri("https://bench.example.com/bench/");
     }
 
     [GlobalCleanup]
@@ -49,7 +47,7 @@ public class ComponentRendererBenchmarks
     [Benchmark]
     public async Task RenderFullPage()
     {
-        await _renderer.RenderComponentToAsync<KijiRoot>(TextWriter.Null, _rootParameters, _pageUri);
+        await _renderer.RenderComponentToAsync<KijiRoot>(TextWriter.Null, _rootParameters);
     }
 
     [Benchmark]

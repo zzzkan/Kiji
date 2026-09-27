@@ -156,8 +156,8 @@ External links receive `target="_blank" rel="noopener noreferrer"`. Other links 
 rendered as written. Kiji does not add `SiteInfo.BaseUrl` to root-relative Markdown links.
 
 A link such as `/about/` therefore points at the domain root and is wrong when the site is
-published under `/my-site/`. Prefer document-relative links in Markdown. In Razor, prefix
-site links with `Site.BaseUrl.AbsolutePath`. See [Deployment](../deployment/) for the full
+published under `/my-site/`. Prefer document-relative links in Markdown. In Razor, resolve
+site links with `new Uri(Site.BaseUrl, "about/").AbsolutePath`. See [Deployment](../deployment/) for the full
 sub-path setup.
 
 ## Local images and page bundles

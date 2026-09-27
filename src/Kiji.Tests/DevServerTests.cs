@@ -57,6 +57,7 @@ public sealed class DevServerTests : IAsyncDisposable
 
             Assert.Equal(HttpStatusCode.OK, blogResponse.StatusCode);
             Assert.Contains("<h1>Hello World</h1>", blogHtml, StringComparison.Ordinal);
+            Assert.Contains("href=\"https://example.com/blog/hello-world/\"", blogHtml, StringComparison.Ordinal);
 
             foreach (var path in new[] { "/Blog/", "/no-such-page/", "/missing.html" })
             {
@@ -114,7 +115,9 @@ public sealed class DevServerTests : IAsyncDisposable
         {
             using var client = CreateClient();
             var page = new Uri(baseAddress, "/日本/blog/日本語/");
-            Assert.Contains("<h1>Hello World</h1>", await client.GetStringAsync(page), StringComparison.Ordinal);
+            var html = await client.GetStringAsync(page);
+            Assert.Contains("<h1>Hello World</h1>", html, StringComparison.Ordinal);
+            Assert.Contains("href=\"https://example.com/%E6%97%A5%E6%9C%AC/blog/%E6%97%A5%E6%9C%AC%E8%AA%9E/\"", html, StringComparison.Ordinal);
             var redirect = await client.GetAsync(new Uri(baseAddress, "/日本/blog/日本語?q=1"));
             Assert.Equal(HttpStatusCode.Found, redirect.StatusCode);
             Assert.Equal("/%E6%97%A5%E6%9C%AC/blog/%E6%97%A5%E6%9C%AC%E8%AA%9E/?q=1", redirect.Headers.Location!.OriginalString);
@@ -337,6 +340,12 @@ public sealed class DevServerTests : IAsyncDisposable
             var prefix = await client.GetAsync(new Uri(baseAddress, "/kiji"));
             Assert.Equal(HttpStatusCode.Found, prefix.StatusCode);
             Assert.Equal("/kiji/", prefix.Headers.Location!.OriginalString);
+
+            var queried = await client.GetStringAsync(new Uri(baseAddress, "/kiji/blog/hello-world/?preview=1"));
+            Assert.Contains("href=\"https://example.com/kiji/blog/hello-world/\"", queried, StringComparison.Ordinal);
+            using var missing = await client.GetAsync(new Uri(baseAddress, "/kiji/missing/?preview=1"));
+            Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+            Assert.Contains("href=\"https://example.com/kiji/404.html\"", await missing.Content.ReadAsStringAsync(), StringComparison.Ordinal);
 
             var post = await client.GetAsync(new Uri(baseAddress, "/kiji/blog/hello-world/"));
             Assert.Equal(HttpStatusCode.OK, post.StatusCode);

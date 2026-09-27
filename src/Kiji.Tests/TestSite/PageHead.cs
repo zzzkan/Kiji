@@ -6,7 +6,7 @@ namespace Kiji.Tests.TestSite;
 public sealed class PageHead : ComponentBase
 {
     [Inject]
-    public NavigationManager NavigationManager { get; set; } = default!;
+    public PageInfo Page { get; set; } = default!;
 
     [Inject]
     public SiteInfo Site { get; set; } = default!;
@@ -59,7 +59,7 @@ public sealed class PageHead : ComponentBase
 
         builder.OpenElement(13, "link");
         builder.AddAttribute(14, "rel", "canonical");
-        builder.AddAttribute(15, "href", NavigationManager.Uri);
+        builder.AddAttribute(15, "href", Page.Url.AbsoluteUri);
         builder.CloseElement();
 
         builder.OpenElement(16, "link");
@@ -71,12 +71,12 @@ public sealed class PageHead : ComponentBase
 
         builder.OpenElement(21, "link");
         builder.AddAttribute(22, "rel", "stylesheet");
-        builder.AddAttribute(23, "href", Site.BaseUrl.AbsolutePath + "css/app.css");
+        builder.AddAttribute(23, "href", new Uri(Site.BaseUrl, "css/app.css").AbsolutePath);
         builder.CloseElement();
 
         builder.OpenElement(24, "link");
         builder.AddAttribute(25, "rel", "icon");
-        builder.AddAttribute(26, "href", Site.BaseUrl.AbsolutePath + "icon.svg");
+        builder.AddAttribute(26, "href", new Uri(Site.BaseUrl, "icon.svg").AbsolutePath);
         builder.AddAttribute(27, "type", "image/svg+xml");
         builder.CloseElement();
     }

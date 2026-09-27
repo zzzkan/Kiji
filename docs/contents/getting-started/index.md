@@ -111,14 +111,14 @@ link together:
 @using Kiji
 @using Kiji.Components
 @inject SiteInfo Site
-@inject NavigationManager NavigationManager
+@inject PageInfo Page
 
 <StaticHeadContent>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@Title - @Site.Name</title>
-    <link rel="canonical" href="@NavigationManager.Uri" />
-    <link rel="stylesheet" href="@($"{Site.BaseUrl.AbsolutePath}css/app.css")" />
+    <link rel="canonical" href="@Page.Url.AbsoluteUri" />
+    <link rel="stylesheet" href="@(new Uri(Site.BaseUrl, "css/app.css").AbsolutePath)" />
 </StaticHeadContent>
 
 @code {
@@ -292,7 +292,7 @@ Update `Pages/Home.razor` so the post is reachable from the home page:
 
 <h1>Hello from Kiji</h1>
 <p>This page is a Razor component rendered to static HTML.</p>
-<p><a href="@($"{Site.BaseUrl.AbsolutePath}posts/hello-kiji/")">Read the first post</a></p>
+<p><a href="@(new Uri(Site.BaseUrl, "posts/hello-kiji/").AbsolutePath)">Read the first post</a></p>
 ```
 
 The directory name becomes the slug, so the new page is available at

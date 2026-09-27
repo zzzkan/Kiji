@@ -35,6 +35,7 @@ public sealed class PageServiceTests : IDisposable
         await app.RenderPageAsync(requests[0], CancellationToken.None);
         Assert.Equal(3, probe.Created.Count);
         Assert.Equal(3, probe.Created.Distinct().Count());
+        Assert.Equal(3, probe.Created.Select(service => service.Page).Distinct().Count());
         foreach (var service in probe.Created)
         {
             Assert.Equal(1, service.DisposeCount);
@@ -43,6 +44,10 @@ public sealed class PageServiceTests : IDisposable
             Assert.Contains("page", places);
             Assert.Contains("layout", places);
             Assert.Contains("child", places);
+            Assert.Equal(new Uri(app.Info.BaseUrl, $"services/{service.Key}/"), service.Page.Url);
+            var pageReads = probe.PageReads.Where(read => ReferenceEquals(read.Service, service)).ToArray();
+            Assert.Equal(3, pageReads.Length);
+            Assert.All(pageReads, read => Assert.Same(service.Page, read.Page));
         }
         Assert.Contains("firstfirst", await renders[0], StringComparison.Ordinal);
         Assert.Contains("secondsecond", await renders[1], StringComparison.Ordinal);

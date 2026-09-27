@@ -32,15 +32,24 @@ the domain root. Include the full path in `BaseUrl`:
 BaseUrl = new Uri("https://your-name.github.io/my-site/"),
 ```
 
-Prefix links to site-root pages and static assets with `Site.BaseUrl.AbsolutePath`:
+Resolve links to site-root pages and static assets against `Site.BaseUrl` using `System.Uri`:
 
 ```razor
-<a href="@($"{Site.BaseUrl.AbsolutePath}docs/")">Docs</a>
-<link rel="stylesheet" href="@($"{Site.BaseUrl.AbsolutePath}css/app.css")" />
+@inject SiteInfo Site
+
+<a href="@(new Uri(Site.BaseUrl, "docs/").AbsolutePath)">Docs</a>
+<link rel="stylesheet" href="@(new Uri(Site.BaseUrl, "css/app.css").AbsolutePath)" />
 ```
 
-`AbsolutePath` is `/my-site/` for that project site and `/` for a domain-root site, so the
-same markup works in both places.
+The resolved paths are `/my-site/docs/` and `/my-site/css/app.css` for that project site.
+Use relative values without a leading `/`, which would discard the deployment base path.
+`AbsolutePath` keeps links on the current host, so they also work on the local development
+server. Use `AbsoluteUri` when a full public URL is required.
+
+For canonical and Open Graph URLs, inject `PageInfo` and use `Page.Url.AbsoluteUri`.
+It identifies the published page even during development. See
+[PageInfo and URI conversion](../api-reference/#pageinfo) for page-relative resolution
+and conversion back to relative URIs.
 
 Kiji already applies `BaseUrl` to feed, sitemap, and generated Markdown image
 URLs. Page-bundle image URLs include the deployment base path, while their files remain

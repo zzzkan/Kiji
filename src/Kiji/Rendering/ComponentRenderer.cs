@@ -18,7 +18,8 @@ internal sealed class ComponentRenderer(IServiceProvider services)
         {
             var context = PageRenderContext.Current ?? throw new InvalidOperationException(
                 "PageInfo is only available during page rendering.");
-            return new PageInfo(provider.GetRequiredService<SiteInfo>().ResolveUrl(context.RoutePath.TrimStart('/')));
+            var site = provider.GetRequiredService<SiteInfo>();
+            return new PageInfo(site.ResolveUrl(context.RoutePath));
         });
         services.AddScoped<HeadContentRegistry>();
         services.AddScoped<IComponentActivator, StaticComponentActivator>();

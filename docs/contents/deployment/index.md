@@ -42,7 +42,8 @@ Resolve links to site-root pages and static assets with `Site.ResolveUrl`:
 ```
 
 The resolved paths are `/my-site/docs/` and `/my-site/css/app.css` for that project site.
-Use relative values without a leading `/`, which would discard the deployment base path.
+A single leading `/` is optional: `Site.ResolveUrl("/docs/")` also preserves the deployment
+base path.
 
 Kiji already applies `BaseUrl` to feed, sitemap, and generated Markdown image
 URLs. Page-bundle image URLs include the deployment base path, while their files remain

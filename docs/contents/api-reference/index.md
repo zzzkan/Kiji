@@ -78,11 +78,15 @@ once throws.
 | `string Language`    | `"en"`           | Written to `<html lang>` and the RSS channel language.                                                                                          |
 | `string Author`      | `""`             | Author metadata available to the site.                                                                                                          |
 
-#### `SiteInfo.ResolveUrl(string relativeUri)`
+#### `SiteInfo.ResolveUrl(string path)`
 
-Returns a `Uri` resolved against `BaseUrl`, equivalent to `new Uri(Site.BaseUrl, relativeUri)`.
-For example, `Site.ResolveUrl("about/")` preserves a deployment base path such as `/kiji/`.
-Use `AbsoluteUri` for a full public URL and `AbsolutePath` for links on the current host.
+Combines a site-relative path with `BaseUrl` and returns an absolute `Uri`.
+A single leading `/` is ignored: both `Site.ResolveUrl("about/")` and
+`Site.ResolveUrl("/about/")` preserve a deployment base path such as `/kiji/`.
+An empty string or `"/"` returns `BaseUrl`.
+
+This differs from standard `System.Uri` resolution: `/about/` stays under the site's base
+path, and external URLs and parent-directory traversal are not accepted.
 
 ### SitePaths
 

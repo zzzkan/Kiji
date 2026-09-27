@@ -73,6 +73,20 @@ public sealed class FeedsTests
         Assert.Equal("https://example.com/rss/all.xml", selfLink.Attribute("href")!.Value);
     }
 
+    [Fact]
+    public async Task WriteAsync_RootItem_UsesBaseUrl()
+    {
+        var artifact = new RssFeedArtifact(static _ =>
+        [
+            new FeedItem("Home", "Site home", DateTimeOffset.UnixEpoch, ""),
+        ]);
+        var document = XDocument.Parse(await WriteFeedAsync(artifact, CreateContext(baseUrl: "https://example.com/kiji/")));
+
+        var item = Assert.Single(document.Root!.Element("channel")!.Elements("item"));
+        Assert.Equal("https://example.com/kiji/", item.Element("link")!.Value);
+        Assert.Equal("https://example.com/kiji/", item.Element("guid")!.Value);
+    }
+
     [Theory]
     [InlineData("/blog/post/")]
     [InlineData("https://example.com/blog/post/")]

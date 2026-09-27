@@ -70,8 +70,7 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
                 return;
             }
 
-            using var socket = await context.WebSockets.AcceptWebSocketAsync();
-            await _hub.HandleClientAsync(socket, context.RequestAborted);
+            await _hub.HandleClientAsync(context.WebSockets.AcceptWebSocketAsync, context.RequestAborted);
         });
 
         web.MapGet("/_kiji/livereload.js", static async context =>

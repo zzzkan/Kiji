@@ -66,17 +66,17 @@ public sealed class PageHead : ComponentBase
         builder.AddAttribute(17, "rel", "alternate");
         builder.AddAttribute(18, "type", "application/rss+xml");
         builder.AddAttribute(19, "title", Site.Name);
-        builder.AddAttribute(20, "href", new Uri(Site.BaseUrl, "feed.xml").AbsoluteUri);
+        builder.AddAttribute(20, "href", Site.ResolveUrl("feed.xml").AbsoluteUri);
         builder.CloseElement();
 
         builder.OpenElement(21, "link");
         builder.AddAttribute(22, "rel", "stylesheet");
-        builder.AddAttribute(23, "href", new Uri(Site.BaseUrl, "css/app.css").AbsolutePath);
+        builder.AddAttribute(23, "href", Site.ResolveUrl("css/app.css").AbsolutePath);
         builder.CloseElement();
 
         builder.OpenElement(24, "link");
         builder.AddAttribute(25, "rel", "icon");
-        builder.AddAttribute(26, "href", new Uri(Site.BaseUrl, "icon.svg").AbsolutePath);
+        builder.AddAttribute(26, "href", Site.ResolveUrl("icon.svg").AbsolutePath);
         builder.AddAttribute(27, "type", "image/svg+xml");
         builder.CloseElement();
     }

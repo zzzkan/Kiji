@@ -32,13 +32,13 @@ the domain root. Include the full path in `BaseUrl`:
 BaseUrl = new Uri("https://your-name.github.io/my-site/"),
 ```
 
-Resolve links to site-root pages and static assets against `Site.BaseUrl` using `System.Uri`:
+Resolve links to site-root pages and static assets with `Site.ResolveUrl`:
 
 ```razor
 @inject SiteInfo Site
 
-<a href="@(new Uri(Site.BaseUrl, "docs/").AbsolutePath)">Docs</a>
-<link rel="stylesheet" href="@(new Uri(Site.BaseUrl, "css/app.css").AbsolutePath)" />
+<a href="@(Site.ResolveUrl("docs/").AbsolutePath)">Docs</a>
+<link rel="stylesheet" href="@(Site.ResolveUrl("css/app.css").AbsolutePath)" />
 ```
 
 The resolved paths are `/my-site/docs/` and `/my-site/css/app.css` for that project site.

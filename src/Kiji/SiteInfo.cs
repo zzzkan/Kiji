@@ -38,6 +38,15 @@ public sealed class SiteInfo
     /// </summary>
     public string Author { get; init; } = string.Empty;
 
+    /// <summary>Resolves a URI against the site's <see cref="BaseUrl"/>.</summary>
+    /// <param name="relativeUri">The URI to resolve. An empty value returns the base URL.</param>
+    /// <returns>The resolved absolute URI.</returns>
+    /// <remarks>
+    /// Uses standard <see cref="Uri"/> resolution: a leading slash replaces the base path,
+    /// and an absolute URI replaces the base URL. No site-containment validation is performed.
+    /// </remarks>
+    public Uri ResolveUrl(string relativeUri) => new(BaseUrl, relativeUri);
+
     private static Uri ValidateBaseUrl(Uri value)
     {
         ArgumentNullException.ThrowIfNull(value);

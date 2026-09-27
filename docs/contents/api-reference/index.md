@@ -74,6 +74,17 @@ once throws.
 
 All properties are initialized when the `SiteInfo` is constructed.
 
+### `SiteInfo.ResolveUrl(string relativeUri)`
+
+Returns a `Uri` resolved against `BaseUrl`, equivalent to `new Uri(Site.BaseUrl, relativeUri)`.
+For example, `Site.ResolveUrl("about/")` preserves a deployment base path such as `/kiji/`.
+Use `AbsoluteUri` for a full public URL and `AbsolutePath` for links on the current host.
+
+Resolution follows `System.Uri` without extra normalization or containment checks:
+an empty string returns the base URL, a leading `/` replaces the base path, `../` can
+leave it, and an absolute input URL replaces the base URL. Query strings and fragments
+are preserved. Use `new Uri(Page.Url, relativeUri)` for page-relative resolution.
+
 ## SitePaths
 
 `SitePaths` configures input directories. Kiji creates it as `StaticSite.Paths`; it has no
@@ -166,14 +177,14 @@ ending in `404.html`.
 <StaticHeadContent>
     <link rel="canonical" href="@Page.Url.AbsoluteUri" />
 </StaticHeadContent>
-<a href="@(new Uri(Site.BaseUrl, "about/").AbsolutePath)">About</a>
+<a href="@Site.ResolveUrl("about/").AbsolutePath">About</a>
 ```
 
-Use `System.Uri` for conversion, with an explicit base:
+Use `SiteInfo.ResolveUrl` for site-relative resolution and `System.Uri` for other conversions:
 
 ```csharp
 // Resolve from the site root, including its deployment base path.
-var about = new Uri(Site.BaseUrl, "about/");
+var about = Site.ResolveUrl("about/");
 
 // Resolve from the current page's URL.
 var image = new Uri(Page.Url, "image.png");
@@ -188,9 +199,12 @@ deployment base path should be retained. `MakeRelativeUri` returns a `Uri`, not 
 use `OriginalString` for its escaped relative representation. It does not enforce site
 containment: results can contain `../` or remain absolute for another origin.
 
-Blazor's `NavigationManager` is not registered. Component property injection (`@inject`
-or `[Inject]`) throws `NotSupportedException` with guidance to use `PageInfo`, `SiteInfo`,
-and `System.Uri`. Kiji provides no runtime
+Blazor's `NavigationManager` is unsupported and is not registered. Injecting it fails;
+use `PageInfo.Url`, `SiteInfo.BaseUrl`, and `SiteInfo.ResolveUrl` instead. When a render
+fails with a recognized Blazor/DI missing-service diagnostic for `NavigationManager`,
+Kiji adds this guidance in a `NotSupportedException` and retains the original error as
+its inner exception. Other error formats pass through unchanged. This diagnostic runs
+only on failure and does not scan component types. Kiji provides no runtime
 navigation, refresh, history, or navigation events. Render links or configure redirects
 in your hosting platform instead.
 

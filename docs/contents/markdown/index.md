@@ -157,7 +157,7 @@ rendered as written. Kiji does not add `SiteInfo.BaseUrl` to root-relative Markd
 
 A link such as `/about/` therefore points at the domain root and is wrong when the site is
 published under `/my-site/`. Prefer document-relative links in Markdown. In Razor, resolve
-site links with `new Uri(Site.BaseUrl, "about/").AbsolutePath`. See [Deployment](../deployment/) for the full
+site links with `Site.ResolveUrl("about/").AbsolutePath`. See [Deployment](../deployment/) for the full
 sub-path setup.
 
 ## Local images and page bundles

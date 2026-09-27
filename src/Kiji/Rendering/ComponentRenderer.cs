@@ -18,7 +18,7 @@ internal sealed class ComponentRenderer(IServiceProvider services)
         {
             var context = PageRenderContext.Current ?? throw new InvalidOperationException(
                 "PageInfo is only available during page rendering.");
-            return new PageInfo(new Uri(provider.GetRequiredService<SiteInfo>().BaseUrl, context.RoutePath.TrimStart('/')));
+            return new PageInfo(provider.GetRequiredService<SiteInfo>().ResolveUrl(context.RoutePath.TrimStart('/')));
         });
         services.AddScoped<HeadContentRegistry>();
         services.AddScoped<IComponentActivator, StaticComponentActivator>();
@@ -42,11 +42,33 @@ internal sealed class ComponentRenderer(IServiceProvider services)
         // HtmlRenderer captures its scope and cannot reset root component state.
         await using var renderer = new HtmlRenderer(
             scope.ServiceProvider, scope.ServiceProvider.GetRequiredService<ILoggerFactory>());
-        await renderer.Dispatcher.InvokeAsync(async () =>
+        try
         {
-            var document = await renderer.RenderComponentAsync<TComponent>(CreateParameterView(parameters));
-            document.WriteHtmlTo(output);
-        });
+            await renderer.Dispatcher.InvokeAsync(async () =>
+            {
+                var document = await renderer.RenderComponentAsync<TComponent>(CreateParameterView(parameters));
+                document.WriteHtmlTo(output);
+            });
+        }
+        catch (InvalidOperationException exception) when (IsMissingNavigationManager(exception))
+        {
+            throw new NotSupportedException(
+                "NavigationManager is not supported by Kiji. Inject PageInfo for the page's public URL "
+                + "and SiteInfo for BaseUrl and ResolveUrl; use System.Uri for page-relative URI conversion. "
+                + "Render links or configure redirects in your hosting platform. "
+                + exception.Message,
+                exception);
+        }
+    }
+
+    private static bool IsMissingNavigationManager(InvalidOperationException exception)
+    {
+        // Blazor/DI expose no structured missing-service identifier. Match only their
+        // known diagnostics on failure; unknown formats retain the original exception.
+        // Nothing is scanned or inspected on successful renders, including first use.
+        return (exception.Message.StartsWith("Cannot provide a value for property '", StringComparison.Ordinal)
+                && exception.Message.EndsWith("There is no registered service of type 'Microsoft.AspNetCore.Components.NavigationManager'.", StringComparison.Ordinal))
+            || exception.Message.StartsWith("Unable to resolve service for type 'Microsoft.AspNetCore.Components.NavigationManager' while attempting to activate '", StringComparison.Ordinal);
     }
 
     private static ParameterView CreateParameterView(IReadOnlyDictionary<string, object?>? parameters)

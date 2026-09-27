@@ -14,7 +14,7 @@ public sealed class PageInfoTestPage : ComponentBase
     {
         builder.AddContent(0, Page.Url.AbsoluteUri);
         builder.AddContent(1, "|");
-        builder.AddContent(2, new Uri(Site.BaseUrl, "about/").AbsolutePath);
+        builder.AddContent(2, Site.ResolveUrl("about/").AbsolutePath);
         builder.AddContent(3, "|");
         builder.AddContent(4, new Uri(Page.Url, "image.png").AbsolutePath);
         builder.AddContent(5, "|");

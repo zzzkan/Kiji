@@ -59,7 +59,7 @@ internal sealed class RssFeedArtifact
             await writer.WriteElementStringAsync(prefix: null, "language", ns: null, site.Language);
 
             await writer.WriteStartElementAsync("atom", "link", AtomNamespace);
-            await writer.WriteAttributeStringAsync(prefix: null, "href", ns: null, new Uri(site.BaseUrl, OutputRelativePath).AbsoluteUri);
+            await writer.WriteAttributeStringAsync(prefix: null, "href", ns: null, site.ResolveUrl(OutputRelativePath).AbsoluteUri);
             await writer.WriteAttributeStringAsync(prefix: null, "rel", ns: null, "self");
             await writer.WriteAttributeStringAsync(prefix: null, "type", ns: null, "application/rss+xml");
             await writer.WriteEndElementAsync();
@@ -69,7 +69,7 @@ internal sealed class RssFeedArtifact
                 cancellationToken.ThrowIfCancellationRequested();
 
                 RelativePath.Validate(item.RelativePath, nameof(item.RelativePath));
-                var itemUrl = new Uri(site.BaseUrl, item.RelativePath).AbsoluteUri;
+                var itemUrl = site.ResolveUrl(item.RelativePath).AbsoluteUri;
                 // RFC 1123 date; converting to UTC keeps the offset correct for any zone.
                 var pubDate = item.PublishedAt.UtcDateTime.ToString("r", CultureInfo.InvariantCulture);
 

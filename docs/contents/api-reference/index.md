@@ -320,10 +320,9 @@ Task<ProcessedImageInfo> ProcessAsync(
     CancellationToken cancellationToken = default);
 ```
 
-The method receives the source image, an isolated output directory, and the run's
-cancellation token. Kiji owns persistence and copies variants into page bundles. It must
-write every returned variant into `outputDirectory`, use file names relative to that
-directory, and return only after the files are ready.
+The processor should observe the token, write every returned variant into
+`outputDirectory` using file names relative to that directory, and return only after the
+files are ready.
 
 #### `ProcessedImageInfo`
 

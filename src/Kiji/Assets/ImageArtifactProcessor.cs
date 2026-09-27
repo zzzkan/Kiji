@@ -72,6 +72,7 @@ internal static class ImageArtifactProcessor
                 await File.WriteAllBytesAsync(sourceCopy, sourceBytes, cancellationToken);
                 info = await processor.ProcessAsync(sourceCopy, generated, cancellationToken);
             }
+            cancellationToken.ThrowIfCancellationRequested();
             var outputs = info.Variants.Select(variant =>
             {
                 return !BuildManifest.IsRelativeOutput(variant.FileName)
@@ -85,6 +86,7 @@ internal static class ImageArtifactProcessor
                     throw new IOException("Cannot materialize a generated image.");
                 }
             }
+            cancellationToken.ThrowIfCancellationRequested();
             var payload = JsonSerializer.Serialize(new CachedImageResult(info, outputs), ImageCacheJsonContext.Default.CachedImageResult);
             ArtifactCache.WriteAtomic(recordPath, JsonSerializer.SerializeToUtf8Bytes(
                 new ImageCacheEnvelope(BuildFingerprint.HashText(payload), payload), ImageCacheJsonContext.Default.ImageCacheEnvelope));

@@ -38,6 +38,10 @@ internal sealed class PageRenderContext
     /// </summary>
     internal Generation.BuildDependencyRecorder? Dependencies { get; init; }
 
+    internal CancellationToken CancellationToken { get; init; }
+
+    internal SharedRenderLifetime? SharedRenders { get; init; }
+
     internal static string CreateOutputUrlDirectory(Uri baseUrl, string outputRelativeDirectory)
     {
         ArgumentNullException.ThrowIfNull(baseUrl);

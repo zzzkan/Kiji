@@ -324,12 +324,9 @@ Task<ProcessedImageInfo> ProcessAsync(
 ```
 
 The method receives the source image, an output directory, and a cancellation token.
-During publish this token observes build cancellation and any explicit Markdown token;
-during development it observes site shutdown, independently of individual request
-disconnects. For persistent caching, the output directory is isolated and Kiji copies
-variants into page bundles; otherwise the processor writes directly into the page bundle. It must
-write every returned variant into `outputDirectory`, use file names relative to that
-directory, and return only after the files are ready.
+The processor should observe the token, write every returned variant into
+`outputDirectory` using file names relative to that directory, and return only after the
+files are ready.
 
 #### `ProcessedImageInfo`
 

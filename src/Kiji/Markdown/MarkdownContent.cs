@@ -111,8 +111,7 @@ public sealed class MarkdownContent<TFrontMatter>
             var task = lifetime is null
                 ? _renderAsync(this, CancellationToken.None)
                 : lifetime.RunAsync(token => _renderAsync(this, token));
-            // The last waiter may leave before a producer fails. Observe the failure
-            // and evict it even when no request remains to run the catch above.
+            // Observe and evict failed shared renders even after every waiter has left.
             _ = EvictFailedRenderAsync(task, tasks, cacheKey, cached);
             return task;
         });

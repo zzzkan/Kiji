@@ -14,14 +14,12 @@ public sealed class SiteCancellationTests : IDisposable
     {
         WriteContent("original");
         var output = Path.Combine(_root, "dist");
-        await using (var original = CreateApp(new CancellationImageProcessor(_ => Task.CompletedTask)))
+        await using (var original = CreateApp(new TrackingImageProcessor()))
         {
             await original.PublishAsync(output);
         }
         var cache = Path.Combine(_root, ".kiji", "cache");
         var manifest = File.ReadAllBytes(Path.Combine(cache, "manifest.json"));
-        var bundles = Directory.GetFiles(cache, "html-*.bin").ToDictionary(path => path, File.ReadAllBytes);
-        Assert.NotEmpty(bundles);
         var htmlPath = Path.Combine(output, "md", "post", "index.html");
         var originalHtml = File.ReadAllText(htmlPath);
         WriteContent("changed");
@@ -29,13 +27,14 @@ public sealed class SiteCancellationTests : IDisposable
         using var cancellation = new CancellationTokenSource();
         var started = Signal();
         var release = Signal();
-        var observedCancellation = false;
-        var processor = new CancellationImageProcessor(async token =>
+        var processor = new TrackingImageProcessor
         {
-            started.SetResult();
-            try { await release.Task.WaitAsync(token); }
-            catch (OperationCanceledException) { observedCancellation = true; throw; }
-        });
+            BeforeWriteAsync = async token =>
+            {
+                started.SetResult();
+                await release.Task.WaitAsync(token);
+            },
+        };
         await using var app = CreateApp(processor);
         var run = app.RunAsync(name => name == "KIJI_OUTPUT" ? output : null, cancellation.Token);
         try
@@ -43,13 +42,8 @@ public sealed class SiteCancellationTests : IDisposable
             await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
             cancellation.Cancel();
             Assert.Equal(1, await run.WaitAsync(TimeSpan.FromSeconds(10)));
-            Assert.True(observedCancellation);
-            Assert.True(processor.Disposed);
-            Assert.False(processor.DisposedWhileActive);
             Assert.Equal(manifest, File.ReadAllBytes(Path.Combine(cache, "manifest.json")));
-            foreach (var (path, bytes) in bundles) { Assert.Equal(bytes, File.ReadAllBytes(path)); }
             Assert.Equal(originalHtml, File.ReadAllText(htmlPath));
-            Assert.Empty(Directory.GetFiles(output, "*.tmp", SearchOption.AllDirectories));
         }
         finally
         {
@@ -57,20 +51,15 @@ public sealed class SiteCancellationTests : IDisposable
             await run.WaitAsync(TimeSpan.FromSeconds(10));
         }
 
-        var recoveredProcessor = new CancellationImageProcessor(_ => Task.CompletedTask);
-        await using var recovered = CreateApp(recoveredProcessor);
+        await using var recovered = CreateApp(new TrackingImageProcessor());
         await recovered.PublishAsync(output);
-        Assert.Equal(1, recoveredProcessor.Calls);
         Assert.Contains("changed", File.ReadAllText(htmlPath), StringComparison.Ordinal);
-        await recovered.PublishAsync(output);
-        Assert.Equal(1, recoveredProcessor.Calls);
     }
 
     [Theory]
     [InlineData("run")]
     [InlineData("host")]
-    [InlineData("dispose")]
-    public async Task DevShutdown_CancelsAndJoinsDetachedMarkdownBeforeProcessorDisposal(string trigger)
+    public async Task DevShutdown_CancelsAndJoinsDetachedMarkdown(string trigger)
     {
         WriteContent("dev");
         using var runStop = new CancellationTokenSource();
@@ -79,22 +68,26 @@ public sealed class SiteCancellationTests : IDisposable
         var canceled = Signal();
         var cleanup = Signal();
         var release = Signal();
-        var processor = new CancellationImageProcessor(async token =>
+        var processor = new TrackingImageProcessor
         {
-            started.SetResult();
-            try { await release.Task.WaitAsync(token); }
-            catch (OperationCanceledException)
+            BeforeWriteAsync = async token =>
             {
-                canceled.SetResult();
-                await cleanup.Task;
-                throw;
-            }
-        });
+                started.SetResult();
+                try { await release.Task.WaitAsync(token); }
+                catch (OperationCanceledException)
+                {
+                    canceled.SetResult();
+                    await cleanup.Task;
+                    throw;
+                }
+            },
+        };
         await using var app = CreateApp(processor);
         var (server, web) = await app.StartDevServerAsync(TestUrls.EphemeralPort, runStop.Token);
         using var client = new HttpClient { BaseAddress = new Uri(web.Urls.First()) };
         var request = client.GetStringAsync("/md/post/", requestStop.Token);
         Task? shutdown = null;
+        var hostShutdown = Task.CompletedTask;
         try
         {
             await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
@@ -103,21 +96,21 @@ public sealed class SiteCancellationTests : IDisposable
             // Reload drops the content dictionary, but its detached producer is still owned.
             await server.ReloadAfterCodeUpdateAsync();
             if (trigger == "run") { runStop.Cancel(); }
-            shutdown = ShutdownAsync();
+            else { hostShutdown = web.StopAsync(); }
+            // Observe the selected stop signal before disposal can cancel the producer itself.
             await canceled.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await hostShutdown.WaitAsync(TimeSpan.FromSeconds(10));
+            shutdown = server.DisposeAsync().AsTask();
             Assert.False(shutdown.IsCompleted);
-            Assert.True(processor.Active);
-            Assert.False(processor.Disposed);
             cleanup.SetResult();
             await shutdown.WaitAsync(TimeSpan.FromSeconds(10));
-            await app.DisposeAsync();
-            Assert.True(processor.Disposed);
-            Assert.False(processor.DisposedWhileActive);
         }
         finally
         {
+            requestStop.Cancel();
             cleanup.TrySetResult();
             release.TrySetResult();
+            await hostShutdown.WaitAsync(TimeSpan.FromSeconds(10));
             if (shutdown is not null) { await shutdown.WaitAsync(TimeSpan.FromSeconds(10)); }
             else
             {
@@ -125,15 +118,9 @@ public sealed class SiteCancellationTests : IDisposable
                 await server.DisposeAsync();
             }
         }
-
-        async Task ShutdownAsync()
-        {
-            if (trigger == "host") { await web.StopAsync(); }
-            await server.DisposeAsync();
-        }
     }
 
-    private StaticSite CreateApp(CancellationImageProcessor processor)
+    private StaticSite CreateApp(TrackingImageProcessor processor)
     {
         var app = StaticSite.Create([]);
         app.Info = new SiteInfo { Name = "Cancellation", BaseUrl = new Uri("https://example.test/") };

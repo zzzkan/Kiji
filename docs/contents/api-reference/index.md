@@ -295,9 +295,6 @@ This type has no public constructor. Kiji creates it for a source file.
 `RenderAsync` should be called while rendering a page when the Markdown contains local
 images, because their output directory comes from the current page.
 
-Cancellation is cooperative. Kiji checks between synchronous Markdown stages; custom
-image processors must observe the token passed to them to stop their own work.
-
 ### Image processing
 
 The public image contracts are in `Kiji.Assets`.
@@ -323,7 +320,6 @@ Task<ProcessedImageInfo> ProcessAsync(
     CancellationToken cancellationToken = default);
 ```
 
-The method receives the source image, an output directory, and a cancellation token.
 The processor should observe the token, write every returned variant into
 `outputDirectory` using file names relative to that directory, and return only after the
 files are ready.

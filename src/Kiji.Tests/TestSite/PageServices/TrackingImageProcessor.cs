@@ -8,11 +8,13 @@ public sealed class TrackingImageProcessor : IImageProcessor, IAsyncDisposable
     private int _calls;
     public int Calls => _calls;
     public int DisposeCount { get; private set; }
+    internal Func<CancellationToken, Task>? BeforeWriteAsync { get; init; }
 
     public async Task<ProcessedImageInfo> ProcessAsync(string sourceFilePath, string outputDirectory,
         CancellationToken cancellationToken = default)
     {
         Interlocked.Increment(ref _calls);
+        if (BeforeWriteAsync is { } beforeWrite) { await beforeWrite(cancellationToken); }
         Directory.CreateDirectory(outputDirectory);
         await File.WriteAllTextAsync(Path.Combine(outputDirectory, "custom.svg"),
             "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"2\" height=\"2\"></svg>", cancellationToken);

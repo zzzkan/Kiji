@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/zzzkan/kiji/actions/workflows/ci.yml/badge.svg)](https://github.com/zzzkan/kiji/actions/workflows/ci.yml)
 [![NuGet](https://img.shields.io/nuget/v/Kiji.svg)](https://www.nuget.org/packages/Kiji)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A static site generator for .NET that turns Razor components into static HTML.
 
@@ -11,7 +12,8 @@ A static site generator for .NET that turns Razor components into static HTML.
 
 ## Demo
 
-The [documentation site](https://kiji-docs.zzzkan.workers.dev/) is built with Kiji. Its [source](docs/) is a working example.
+- [Kiji documentation](https://kiji-docs.zzzkan.workers.dev/) ([source](docs/))
+- [zzzkan.me](https://zzzkan.me/)
 
 ## Why Kiji
 

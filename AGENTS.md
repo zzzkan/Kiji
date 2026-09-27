@@ -7,8 +7,9 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
 - `dotnet build -c Release` and `dotnet test -c Release` cover the whole solution.
   Pass no extra flags to test: unsupported flags reach Microsoft.Testing.Platform.
 - `dotnet publish docs -c Release -o docs/dist` generates docs;
-  `dotnet watch --project docs` serves it. Docs references the published package;
-  use an isolated consumer of the local package to verify framework changes.
+  `dotnet watch --project docs` serves it. Docs references the local Kiji project
+  and imports its publish targets. Use an isolated consumer of the packed local
+  package to verify package integration.
 - `src/Kiji` is the single package, including Markdown, images, feeds and hosting.
   `MSBuild/Kiji.targets` integrates publish, watch and clean.
 - `src/Kiji.Tests` contains xUnit v3 tests and TestSite integration fixtures.

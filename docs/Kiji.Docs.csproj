@@ -6,7 +6,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Kiji" />
+    <ProjectReference Include="../src/Kiji/Kiji.csproj" />
   </ItemGroup>
+
+  <Import Project="../src/Kiji/MSBuild/Kiji.targets" />
+
+  <!-- This explicit import runs before the SDK computes its default PublishDir. -->
+  <PropertyGroup Condition="'$(KijiGenerateOnPublish)' == 'true' and '$(UseArtifactsOutput)' != 'true'">
+    <PublishDir Condition="'$(PublishDir)' == ''">$(MSBuildProjectDirectory)/dist/</PublishDir>
+  </PropertyGroup>
 
 </Project>

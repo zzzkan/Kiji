@@ -8,21 +8,27 @@ This page covers Kiji's complete public site-authoring API. All `StaticSite` reg
 methods return the same site instance and may be chained. Configure the site before
 `RunAsync`; execution makes its configuration read-only.
 
-- [StaticSite lifecycle](#staticsite-lifecycle)
-- [SiteInfo](#siteinfo)
-- [SitePaths](#sitepaths)
-- [Pages, layouts, and page services](#pages-layouts-and-page-services)
-- [PageInfo](#pageinfo)
-- [StaticHeadContent](#staticheadcontent)
-- [Content sources and ContentDictionary](#content-sources-and-contentdictionary)
-- [Markdown APIs](#markdown-apis)
+- [Site setup](#site-setup)
+  - [StaticSite lifecycle](#staticsite-lifecycle)
+  - [SiteInfo](#siteinfo)
+  - [SitePaths](#sitepaths)
+- [Pages and rendering](#pages-and-rendering)
+  - [Pages, layouts, and page services](#pages-layouts-and-page-services)
+  - [PageInfo](#pageinfo)
+  - [StaticHeadContent](#staticheadcontent)
+- [Content and images](#content-and-images)
+  - [Content sources and ContentDictionary](#content-sources-and-contentdictionary)
+  - [Markdown APIs](#markdown-apis)
+  - [Image processing](#image-processing)
 - [Build inputs and controls](#build-inputs-and-controls)
-- [Feeds](#feeds)
-- [Sitemaps](#sitemaps)
-- [Custom artifacts](#custom-artifacts)
-- [Image processing](#image-processing)
+- [Generated files](#generated-files)
+  - [Feeds](#feeds)
+  - [Sitemaps](#sitemaps)
+  - [Custom artifacts](#custom-artifacts)
 
-## StaticSite lifecycle
+## Site setup
+
+### StaticSite lifecycle
 
 ```csharp
 var app = StaticSite.Create(args);
@@ -37,22 +43,22 @@ app.Info = new SiteInfo
 return await app.RunAsync();
 ```
 
-### `StaticSite.Create(string[] args)`
+#### `StaticSite.Create(string[] args)`
 
 Creates one site. `args` cannot be null and are forwarded to ASP.NET Core configuration
 when the development server runs. Each `StaticSite` instance can execute once.
 
-### `StaticSite.Info`
+#### `StaticSite.Info`
 
 Gets or sets the required `SiteInfo`. Reading it before assignment throws. It may be
 reassigned until execution starts; setting it afterward throws.
 
-### `StaticSite.Paths`
+#### `StaticSite.Paths`
 
 Gets the site's `SitePaths`. The object is created with the site and remains mutable until
 execution starts.
 
-### `StaticSite.RunAsync(CancellationToken cancellationToken = default)`
+#### `StaticSite.RunAsync(CancellationToken cancellationToken = default)`
 
 Starts the development server during `dotnet watch`, and generates the
 site when invoked by Kiji's `dotnet publish` targets. Await it from the entry point and
@@ -60,7 +66,7 @@ return its process exit code. The method freezes configuration, owns the resourc
 for the run, and disposes them on success, failure, or cancellation. Calling it more than
 once throws.
 
-## SiteInfo
+### SiteInfo
 
 `SiteInfo` contains site-wide metadata used by rendered pages, feeds, and sitemaps.
 
@@ -72,20 +78,13 @@ once throws.
 | `string Language`    | `"en"`           | Written to `<html lang>` and the RSS channel language.                                                                                          |
 | `string Author`      | `""`             | Author metadata available to the site.                                                                                                          |
 
-All properties are initialized when the `SiteInfo` is constructed.
-
-### `SiteInfo.ResolveUrl(string relativeUri)`
+#### `SiteInfo.ResolveUrl(string relativeUri)`
 
 Returns a `Uri` resolved against `BaseUrl`, equivalent to `new Uri(Site.BaseUrl, relativeUri)`.
 For example, `Site.ResolveUrl("about/")` preserves a deployment base path such as `/kiji/`.
 Use `AbsoluteUri` for a full public URL and `AbsolutePath` for links on the current host.
 
-Resolution follows `System.Uri` without extra normalization or containment checks:
-an empty string returns the base URL, a leading `/` replaces the base path, `../` can
-leave it, and an absolute input URL replaces the base URL. Query strings and fragments
-are preserved. Use `new Uri(Page.Url, relativeUri)` for page-relative resolution.
-
-## SitePaths
+### SitePaths
 
 `SitePaths` configures input directories. Kiji creates it as `StaticSite.Paths`; it has no
 public constructor. Relative paths are resolved from `RootDirectory`.
@@ -98,20 +97,22 @@ public constructor. Relative paths are resolved from `RootDirectory`.
 
 Changing a property after execution starts throws.
 
-## Pages, layouts, and page services
+## Pages and rendering
 
-### `AddStaticPages()`
+### Pages, layouts, and page services
+
+#### `AddStaticPages()`
 
 Finds public, non-abstract components with fixed routes in the entry assembly. Components
 with parameterized routes are ignored. If there is no entry assembly, use the assembly
 overload.
 
-### `AddStaticPages(Assembly assembly)`
+#### `AddStaticPages(Assembly assembly)`
 
 Finds fixed routed components in the supplied non-null assembly. Registering the same
 assembly repeatedly has no additional effect.
 
-### `AddPages<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)`
+#### `AddPages<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)`
 
 Registers parameter sets for an `IComponent` with exactly one parameterized route. The
 factory is deferred until paths and services are ready and runs once per registration per
@@ -134,18 +135,18 @@ HTML can be reused when parameter values are `null` or have one of these types:
 HTML reuse for that page. Prefer passing a content key and looking up the item during
 rendering. See [Incremental builds](../incremental-builds/#pass-stable-page-parameters).
 
-### `UseDefaultLayout<TLayout>()`
+#### `UseDefaultLayout<TLayout>()`
 
 Sets the `LayoutComponentBase` used by pages without their own `@layout`. A page's layout
 takes precedence, and layouts may nest through their own `@layout`. Without a default,
 the page renders directly inside the generated document body.
 
-### `UseNotFoundPage<TComponent>()`
+#### `UseNotFoundPage<TComponent>()`
 
 Writes a routed `IComponent` as `/404.html`. The component must declare exactly one route
 and cannot also be registered through `AddPages`.
 
-### `AddPageService<T>()`
+#### `AddPageService<T>()`
 
 Registers one instance of a concrete class for each page render. Its public constructor
 dependencies are resolved automatically; the page, layout, and child components share the
@@ -155,20 +156,14 @@ The type must be a non-abstract class with a public constructor and may be regis
 once. Page services are unavailable to content loaders, route/feed factories, and artifact
 writers.
 
-## PageInfo
+### PageInfo
 
-Inject `Kiji.PageInfo` to read the page's public URL. Kiji creates this immutable object;
-it has no public constructor. Each render has its own instance, shared by the page,
-layouts, child components, and page services. It is unavailable to content loaders,
-route/feed factories, artifact writers, or components rendered without a page context.
+Inject `Kiji.PageInfo` to read the page's public URL. Kiji creates one immutable instance
+per render and shares it with the page, layouts, child components, and page services.
 
-| Property | Behavior |
-| --- | --- |
+| Property  | Behavior                                                                                                                  |
+| --------- | ------------------------------------------------------------------------------------------------------------------------- |
 | `Uri Url` | Read-only absolute public URL, resolved from `SiteInfo.BaseUrl` and the page's route, including the deployment base path. |
-
-Development uses the same public URL as publishing, rather than the local request URL.
-Request query strings do not change it. The configured not-found page has the public URL
-ending in `404.html`.
 
 ```razor
 @inject PageInfo Page
@@ -180,35 +175,10 @@ ending in `404.html`.
 <a href="@Site.ResolveUrl("about/").AbsolutePath">About</a>
 ```
 
-Use `SiteInfo.ResolveUrl` for site-relative resolution and `System.Uri` for other conversions:
+Blazor's `NavigationManager` is unsupported and not registered. Use `PageInfo.Url` and
+`SiteInfo.ResolveUrl` for links; configure redirects in the hosting platform.
 
-```csharp
-// Resolve from the site root, including its deployment base path.
-var about = Site.ResolveUrl("about/");
-
-// Resolve from the current page's URL.
-var image = new Uri(Page.Url, "image.png");
-
-// Express the page's URL relative to the site root.
-var relative = Site.BaseUrl.MakeRelativeUri(Page.Url);
-```
-
-Use `AbsoluteUri` for full public URLs and `AbsolutePath` for links that should stay on
-the current host during development. Relative input must not start with `/` when the
-deployment base path should be retained. `MakeRelativeUri` returns a `Uri`, not a string;
-use `OriginalString` for its escaped relative representation. It does not enforce site
-containment: results can contain `../` or remain absolute for another origin.
-
-Blazor's `NavigationManager` is unsupported and is not registered. Injecting it fails;
-use `PageInfo.Url`, `SiteInfo.BaseUrl`, and `SiteInfo.ResolveUrl` instead. When a render
-fails with a recognized Blazor/DI missing-service diagnostic for `NavigationManager`,
-Kiji adds this guidance in a `NotSupportedException` and retains the original error as
-its inner exception. Other error formats pass through unchanged. This diagnostic runs
-only on failure and does not scan component types. Kiji provides no runtime
-navigation, refresh, history, or navigation events. Render links or configure redirects
-in your hosting platform instead.
-
-## StaticHeadContent
+### StaticHeadContent
 
 `Kiji.Components.StaticHeadContent` is a component that places its `RenderFragment? ChildContent`
 inside the generated document `<head>`:
@@ -228,9 +198,11 @@ Blazor's `Microsoft.AspNetCore.Components.Web.PageTitle`, `HeadContent`, and `He
 are unsupported and throw an actionable error during rendering (publish and development).
 Use `StaticHeadContent` with a plain `<title>` element.
 
-## Content sources and ContentDictionary
+## Content and images
 
-### `UseContentSource<T>(Func<IServiceProvider, IReadOnlyList<T>> loader)`
+### Content sources and ContentDictionary
+
+#### `UseContentSource<T>(Func<IServiceProvider, IReadOnlyList<T>> loader)`
 
 Registers a content source for reference type `T`. The loader runs lazily once for each
 site snapshot, after execution paths are known. Its items receive opaque string keys based
@@ -238,7 +210,7 @@ on their zero-based order and are exposed as `ContentDictionary<T>`. A given ele
 can identify only one registered dictionary. This form has no data digest, so pages
 reading its items are rendered on every publish.
 
-### `UseContentSource<T>(string sourceId, Func<IServiceProvider, IReadOnlyList<ContentEntry<T>>> loader)`
+#### `UseContentSource<T>(string sourceId, Func<IServiceProvider, IReadOnlyList<ContentEntry<T>>> loader)`
 
 Registers a source with stable, source-local identities. Return
 `new ContentEntry<T>(id, value, digest)` for each item. The digest must change whenever
@@ -248,24 +220,7 @@ lose HTML reuse.
 Values are immutable for one build snapshot. Collection enumeration tracks item order,
 membership, and all item digests. A missing lookup tracks the collection too.
 
-### `AddPageInput(string key, Func<string> read)` and `PageBuildInputs`
-
-Registers an external value evaluated once per build snapshot when needed.
-Inject `PageBuildInputs` and call `Read(key)` during rendering; only readers depend on it.
-
-| Method                                | Behavior                                                                                                                                                                    |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `string Read(string key)`             | Instance method; reads a registered value and records it for the current page. An unknown key throws.                                                                       |
-| `static byte[] ReadFile(string path)` | Reads and records the exact file bytes consumed during rendering. Pass an absolute path resolved against the site root; a relative path uses the process working directory. |
-| `static void DisableCache()`          | Disables persistent HTML reuse for the current page render, for untracked or nondeterministic inputs.                                                                       |
-
-Call these methods during rendering to record dependencies for that page. File paths
-outside the site root disable persistent HTML reuse for that page. These APIs do not
-register file watchers or poll external systems. `AddBuildInput` continues to declare
-dependencies shared by all pages and watches declared paths in development. See the
-[input selection guide](../incremental-builds/#declare-inputs-outside-the-built-in-content-pipeline).
-
-### `ContentDictionary<T>`
+#### `ContentDictionary<T>`
 
 `ContentDictionary<T>` implements `IReadOnlyDictionary<string, T>` and is resolved through
 dependency injection. It has no public constructor. Keys are case-insensitive opaque
@@ -289,23 +244,23 @@ the collection's order, membership, and every item digest. A body-only edit can 
 invalidate a collection reader even when its count and keys stay the same. Reads from
 layouts and child components are dependencies of the page too.
 
-## Markdown APIs
+### Markdown APIs
 
 The public Markdown extensions are declared by `Kiji.Markdown.MarkdownStaticSiteExtensions`.
 
-### `UseMarkdownContent<TFrontMatter>(Action<MarkdownOptions>? configure = null)`
+#### `UseMarkdownContent<TFrontMatter>(Action<MarkdownOptions>? configure = null)`
 
 Recursively loads `*.md` files and registers
 `ContentDictionary<MarkdownContent<TFrontMatter>>`. `TFrontMatter` must be a class. Each
 file must begin with YAML front matter; the body is rendered on demand.
 
-### `UseMarkdownContent<TFrontMatter,TModel>(Func<MarkdownContent<TFrontMatter>,TModel> select, Action<MarkdownOptions>? configure = null)`
+#### `UseMarkdownContent<TFrontMatter,TModel>(Func<MarkdownContent<TFrontMatter>,TModel> select, Action<MarkdownOptions>? configure = null)`
 
 Projects each parsed file independently and registers `ContentDictionary<TModel>`. Both
 generic arguments must be classes, and `select` cannot be null. The projection should not
 depend on other items in the collection.
 
-### `MarkdownOptions`
+#### `MarkdownOptions`
 
 The configure callback receives a new options instance for that registration.
 
@@ -317,7 +272,7 @@ The configure callback receives a new options instance for that registration.
 | `ConfigureYaml(Action<DeserializerBuilder>)`         | Adds a non-null YamlDotNet configuration after the camel-case and ignore-unmatched defaults. Calls run in registration order.   |
 | `AddHtmlPostProcessor(Func<string,string>)`          | Adds a non-null synchronous HTML transformation. Transformations run in registration order, each receiving the previous result. |
 
-### `MarkdownContent<TFrontMatter>`
+#### `MarkdownContent<TFrontMatter>`
 
 This type has no public constructor. Kiji creates it for a source file.
 
@@ -329,6 +284,48 @@ This type has no public constructor. Kiji creates it for a source file.
 
 `RenderAsync` should be called while rendering a page when the Markdown contains local
 images, because their output directory comes from the current page.
+
+### Image processing
+
+The public image contracts are in `Kiji.Assets`.
+
+#### `UseImageProcessor(Func<IImageProcessor> factory)`
+
+Replaces the default responsive-image processor. The last registration wins. The factory
+is required, runs lazily, and must return a new non-null instance. Kiji owns that instance
+and disposes it with the site, using asynchronous disposal when supported.
+
+One instance is shared by concurrent page renders and survives content reloads, so an
+implementation must support concurrent calls and retain no page or content state. Declare
+external configuration with `AddBuildInput` and include configuration and encoder versions
+in `IImageProcessor.CacheIdentity`. This identity covers all transformation settings and
+the encoder implementation. Its default value is `null`, disabling persistent reuse.
+
+#### `IImageProcessor.ProcessAsync`
+
+```csharp
+Task<ProcessedImageInfo> ProcessAsync(
+    string sourceFilePath,
+    string outputDirectory,
+    CancellationToken cancellationToken = default);
+```
+
+The method receives the source image, an isolated output directory, and the run's
+cancellation token. Kiji owns persistence and copies variants into page bundles. It must
+write every returned variant into `outputDirectory`, use file names relative to that
+directory, and return only after the files are ready.
+
+#### `ProcessedImageInfo`
+
+Construct this record with an object initializer. `OriginalWidth` and `OriginalHeight` are
+required source dimensions in pixels. `Variants` is a required `IReadOnlyList<ImageVariant>`
+ordered by ascending width; the largest variant is used as the default image source.
+
+#### `ImageVariant`
+
+`ImageVariant(string FileName, int Width)` describes one generated file. `FileName` is
+relative to the output directory and `Width` is its pixel width. Both positional
+properties are read-only.
 
 ## Build inputs and controls
 
@@ -344,19 +341,38 @@ Declares a named value such as a remote-data version or encoder setting. Changin
 the key/value input set or a value requires a full rebuild. The key cannot be blank and
 the value cannot be null.
 
-## Feeds
+### `AddPageInput(string key, Func<string> read)` and `PageBuildInputs`
+
+Registers an external value evaluated once per build snapshot when needed.
+Inject `PageBuildInputs` and call `Read(key)` during rendering; only readers depend on it.
+
+| Method                                | Behavior                                                                                                                                                                    |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `string Read(string key)`             | Instance method; reads a registered value and records it for the current page. An unknown key throws.                                                                       |
+| `static byte[] ReadFile(string path)` | Reads and records the exact file bytes consumed during rendering. Pass an absolute path resolved against the site root; a relative path uses the process working directory. |
+| `static void DisableCache()`          | Disables persistent HTML reuse for the current page render, for untracked or nondeterministic inputs.                                                                       |
+
+Call these methods during rendering to record dependencies for that page. File paths
+outside the site root disable persistent HTML reuse for that page. These APIs do not
+register file watchers or poll external systems. `AddBuildInput` continues to declare
+dependencies shared by all pages and watches declared paths in development. See the
+[input selection guide](../incremental-builds/#declare-inputs-outside-the-built-in-content-pipeline).
+
+## Generated files
+
+### Feeds
 
 The public feed types are in `Kiji.Feeds`; `AddRssFeed` is declared by
 `RssFeedStaticSiteExtensions`.
 
-### `AddRssFeed(Func<IServiceProvider,IEnumerable<FeedItem>> items, string path = "feed.xml")`
+#### `AddRssFeed(Func<IServiceProvider,IEnumerable<FeedItem>> items, string path = "feed.xml")`
 
 Registers an RSS 2.0 artifact. The deferred factory runs when artifacts are written and
 can resolve content dictionaries. Entries are emitted in supplied order. `path` is the
 output-relative feed path and cannot be blank. Channel title, description, language, and
 absolute URLs come from `SiteInfo`.
 
-### `FeedItem`
+#### `FeedItem`
 
 Construct an item with
 `FeedItem(string Title, string Description, DateTimeOffset PublishedAt, string RelativePath)`.
@@ -370,7 +386,7 @@ Construct an item with
 
 Null titles or descriptions and invalid relative paths throw during construction.
 
-## Sitemaps
+### Sitemaps
 
 `AddSitemap` is declared by `Kiji.Sitemaps.SitemapStaticSiteExtensions`:
 
@@ -386,16 +402,16 @@ registers a sitemap containing generated page URLs, sorted by site-relative path
 case-insensitively and must follow the same site-relative path rules as `FeedItem`.
 `path` cannot be blank.
 
-## Custom artifacts
+### Custom artifacts
 
-### `AddArtifact(string outputRelativePath, Func<Stream,SiteOutputContext,CancellationToken,Task> write)`
+#### `AddArtifact(string outputRelativePath, Func<Stream,SiteOutputContext,CancellationToken,Task> write)`
 
 Registers a site-wide output file written after pages. The path and delegate are required.
 The delegate receives a writable stream owned by Kiji, the completed site context, and the
 run's cancellation token. Do not dispose the stream. Output-path collisions or paths that
 escape the output directory fail generation.
 
-### `SiteOutputContext`
+#### `SiteOutputContext`
 
 Kiji constructs this type for artifact writers; it has no public constructor.
 
@@ -405,52 +421,10 @@ Kiji constructs this type for artifact writers; it has no public constructor.
 | `IReadOnlyList<SitePageInfo> Pages` | Every generated page.                                                                                      |
 | `IServiceProvider Services`         | Site services available at artifact generation time, including content dictionaries but not page services. |
 
-### `SitePageInfo`
+#### `SitePageInfo`
 
 `SitePageInfo(string RelativePath, string OutputRelativePath)` describes a generated page.
 `RelativePath` is URL-facing and relative to `SiteInfo.BaseUrl`; it follows the site-relative
 path validation rules. `OutputRelativePath` is the file-facing path below the output
 directory and cannot be blank. Both values are exposed as read-only properties with the
 same names.
-
-## Image processing
-
-The public image contracts are in `Kiji.Assets`.
-
-### `UseImageProcessor(Func<IImageProcessor> factory)`
-
-Replaces the default responsive-image processor. The last registration wins. The factory
-is required, runs lazily, and must return a new non-null instance. Kiji owns that instance
-and disposes it with the site, using asynchronous disposal when supported.
-
-One instance is shared by concurrent page renders and survives content reloads, so an
-implementation must support concurrent calls and retain no page or content state. Declare
-external configuration with `AddBuildInput` and include configuration and encoder versions
-in `IImageProcessor.CacheIdentity`. This identity covers all transformation settings and
-the encoder implementation. Its default value is `null`, disabling persistent reuse.
-
-### `IImageProcessor.ProcessAsync`
-
-```csharp
-Task<ProcessedImageInfo> ProcessAsync(
-    string sourceFilePath,
-    string outputDirectory,
-    CancellationToken cancellationToken = default);
-```
-
-The method receives the source image, an isolated output directory, and the run's
-cancellation token. Kiji owns persistence and copies variants into page bundles. It must
-write every returned variant into `outputDirectory`, use file names relative to that
-directory, and return only after the files are ready.
-
-### `ProcessedImageInfo`
-
-Construct this record with an object initializer. `OriginalWidth` and `OriginalHeight` are
-required source dimensions in pixels. `Variants` is a required `IReadOnlyList<ImageVariant>`
-ordered by ascending width; the largest variant is used as the default image source.
-
-### `ImageVariant`
-
-`ImageVariant(string FileName, int Width)` describes one generated file. `FileName` is
-relative to the output directory and `Width` is its pixel width. Both positional
-properties are read-only.

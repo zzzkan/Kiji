@@ -92,7 +92,7 @@ Only pages that read this value depend on it. The registration does not poll ext
 systems or refresh the environment of an already running process.
 
 Read page inputs during rendering. For files, pass `ReadFile` an absolute path under
-your site root. See [PageBuildInputs](../api-reference/#content-sources-and-contentdictionary)
+your site root. See [PageBuildInputs](../api-reference/#build-inputs-and-controls)
 for path resolution and reuse constraints.
 
 These page-level APIs do not add arbitrary file watchers. To trigger development reloads

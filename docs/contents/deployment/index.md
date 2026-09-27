@@ -43,13 +43,6 @@ Resolve links to site-root pages and static assets with `Site.ResolveUrl`:
 
 The resolved paths are `/my-site/docs/` and `/my-site/css/app.css` for that project site.
 Use relative values without a leading `/`, which would discard the deployment base path.
-`AbsolutePath` keeps links on the current host, so they also work on the local development
-server. Use `AbsoluteUri` when a full public URL is required.
-
-For canonical and Open Graph URLs, inject `PageInfo` and use `Page.Url.AbsoluteUri`.
-It identifies the published page even during development. See
-[PageInfo and URI conversion](../api-reference/#pageinfo) for page-relative resolution
-and conversion back to relative URIs.
 
 Kiji already applies `BaseUrl` to feed, sitemap, and generated Markdown image
 URLs. Page-bundle image URLs include the deployment base path, while their files remain

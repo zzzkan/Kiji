@@ -729,8 +729,7 @@ public sealed class StaticSite
         {
             await renderer.RenderComponentToAsync<KijiRoot>(
                 output,
-                request.RootParameters ?? CreateRootParameters(request),
-                new Uri(Info.BaseUrl, request.RoutePath.TrimStart('/')));
+                request.RootParameters ?? CreateRootParameters(request));
         }
         finally
         {
@@ -947,7 +946,7 @@ public sealed class StaticSite
 
         EnsureServices();
 
-        _renderer = new ComponentRenderer(_services!, Info.BaseUrl);
+        _renderer = new ComponentRenderer(_services!);
         return _renderer;
     }
 

@@ -45,6 +45,38 @@ public sealed class IncrementalBuildTests : IDisposable
     }
 
     [Fact]
+    public async Task PageInfo_BaseUrlChangeInvalidatesCachedCanonicalUrls()
+    {
+        var root = CreateSiteRoot("page-info");
+        var renders = 0;
+        void RecordRender() { Interlocked.Increment(ref renders); }
+        await BuildAsync(root, RecordRender);
+        var initialRenders = renders;
+
+        await BuildWithBasePath(root);
+        Assert.True(renders > initialRenders);
+        var homePath = Path.Combine(root, "dist", "index.html");
+        Assert.Contains("href=\"https://example.com/kiji/\"", await File.ReadAllTextAsync(homePath), StringComparison.Ordinal);
+        Assert.Contains("href=\"https://example.com/kiji/404.html\"",
+            await File.ReadAllTextAsync(Path.Combine(root, "dist", "404.html")), StringComparison.Ordinal);
+
+        var changedRenders = renders;
+        await BuildWithBasePath(root);
+        Assert.Equal(changedRenders, renders);
+
+        var scratch = CreateSiteRoot("page-info-scratch");
+        await BuildWithBasePath(scratch);
+        AssertDirectoriesIdentical(Path.Combine(scratch, "dist"), Path.Combine(root, "dist"));
+
+        async Task BuildWithBasePath(string siteRoot)
+        {
+            await using var app = CreateBuildApp(siteRoot, RecordRender);
+            app.Info = TestArticleContents.CreateSiteInfoWithBasePath();
+            await app.PublishAsync(Path.Combine(siteRoot, "dist"));
+        }
+    }
+
+    [Fact]
     public async Task IncrementalBuild_MalformedManifestFallsBackToFullBuild()
     {
         var renders = 0;

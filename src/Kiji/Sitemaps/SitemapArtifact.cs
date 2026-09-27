@@ -63,7 +63,8 @@ internal sealed class SitemapArtifact
                 cancellationToken.ThrowIfCancellationRequested();
 
                 await writer.WriteStartElementAsync(prefix: null, "url", ns: null);
-                await writer.WriteElementStringAsync(prefix: null, "loc", ns: null, new Uri(context.Site.BaseUrl, page.RelativePath).AbsoluteUri);
+                var pageUrl = context.Site.ResolveUrl(page.RelativePath);
+                await writer.WriteElementStringAsync(prefix: null, "loc", ns: null, pageUrl.AbsoluteUri);
                 await writer.WriteEndElementAsync();
             }
 

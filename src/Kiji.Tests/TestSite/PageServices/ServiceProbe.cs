@@ -7,4 +7,5 @@ public sealed class ServiceProbe
     public ConcurrentQueue<RenderService> Created { get; } = new();
     public TaskCompletionSource? Release { get; set; }
     public ConcurrentQueue<(string Place, RenderService Service)> Reads { get; } = new();
+    public ConcurrentQueue<(RenderService Service, PageInfo Page)> PageReads { get; } = new();
 }

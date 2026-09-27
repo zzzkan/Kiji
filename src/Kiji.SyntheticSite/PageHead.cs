@@ -9,7 +9,7 @@ namespace Kiji.SyntheticSite;
 public sealed class PageHead : ComponentBase
 {
     [Inject]
-    public NavigationManager NavigationManager { get; set; } = default!;
+    public PageInfo Page { get; set; } = default!;
 
     [Inject]
     public SiteInfo Site { get; set; } = default!;
@@ -44,7 +44,7 @@ public sealed class PageHead : ComponentBase
 
         builder.OpenElement(7, "link");
         builder.AddAttribute(8, "rel", "canonical");
-        builder.AddAttribute(9, "href", NavigationManager.Uri);
+        builder.AddAttribute(9, "href", Page.Url.AbsoluteUri);
         builder.CloseElement();
 
         builder.OpenElement(10, "link");

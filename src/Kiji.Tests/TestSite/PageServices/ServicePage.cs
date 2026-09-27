@@ -7,6 +7,7 @@ namespace Kiji.Tests.TestSite.PageServices;
 public sealed class ServicePage : ComponentBase
 {
     [Inject] public RenderService Service { get; set; } = null!;
+    [Inject] public PageInfo Page { get; set; } = null!;
     [Parameter] public string Key { get; set; } = string.Empty;
     [Parameter] public bool Fail { get; set; }
 
@@ -14,6 +15,7 @@ public sealed class ServicePage : ComponentBase
     {
         Service.Key = Key;
         Service.Probe.Reads.Enqueue(("page", Service));
+        Service.Probe.PageReads.Enqueue((Service, Page));
         if (Service.Probe.Release is { } release)
         {
             await release.Task;

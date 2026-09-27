@@ -34,6 +34,21 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
     }
 
     [Fact]
+    public async Task PublishAsync_NavigationManagerInjectionFailsWithoutPublishingPage()
+    {
+        await using var app = StaticSite.Create([]);
+        app.Info = TestArticleContents.CreateSiteInfoWithBasePath();
+        app.Paths.RootDirectory = _testDir;
+        app.AddPages<UnsupportedNavigationPage>(_ => [new { Id = "original" }]);
+
+        var exception = await Assert.ThrowsAsync<NotSupportedException>(() => app.PublishAsync(_outputDir));
+
+        Assert.Contains("NavigationManager", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("PageInfo", exception.Message, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(_outputDir, "navigation", "original", "index.html")));
+    }
+
+    [Fact]
     public async Task PublishAsync_WritesDynamicBlogAndTagPagesAndFeed()
     {
         await using var app = StaticSite.Create([]);

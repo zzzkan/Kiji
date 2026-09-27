@@ -15,10 +15,18 @@ internal sealed class LiveReloadHub
     private readonly Lock _sendLock = new();
     private Task _pendingSend = Task.CompletedTask;
 
-    internal async Task HandleClientAsync(WebSocket socket, CancellationToken cancellationToken)
+    internal async Task HandleClientAsync(Func<Task<WebSocket>> acceptWebSocket, CancellationToken cancellationToken)
     {
         var id = Guid.NewGuid();
-        _clients.TryAdd(id, socket);
+        // A client can finish its handshake before the server's accept continuation
+        // resumes. Queue acceptance and registration together so a broadcast in that
+        // gap waits for the client instead of silently missing it.
+        using var socket = await QueueSendAsync(async () =>
+        {
+            var accepted = await acceptWebSocket();
+            _clients.TryAdd(id, accepted);
+            return accepted;
+        });
 
         try
         {
@@ -54,11 +62,11 @@ internal sealed class LiveReloadHub
     internal Task<int> BroadcastReloadAsync(CancellationToken cancellationToken)
     {
         // WebSocket supports only one concurrent send. File saves and code updates
-        // can arrive together, so serialize broadcasts and close acknowledgements.
+        // can arrive together, so serialize acceptance, broadcasts and close acknowledgements.
         return QueueSendAsync(() => SendReloadAsync(cancellationToken));
     }
 
-    private Task<int> QueueSendAsync(Func<Task<int>> send)
+    private Task<T> QueueSendAsync<T>(Func<Task<T>> send)
     {
         lock (_sendLock)
         {
@@ -68,9 +76,9 @@ internal sealed class LiveReloadHub
         }
     }
 
-    private static async Task<int> SendAfterAsync(Task previous, Func<Task<int>> send)
+    private static async Task<T> SendAfterAsync<T>(Task previous, Func<Task<T>> send)
     {
-        // A failed or cancelled broadcast must not poison subsequent notifications.
+        // A failed or cancelled operation must not poison subsequent notifications.
         await previous.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
         return await send();
     }

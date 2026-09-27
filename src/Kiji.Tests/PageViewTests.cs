@@ -13,7 +13,7 @@ public sealed class PageViewTests
     public async Task LayoutAttributeOnPage_OverridesDefaultLayout()
     {
         await using var app = CreateApp();
-        var renderer = new ComponentRenderer(app.ServiceProvider, app.Info.BaseUrl);
+        var renderer = new ComponentRenderer(app.ServiceProvider);
 
         var html = await renderer.RenderComponentAsync<KijiRoot>(
             CreateRootParameters(typeof(PageWithAltLayout), defaultLayout: typeof(MainLayout)));
@@ -26,7 +26,7 @@ public sealed class PageViewTests
     public async Task NestedLayouts_RenderInsideParentLayout()
     {
         await using var app = CreateApp();
-        var renderer = new ComponentRenderer(app.ServiceProvider, app.Info.BaseUrl);
+        var renderer = new ComponentRenderer(app.ServiceProvider);
 
         var html = await renderer.RenderComponentAsync<KijiRoot>(
             CreateRootParameters(typeof(PageWithNestedLayout), defaultLayout: null));
@@ -41,7 +41,7 @@ public sealed class PageViewTests
     public async Task CircularLayoutChain_ThrowsInsteadOfLooping()
     {
         await using var app = CreateApp();
-        var renderer = new ComponentRenderer(app.ServiceProvider, app.Info.BaseUrl);
+        var renderer = new ComponentRenderer(app.ServiceProvider);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             renderer.RenderComponentAsync<KijiRoot>(
@@ -52,7 +52,7 @@ public sealed class PageViewTests
     public async Task PageWithoutLayoutOrHead_RendersOnlyItsBody()
     {
         await using var app = CreateApp();
-        var renderer = new ComponentRenderer(app.ServiceProvider, app.Info.BaseUrl);
+        var renderer = new ComponentRenderer(app.ServiceProvider);
 
         var html = await renderer.RenderComponentAsync<KijiRoot>(
             CreateRootParameters(typeof(PlainPage), defaultLayout: null));
@@ -66,7 +66,7 @@ public sealed class PageViewTests
     public async Task StaticHeadContentInLayoutAndPage_CombinesSharedCssAndPageMetadata()
     {
         await using var app = CreateApp();
-        var renderer = new ComponentRenderer(app.ServiceProvider, app.Info.BaseUrl);
+        var renderer = new ComponentRenderer(app.ServiceProvider);
 
         var html = await renderer.RenderComponentAsync<KijiRoot>(
             CreateRootParameters(typeof(PageWithTitle), defaultLayout: typeof(LayoutWithHead)));
@@ -81,7 +81,7 @@ public sealed class PageViewTests
     public async Task AsyncPage_HeadContentPublishedAfterFirstRenderLandsInHead()
     {
         await using var app = CreateApp();
-        var renderer = new ComponentRenderer(app.ServiceProvider, app.Info.BaseUrl);
+        var renderer = new ComponentRenderer(app.ServiceProvider);
 
         var html = await renderer.RenderComponentAsync<KijiRoot>(
             CreateRootParameters(typeof(AsyncPage), defaultLayout: typeof(LayoutWithHead)));
@@ -99,7 +99,7 @@ public sealed class PageViewTests
     public async Task StandardBlazorHeadComponents_ThrowActionableDiagnostic(Type componentType)
     {
         await using var app = CreateApp();
-        var renderer = new ComponentRenderer(app.ServiceProvider, app.Info.BaseUrl);
+        var renderer = new ComponentRenderer(app.ServiceProvider);
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             renderer.RenderComponentAsync<KijiRoot>(CreateRootParameters(componentType, null)));
         Assert.Contains(componentType.FullName!, error.Message, StringComparison.Ordinal);

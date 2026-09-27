@@ -5,7 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Kiji.Rendering;
 
-/// <summary>Rejects unsupported head components before they silently lose metadata.</summary>
+/// <summary>Creates components and rejects unsupported Blazor features.</summary>
 internal sealed class StaticComponentActivator(IServiceProvider services) : IComponentActivator
 {
     private static readonly ConcurrentDictionary<Type, ObjectFactory> Factories = new();

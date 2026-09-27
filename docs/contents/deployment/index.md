@@ -32,15 +32,18 @@ the domain root. Include the full path in `BaseUrl`:
 BaseUrl = new Uri("https://your-name.github.io/my-site/"),
 ```
 
-Prefix links to site-root pages and static assets with `Site.BaseUrl.AbsolutePath`:
+Resolve links to site-root pages and static assets with `Site.ResolveUrl`:
 
 ```razor
-<a href="@($"{Site.BaseUrl.AbsolutePath}docs/")">Docs</a>
-<link rel="stylesheet" href="@($"{Site.BaseUrl.AbsolutePath}css/app.css")" />
+@inject SiteInfo Site
+
+<a href="@(Site.ResolveUrl("docs/").AbsolutePath)">Docs</a>
+<link rel="stylesheet" href="@(Site.ResolveUrl("css/app.css").AbsolutePath)" />
 ```
 
-`AbsolutePath` is `/my-site/` for that project site and `/` for a domain-root site, so the
-same markup works in both places.
+The resolved paths are `/my-site/docs/` and `/my-site/css/app.css` for that project site.
+A single leading `/` is optional: `Site.ResolveUrl("/docs/")` also preserves the deployment
+base path.
 
 Kiji already applies `BaseUrl` to feed, sitemap, and generated Markdown image
 URLs. Page-bundle image URLs include the deployment base path, while their files remain

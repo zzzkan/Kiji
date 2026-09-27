@@ -13,7 +13,7 @@ A static site generator for .NET that turns Razor components into static HTML.
 ## Demo
 
 - [Kiji documentation](https://kiji-docs.zzzkan.workers.dev/) ([source](docs/))
-- [zzzkan.me](https://zzzkan.me/)
+- [zzzkan.me](https://zzzkan.me/) (the author's blog)
 
 ## Why Kiji
 

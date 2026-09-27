@@ -6,8 +6,8 @@ namespace Kiji.Components;
 /// <summary>
 /// The built-in root document wrapping every page render: emits the HTML5 doctype,
 /// <c>&lt;html lang&gt;</c> from <see cref="SiteInfo.Language"/>, a <c>&lt;head&gt;</c>
-/// collecting content contributed via <see cref="HeadContent"/> through
-/// <see cref="HeadOutlet"/>, and a <c>&lt;body&gt;</c> hosting the page through
+/// collecting content contributed via <see cref="StaticHeadContent"/> through
+/// <see cref="StaticHeadOutlet"/>, and a <c>&lt;body&gt;</c> hosting the page through
 /// <see cref="PageView"/>.
 /// </summary>
 internal sealed class KijiRoot : ComponentBase
@@ -31,7 +31,7 @@ internal sealed class KijiRoot : ComponentBase
         builder.AddAttribute(2, "lang", Site.Language);
 
         builder.OpenElement(3, "head");
-        builder.OpenComponent<HeadOutlet>(4);
+        builder.OpenComponent<StaticHeadOutlet>(4);
         builder.CloseComponent();
         builder.CloseElement();
 

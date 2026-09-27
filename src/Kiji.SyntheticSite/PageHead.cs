@@ -22,8 +22,8 @@ public sealed class PageHead : ComponentBase
 
     protected override void BuildRenderTree(RenderTreeBuilder builder)
     {
-        builder.OpenComponent<Kiji.Components.HeadContent>(0);
-        builder.AddAttribute(1, nameof(Kiji.Components.HeadContent.ChildContent), (RenderFragment)BuildHeadContent);
+        builder.OpenComponent<Kiji.Components.StaticHeadContent>(0);
+        builder.AddAttribute(1, nameof(Kiji.Components.StaticHeadContent.ChildContent), (RenderFragment)BuildHeadContent);
         builder.CloseComponent();
     }
 

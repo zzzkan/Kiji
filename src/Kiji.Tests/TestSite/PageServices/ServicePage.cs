@@ -6,7 +6,7 @@ namespace Kiji.Tests.TestSite.PageServices;
 [Route("/services/{Key}/")]
 public sealed class ServicePage : ComponentBase
 {
-    [Inject] public RenderService Service { get; set; } = null!;
+    [Inject] public IRenderService Service { get; set; } = null!;
     [Inject] public PageInfo Page { get; set; } = null!;
     [Parameter] public string Key { get; set; } = string.Empty;
     [Parameter] public bool Fail { get; set; }

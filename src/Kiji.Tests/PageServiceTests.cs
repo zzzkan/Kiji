@@ -1,3 +1,4 @@
+using Kiji.Assets;
 using Kiji.Feeds;
 using Kiji.Tests.TestSite.PageServices;
 using Microsoft.AspNetCore.Components;
@@ -74,8 +75,15 @@ public sealed class PageServiceTests : IDisposable
         Assert.Throws<ArgumentException>(() => app.AddPageService<LayoutComponentBase>());
         Assert.Throws<ArgumentException>(() => app.AddPageService<StaticSite>());
         Assert.Throws<ArgumentException>(() => app.AddPageService<ContentDictionary<ServiceProbe>>());
+        Assert.Throws<ArgumentException>(() => app.AddPageService<IRenderService, IRenderService>());
+        Assert.Throws<ArgumentException>(() => app.AddPageService<object, LayoutComponentBase>());
+        Assert.Throws<ArgumentException>(() => app.AddPageService<object, StaticSite>());
         app.AddPageService<RenderDependency>();
         Assert.Throws<InvalidOperationException>(() => app.AddPageService<RenderDependency>());
+        Assert.Throws<InvalidOperationException>(() => app.AddPageService<RenderDependency, RenderDependency>());
+        app.AddPageService<object, RenderDependency>();
+        Assert.Throws<InvalidOperationException>(() => app.AddPageService<object>());
+        Assert.Throws<InvalidOperationException>(() => app.AddPageService<object, MissingDependencyService>());
         app.AddPageService<SiteInfo>();
         var exception = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());
         Assert.Contains(nameof(SiteInfo), exception.Message, StringComparison.Ordinal);
@@ -83,10 +91,20 @@ public sealed class PageServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task InterfaceRegistration_CannotReplaceManagedService()
+    {
+        await using var app = CreateApp();
+        app.AddPageService<IImageProcessor, TrackingImageProcessor>();
+        var exception = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());
+        Assert.Contains(nameof(IImageProcessor), exception.Message, StringComparison.Ordinal);
+        Assert.Contains("managed by Kiji", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task MissingDependency_FailsBeforeRendering()
     {
         await using var app = CreateApp();
-        app.AddPageService<MissingDependencyService>();
+        app.AddPageService<object, MissingDependencyService>();
         var exception = Assert.Throws<AggregateException>(() => app.CreateSnapshot());
         Assert.Contains(nameof(MissingDependencyService), exception.ToString(), StringComparison.Ordinal);
     }
@@ -95,37 +113,50 @@ public sealed class PageServiceTests : IDisposable
     [InlineData("route")]
     [InlineData("feed")]
     [InlineData("artifact")]
+    [InlineData("loader")]
     public async Task PageServices_CannotBeResolvedOutsidePage(string consumer)
     {
         await using var app = CreateApp();
-        app.AddPageService<RenderDependency>();
+        app.AddPageService<IDisposable, RenderDependency>();
         switch (consumer)
         {
             case "route":
                 app.AddPages<ServicePage>(provider =>
                 {
-                    _ = provider.GetRequiredService<RenderDependency>();
+                    _ = provider.GetRequiredService<IDisposable>();
                     return [new { Key = "test" }];
                 });
                 break;
             case "feed":
                 app.AddRssFeed(provider =>
                 {
-                    _ = provider.GetRequiredService<RenderDependency>();
+                    _ = provider.GetRequiredService<IDisposable>();
                     return [];
                 });
                 break;
             case "artifact":
                 app.AddArtifact("service.txt", static (_, context, _) =>
                 {
-                    _ = context.Services.GetRequiredService<RenderDependency>();
+                    _ = context.Services.GetRequiredService<IDisposable>();
                     return Task.CompletedTask;
+                });
+                break;
+            case "loader":
+                app.UseContentSource<ServiceProbe>(provider =>
+                {
+                    _ = provider.GetRequiredService<IDisposable>();
+                    return [];
+                });
+                app.AddPages<ServicePage>(provider =>
+                {
+                    _ = provider.GetRequiredService<ContentDictionary<ServiceProbe>>().Count;
+                    return [];
                 });
                 break;
         }
         var exception = await Assert.ThrowsAnyAsync<Exception>(() => app.PublishAsync(Path.Combine(_root, "dist")));
         Assert.Contains("scoped service", exception.ToString(), StringComparison.OrdinalIgnoreCase);
-        Assert.Contains(nameof(RenderDependency), exception.ToString(), StringComparison.Ordinal);
+        Assert.Contains(nameof(IDisposable), exception.ToString(), StringComparison.Ordinal);
     }
 
     private StaticSite CreateApp(ServiceProbe? probe = null)
@@ -136,7 +167,7 @@ public sealed class PageServiceTests : IDisposable
         if (probe is not null)
         {
             app.UseContentSource<ServiceProbe>(_ => [probe]);
-            app.AddPageService<RenderDependency>().AddPageService<RenderService>();
+            app.AddPageService<RenderDependency>().AddPageService<IRenderService, RenderService>();
             app.UseDefaultLayout<ServiceLayout>();
         }
         return app;

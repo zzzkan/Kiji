@@ -13,9 +13,10 @@ methods return the same site instance and may be chained. Configure the site bef
   - [SiteInfo](#siteinfo)
   - [SitePaths](#sitepaths)
 - [Pages and rendering](#pages-and-rendering)
-  - [Pages, layouts, and page services](#pages-layouts-and-page-services)
-  - [PageInfo](#pageinfo)
-  - [StaticHeadContent](#staticheadcontent)
+  - [Pages](#pages)
+  - [Layout](#layout)
+  - [Page service](#page-service)
+  - [Page metadata](#page-metadata)
 - [Content and images](#content-and-images)
   - [Content sources and ContentDictionary](#content-sources-and-contentdictionary)
   - [Markdown APIs](#markdown-apis)
@@ -103,7 +104,7 @@ Changing a property after execution starts throws.
 
 ## Pages and rendering
 
-### Pages, layouts, and page services
+### Pages
 
 #### `AddStaticPages()`
 
@@ -139,28 +140,33 @@ HTML can be reused when parameter values are `null` or have one of these types:
 HTML reuse for that page. Prefer passing a content key and looking up the item during
 rendering. See [Incremental builds](../incremental-builds/#pass-stable-page-parameters).
 
+#### `UseNotFoundPage<TComponent>()`
+
+Writes a routed `IComponent` as `/404.html`. The component must declare exactly one route
+and cannot also be registered through `AddPages`.
+
+### Layout
+
 #### `UseDefaultLayout<TLayout>()`
 
 Sets the `LayoutComponentBase` used by pages without their own `@layout`. A page's layout
 takes precedence, and layouts may nest through their own `@layout`. Without a default,
 the page renders directly inside the generated document body.
 
-#### `UseNotFoundPage<TComponent>()`
+### Page service
 
-Writes a routed `IComponent` as `/404.html`. The component must declare exactly one route
-and cannot also be registered through `AddPages`.
-
-#### `AddPageService<T>()`
+#### `AddPageService<T>()` / `AddPageService<TService, TImplementation>()`
 
 Registers one instance of a concrete class for each page render. Its public constructor
 dependencies are resolved automatically; the page, layout, and child components share the
 instance. Kiji disposes it when that render finishes.
 
-The type must be a non-abstract class with a public constructor and may be registered only
-once. Page services are unavailable to content loaders, route/feed factories, and artifact
+Page services are unavailable to content loaders, route/feed factories, and artifact
 writers.
 
-### PageInfo
+### Page metadata
+
+#### PageInfo
 
 Inject `Kiji.PageInfo` to read the page's public URL. Kiji creates one immutable instance
 per render and shares it with the page, layouts, child components, and page services.
@@ -182,7 +188,7 @@ per render and shares it with the page, layouts, child components, and page serv
 Blazor's `NavigationManager` is unsupported and not registered. Use `PageInfo.Url` and
 `SiteInfo.ResolveUrl` for links; configure redirects in the hosting platform.
 
-### StaticHeadContent
+#### StaticHeadContent
 
 `Kiji.Components.StaticHeadContent` is a component that places its `RenderFragment? ChildContent`
 inside the generated document `<head>`:

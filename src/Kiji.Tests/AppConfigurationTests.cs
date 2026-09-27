@@ -100,6 +100,7 @@ public sealed class AppConfigurationTests : IDisposable
         void AssertFrozen()
         {
             Assert.Throws<InvalidOperationException>(() => app.AddPageService<object>());
+            Assert.Throws<InvalidOperationException>(() => app.AddPageService<object, object>());
             Assert.Throws<InvalidOperationException>(() => app.UseImageProcessor(
                 () => throw new Xunit.Sdk.XunitException("Factory must not run after execution starts.")));
             Assert.Throws<InvalidOperationException>(() => paths.RootDirectory = _root);

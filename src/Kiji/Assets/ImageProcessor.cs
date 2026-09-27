@@ -82,6 +82,7 @@ internal sealed class ImageProcessor : IImageProcessor
             {
                 foreach (var targetWidth in targetWidths)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     var fileName = $"{fileNameBase}.{contentHash}.{targetWidth}w.webp";
                     var materializedPath = Path.Combine(outputDirectory, fileName);
 
@@ -154,6 +155,7 @@ internal sealed class ImageProcessor : IImageProcessor
         var temporaryPath = $"{destinationPath}.{Guid.NewGuid():N}.tmp";
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (targetWidth == originalWidth)
             {
                 await image.SaveAsync(temporaryPath, encoder, cancellationToken);
@@ -170,6 +172,7 @@ internal sealed class ImageProcessor : IImageProcessor
                 await resized.SaveAsync(temporaryPath, encoder, cancellationToken);
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             File.Move(temporaryPath, destinationPath, overwrite: true);
         }
         finally

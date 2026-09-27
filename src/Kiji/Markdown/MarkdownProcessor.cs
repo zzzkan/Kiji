@@ -57,8 +57,10 @@ internal sealed class MarkdownProcessor
         // Reopening the file here would duplicate input verification and could
         // fingerprint bytes different from the body being converted.
         var document = global::Markdig.Markdown.Parse(markdownBody, _pipeline);
+        cancellationToken.ThrowIfCancellationRequested();
 
         var imageInfoLookup = await MaterializeReferencedImagesAsync(filePath, document, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         var imageContext = new ResponsiveImageContext(
             imageInfoLookup,
             PageRenderContext.Current?.OutputUrlDirectory ?? "/");
@@ -67,9 +69,11 @@ internal sealed class MarkdownProcessor
 
         foreach (var postProcess in _htmlPostProcessors)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             html = postProcess(html);
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return html;
     }
 
@@ -96,6 +100,7 @@ internal sealed class MarkdownProcessor
 
         foreach (var url in imageUrls)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var referenceKey = ImageReferenceKey.FromMarkdownUrl(url);
             var sourceFile = ResolveSourceFile(filePath, url, referenceKey, sourceRoot);
 

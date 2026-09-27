@@ -295,6 +295,16 @@ This type has no public constructor. Kiji creates it for a source file.
 `RenderAsync` should be called while rendering a page when the Markdown contains local
 images, because their output directory comes from the current page.
 
+During publish, it observes both the current page's build cancellation and any explicitly
+passed token, including when the token argument is omitted. During development, Markdown
+generation is shared by requests for the same page: a disconnected request or an explicit
+token cancels only that caller's wait. Stopping the site cancels the shared generation and
+waits for it to finish before disposing the image processor. Outside a page render, an
+explicit token also cancels only the wait for shared generation.
+
+Cancellation is cooperative. Kiji checks between synchronous Markdown stages; custom
+image processors must observe the token passed to them to stop their own work.
+
 ### Image processing
 
 The public image contracts are in `Kiji.Assets`.
@@ -320,8 +330,11 @@ Task<ProcessedImageInfo> ProcessAsync(
     CancellationToken cancellationToken = default);
 ```
 
-The method receives the source image, an isolated output directory, and the run's
-cancellation token. Kiji owns persistence and copies variants into page bundles. It must
+The method receives the source image, an output directory, and a cancellation token.
+During publish this token observes build cancellation and any explicit Markdown token;
+during development it observes site shutdown, independently of individual request
+disconnects. For persistent caching, the output directory is isolated and Kiji copies
+variants into page bundles; otherwise the processor writes directly into the page bundle. It must
 write every returned variant into `outputDirectory`, use file names relative to that
 directory, and return only after the files are ready.
 

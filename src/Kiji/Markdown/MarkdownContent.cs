@@ -57,20 +57,33 @@ public sealed class MarkdownContent<TFrontMatter>
     /// <summary>Renders the Markdown body as HTML and writes referenced image variants beside the current page.</summary>
     public async ValueTask<string> RenderAsync(CancellationToken cancellationToken = default)
     {
+        var context = PageRenderContext.Current;
+        var pageToken = context?.CancellationToken ?? default;
+        using var linked = cancellationToken.CanBeCanceled && pageToken.CanBeCanceled && cancellationToken != pageToken
+            ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, pageToken)
+            : null;
+        cancellationToken = linked?.Token ?? (cancellationToken.CanBeCanceled ? cancellationToken : pageToken);
         cancellationToken.ThrowIfCancellationRequested();
-        PageRenderContext.Current?.Dependencies?.AddFile(FileInfo.FullName, ContentHash);
+        context?.Dependencies?.AddFile(FileInfo.FullName, ContentHash);
         // A tracked render must observe all dependencies and materialize its outputs
         // again, even if the same content instance was rendered in an earlier build.
-        if (PageRenderContext.Current?.Dependencies is not null)
+        if (context?.Dependencies is not null)
         {
-            return await _renderAsync(this, cancellationToken);
+            var html = await _renderAsync(this, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            return html;
         }
 
-        var cacheKey = PageRenderContext.Current?.RoutePath ?? string.Empty;
+        var cacheKey = context?.RoutePath ?? string.Empty;
         var tasks = LazyInitializer.EnsureInitialized(ref _renderTasksByRoute,
             static () => new(StringComparer.Ordinal));
-        var cached = tasks.GetOrAdd(cacheKey,
-            _ => new Lazy<Task<string>>(() => _renderAsync(this, CancellationToken.None)));
+        var cached = tasks.GetOrAdd(cacheKey, _ => CreateSharedRender(tasks, cacheKey, context?.SharedRenders));
+        // A producer may have finished before its eviction continuation runs.
+        while (cached.IsValueCreated && cached.Value.IsCompleted && !cached.Value.IsCompletedSuccessfully)
+        {
+            tasks.TryRemove(new KeyValuePair<string, Lazy<Task<string>>>(cacheKey, cached));
+            cached = tasks.GetOrAdd(cacheKey, _ => CreateSharedRender(tasks, cacheKey, context?.SharedRenders));
+        }
         try
         {
             var renderTask = cached.Value;
@@ -81,11 +94,35 @@ public sealed class MarkdownContent<TFrontMatter>
         catch
         {
             // Do not evict a shared render merely because one waiting request left.
-            if (!cached.IsValueCreated || cached.Value.IsCompleted)
+            if (!cached.IsValueCreated || (cached.Value.IsCompleted && !cached.Value.IsCompletedSuccessfully))
             {
                 tasks.TryRemove(new KeyValuePair<string, Lazy<Task<string>>>(cacheKey, cached));
             }
             throw;
         }
+    }
+
+    private Lazy<Task<string>> CreateSharedRender(ConcurrentDictionary<string, Lazy<Task<string>>> tasks,
+        string cacheKey, SharedRenderLifetime? lifetime)
+    {
+        Lazy<Task<string>> cached = null!;
+        cached = new Lazy<Task<string>>(() =>
+        {
+            var task = lifetime is null
+                ? _renderAsync(this, CancellationToken.None)
+                : lifetime.RunAsync(token => _renderAsync(this, token));
+            // The last waiter may leave before a producer fails. Observe the failure
+            // and evict it even when no request remains to run the catch above.
+            _ = EvictFailedRenderAsync(task, tasks, cacheKey, cached);
+            return task;
+        });
+        return cached;
+    }
+
+    private static async Task EvictFailedRenderAsync(Task<string> render,
+        ConcurrentDictionary<string, Lazy<Task<string>>> tasks, string cacheKey, Lazy<Task<string>> cached)
+    {
+        try { await render; }
+        catch { tasks.TryRemove(new KeyValuePair<string, Lazy<Task<string>>>(cacheKey, cached)); }
     }
 }

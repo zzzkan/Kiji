@@ -1,3 +1,4 @@
+using Kiji.Rendering;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -32,6 +33,7 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
     private volatile bool _contentChanged;
     private WebApplication? _webApplication;
     private Task? _warmupTask;
+    private SharedRenderLifetime? _sharedRenders;
     private bool _disposed;
 
     internal async Task<WebApplication> StartAsync(ResolvedSitePaths options, string[] args, CancellationToken cancellationToken)
@@ -53,6 +55,7 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
 
         var web = builder.Build();
         _webApplication = web;
+        _sharedRenders = new SharedRenderLifetime(cancellationToken, web.Lifetime.ApplicationStopping);
 
         // Must run before route matching, so the /_kiji/* endpoints below match a
         // prefixed request. WebApplication auto-inserts UseRouting ahead of all user
@@ -188,6 +191,11 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
             await _debounceTimer.DisposeAsync();
         }
 
+        if (_sharedRenders is not null)
+        {
+            await _sharedRenders.DisposeAsync();
+        }
+
         if (_webApplication is not null)
         {
             await _webApplication.DisposeAsync();
@@ -240,7 +248,8 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
 
     private async Task WritePageAsync(HttpContext context, Rendering.PageRenderRequest page, int statusCode)
     {
-        var html = await app.RenderPageAsync(page, context.RequestAborted);
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, _sharedRenders!.Token);
+        var html = await app.RenderPageAsync(page, cancellation.Token, _sharedRenders);
         html = InjectLiveReloadScript(html, context.Request.PathBase);
 
         context.Response.StatusCode = statusCode;

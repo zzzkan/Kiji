@@ -569,9 +569,10 @@ public sealed class StaticSite
         }
     }
 
-    internal Task<string> RenderPageAsync(PageRenderRequest request, CancellationToken cancellationToken)
+    internal Task<string> RenderPageAsync(PageRenderRequest request, CancellationToken cancellationToken,
+        SharedRenderLifetime? sharedRenders = null)
     {
-        return RenderPageAsync(GetRenderer(), request, cancellationToken);
+        return RenderPageAsync(GetRenderer(), request, sharedRenders, cancellationToken);
     }
 
     internal void InvalidateContent()
@@ -722,10 +723,11 @@ public sealed class StaticSite
             new PageDiscovery.DiscoveredPage(overridden.SourceIdentifier, _notFoundComponentType, overridden)];
     }
 
-    private async Task<string> RenderPageAsync(ComponentRenderer renderer, PageRenderRequest request, CancellationToken cancellationToken)
+    private async Task<string> RenderPageAsync(ComponentRenderer renderer, PageRenderRequest request,
+        SharedRenderLifetime? sharedRenders, CancellationToken cancellationToken)
     {
         using var output = new StringWriter();
-        await RenderPageAsync(renderer, request, output, dependencies: null, cancellationToken);
+        await RenderPageAsync(renderer, request, output, dependencies: null, cancellationToken, sharedRenders);
         return output.ToString();
     }
 
@@ -734,16 +736,19 @@ public sealed class StaticSite
         PageRenderRequest request,
         TextWriter output,
         BuildDependencyRecorder? dependencies,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        SharedRenderLifetime? sharedRenders = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        PageRenderContext.SetCurrent(CreatePageRenderContext(request, dependencies));
+        PageRenderContext.SetCurrent(CreatePageRenderContext(request, dependencies, sharedRenders, cancellationToken));
         try
         {
             await renderer.RenderComponentToAsync<KijiRoot>(
                 output,
                 request.RootParameters ?? CreateRootParameters(request));
+            // Component lifecycle methods can absorb cancellation exceptions.
+            cancellationToken.ThrowIfCancellationRequested();
         }
         finally
         {
@@ -751,7 +756,8 @@ public sealed class StaticSite
         }
     }
 
-    private PageRenderContext CreatePageRenderContext(PageRenderRequest request, BuildDependencyRecorder? dependencies = null)
+    private PageRenderContext CreatePageRenderContext(PageRenderRequest request, BuildDependencyRecorder? dependencies,
+        SharedRenderLifetime? sharedRenders, CancellationToken cancellationToken)
     {
         var outputRelativeDirectory = Path.GetDirectoryName(request.OutputRelativePath) ?? string.Empty;
 
@@ -761,6 +767,8 @@ public sealed class StaticSite
             OutputRelativeDirectory = outputRelativeDirectory,
             OutputUrlDirectory = PageRenderContext.CreateOutputUrlDirectory(Info.BaseUrl, outputRelativeDirectory),
             Dependencies = dependencies,
+            CancellationToken = cancellationToken,
+            SharedRenders = sharedRenders,
         };
     }
 

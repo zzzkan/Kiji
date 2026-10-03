@@ -67,6 +67,10 @@ return its process exit code. The method freezes configuration, owns the resourc
 for the run, and disposes them on success, failure, or cancellation. Calling it more than
 once throws.
 
+For site executables, `dotnet publish` always generates the static site. Libraries and
+test projects retain normal SDK behavior. Static assets are optional: a site without
+`wwwroot`, isolated CSS, or library assets can be published and served with `dotnet watch`.
+
 ### SiteInfo
 
 `SiteInfo` contains site-wide metadata used by rendered pages, feeds, and sitemaps.
@@ -98,7 +102,6 @@ public constructor. Relative paths are resolved from `RootDirectory`.
 | ------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
 | `string RootDirectory`    | Nearest project directory, then nearest Git root, then current directory | Base for relative site paths.                                                               |
 | `string ContentDirectory` | `contents`                                                               | Root used by content sources.                                                               |
-| `string StaticDirectory`  | `wwwroot`                                                                | Directory copied unchanged to generated output. It may be absolute or relative to the root. |
 
 Changing a property after execution starts throws.
 

@@ -159,7 +159,7 @@ public sealed class SiteArtifactTests : IDisposable
         app.Info = TestArticleContents.CreateSiteInfo();
         app.Paths.RootDirectory = _testDir;
         app.Paths.ContentDirectory = _contentsDir;
-        app.Paths.StaticDirectory = staticPath ?? TestSitePaths.StaticDirectory;
+        TestSiteAssets.Bind(app, staticPath ?? TestSitePaths.StaticDirectory);
 
         IReadOnlyList<Post> items =
         [

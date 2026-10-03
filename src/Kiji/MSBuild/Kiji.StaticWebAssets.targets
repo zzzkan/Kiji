@@ -1,0 +1,56 @@
+<Project>
+  <!-- The SDK resolves assets; Kiji owns the final site's layout and reconciliation. -->
+  <Target Name="_SplitPublishStaticWebAssetsByCopyOptions" AfterTargets="CopyStaticWebAssetsToPublishDirectory" />
+  <Target Name="CopyStaticWebAssetsEndpointsManifest" AfterTargets="CopyStaticWebAssetsToPublishDirectory" />
+
+  <!-- Kiji handles newly discovered files without recompilation. Set this only
+       after SDK discovery includes referenced libraries, so all assets remain available.
+       SDK 10.0.301 otherwise forwards asset additions to Roslyn as source additions. -->
+  <Target Name="KijiWatchAssetDiscovery" AfterTargets="ResolveCoreStaticWebAssets"
+          Condition="'$(DesignTimeBuild)' == 'true'">
+    <PropertyGroup>
+      <DefaultItemExcludes>$(DefaultItemExcludes);@(StaticWebAssetDiscoveryPattern->'%(ContentRoot)%(Pattern)')</DefaultItemExcludes>
+    </PropertyGroup>
+  </Target>
+
+  <Target Name="KijiValidateStaticWebAssets" BeforeTargets="PrepareForBuild;KijiGenerateSite">
+    <Error Condition="'$(StaticWebAssetBasePath)' != '' and '$(StaticWebAssetBasePath)' != '/'"
+           Code="KIJI1004" Text="Set SiteInfo.BaseUrl to host a Kiji site under a path prefix. StaticWebAssetBasePath is supported on libraries, not on the site project." />
+  </Target>
+
+  <!-- The SDK omits an empty runtime manifest, and may leave an older one behind.
+       Always write the empty state so runtime startup can require a manifest. -->
+  <Target Name="KijiEmptyBuildAssets" AfterTargets="StaticWebAssetsPrepareForRun"
+          Condition="'$(DesignTimeBuild)' != 'true' and '@(StaticWebAsset)' == '' and '@(StaticWebAssetDiscoveryPattern)' == ''">
+    <WriteLinesToFile File="$(TargetDir)$(TargetName).staticwebassets.runtime.json"
+                      Lines="{&quot;ContentRoots&quot;:[],&quot;Root&quot;:{}}" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <FileWrites Include="$(TargetDir)$(TargetName).staticwebassets.runtime.json" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="KijiPublishAssets" BeforeTargets="KijiGenerateSite" DependsOnTargets="StaticWebAssetsPrepareForPublish">
+    <ComputeStaticWebAssetsForCurrentProject Assets="@(StaticWebAsset)" ProjectMode="$(StaticWebAssetProjectMode)" AssetKind="Publish" Source="$(PackageId)">
+      <Output TaskParameter="StaticWebAssets" ItemName="_KijiPublishAsset" />
+    </ComputeStaticWebAssetsForCurrentProject>
+    <ItemGroup>
+      <_KijiPublishAsset Remove="@(_KijiPublishAsset)" Condition="'%(AssetRole)' == 'Alternative' or '%(CopyToPublishDirectory)' == 'Never'" />
+      <!-- Selection already used publish semantics. Encode the selected files with
+           the SDK runtime format. Root each mapping at its actual source directory:
+           linked Content can live outside the SDK's logical wwwroot. -->
+      <_KijiPublishAsset AssetKind="Build" ContentRoot="%(RootDir)%(Directory)" />
+    </ItemGroup>
+    <!-- Using the output itself as the cache input disables timestamp skipping:
+         transformed metadata must be re-evaluated, even when only Kiji changed.
+         The SDK still avoids writing an identical manifest. -->
+    <GenerateStaticWebAssetsDevelopmentManifest Assets="@(_KijiPublishAsset)" DiscoveryPatterns="@(StaticWebAssetDiscoveryPattern)"
+      Source="$(PackageId)" ManifestPath="$(TargetDir)$(TargetName).staticwebassets.publish.runtime.json"
+      CacheFilePath="$(TargetDir)$(TargetName).staticwebassets.publish.runtime.json" />
+    <WriteLinesToFile Condition="'@(_KijiPublishAsset)' == '' and '@(StaticWebAssetDiscoveryPattern)' == ''"
+      File="$(TargetDir)$(TargetName).staticwebassets.publish.runtime.json"
+      Lines="{&quot;ContentRoots&quot;:[],&quot;Root&quot;:{}}" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <FileWrites Include="$(TargetDir)$(TargetName).staticwebassets.publish.runtime.json" />
+    </ItemGroup>
+  </Target>
+</Project>

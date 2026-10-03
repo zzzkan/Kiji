@@ -28,6 +28,7 @@ function New-Fixture([string] $name) {
 <Project Sdk="Microsoft.NET.Sdk.Razor">
   <PropertyGroup><OutputType>Exe</OutputType><RootNamespace>Portable</RootNamespace></PropertyGroup>
   <ItemGroup><PackageReference Include="Kiji" Version="$version" /></ItemGroup>
+  <ItemGroup><Content Update="wwwroot/excluded.txt" CopyToPublishDirectory="Never" /></ItemGroup>
 </Project>
 "@ | Set-Content (Join-Path $root 'Portable.csproj')
     @'
@@ -56,6 +57,10 @@ namespace Portable { public sealed class FrontMatter { public string? Title { ge
     private static string SourcePath([System.Runtime.CompilerServices.CallerFilePath] string source = "") => source;
 }
 '@ | Set-Content (Join-Path $root 'Article.razor')
+    'small { color: navy; }' | Set-Content (Join-Path $root 'Article.razor.css')
+    New-Item -ItemType Directory -Path (Join-Path $root 'wwwroot/css') -Force | Out-Null
+    'body { margin: 0; }' | Set-Content (Join-Path $root 'wwwroot/css/shared.css')
+    'excluded from publish' | Set-Content (Join-Path $root 'wwwroot/excluded.txt')
     "---`ntitle: First`n---`n`nStable body.`n`n![image](source.png)" | Set-Content (Join-Path $root 'contents/first.md')
     "---`ntitle: Second`n---`n`nSecond body." | Set-Content (Join-Path $root 'contents/second.md')
     [IO.File]::WriteAllBytes((Join-Path $root 'contents/source.png'), [Convert]::FromBase64String('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGP4z8DwH4QZYAwAR8oH+WdZbrcAAAAASUVORK5CYII='))
@@ -68,6 +73,12 @@ function Publish-Fixture([string] $root, [string] $label, [int] $expectedRenders
     if ($LASTEXITCODE -ne 0) { throw "Publish failed: $label. See $runRoot." }
     $renders = @($output | Where-Object { "$_".Trim() -eq 'RENDER' }).Count
     if ($renders -ne $expectedRenders) { throw "$label rendered $renders pages; expected $expectedRenders. See $runRoot." }
+    if (!(Test-Path (Join-Path $root 'dist/Portable.styles.css')) -or !(Test-Path (Join-Path $root 'dist/css/shared.css'))) {
+        throw "Missing scoped CSS or nested static asset: $label."
+    }
+    if ((Test-Path (Join-Path $root 'dist/excluded.txt')) -or (Test-Path (Join-Path $root 'dist/wwwroot')) -or (Test-Path (Join-Path $root 'dist/Portable.staticwebassets.endpoints.json'))) {
+        throw "SDK asset selection or final output layout changed: $label."
+    }
     $manifest = Get-Content -LiteralPath (Join-Path $root '.kiji/cache/manifest.json') -Raw | ConvertFrom-Json
     if (@($manifest.CodeDependencies | Where-Object { $_ -notmatch ':mvid:[0-9a-f]{32}$' }).Count) {
         throw "Unexpected code identity: $label."
@@ -108,6 +119,13 @@ Copy-Item -LiteralPath (Join-Path $first '.kiji') -Destination (Join-Path $secon
 Publish-Fixture $second 'different-revision-and-checkout' 0
 Assert-SameOutputs $first $second
 
+$scopedCss = Join-Path $second 'Article.razor.css'
+[IO.File]::WriteAllText($scopedCss, 'small { color: teal; }')
+Publish-Fixture $second 'css-only' 0
+if (!([IO.File]::ReadAllText((Join-Path $second 'dist/Portable.styles.css'))).Contains('color: teal')) {
+    throw 'CSS-only edit was not published.'
+}
+
 $post = Join-Path $second 'contents/first.md'
 $stamp = [IO.File]::GetLastWriteTimeUtc($post)
 [IO.File]::WriteAllText($post, [IO.File]::ReadAllText($post).Replace('Stable', 'Edited'))
@@ -137,6 +155,7 @@ Publish-Fixture $second 'page-repair' 1
 $full = New-Fixture 'full'
 Copy-Item -LiteralPath $post -Destination (Join-Path $full 'contents/first.md') -Force
 Copy-Item -LiteralPath $page -Destination (Join-Path $full 'Article.razor') -Force
+Copy-Item -LiteralPath $scopedCss -Destination (Join-Path $full 'Article.razor.css') -Force
 Publish-Fixture $full 'full-comparison' 2
 Assert-SameOutputs $full $second
 
@@ -217,8 +236,11 @@ Publish-Fixture $codeSite 'csharp-edited' 2
 if (-not ([IO.File]::ReadAllText((Join-Path $codeSite 'dist/first.md/index.html')).Contains('Other label'))) { throw 'C# edit was not rendered.' }
 
 $library = Join-Path $runRoot 'support'
-New-Item -ItemType Directory -Path $library | Out-Null
-'<Project Sdk="Microsoft.NET.Sdk" />' | Set-Content (Join-Path $library 'Support.csproj')
+New-Item -ItemType Directory -Path (Join-Path $library 'wwwroot') -Force | Out-Null
+'<Project Sdk="Microsoft.NET.Sdk.Razor"><ItemGroup><FrameworkReference Include="Microsoft.AspNetCore.App" /></ItemGroup></Project>' | Set-Content (Join-Path $library 'Support.csproj')
+'<p>Library component</p>' | Set-Content (Join-Path $library 'Card.razor')
+'p { color: blue; }' | Set-Content (Join-Path $library 'Card.razor.css')
+'library asset' | Set-Content (Join-Path $library 'wwwroot/library.txt')
 'namespace Support; public static class Label { public static string Text => "Library first"; }' | Set-Content (Join-Path $library 'Label.cs')
 $project = Join-Path $codeSite 'Portable.csproj'
 [IO.File]::WriteAllText($project, [IO.File]::ReadAllText($project).Replace('</Project>', '<ItemGroup><ProjectReference Include="../support/Support.csproj" /></ItemGroup></Project>'))
@@ -232,6 +254,8 @@ if (-not ([IO.File]::ReadAllText((Join-Path $codeSite 'dist/first.md/index.html'
 Publish-Fixture $codeSite 'reference-unchanged' 0 @('-p:SourceRevisionId=reference-initial')
 
 & (Join-Path $PSScriptRoot 'Verify-BuildModes.ps1') -RunRoot $runRoot -Site $codeSite -PackageVersion $version
+& (Join-Path $PSScriptRoot 'Verify-RclAssets.ps1') -RunRoot $runRoot -PackageVersion $version
+& (Join-Path $PSScriptRoot 'Verify-MinimalSite.ps1') -RunRoot $runRoot -PackageVersion $version
 
 # Development output must stay out of SDK compile globs and be removed by clean.
 $devOutput = Join-Path $first '.kiji/dev-site'

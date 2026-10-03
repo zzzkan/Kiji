@@ -41,7 +41,7 @@ internal sealed class DevServerStatusReporter
     internal void DevServerStarted(
         Uri address,
         string contentPath,
-        string? staticPath,
+        bool watchesStaticAssets,
         IReadOnlyList<string> buildInputPaths)
     {
         ArgumentNullException.ThrowIfNull(address);
@@ -52,9 +52,9 @@ internal sealed class DevServerStatusReporter
         WriteLine(StatusKind.Started, $"Dev server started at {displayAddress}");
         WriteLine(StatusKind.Change, $"Watching content: '{contentPath}'.");
 
-        if (!string.IsNullOrWhiteSpace(staticPath))
+        if (watchesStaticAssets)
         {
-            WriteLine(StatusKind.Change, $"Watching static assets: '{staticPath}'.");
+            WriteLine(StatusKind.Change, "Watching static assets.");
         }
 
         foreach (var buildInputPath in buildInputPaths)

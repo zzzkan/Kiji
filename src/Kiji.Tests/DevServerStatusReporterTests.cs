@@ -13,7 +13,7 @@ public sealed class DevServerStatusReporterTests
         reporter.DevServerStarted(
             new Uri("http://127.0.0.1:8080/"),
             @"C:\site\contents",
-            staticPath: null,
+            watchesStaticAssets: false,
             [@"C:\site\data\authors.json"]);
         reporter.WatcherError(WatchedPathSource.Content, @"C:\site\contents", new IOException("access denied"));
 
@@ -70,7 +70,7 @@ public sealed class DevServerStatusReporterTests
         reporter.DevServerStarted(
             new Uri("http://127.0.0.1:8080/kiji/"),
             @"C:\site\contents",
-            @"C:\site\wwwroot",
+            watchesStaticAssets: true,
             []);
 
         Assert.Contains(

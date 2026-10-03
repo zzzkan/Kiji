@@ -22,9 +22,9 @@ MySite/
 └── dist/             generated site after publishing
 ```
 
-These names are conventions rather than a separate Kiji project format. `contents/` and
-`wwwroot/` can be changed through `SitePaths`, and you can organize components however you
-prefer.
+These names are conventions rather than a separate Kiji project format. Change the
+content directory through `SitePaths.ContentDirectory`, and organize components however
+you prefer. The Razor SDK manages static assets under `wwwroot/`.
 
 ## The site definition
 
@@ -110,6 +110,27 @@ Files under `wwwroot/` are copied to the published site without modification. Us
 shared CSS, JavaScript, fonts, and images. Images referenced relative to a Markdown file
 can instead stay beside that file and be processed as responsive page-bundle images. See
 [Markdown and images](../markdown/) for both content registration and local images.
+
+### Component styles
+
+Put component-specific rules beside the component: `Pages/Home.razor.css` styles
+`Pages/Home.razor`. Keep shared colors, typography, and resets in `wwwroot/`.
+With the Razor SDK, Kiji publishes the generated CSS bundle and referenced Razor class
+library assets. Add the bundle to your shared `StaticHeadContent`, after your shared CSS:
+
+```razor
+<link rel="stylesheet" href="@(Site.ResolveUrl("MySite.styles.css").AbsolutePath)" />
+```
+
+Replace `MySite` with the project's `PackageId`, which defaults to its assembly name.
+The bundle includes referenced libraries' isolated CSS; other library assets use
+`_content/{PackageId}/...` unless the library defines a different base path.
+
+Scoped rules match HTML rendered by the component. For child components or generated
+Markdown HTML, use `::deep` from an HTML element owned by the component, such as
+`.doc-content ::deep h2`. See [Blazor CSS isolation](https://learn.microsoft.com/aspnet/core/blazor/components/css-isolation)
+for selector rules. `dotnet watch` rebuilds isolated CSS and Kiji reloads the browser;
+changes to ordinary static assets also reload it.
 
 ## Site-wide output
 

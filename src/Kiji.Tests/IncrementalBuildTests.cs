@@ -30,6 +30,52 @@ public sealed class IncrementalBuildTests : IDisposable
     }
 
     [Fact]
+    public async Task MappedStaticAssets_AreRetainedRepairedAndRetiredByPublicPath()
+    {
+        var source = Path.Combine(_testDir, "library.css");
+        await File.WriteAllTextAsync(source, "blue");
+        var sourceStamp = File.GetLastWriteTimeUtc(source);
+        var catalogPath = Path.Combine(_testDir, "assets.json");
+        void WriteCatalog(string target)
+        {
+            TestSiteAssets.WriteManifest(catalogPath, [new Assets.StaticAsset(source, target)], []);
+        }
+        WriteCatalog("_content/library/first.css");
+        var options = new ResolvedSitePaths
+        {
+            ContentDirectory = Path.Combine(_testDir, "contents"),
+            OutputDirectory = Path.Combine(_testDir, "dist"),
+            AssetManifestPath = catalogPath,
+        };
+        var planner = new Generation.IncrementalBuildPlanner(options, _testDir, Path.Combine(_testDir, "cache"),
+            TestArticleContents.CreateSiteInfo(), [], []);
+        async Task Sync()
+        {
+            var files = await planner.SyncStaticFilesAsync(Assets.StaticAssetManifest.Load(catalogPath).Assets);
+            planner.ReconcileOutputs(new Generation.BuildManifest { StaticFiles = files });
+        }
+        await Sync();
+        var first = Path.Combine(options.OutputDirectory, "_content", "library", "first.css");
+        Assert.Equal("blue", await File.ReadAllTextAsync(first));
+
+        await File.WriteAllTextAsync(source, "cyan");
+        File.SetLastWriteTimeUtc(source, sourceStamp);
+        await Sync();
+        Assert.Equal("cyan", await File.ReadAllTextAsync(first));
+
+        await File.WriteAllTextAsync(first, "bad!");
+        await Sync();
+        Assert.Equal("cyan", await File.ReadAllTextAsync(first));
+        WriteCatalog("_content/library/second.css");
+        await Sync();
+        Assert.False(File.Exists(first));
+        Assert.Equal("cyan", await File.ReadAllTextAsync(Path.Combine(options.OutputDirectory, "_content", "library", "second.css")));
+
+        File.Delete(source);
+        await Assert.ThrowsAsync<FileNotFoundException>(Sync);
+    }
+
+    [Fact]
     public async Task ReusingAppForSameOutput_ReloadsContentAndMatchesFreshBuild()
     {
         var root = CreateSiteRoot("reused");
@@ -355,7 +401,7 @@ public sealed class IncrementalBuildTests : IDisposable
         app.Info = TestArticleContents.CreateSiteInfo();
         app.Paths.RootDirectory = root;
         app.Paths.ContentDirectory = "contents";
-        app.Paths.StaticDirectory = "static";
+        TestSiteAssets.Bind(app, Path.Combine(app.Paths.RootDirectory, "static"));
 
         app.UseMarkdownContent<FrontMatter>();
         app.UseContentSource<Post>(static _ => []);
@@ -382,7 +428,7 @@ public sealed class IncrementalBuildTests : IDisposable
         app.Info = TestArticleContents.CreateSiteInfo();
         app.Paths.RootDirectory = root;
         app.Paths.ContentDirectory = "contents";
-        app.Paths.StaticDirectory = "static";
+        TestSiteAssets.Bind(app, Path.Combine(app.Paths.RootDirectory, "static"));
 
         app.UseMarkdownContent<FrontMatter>(static options => options.Directory = "posts");
         app.UseMarkdownContent<FrontMatter, ScopedNote>(
@@ -771,7 +817,7 @@ public sealed class IncrementalBuildTests : IDisposable
         app.Info = TestArticleContents.CreateSiteInfo();
         app.Paths.RootDirectory = root;
         app.Paths.ContentDirectory = "contents";
-        app.Paths.StaticDirectory = "static";
+        TestSiteAssets.Bind(app, Path.Combine(app.Paths.RootDirectory, "static"));
 
         app.UseMarkdownContent<FrontMatter>(options => options.AddHtmlPostProcessor(html => { onRender?.Invoke(); return html; }));
         app.UseContentSource<Post>(static _ => []);

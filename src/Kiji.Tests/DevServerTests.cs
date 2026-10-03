@@ -72,7 +72,7 @@ public sealed class DevServerTests : IAsyncDisposable
             var output = logs.ToString();
             Assert.Contains("Dev server started at", output, StringComparison.Ordinal);
             Assert.Contains("Watching content:", output, StringComparison.Ordinal);
-            Assert.Contains("Watching static assets:", output, StringComparison.Ordinal);
+            Assert.Contains("Watching static assets.", output, StringComparison.Ordinal);
             Assert.Contains("Watching build input:", output, StringComparison.Ordinal);
         }
     }
@@ -185,15 +185,48 @@ public sealed class DevServerTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task Serve_StaticDirectoryCreatedDuringStartupServesNewFiles()
+    public async Task Serve_AssetDiscoveryServesNewFiles()
     {
-        Directory.Delete(_staticDir);
         var (baseAddress, devServer) = await StartServerAsync();
         await using (devServer)
         {
             await File.WriteAllTextAsync(Path.Combine(_staticDir, "new.css"), "body{}");
             using var client = CreateClient();
             Assert.Equal("body{}", await client.GetStringAsync(new Uri(baseAddress, "/new.css")));
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Serve_RequiresManifest_AndAcceptsEmptyAssets(bool missing)
+    {
+        using var logs = new StringWriter();
+        Task<(Uri BaseAddress, IAsyncDisposable DevServer)> Start()
+        {
+            return StartServerAsync(logs, configureAssets: app =>
+            {
+                var prefix = app.Paths.AssetManifestBasePath!;
+                var path = prefix + ".staticwebassets.runtime.json";
+                if (missing) { File.Delete(path); }
+                else { TestSiteAssets.WriteManifest(path, [], []); }
+            });
+        }
+
+        if (missing)
+        {
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(Start);
+            Assert.Contains("is missing", error.Message, StringComparison.Ordinal);
+            return;
+        }
+
+        var (baseAddress, devServer) = await Start();
+        await using (devServer)
+        {
+            using var client = CreateClient();
+            var html = await client.GetStringAsync(baseAddress);
+            Assert.Contains("<title>Home - zzzkan.me</title>", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("Watching static assets.", logs.ToString(), StringComparison.Ordinal);
         }
     }
 
@@ -402,7 +435,8 @@ public sealed class DevServerTests : IAsyncDisposable
     private async Task<(Uri BaseAddress, IAsyncDisposable DevServer)> StartServerAsync(
         StringWriter logs,
         SiteInfo? site = null,
-        string? additionalSlug = null)
+        string? additionalSlug = null,
+        Action<StaticSite>? configureAssets = null)
     {
         await File.WriteAllTextAsync(Path.Combine(_contentsDir, "hello-world.txt"), "Hello World");
 
@@ -410,7 +444,8 @@ public sealed class DevServerTests : IAsyncDisposable
         app.Info = site ?? TestArticleContents.CreateSiteInfo();
         app.Paths.RootDirectory = _testDir;
         app.Paths.ContentDirectory = _contentsDir;
-        app.Paths.StaticDirectory = _staticDir;
+        TestSiteAssets.Bind(app, _staticDir);
+        configureAssets?.Invoke(app);
 
         var contentsDir = _contentsDir;
         var settingsPath = Path.Combine(_testDir, "title.txt");

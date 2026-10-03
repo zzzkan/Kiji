@@ -12,7 +12,7 @@
   <Import Project="../src/Kiji/MSBuild/Kiji.targets" />
 
   <!-- This explicit import runs before the SDK computes its default PublishDir. -->
-  <PropertyGroup Condition="'$(KijiGenerateOnPublish)' == 'true' and '$(UseArtifactsOutput)' != 'true'">
+  <PropertyGroup Condition="'$(_KijiIsSiteApp)' == 'true' and '$(UseArtifactsOutput)' != 'true'">
     <PublishDir Condition="'$(PublishDir)' == ''">$(MSBuildProjectDirectory)/dist/</PublishDir>
   </PropertyGroup>
 

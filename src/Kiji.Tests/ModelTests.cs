@@ -6,16 +6,6 @@ namespace Kiji.Tests;
 public sealed class ModelTests
 {
     [Fact]
-    public void SitePaths_StaticDirectoryDefaultsToWwwroot()
-    {
-        var root = Path.Combine(Path.GetTempPath(), $"site-{Guid.NewGuid():N}");
-        var paths = new SitePaths(root);
-
-        Assert.Equal("wwwroot", paths.StaticDirectory);
-        Assert.Equal(Path.Combine(root, "wwwroot"), paths.ResolveForDevelopment().StaticDirectory);
-    }
-
-    [Fact]
     public async Task MarkdownContent_RetriesFailedRenderAndCachesSuccess()
     {
         var attempts = 0;
@@ -39,7 +29,6 @@ public sealed class ModelTests
         var exception = Assert.Throws<ArgumentException>(() => new ResolvedSitePaths
         {
             ContentDirectory = Path.GetTempPath(),
-            StaticDirectory = Path.GetTempPath(),
             OutputDirectory = "relative-output",
         });
         Assert.Contains("The path must be absolute.", exception.Message, StringComparison.Ordinal);

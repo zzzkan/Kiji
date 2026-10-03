@@ -29,7 +29,6 @@ public sealed class StaticSiteGeneratorTests : IDisposable
         var options = new ResolvedSitePaths
         {
             ContentDirectory = Path.Combine(_testDir, "contents"),
-            StaticDirectory = Path.Combine(_testDir, "static"),
             OutputDirectory = outputDir,
         };
 
@@ -58,7 +57,6 @@ public sealed class StaticSiteGeneratorTests : IDisposable
         var options = new ResolvedSitePaths
         {
             ContentDirectory = Path.Combine(_testDir, "contents"),
-            StaticDirectory = Path.Combine(_testDir, "static"),
             OutputDirectory = outputDir,
         };
 

@@ -36,8 +36,6 @@
                                '$(_KijiIsTestProject)' != 'true' and
                                '$(_KijiIsOuterBuild)' != 'true'">true</_KijiIsSiteApp>
 
-    <!-- The one opt-out: -p:KijiGenerateOnPublish=false publishes the app normally. -->
-    <KijiGenerateOnPublish Condition="'$(KijiGenerateOnPublish)' == ''">$(_KijiIsSiteApp)</KijiGenerateOnPublish>
   </PropertyGroup>
 
   <!-- Release sites are build tools whose deliverable is HTML. Keep their MVIDs
@@ -54,7 +52,7 @@
   <!-- ==============================================================
        Default publish output
        ============================================================== -->
-  <PropertyGroup Condition="'$(KijiGenerateOnPublish)' == 'true' and
+  <PropertyGroup Condition="'$(_KijiIsSiteApp)' == 'true' and
                             '$(UseArtifactsOutput)' != 'true' and
                             '$(PublishDirName)' == 'publish'">
     <!-- Package targets are imported after the project and after the SDK has computed its
@@ -73,7 +71,7 @@
   <!-- ==============================================================
        Where the site is staged, and the two execution-control knobs
        ============================================================== -->
-  <PropertyGroup Condition="'$(KijiGenerateOnPublish)' == 'true'">
+  <PropertyGroup Condition="'$(_KijiIsSiteApp)' == 'true'">
     <!-- Where .kiji lives, matching SitePaths.Root's default. Override this if the site
          sets SitePaths.Root in C#, which MSBuild cannot see. -->
     <KijiSiteRoot Condition="'$(KijiSiteRoot)' == ''">$(MSBuildProjectDirectory)</KijiSiteRoot>
@@ -91,16 +89,10 @@
   <!-- ==============================================================
        Hand static assets to Kiji
        ============================================================== -->
-  <PropertyGroup Condition="'$(KijiGenerateOnPublish)' == 'true'">
-    <!-- Required, not an optimization. The static web assets pipeline copies wwwroot,
-         its compressed variants, and the endpoints manifest into the publish directory
-         through its own targets rather than through @(ResolvedFileToPublish) — so clearing
-         that list does not stop it, and a wwwroot/ subfolder appears beside the site.
-         Setting this false skips the import that defines those targets.
-         Kiji's StaticFileCopier already copies wwwroot into the site, so nothing is lost.
-         Scoped CSS (.razor.css) rides on the same pipeline and stays unavailable, which it
-         already was: Kiji never referenced the generated bundle. -->
-    <StaticWebAssetsEnabled Condition="'$(StaticWebAssetsEnabled)' == ''">false</StaticWebAssetsEnabled>
+  <PropertyGroup Condition="'$(_KijiIsSiteApp)' == 'true'">
+    <StaticWebAssetsEnabled Condition="'$(StaticWebAssetsEnabled)' == ''">true</StaticWebAssetsEnabled>
+    <CompressionEnabled>false</CompressionEnabled>
+    <CustomAfterStaticWebAssetsSdkTargets>$(MSBuildThisFileDirectory)Kiji.StaticWebAssets.targets</CustomAfterStaticWebAssetsSdkTargets>
 
     <!-- The publish list is replaced wholesale below, so these only save the work of
          staging files that are about to be dropped. Note that they do not cover the
@@ -115,7 +107,15 @@
   <!-- ==============================================================
        Keep published output out of SDK evaluation
        ============================================================== -->
-  <PropertyGroup Condition="'$(KijiGenerateOnPublish)' == 'true'">
+  <Target Name="KijiValidateAssetSdk" BeforeTargets="PrepareForBuild;KijiGenerateSite"
+          Condition="'$(_KijiIsSiteApp)' == 'true'">
+    <Error Condition="'$(UsingMicrosoftNETSdkRazor)' != 'true'" Code="KIJI1003"
+           Text="Kiji sites require Microsoft.NET.Sdk.Razor (or Microsoft.NET.Sdk.Web) to resolve CSS isolation and static web assets." />
+    <Error Condition="'$(StaticWebAssetsEnabled)' != 'true'" Code="KIJI1003"
+           Text="Kiji sites require StaticWebAssetsEnabled=true." />
+  </Target>
+
+  <PropertyGroup Condition="'$(_KijiIsSiteApp)' == 'true'">
     <!-- dist is the documented project-local publish directory. Exclude it from
          default items as well as dotnet watch: Watch=false alone still makes the
          SDK enumerate and evaluate the generated site on every startup. Keep this
@@ -126,20 +126,7 @@
     <DefaultItemExcludes>$(DefaultItemExcludes);dist/**</DefaultItemExcludes>
   </PropertyGroup>
 
-  <!-- ==============================================================
-       Keep dotnet watch off the files Kiji watches itself
-       ============================================================== -->
-  <ItemGroup Condition="'$(KijiGenerateOnPublish)' == 'true' and '$(KijiWatchStaticFiles)' != 'true'">
-    <!-- The Razor SDK explicitly registers Content items under wwwroot with dotnet watch.
-         Kiji's FileSystemWatcher already picks up those static files with a 250 ms debounce
-         and reloads the browser, so marking them unwatched avoids duplicate static-file
-         handling. Newer dotnet watch versions may still observe other project-tree changes
-         such as Kiji content files through their directory watcher. Kiji reports the semantic
-         action it took for those changes rather than trying to alter that SDK-owned watcher.
-         Code stays watched on purpose: hot reload refreshes edited components. -->
-    <KijiUnwatchedContent Include="wwwroot\**" />
-    <Content Update="@(KijiUnwatchedContent)" Watch="false" />
-  </ItemGroup>
+
 
   <!-- ==============================================================
        Where the generated site is staged
@@ -167,12 +154,12 @@
        ============================================================== -->
   <Target Name="KijiGenerateSite"
           DependsOnTargets="KijiResolveStagingDir"
-          Condition="'$(KijiGenerateOnPublish)' == 'true' and '$(DesignTimeBuild)' != 'true'"
+          Condition="'$(_KijiIsSiteApp)' == 'true' and '$(DesignTimeBuild)' != 'true'"
           Returns="@(KijiSiteFile)">
 
     <Error Condition="!Exists('$(TargetPath)')"
            Code="KIJI1001"
-           Text="Kiji cannot generate the site: '$(TargetPath)' does not exist. Build the project before publishing, or set KijiGenerateOnPublish=false to publish it as an ordinary application." />
+           Text="Kiji cannot generate the site: '$(TargetPath)' does not exist. Build the project before publishing." />
 
     <MakeDir Directories="$(KijiStagingDir)" />
 
@@ -203,7 +190,7 @@
   <Target Name="KijiComputeFilesToPublish"
           AfterTargets="ComputeFilesToPublish"
           DependsOnTargets="KijiGenerateSite"
-          Condition="'$(KijiGenerateOnPublish)' == 'true' and '$(DesignTimeBuild)' != 'true'">
+          Condition="'$(_KijiIsSiteApp)' == 'true' and '$(DesignTimeBuild)' != 'true'">
 
     <!-- Hooked after ComputeFilesToPublish rather than before it: BeforeTargets runs ahead of
          the target's own DependsOnTargets, which is where the publish list is built. Running
@@ -230,7 +217,7 @@
   <Target Name="KijiClean"
           AfterTargets="Clean"
           DependsOnTargets="KijiResolveStagingDir"
-          Condition="'$(KijiGenerateOnPublish)' == 'true'">
+          Condition="'$(_KijiIsSiteApp)' == 'true'">
     <!-- Plain directory removal rather than asking the app to clean up after itself: by the
          time Clean has run there is no assembly left to invoke, and hooking BeforeTargets
          instead would then need its own handling for a tree that was never built.

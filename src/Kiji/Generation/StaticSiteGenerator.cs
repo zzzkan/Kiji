@@ -88,13 +88,8 @@ internal static class StaticSiteGenerator
         return new RenderedPage(pageRequest, outputHash, written, writer.ToArray());
     }
 
-    internal static void ValidateNoStaticFileCollisions(ResolvedSitePaths options, IReadOnlyList<PageRenderRequest> pageRequests)
+    internal static void ValidateNoStaticFileCollisions(ResolvedSitePaths options, IReadOnlyList<PageRenderRequest> pageRequests, IReadOnlyList<Kiji.Assets.StaticAsset> assets)
     {
-        if (!Directory.Exists(options.StaticDirectory))
-        {
-            return;
-        }
-
         var pageOutputPaths = pageRequests
             .Select(request => OutputPathValidator.ResolveUnderRoot(
                 options.OutputDirectory,
@@ -102,9 +97,9 @@ internal static class StaticSiteGenerator
                 "Page output path"))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var file in Directory.EnumerateFiles(options.StaticDirectory, "*", SearchOption.AllDirectories))
+        foreach (var file in assets)
         {
-            var relativePath = Path.GetRelativePath(options.StaticDirectory, file);
+            var relativePath = file.Target;
             var staticOutputPath = Path.GetFullPath(Path.Combine(options.OutputDirectory, relativePath));
             if (pageOutputPaths.Contains(staticOutputPath))
             {

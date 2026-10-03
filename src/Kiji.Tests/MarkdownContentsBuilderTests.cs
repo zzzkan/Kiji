@@ -21,7 +21,6 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
         _markdownProcessor = new MarkdownProcessor(new ResolvedSitePaths
         {
             ContentDirectory = _contentsDir,
-            StaticDirectory = _testDir,
             OutputDirectory = _outputDir,
         }, new ImageProcessor());
     }

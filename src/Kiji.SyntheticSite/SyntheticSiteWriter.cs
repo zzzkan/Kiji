@@ -33,6 +33,24 @@ public static class SyntheticSiteWriter
                 $"static asset {i}\n{new string('x', 2048)}\n");
         }
 
+        // The harness materializes its inputs without MSBuild. Supply the same
+        // resolved asset contract as a built site, keeping the workload unchanged.
+        Directory.CreateDirectory(Path.Combine(root, "obj"));
+        var manifestRoot = new System.Text.Json.Nodes.JsonObject();
+        foreach (var source in Directory.EnumerateFiles(staticDir, "*", SearchOption.AllDirectories))
+        {
+            var relativePath = Path.GetRelativePath(staticDir, source).Replace('\\', '/');
+            var node = manifestRoot;
+            foreach (var segment in relativePath.Split('/'))
+            {
+                var children = (System.Text.Json.Nodes.JsonObject)(node["Children"] ??= new System.Text.Json.Nodes.JsonObject());
+                node = (System.Text.Json.Nodes.JsonObject)(children[segment] ??= new System.Text.Json.Nodes.JsonObject());
+            }
+            node["Asset"] = System.Text.Json.JsonSerializer.SerializeToNode(new { ContentRootIndex = 0, SubPath = relativePath });
+        }
+        await File.WriteAllTextAsync(Path.Combine(root, "obj", "synthetic.staticwebassets.publish.runtime.json"),
+            System.Text.Json.JsonSerializer.Serialize(new { ContentRoots = new[] { Path.GetFullPath(staticDir) }, Root = manifestRoot }));
+
         for (var i = 0; i < pages; i++)
         {
             var slug = $"post-{i:D5}";

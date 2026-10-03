@@ -1,6 +1,7 @@
 using Kiji.Rendering;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging;
@@ -39,7 +40,6 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
     internal async Task<WebApplication> StartAsync(ResolvedSitePaths options, string[] args, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(options.OutputDirectory);
-        Directory.CreateDirectory(options.StaticDirectory);
 
         var builder = WebApplication.CreateSlimBuilder(args);
         builder.Logging.SetMinimumLevel(LogLevel.Warning);
@@ -83,14 +83,28 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
             await context.Response.WriteAsync(LiveReloadScript.Value, context.RequestAborted);
         });
 
-        if (Directory.Exists(options.StaticDirectory))
+        var assets = options.AssetManifestPath is null ? null : Assets.StaticAssetManifest.Load(options.AssetManifestPath);
+        if (assets?.ContentRoots.Length > 0)
         {
+            // Match ASP.NET Core: SDK mappings are loaded at startup. Project/asset
+            // configuration changes take effect on rebuild/restart; file bytes stay live.
+            builder.Environment.WebRootFileProvider = new NullFileProvider();
+            builder.Configuration[WebHostDefaults.StaticWebAssetsKey] = options.AssetManifestPath;
+            StaticWebAssetsLoader.UseStaticWebAssets(builder.Environment, builder.Configuration);
+            if (builder.Environment.WebRootFileProvider is NullFileProvider)
+            {
+                throw new InvalidOperationException($"Static asset manifest '{options.AssetManifestPath}' could not be loaded. Rebuild the site.");
+            }
             web.UseStaticFiles(new StaticFileOptions
             {
-                FileProvider = new PhysicalFileProvider(options.StaticDirectory),
+                FileProvider = builder.Environment.WebRootFileProvider,
                 ServeUnknownFileTypes = true,
                 OnPrepareResponse = static context => context.Context.Response.Headers.CacheControl = "no-store",
             });
+            foreach (var root in assets.ContentRoots)
+            {
+                WatchDirectory(root, WatchedPathSource.Static);
+            }
         }
 
         // Page-bundle assets (e.g. optimized images) are materialized into the output
@@ -119,7 +133,6 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
 
         var buildInputs = app.WatchedBuildInputs.ToArray();
         WatchDirectory(options.ContentDirectory, WatchedPathSource.Content);
-        WatchDirectory(options.StaticDirectory, WatchedPathSource.Static);
         foreach (var input in buildInputs)
         {
             WatchDirectory(input, WatchedPathSource.BuildInput);
@@ -130,7 +143,7 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
         _reporter.DevServerStarted(
             new Uri(new Uri(web.Urls.First()), app.Info.BaseUrl.AbsolutePath),
             options.ContentDirectory,
-            Directory.Exists(options.StaticDirectory) ? options.StaticDirectory : null,
+            assets?.ContentRoots.Length > 0,
             buildInputs);
 
         // Warm the snapshot (page discovery + content materialization) in the
@@ -384,6 +397,10 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
 
         lock (_snapshotLock)
         {
+            if (_disposed)
+            {
+                return;
+            }
             changes = DeduplicateChanges(_pendingChanges);
             _pendingChanges.Clear();
 

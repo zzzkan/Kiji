@@ -125,6 +125,7 @@ public sealed class SiteCancellationTests : IDisposable
         var app = StaticSite.Create([]);
         app.Info = new SiteInfo { Name = "Cancellation", BaseUrl = new Uri("https://example.test/") };
         app.Paths.RootDirectory = _root;
+        TestSite.TestSiteAssets.Bind(app, Path.Combine(_root, "wwwroot"));
         app.UseImageProcessor(() => processor).UseMarkdownContent<FrontMatter>();
         app.AddPages<MarkdownPostTestPage>(provider => provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
             .Select(post => new { Slug = "post", ContentKey = post.Key }));

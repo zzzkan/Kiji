@@ -42,9 +42,6 @@ $published = Invoke-Mode 'mode-release-publish' 'publish' 'Release' $false
 if ($release.Mvid -ne $published.Mvid) { throw 'Release build/publish changed MVID.' }
 $noBuild = Invoke-Mode 'mode-release-no-build' 'publish' 'Release' $false @('--no-build')
 if ($release.Mvid -ne $noBuild.Mvid) { throw 'Publish --no-build changed MVID.' }
-# The switch controls publication, not whether this executable is a Release site.
-$ordinary = Invoke-Mode 'mode-release-opt-out' 'build' 'Release' $false @('-p:KijiGenerateOnPublish=false')
-if ($release.Mvid -ne $ordinary.Mvid) { throw 'Publish opt-out changed compilation identity.' }
 $debug = Invoke-Mode 'mode-debug-build' 'build' 'Debug' $true
 $debugPublish = Invoke-Mode 'mode-debug-publish' 'publish' 'Debug' $true
 if ($debug.Mvid -ne $debugPublish.Mvid) { throw 'Debug build/publish changed MVID.' }
@@ -53,7 +50,7 @@ $again = Invoke-Mode 'mode-release-again' 'build' 'Release' $false
 if ($release.Mvid -ne $again.Mvid) { throw 'Returning from Debug changed Release identity.' }
 # DebugType alone is not in the SDK's incremental compiler cache. Rebuild when
 # testing an explicit compiler-option override; Kiji does not replace that cache.
-$override = Invoke-Mode 'mode-release-explicit-symbols' 'build' 'Release' $true @('--no-incremental', '-p:DebugType=portable')
+Invoke-Mode 'mode-release-explicit-symbols' 'build' 'Release' $true @('--no-incremental', '-p:DebugType=portable')
 $restored = Invoke-Mode 'mode-release-restored' 'build' 'Release' $false @('--no-incremental')
 if ($release.Mvid -ne $restored.Mvid) { throw 'Returning from explicit symbols changed Release identity.' }
 
@@ -84,13 +81,35 @@ $env:ASPNETCORE_URLS = 'http://127.0.0.1:0'
 $env:DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER = '1'
 $env:NUGET_PACKAGES = Join-Path $RunRoot 'packages'
 $watchProcess = $null
+$watchOriginals = @{}
+function Assert-AssetChange([string] $source, [string] $value, [scriptblock] $publicPath) {
+    $socket = [Net.WebSockets.ClientWebSocket]::new()
+    $timeout = [Threading.CancellationTokenSource]::new([TimeSpan]::FromSeconds(30))
+    try {
+        $socket.ConnectAsync([Uri]($address.Replace('http:', 'ws:') + '/_kiji/reload'), $timeout.Token).GetAwaiter().GetResult() | Out-Null
+        $watchOriginals[$source] = if (Test-Path -LiteralPath $source) { [IO.File]::ReadAllBytes($source) } else { $null }
+        [IO.File]::WriteAllText($source, $value)
+        $buffer = [byte[]]::new(128)
+        $received = $socket.ReceiveAsync([ArraySegment[byte]]::new($buffer), $timeout.Token).GetAwaiter().GetResult()
+        if ([Text.Encoding]::UTF8.GetString($buffer, 0, $received.Count) -ne 'reload') { throw "Missing reload notification: $source" }
+        while (!$timeout.IsCancellationRequested) {
+            if ($watchProcess.HasExited) { throw "Watch exited after asset change: $source" }
+            $path = & $publicPath
+            $response = Invoke-WebRequest ($address + '/' + $path) -SkipHttpErrorCheck -TimeoutSec 2
+            if ($response.StatusCode -eq 200 -and $response.Content.Contains($value)) { return }
+            Start-Sleep -Milliseconds 200
+        }
+        throw "Asset did not update: $source"
+    }
+    finally { $socket.Dispose(); $timeout.Dispose() }
+}
 try {
     $start = @{
-        FilePath = 'dotnet'
-        ArgumentList = @('watch', '--project', "`"$Site`"", '--non-interactive')
-        PassThru = $true
+        FilePath               = 'dotnet'
+        ArgumentList           = @('watch', '--project', "`"$Site`"", '--non-interactive')
+        PassThru               = $true
         RedirectStandardOutput = $watchLog
-        RedirectStandardError = $watchError
+        RedirectStandardError  = $watchError
     }
     if ($IsWindows) { $start.WindowStyle = 'Hidden' }
     $watchProcess = Start-Process @start
@@ -104,20 +123,42 @@ try {
             try {
                 $response = Invoke-WebRequest ($address + '/first.md/') -TimeoutSec 2
                 if ($response.StatusCode -eq 200 -and $response.Content.Contains('Stable body')) { $ready = $true; break }
-            } catch { }
+            }
+            catch { }
         }
     }
     if (-not $ready) { throw 'Watch did not serve the expected article.' }
     $identity = Read-Identity (Join-Path $Site 'bin/Debug/net10.0/Portable.dll')
     if (-not $identity.Symbols -or $identity.PdbPath.StartsWith('/_/source')) { throw 'Watch did not retain Debug symbols and paths.' }
     $identity | ConvertTo-Json | Set-Content (Join-Path $RunRoot 'mode-watch-identity.json')
-} finally {
+
+    # Observe browser reload and served bytes, including a referenced library's assets.
+    # A comment survives CSS isolation rewriting without depending on scope hashes.
+    Assert-AssetChange (Join-Path $Site 'Article.razor.css') '/* app scoped update */' { 'Portable.styles.css' }
+    Assert-AssetChange (Join-Path $RunRoot 'support/Card.razor.css') '/* library scoped update */' {
+        $css = (Invoke-WebRequest ($address + '/Portable.styles.css') -TimeoutSec 2).Content
+        $match = [regex]::Match($css, '@import\s+[''"]([^''"]*Support/[^''"]+)[''"]')
+        if (!$match.Success) { throw 'Missing RCL CSS import during watch.' }
+        $match.Groups[1].Value
+    }
+    Assert-AssetChange (Join-Path $Site 'wwwroot/css/shared.css') '/* shared asset update */' { 'css/shared.css' }
+    Assert-AssetChange (Join-Path $RunRoot 'support/wwwroot/added.txt') 'new library asset' { '_content/Support/added.txt' }
+    # Let dotnet watch process the addition too; Kiji can serve it before SDK handling.
+    Start-Sleep -Seconds 2
+    if ($watchProcess.HasExited) { throw 'Watch exited after discovering a library asset.' }
+    if ((Invoke-WebRequest ($address + '/first.md/') -TimeoutSec 2).StatusCode -ne 200) { throw 'Site stopped after asset changes.' }
+}
+finally {
     if ($null -ne $watchProcess -and -not $watchProcess.HasExited) {
         if ($IsWindows) {
             & taskkill /PID $watchProcess.Id /T /F > (Join-Path $RunRoot 'mode-watch-stop.log') 2>&1
             if ($LASTEXITCODE) { throw 'Failed to stop the verification watch process.' }
-        } else { $watchProcess.Kill($true) }
+        }
+        else { $watchProcess.Kill($true) }
         $watchProcess.WaitForExit()
+    }
+    foreach ($entry in $watchOriginals.GetEnumerator()) {
+        if ($null -eq $entry.Value) { [IO.File]::Delete($entry.Key) } else { [IO.File]::WriteAllBytes($entry.Key, $entry.Value) }
     }
     $env:ASPNETCORE_URLS = $oldUrls
     $env:DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER = $oldBrowser

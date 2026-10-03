@@ -166,6 +166,7 @@ public sealed class PageRegistrationTests
             await File.WriteAllTextAsync(Path.Combine(root, "wwwroot", "404.html"), "existing");
             await using var site = CreateSite();
             site.Paths.RootDirectory = root;
+            TestSite.TestSiteAssets.Bind(site, Path.Combine(root, "wwwroot"));
             site.UseNotFoundPage<Fixed>();
             await Assert.ThrowsAsync<InvalidOperationException>(() => site.PublishAsync("dist"));
         }

@@ -77,7 +77,7 @@ function Get-FileStates([string] $path) {
     return $states
 }
 
-function Count-Writes($before, $after) {
+function Get-WriteCount($before, $after) {
     $count = 0
     foreach ($key in $after.Keys) {
         if (!$before.ContainsKey($key) -or $before[$key].Stamp -ne $after[$key].Stamp -or $before[$key].Length -ne $after[$key].Length) { $count++ }
@@ -85,7 +85,7 @@ function Count-Writes($before, $after) {
     return $count
 }
 
-function Hash-File([string] $path) {
+function Get-FileSha256([string] $path) {
     $stream = [IO.File]::OpenRead($path)
     try { return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($stream)) }
     finally { $stream.Dispose() }
@@ -111,10 +111,10 @@ function Assert-Outputs([string] $scenario, [int] $round) {
         $relative = [IO.Path]::GetRelativePath($baseDist, $source)
         $target = Join-Path $candidateDist $relative
         if ($AllowCompressionDifferences -and [IO.Path]::GetExtension($source) -in @('.gz','.br')) {
-            if (!(Test-Path -LiteralPath $target) -or (Hash-File $source) -ne (Hash-File $target)) { $differences.Add($relative) }
+            if (!(Test-Path -LiteralPath $target) -or (Get-FileSha256 $source) -ne (Get-FileSha256 $target)) { $differences.Add($relative) }
             continue
         }
-        if (!(Test-Path -LiteralPath $target) -or (Hash-File $source) -ne (Hash-File $target)) { throw "Public output mismatch: $relative" }
+        if (!(Test-Path -LiteralPath $target) -or (Get-FileSha256 $source) -ne (Get-FileSha256 $target)) { throw "Public output mismatch: $relative" }
         $common++
     }
     $compressedCount = 0
@@ -124,7 +124,7 @@ function Assert-Outputs([string] $scenario, [int] $round) {
         if (!(Test-Path -LiteralPath (Join-Path $baseDist $relative))) {
             if (!$AllowNewFingerprintAliases -or !$aliasSources.ContainsKey($relative)) { throw "Unexpected candidate output: $relative" }
             $original = Join-Path $baseDist $aliasSources[$relative]
-            if (!(Test-Path -LiteralPath $original) -or (Hash-File $target) -ne (Hash-File $original)) { throw "New fingerprint alias does not match baseline bytes: $relative" }
+            if (!(Test-Path -LiteralPath $original) -or (Get-FileSha256 $target) -ne (Get-FileSha256 $original)) { throw "New fingerprint alias does not match baseline bytes: $relative" }
             $aliases.Add($relative)
         }
     }
@@ -139,7 +139,7 @@ function Assert-Outputs([string] $scenario, [int] $round) {
                 else { [IO.Compression.GZipStream]::new($stream, [IO.Compression.CompressionMode]::Decompress) }
             try { $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($decoder)) }
             finally { $decoder.Dispose() }
-            if ($hash -ne (Hash-File $original)) { throw "Compressed output mismatch: $compressed" }
+            if ($hash -ne (Get-FileSha256 $original)) { throw "Compressed output mismatch: $compressed" }
             $compressedCount++
         } finally { $stream.Dispose() }
     }
@@ -205,7 +205,7 @@ foreach ($variant in $variants) {
     "<configuration><packageSources><clear /><add key='local' value='$feedXml' /><add key='nuget' value='https://api.nuget.org/v3/index.json' /></packageSources></configuration>" | Set-Content -LiteralPath (Join-Path $site 'NuGet.Config')
     "<Project Sdk='Microsoft.NET.Sdk.Razor'><PropertyGroup><OutputType>Exe</OutputType><AssemblyName>Kiji.SyntheticSite</AssemblyName><RootNamespace>Kiji.SyntheticSite</RootNamespace><RestorePackagesPath>$cacheXml</RestorePackagesPath></PropertyGroup><ItemGroup><PackageReference Include='Kiji' Version='$version' /></ItemGroup></Project>" | Set-Content -LiteralPath (Join-Path $site 'Site.csproj')
     $null = Invoke-Dotnet (@('restore', $site) + @(Get-Properties $variant)) (Join-Path $root "$variant-restore.log")
-    $provenance[$variant] = @{ Package=$package; SHA256=(Hash-File $package); Properties=@(Get-Properties $variant); EntrySHA256=(Hash-File (Join-Path $site 'Program.cs')); SiteDefinitionSHA256=(Hash-File $runner) }
+    $provenance[$variant] = @{ Package=$package; SHA256=(Get-FileSha256 $package); Properties=@(Get-Properties $variant); EntrySHA256=(Get-FileSha256 (Join-Path $site 'Program.cs')); SiteDefinitionSHA256=(Get-FileSha256 $runner) }
 }
 if ($provenance.baseline.EntrySHA256 -ne $provenance.candidate.EntrySHA256 -or $provenance.baseline.SiteDefinitionSHA256 -ne $provenance.candidate.SiteDefinitionSHA256) { throw 'The two variants do not use the same workload.' }
 $originalPost = [IO.File]::ReadAllText((Join-Path $corpus 'contents/post-00000/index.md'))
@@ -252,9 +252,9 @@ function Invoke-Publish([string] $variant, [string] $scenario, [int] $round) {
         KijiExecMs=($msbuild.Tasks | Where-Object { $_.Name -eq 'Exec' -and $_.Target -eq 'KijiGenerateSite' } | Measure-Object Milliseconds -Sum).Sum
         CompilerInvocations=[int]($msbuild.Tasks | Where-Object Name -EQ 'Csc' | Measure-Object Count -Sum).Sum
         AppHostInvocations=[int]($msbuild.Tasks | Where-Object Name -EQ 'CreateAppHost' | Measure-Object Count -Sum).Sum
-        PublishedFiles=$after.Count; PublishedWrites=(Count-Writes $before $after); OutputKinds=@($outputKinds)
+        PublishedFiles=$after.Count; PublishedWrites=(Get-WriteCount $before $after); OutputKinds=@($outputKinds)
         SdkAssets=@($manifest.Assets).Count; SdkEndpoints=@($manifest.Endpoints).Count
-        CompressionFiles=$compressionAfter.Count; CompressionWrites=(Count-Writes $compressionBefore $compressionAfter)
+        CompressionFiles=$compressionAfter.Count; CompressionWrites=(Get-WriteCount $compressionBefore $compressionAfter)
     }
     $results.Add($record)
     $results | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath (Join-Path $root 'runs.json')

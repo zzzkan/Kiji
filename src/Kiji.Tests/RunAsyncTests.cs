@@ -115,23 +115,40 @@ public sealed class RunAsyncTests : IDisposable
     [Fact]
     public async Task RunAsync_WithForce_RebuildsEveryPage()
     {
-        await using (var first = CreateApp())
+        var renders = new AssetRenderLog();
+        StaticSite CreateMeasuredApp()
+        {
+            var app = CreateApp();
+            app.UseContentSource<AssetRenderLog>("force-render-log", _ => [new("log", renders, "stable")]);
+            app.AddPages<AssetPage>(_ => [new { Kind = "first" }, new { Kind = "second" }]);
+            return app;
+        }
+        await using (var first = CreateMeasuredApp())
         {
             await first.RunAsync(EnvironmentWith([("KIJI_OUTPUT", _outputDir)]), CancellationToken.None);
         }
+
+        await using (var unchanged = CreateMeasuredApp())
+        {
+            await unchanged.RunAsync(EnvironmentWith([("KIJI_OUTPUT", _outputDir)]), CancellationToken.None);
+        }
+        Assert.Equal(1, renders.Counts["first"]);
+        Assert.Equal(1, renders.Counts["second"]);
 
         var indexPath = Path.Combine(_outputDir, "index.html");
         File.SetLastWriteTimeUtc(indexPath, new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
         var stampBefore = File.GetLastWriteTimeUtc(indexPath);
 
-        await using (var forced = CreateApp())
+        await using (var forced = CreateMeasuredApp())
         {
             await forced.RunAsync(
                 EnvironmentWith([("KIJI_OUTPUT", _outputDir), ("KIJI_FORCE", "1")]),
                 CancellationToken.None);
         }
 
-        Assert.NotEqual(stampBefore, File.GetLastWriteTimeUtc(indexPath));
+        Assert.Equal(2, renders.Counts["first"]);
+        Assert.Equal(2, renders.Counts["second"]);
+        Assert.Equal(stampBefore, File.GetLastWriteTimeUtc(indexPath));
     }
 
     [Fact]

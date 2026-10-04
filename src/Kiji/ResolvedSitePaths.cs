@@ -4,6 +4,7 @@ namespace Kiji;
 internal sealed record ResolvedSitePaths
 {
     internal string? AssetManifestPath { get; init; }
+    internal string? AssetEndpointsPath { get; init; }
 
     /// <summary>The absolute content directory, which content loaders may require to exist.</summary>
     public required string ContentDirectory

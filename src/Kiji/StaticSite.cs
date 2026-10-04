@@ -302,12 +302,18 @@ public sealed class StaticSite
     public StaticSite AddArtifact(
         string outputRelativePath,
         Func<Stream, SiteOutputContext, CancellationToken, Task> write)
+        => AddArtifact(outputRelativePath, write, preserveUnchangedOutput: false);
+
+    internal StaticSite AddArtifact(
+        string outputRelativePath,
+        Func<Stream, SiteOutputContext, CancellationToken, Task> write,
+        bool preserveUnchangedOutput)
     {
         EnsureConfigurable();
         ArgumentException.ThrowIfNullOrWhiteSpace(outputRelativePath);
         ArgumentNullException.ThrowIfNull(write);
 
-        _artifacts.Add(new SiteArtifactRegistration(outputRelativePath, write));
+        _artifacts.Add(new SiteArtifactRegistration(outputRelativePath, write, preserveUnchangedOutput));
         return this;
     }
 
@@ -388,7 +394,9 @@ public sealed class StaticSite
 
         await using var cacheLease = await CacheLease.AcquireAsync(Paths.ResolveCachePath(), cancellationToken);
         var options = Paths.ResolveForPublish(outputPath);
-        var assetManifest = options.AssetManifestPath is null ? new StaticAssetManifest { Assets = [] } : StaticAssetManifest.Load(options.AssetManifestPath);
+        var assetManifest = options.AssetManifestPath is null ? new StaticAssetManifest { Assets = [] }
+            : StaticAssetManifest.Load(options.AssetManifestPath, options.AssetEndpointsPath, Info.BaseUrl);
+        UseAssetResources(assetManifest.Resources);
         var assets = assetManifest.Assets;
         OutputPathValidator.Validate(options, assetManifest, Paths.RootDirectory, Paths.ResolveKijiPath());
         UseRunOptions(options);
@@ -410,7 +418,7 @@ public sealed class StaticSite
             _buildInputPaths,
             _buildInputValues,
             _services!.GetService<ContentFileRegistry>(), _runtime.Dependencies,
-            _services!.GetRequiredService<IImageProcessor>());
+            _services!.GetRequiredService<IImageProcessor>(), assetManifest.Resources);
 
         // Helpers and custom encoder factories may live outside the page assemblies.
         // Their code is a build input even when pages only reach it through injection.
@@ -773,8 +781,13 @@ public sealed class StaticSite
             Dependencies = dependencies,
             CancellationToken = cancellationToken,
             SharedRenders = sharedRenders,
+            Assets = _assetResources,
         };
     }
+
+    private AssetResources _assetResources = AssetResources.Empty;
+
+    internal void UseAssetResources(AssetResources resources) => _assetResources = resources;
 
     private Dictionary<string, object?> CreateRootParameters(PageRenderRequest request)
     {
@@ -822,8 +835,7 @@ public sealed class StaticSite
             reservedPaths[fullPath] = "another artifact output path";
             Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
 
-            await using var stream = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 64 * 1024, useAsync: true);
-            await artifact.WriteAsync(stream, context, cancellationToken);
+            await artifact.WriteFileAsync(fullPath, context, cancellationToken);
 
             artifactRelativePaths.Add(Path.GetRelativePath(options.OutputDirectory, fullPath));
             BuildOutput.Info($"Generated: {fullPath}");

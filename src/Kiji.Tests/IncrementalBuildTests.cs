@@ -235,6 +235,35 @@ public sealed class IncrementalBuildTests : IDisposable
     }
 
     [Fact]
+    public async Task MissingCache_RendersPagesButPreservesIdenticalFiles_AndRepairsDamage()
+    {
+        var root = CreateSiteRoot("missing-cache");
+        var renders = 0;
+        void RecordRender() { Interlocked.Increment(ref renders); }
+        await BuildAsync(root, RecordRender);
+        var firstRenders = renders;
+        var page = Path.Combine(root, "dist", "md", "stable", "index.html");
+        var manifest = Path.Combine(root, ".kiji", "cache", "manifest.json");
+        var original = await File.ReadAllBytesAsync(page);
+        var stamp = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(page, stamp);
+        File.Delete(manifest);
+        await BuildAsync(root, RecordRender);
+        Assert.Equal(firstRenders * 2, renders);
+        Assert.Equal(stamp, File.GetLastWriteTimeUtc(page));
+
+        var damaged = (byte[])original.Clone();
+        damaged[0] ^= 1;
+        await File.WriteAllBytesAsync(page, damaged);
+        File.SetLastWriteTimeUtc(page, stamp);
+        File.Delete(manifest);
+        await BuildAsync(root, RecordRender);
+        Assert.Equal(firstRenders * 3, renders);
+        Assert.Equal(original, await File.ReadAllBytesAsync(page));
+        Assert.NotEqual(stamp, File.GetLastWriteTimeUtc(page));
+    }
+
+    [Fact]
     public async Task IncrementalBuild_RemovedPost_DeletesOrphanedOutput()
     {
         var root = CreateSiteRoot("site");

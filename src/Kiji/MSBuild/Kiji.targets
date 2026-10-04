@@ -2,8 +2,8 @@
   Kiji.targets — makes `dotnet publish` emit the generated site and nothing else.
 
   A Kiji site is declared in C#, so generating it means running the site's own assembly.
-  That makes the app a build tool, not a deliverable: these targets run it and then replace
-  the publish list with what it produced, so the publish directory holds the site alone —
+  That makes the app a build tool, not a deliverable: these targets run it, add its output
+  to the SDK static asset graph, and publish the resolved assets, so the directory holds the site alone —
   no assemblies, no apphost, no deps.json.
 
   Shipped in the Kiji package at build/Kiji.targets, so a direct PackageReference imports it.
@@ -43,11 +43,25 @@
        by a publish without building. Debug builds, libraries, and tests retain SDK defaults. -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release' and '$(_KijiIsSiteApp)' == 'true'">
     <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <UseAppHost>false</UseAppHost>
     <Deterministic>true</Deterministic>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <PathMap Condition="'$(PathMap)' != ''">$(PathMap),</PathMap>
     <PathMap>$(PathMap)$(MSBuildProjectDirectory)=/_/source</PathMap>
   </PropertyGroup>
+
+  <!-- NuGet imports can follow Common.targets' PDB output calculation. Reconcile
+       that calculation with DebugType so CoreCompile does not wait for a PDB it
+       will never emit. Explicit project imports can precede Common.targets; in
+       that order the SDK derives the same values itself. Honor global DebugType. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' and '$(_KijiIsSiteApp)' == 'true' and '$(DebugType)' == 'none'">
+    <_DebugSymbolsProduced>false</_DebugSymbolsProduced>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(Configuration)' == 'Release' and '$(_KijiIsSiteApp)' == 'true' and '$(DebugType)' == 'none'">
+    <_DebugSymbolsIntermediatePath Remove="@(_DebugSymbolsIntermediatePath)" />
+    <_DebugSymbolsOutputPath Remove="@(_DebugSymbolsOutputPath)" />
+  </ItemGroup>
 
   <!-- ==============================================================
        Default publish output
@@ -91,7 +105,16 @@
        ============================================================== -->
   <PropertyGroup Condition="'$(_KijiIsSiteApp)' == 'true'">
     <StaticWebAssetsEnabled Condition="'$(StaticWebAssetsEnabled)' == ''">true</StaticWebAssetsEnabled>
-    <CompressionEnabled>false</CompressionEnabled>
+    <!-- Preserve Kiji's ordinary static-host output unless the site opts into
+         precompression. A project or command-line setting remains authoritative. -->
+    <CompressionEnabled Condition="'$(CompressionEnabled)' == ''">false</CompressionEnabled>
+    <_KijiConfiguredStaticWebAssetBasePath>$(StaticWebAssetBasePath)</_KijiConfiguredStaticWebAssetBasePath>
+    <!-- The site is published at its root, including SDK-generated service-worker
+         URLs. Referenced libraries retain their own base paths. -->
+    <StaticWebAssetBasePath>/</StaticWebAssetBasePath>
+    <!-- SDK metadata caching uses file size/mtime; Kiji also accepts content edits
+         that preserve both, so fingerprints must come from the current bytes. -->
+    <StaticWebAssetsCacheDefineStaticWebAssetsEnabled>false</StaticWebAssetsCacheDefineStaticWebAssetsEnabled>
     <CustomAfterStaticWebAssetsSdkTargets>$(MSBuildThisFileDirectory)Kiji.StaticWebAssets.targets</CustomAfterStaticWebAssetsSdkTargets>
 
     <!-- The publish list is replaced wholesale below, so these only save the work of
@@ -125,6 +148,18 @@
          does not retain a previous publish command's -o argument. -->
     <DefaultItemExcludes>$(DefaultItemExcludes);dist/**</DefaultItemExcludes>
   </PropertyGroup>
+
+  <!-- NuGet adds transitive ProjectReference items during target execution. Apply
+       the same global property to those and explicit references, otherwise MSBuild
+       builds one library twice with different globals and races in its obj folder. -->
+  <Target Name="KijiConfigureReferencedAssetCaching" BeforeTargets="AssignProjectConfiguration"
+          DependsOnTargets="ResolvePackageDependenciesForBuild" Condition="'$(_KijiIsSiteApp)' == 'true'">
+    <ItemGroup>
+      <ProjectReference Update="@(ProjectReference)">
+        <AdditionalProperties>%(ProjectReference.AdditionalProperties);StaticWebAssetsCacheDefineStaticWebAssetsEnabled=false</AdditionalProperties>
+      </ProjectReference>
+    </ItemGroup>
+  </Target>
 
 
 
@@ -189,13 +224,12 @@
        ============================================================== -->
   <Target Name="KijiComputeFilesToPublish"
           AfterTargets="ComputeFilesToPublish"
-          DependsOnTargets="KijiGenerateSite"
+          DependsOnTargets="KijiResolvePublicAssets"
           Condition="'$(_KijiIsSiteApp)' == 'true' and '$(DesignTimeBuild)' != 'true'">
 
-    <!-- Hooked after ComputeFilesToPublish rather than before it: BeforeTargets runs ahead of
-         the target's own DependsOnTargets, which is where the publish list is built. Running
-         after the whole chain also puts this behind every SDK target that appends to the list
-         (Razor compilation, static web assets, publish filtering), and still ahead of
+    <!-- Run after the SDK finishes computing the ordinary application publish list,
+         and resolve the complete static asset graph before replacing that list.
+         This stays ahead of
          CopyFilesToPublishDirectory, so the incremental cleanup sees the final list and
          deletes anything a previous publish left behind. -->
     <ItemGroup>
@@ -204,9 +238,11 @@
            a site, and there is no way to notice from the outside. -->
       <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" />
 
-      <ResolvedFileToPublish Include="@(KijiSiteFile)">
-        <RelativePath>%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
-        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ResolvedFileToPublish Include="@(_KijiPublicFile->'%(PublishSource)')">
+        <!-- Switching optimizers can select an older cached source for the same
+             public URL (notably the finalized service worker). Compare either
+             direction so a newer destination never hides that replacement. -->
+        <CopyToPublishDirectory>IfDifferent</CopyToPublishDirectory>
       </ResolvedFileToPublish>
     </ItemGroup>
   </Target>

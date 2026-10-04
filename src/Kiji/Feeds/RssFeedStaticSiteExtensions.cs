@@ -16,6 +16,6 @@ public static class RssFeedStaticSiteExtensions
         ArgumentNullException.ThrowIfNull(app);
 
         var artifact = new RssFeedArtifact(items, path);
-        return app.AddArtifact(artifact.OutputRelativePath, artifact.WriteAsync);
+        return app.AddArtifact(artifact.OutputRelativePath, artifact.WriteAsync, preserveUnchangedOutput: true);
     }
 }

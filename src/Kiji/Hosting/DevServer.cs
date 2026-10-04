@@ -43,6 +43,12 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
 
         var builder = WebApplication.CreateSlimBuilder(args);
         builder.Logging.SetMinimumLevel(LogLevel.Warning);
+        // This host always serves live source files, including outside Development.
+        // Its own fallback renders pages and discovers new assets without stealing routes.
+        builder.Configuration["ReloadStaticAssetsAtRuntime"] = "true";
+        builder.Configuration["DisableStaticAssetNotFoundRuntimeFallback"] = "true";
+        builder.Configuration["EnableStaticAssetsDevelopmentCaching"] = "false";
+        builder.Configuration["EnableStaticAssetsDevelopmentIntegrity"] = "false";
 
         // Only fill in an address when nothing else supplied one, so ASPNETCORE_URLS,
         // --urls, and launchSettings.json behave exactly as they do for any other
@@ -83,7 +89,9 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
             await context.Response.WriteAsync(LiveReloadScript.Value, context.RequestAborted);
         });
 
-        var assets = options.AssetManifestPath is null ? null : Assets.StaticAssetManifest.Load(options.AssetManifestPath);
+        var assets = options.AssetManifestPath is null ? null
+            : Assets.StaticAssetManifest.Load(options.AssetManifestPath, options.AssetEndpointsPath, app.Info.BaseUrl, includeIntegrity: false);
+        app.UseAssetResources(assets?.Resources ?? Assets.AssetResources.Empty);
         if (assets?.ContentRoots.Length > 0)
         {
             // Match ASP.NET Core: SDK mappings are loaded at startup. Project/asset
@@ -95,6 +103,13 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
             {
                 throw new InvalidOperationException($"Static asset manifest '{options.AssetManifestPath}' could not be loaded. Rebuild the site.");
             }
+            if (options.AssetEndpointsPath is not null && File.Exists(options.AssetEndpointsPath))
+            {
+                var files = assets.Assets.ToDictionary(static asset => asset.Target, static asset => asset.Source, StringComparer.OrdinalIgnoreCase);
+                web.Use((context, next) => StaticAssetRangeHandler.HandleAsync(context, next, files));
+                web.MapStaticAssets(options.AssetEndpointsPath);
+            }
+            // Discovery patterns also expose files added since the SDK manifest was built.
             web.UseStaticFiles(new StaticFileOptions
             {
                 FileProvider = builder.Environment.WebRootFileProvider,

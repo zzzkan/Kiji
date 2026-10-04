@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Kiji.Generation;
+using Microsoft.AspNetCore.Components;
 
 namespace Kiji.Assets;
 
@@ -8,8 +9,9 @@ internal sealed class StaticAssetManifest
     public required StaticAsset[] Assets { get; init; }
     public string[] ContentRoots { get; init; } = [];
     internal string[] DiscoveryRoots { get; init; } = [];
+    internal AssetResources Resources { get; init; } = AssetResources.Empty;
 
-    internal static StaticAssetManifest Load(string path)
+    internal static StaticAssetManifest Load(string path, string? endpointsPath = null, Uri? baseUrl = null, bool includeIntegrity = true)
     {
         if (!File.Exists(path))
         {
@@ -26,7 +28,50 @@ internal sealed class StaticAssetManifest
         var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var discoveryRoots = new HashSet<string>(StringComparer.Ordinal);
         ReadNode(document.RootElement.GetProperty("Root"), "");
-        return new StaticAssetManifest { Assets = [.. assets], ContentRoots = roots, DiscoveryRoots = [.. discoveryRoots] };
+        var resources = new List<ResourceAsset>();
+        if (endpointsPath is not null && File.Exists(endpointsPath))
+        {
+            var sources = assets.ToDictionary(static asset => asset.Target, StringComparer.OrdinalIgnoreCase);
+            var hashes = new Dictionary<string, string>(StringComparer.Ordinal);
+            using var endpointsStream = File.OpenRead(endpointsPath);
+            using var endpoints = JsonDocument.Parse(endpointsStream);
+            foreach (var endpoint in endpoints.RootElement.GetProperty("Endpoints").EnumerateArray())
+            {
+                if (endpoint.TryGetProperty("Selectors", out var selectors) && selectors.GetArrayLength() > 0) { continue; }
+                var assetFile = endpoint.GetProperty("AssetFile").GetString()!;
+                if (!sources.TryGetValue(assetFile, out var source)) { continue; }
+                var route = endpoint.GetProperty("Route").GetString()!;
+                if (!BuildManifest.IsRelativeOutput(route) || route.Contains('\\', StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"Invalid static asset endpoint '{route}'.");
+                }
+                if (paths.Add(route)) { assets.Add(new StaticAsset(source.Source, route)); }
+                var properties = endpoint.GetProperty("EndpointProperties").EnumerateArray()
+                    .Where(property => includeIntegrity || property.GetProperty("Name").GetString() != "integrity")
+                    .Select(static property => new ResourceAssetProperty(property.GetProperty("Name").GetString()!, property.GetProperty("Value").GetString()!)).ToArray();
+                var integrity = properties.FirstOrDefault(static property => property.Name == "integrity")?.Value;
+                if (integrity is not null && integrity.StartsWith("sha256-", StringComparison.Ordinal))
+                {
+                    hashes[source.Source] = Convert.ToHexStringLower(Convert.FromBase64String(integrity[7..]));
+                }
+                var url = baseUrl is null ? route : new Uri(baseUrl, string.Join('/', route.Split('/').Select(Uri.EscapeDataString))).AbsolutePath;
+                resources.Add(new ResourceAsset(url, properties));
+            }
+            for (var index = 0; index < assets.Count; index++)
+            {
+                if (hashes.TryGetValue(assets[index].Source, out var hash))
+                {
+                    assets[index] = assets[index] with { ExpectedHash = hash };
+                }
+            }
+        }
+        return new StaticAssetManifest
+        {
+            Assets = [.. assets],
+            ContentRoots = roots,
+            DiscoveryRoots = [.. discoveryRoots],
+            Resources = resources.Count == 0 ? AssetResources.Empty : new AssetResources(new ResourceAssetCollection(resources)),
+        };
 
         void ReadNode(JsonElement node, string target)
         {

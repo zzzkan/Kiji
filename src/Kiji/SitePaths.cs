@@ -56,6 +56,7 @@ public sealed class SitePaths
         {
             ImageCacheDirectory = Path.Combine(ResolveCachePath(), "images"),
             AssetManifestPath = FindAssetManifest("staticwebassets.publish.runtime.json"),
+            AssetEndpointsPath = FindAssetManifest("staticwebassets.publish.endpoints.json"),
         };
     }
 
@@ -65,7 +66,11 @@ public sealed class SitePaths
     /// </summary>
     internal ResolvedSitePaths ResolveForDevelopment()
     {
-        return Resolve(Path.Combine(ResolveKijiPath(), "dev-site")) with { AssetManifestPath = FindAssetManifest("staticwebassets.runtime.json") };
+        return Resolve(Path.Combine(ResolveKijiPath(), "dev-site")) with
+        {
+            AssetManifestPath = FindAssetManifest("staticwebassets.runtime.json"),
+            AssetEndpointsPath = FindAssetManifest("staticwebassets.endpoints.json"),
+        };
     }
 
     private string? FindAssetManifest(string suffix)

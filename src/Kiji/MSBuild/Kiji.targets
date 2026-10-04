@@ -112,9 +112,6 @@
     <!-- The site is published at its root, including SDK-generated service-worker
          URLs. Referenced libraries retain their own base paths. -->
     <StaticWebAssetBasePath>/</StaticWebAssetBasePath>
-    <!-- SDK metadata caching uses file size/mtime; Kiji also accepts content edits
-         that preserve both, so fingerprints must come from the current bytes. -->
-    <StaticWebAssetsCacheDefineStaticWebAssetsEnabled>false</StaticWebAssetsCacheDefineStaticWebAssetsEnabled>
     <CustomAfterStaticWebAssetsSdkTargets>$(MSBuildThisFileDirectory)Kiji.StaticWebAssets.targets</CustomAfterStaticWebAssetsSdkTargets>
 
     <!-- The publish list is replaced wholesale below, so these only save the work of
@@ -148,20 +145,6 @@
          does not retain a previous publish command's -o argument. -->
     <DefaultItemExcludes>$(DefaultItemExcludes);dist/**</DefaultItemExcludes>
   </PropertyGroup>
-
-  <!-- NuGet adds transitive ProjectReference items during target execution. Apply
-       the same global property to those and explicit references, otherwise MSBuild
-       builds one library twice with different globals and races in its obj folder. -->
-  <Target Name="KijiConfigureReferencedAssetCaching" BeforeTargets="AssignProjectConfiguration"
-          DependsOnTargets="ResolvePackageDependenciesForBuild" Condition="'$(_KijiIsSiteApp)' == 'true'">
-    <ItemGroup>
-      <ProjectReference Update="@(ProjectReference)">
-        <AdditionalProperties>%(ProjectReference.AdditionalProperties);StaticWebAssetsCacheDefineStaticWebAssetsEnabled=false</AdditionalProperties>
-      </ProjectReference>
-    </ItemGroup>
-  </Target>
-
-
 
   <!-- ==============================================================
        Where the generated site is staged

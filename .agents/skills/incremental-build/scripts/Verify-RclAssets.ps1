@@ -70,25 +70,21 @@ $htmlStamp = [IO.File]::GetLastWriteTimeUtc((Join-Path $dist 'index.html'))
 'p { color: cyan; }' | Set-Content (Join-Path $root 'library/Card.razor.css')
 Remove-Item -LiteralPath (Join-Path $root 'library/wwwroot/library.txt')
 $raw = Join-Path $site 'wwwroot/raw.txt'
-$rawStamp = [IO.File]::GetLastWriteTimeUtc($raw)
 [IO.File]::WriteAllText($raw, 'static after!')
-[IO.File]::SetLastWriteTimeUtc($raw, $rawStamp)
 $leafSource = Join-Path $root 'leaf/wwwroot/leaf.txt'
-$leafStamp = [IO.File]::GetLastWriteTimeUtc($leafSource)
 $oldLeafAlias = @(Get-ChildItem (Join-Path $dist 'vendor/leaf') -Filter 'leaf.*.txt')
 if ($oldLeafAlias.Count -ne 1) { throw 'Missing initial transitive fingerprint.' }
 $leafText = 'leaf edits'
 [IO.File]::WriteAllText($leafSource, [IO.File]::ReadAllText($leafSource).Replace('leaf asset', $leafText))
-[IO.File]::SetLastWriteTimeUtc($leafSource, $leafStamp)
 $newCss = Publish-Rcl 'rcl-project-edited' 'cyan'
 if ($oldCss -eq $newCss -or (Test-Path -LiteralPath $oldCss) -or (Test-Path (Join-Path $dist '_content/Different.Library.Package/library.txt'))) {
     throw 'Retired RCL assets remain in the published site.'
 }
-if ([IO.File]::ReadAllText((Join-Path $dist 'raw.txt')) -ne 'static after!') { throw 'Same-timestamp static edit was lost.' }
+if ([IO.File]::ReadAllText((Join-Path $dist 'raw.txt')) -ne 'static after!') { throw 'Static edit was lost.' }
 $newLeafAlias = @(Get-ChildItem (Join-Path $dist 'vendor/leaf') -Filter 'leaf.*.txt')
 if ($newLeafAlias.Count -ne 1 -or (Test-Path -LiteralPath $oldLeafAlias[0].FullName) -or
     [IO.File]::ReadAllText($newLeafAlias[0].FullName).Trim() -ne $leafText) {
-    throw 'Same-size/same-mtime transitive edit kept a stale fingerprint or bytes.'
+    throw 'Transitive asset edit kept a stale fingerprint or bytes.'
 }
 if ($htmlStamp -ne [IO.File]::GetLastWriteTimeUtc((Join-Path $dist 'index.html'))) { throw 'CSS-only changes rewrote unchanged HTML.' }
 

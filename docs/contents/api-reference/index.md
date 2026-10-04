@@ -285,6 +285,10 @@ Publishing checks that asset bytes still match the SDK's fingerprints. After cha
 assets, run a normal build or publish; `--no-build` cannot refresh their URLs and fails
 if its saved asset metadata no longer matches the files.
 
+Static asset change detection follows the SDK's metadata caching behavior, including
+for referenced Razor class libraries. Asset edits must update the file's modification
+time; edits that preserve both size and modification time are unsupported.
+
 With .NET SDK 10.0.301 on Windows, asset names containing `;` can fail during
 publish, including in a standard Web SDK project without Kiji. Avoid semicolons
 in asset file names.

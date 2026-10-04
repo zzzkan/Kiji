@@ -153,8 +153,8 @@
        compression, without constructing HTTP endpoints that no Kiji host consumes.
        Existing assets still need those endpoints for fingerprint URL resolution. -->
   <Target Name="ResolvePublishCompressedStaticWebAssets" DependsOnTargets="$(ResolvePublishCompressedStaticWebAssetsDependsOn)">
-    <!-- These files are SDK-owned compression outputs. External source assets keep
-         their content-based validation, including equal-size/equal-mtime edits. -->
+    <!-- These files are SDK-owned compression outputs. Validate external source
+         assets against their resolved SDK metadata before publication. -->
     <DefineStaticWebAssets CandidateAssets="@(_CompressedStaticWebAssetsForPublish)"
                            CacheManifestPath="$(IntermediateOutputPath)kiji-compressed-assets.cache.json">
       <Output TaskParameter="Assets" ItemName="_CompressionPublishStaticWebAsset" />
@@ -237,8 +237,7 @@
       </_KijiPublicEndpoint>
       <_KijiAliasEndpoint Include="@(_KijiPublicEndpoint->'%(RelativePath)')" Exclude="@(_KijiPublicFile->'%(RelativePath)')" />
       <_KijiPublicFile Include="@(_KijiAliasEndpoint->'%(AssetFile)')" KeepMetadata="RelativePath" KeepDuplicates="false" />
-      <!-- Kiji's verified mirror updates timestamps when equal-size/equal-mtime
-           source edits change bytes. Preserve that signal for the SDK copy step.
+      <!-- Publish existing inputs through Kiji's verified mirror.
            Late publish replacements (e.g. Service Worker) use their SDK source. -->
       <_KijiPublicFile PublishSource="%(Identity)" />
       <_KijiPublicFile PublishSource="$(KijiStagingDir)%(RelativePath)"

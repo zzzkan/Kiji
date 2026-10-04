@@ -22,9 +22,9 @@ public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : ICla
     }
 
     [Fact]
-    public async Task Publish_ResolvesScopedAndRclAssetsAndReplacesEqualStampFingerprint()
+    public async Task Publish_ResolvesScopedAndRclAssetsAndReplacesEditedFingerprint()
     {
-        var site = fixture.CreateSite(nameof(Publish_ResolvesScopedAndRclAssetsAndReplacesEqualStampFingerprint), assets: true);
+        var site = fixture.CreateSite(nameof(Publish_ResolvesScopedAndRclAssetsAndReplacesEditedFingerprint), assets: true);
         var library = Path.Combine(site, "..", "library");
         PackagedSiteFixture.Write(library, "Library.csproj", "<Project Sdk=\"Microsoft.NET.Sdk.Razor\"><ItemGroup><FrameworkReference Include=\"Microsoft.AspNetCore.App\" /></ItemGroup></Project>");
         PackagedSiteFixture.Write(library, "Card.razor", "<p>Library card</p>");
@@ -45,14 +45,49 @@ public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : ICla
         Assert.Equal("export const library = true;", File.ReadAllText(PublicFile(site, AssetUrl(html, "library"))));
 
         var source = Path.Combine(site, "wwwroot/app.js");
-        var stamp = File.GetLastWriteTimeUtc(source);
         File.WriteAllText(source, File.ReadAllText(source).Replace("original", "modified", StringComparison.Ordinal));
-        File.SetLastWriteTimeUtc(source, stamp);
         await fixture.PublishAsync(site);
         var newUrl = AssetUrl(File.ReadAllText(Path.Combine(site, "dist/index.html")));
         Assert.NotEqual(oldUrl, newUrl);
         Assert.Equal(File.ReadAllBytes(source), File.ReadAllBytes(PublicFile(site, newUrl)));
         Assert.False(File.Exists(PublicFile(site, oldUrl)));
+    }
+
+    [Fact]
+    public async Task Build_SolutionCompilesSharedLibrariesOnce()
+    {
+        var site = fixture.CreateSite(Path.Combine(nameof(Build_SolutionCompilesSharedLibrariesOnce), "site"), assets: true);
+        var root = Path.GetDirectoryName(site)!;
+        const string recordCompile = """
+            <Target Name="RecordCompileVisit" BeforeTargets="CoreCompile">
+              <MakeDir Directories="$(IntermediateOutputPath)compile-visits" />
+              <WriteLinesToFile File="$(IntermediateOutputPath)compile-visits/$([System.Guid]::NewGuid()).txt" Lines="$(MSBuildProjectFullPath)" />
+            </Target>
+            """;
+        foreach (var (name, sdk) in new[] { ("Helper", "Microsoft.NET.Sdk"), ("Library", "Microsoft.NET.Sdk.Razor") })
+        {
+            var library = Path.Combine(root, name);
+            PackagedSiteFixture.Write(library, $"{name}.csproj", $"<Project Sdk=\"{sdk}\"><ItemGroup><FrameworkReference Include=\"Microsoft.AspNetCore.App\" /></ItemGroup>{recordCompile}</Project>");
+            PackagedSiteFixture.Write(library, "Value.cs", $"namespace {name}; public static class Value {{ public static string Text => \"Shared library\"; }}");
+        }
+        PackagedSiteFixture.Write(Path.Combine(root, "Library"), "wwwroot/library.js", "export const library = true;");
+        var project = Path.Combine(site, "Site.csproj");
+        File.WriteAllText(project, File.ReadAllText(project).Replace("</Project>", "<ItemGroup><ProjectReference Include=\"../Helper/Helper.csproj\" /><ProjectReference Include=\"../Library/Library.csproj\" /></ItemGroup></Project>", StringComparison.Ordinal));
+        PackagedSiteFixture.Write(root, "Assets.slnx", """
+            <Solution>
+              <Project Path="site/Site.csproj" />
+              <Project Path="Helper/Helper.csproj" />
+              <Project Path="Library/Library.csproj" />
+            </Solution>
+            """);
+
+        // A property added only on the site's references creates a second build
+        // of each shared library, even when a file-sharing failure happens not to occur.
+        await fixture.DotnetAsync(root, "build", "Assets.slnx", "-c", "Release", "-m:4");
+        foreach (var name in new[] { "Helper", "Library" })
+        {
+            Assert.Single(Directory.GetFiles(Path.Combine(root, name, "obj/Release/net10.0/compile-visits"), "*.txt"));
+        }
     }
 
     [Fact]

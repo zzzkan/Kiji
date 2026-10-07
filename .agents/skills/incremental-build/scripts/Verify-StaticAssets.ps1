@@ -151,7 +151,7 @@ await site.RunAsync();
     Check ($html.Contains('<h1')) "$kind generated HTML"
     Check (!(Test-Path -LiteralPath (Join-Path $dist 'Audit.dll'))) "$kind publishes only the static site"
     if ($kind -eq 'empty') {
-        Run-Dotnet @($publishArgs | Where-Object { $_ -ne '-p:CompressionEnabled=true' }) (Join-Path $work 'empty-default-compression.log')
+        Run-Dotnet (@($publishArgs | Where-Object { $_ -ne '-p:CompressionEnabled=true' }) + @('-p:CompressionEnabled=false')) (Join-Path $work 'empty-no-compression.log')
         Check ([IO.File]::ReadAllText((Join-Path $dist 'index.html')) -ceq $html) 'Empty site publishes identical HTML without compression'
         Check (@(Get-ChildItem $dist -Recurse -File | Where-Object Extension -In @('.gz','.br')).Count -eq 0) 'Empty site removes obsolete compression outputs'
         continue
@@ -320,6 +320,11 @@ try {
         $process = $null
         try {
             $site = Join-Path $root $kind
+            # HTTP compression is an explicit build opt-in; publish sidecars alone
+            # do not enable compression in the development asset manifest.
+            if ($kind -ne 'empty') {
+                Run-Dotnet @('build', (Join-Path $site 'Audit.csproj'), '-c', 'Release', "-p:RestorePackagesPath=$packages", '-p:DisableBuildCompression=false') (Join-Path $work "$kind-http-build.log")
+            }
             $log = Join-Path $root "$kind-http.log"
             $errorLog = Join-Path $root "$kind-http-error.log"
             $process = Start-Process -FilePath dotnet -ArgumentList @('exec', "`"$site/bin/Release/net10.0/Audit.dll`"", '--urls', 'http://127.0.0.1:0') -WorkingDirectory $site -WindowStyle Hidden -PassThru -Environment @{ ASPNETCORE_ENVIRONMENT='Production'; DOTNET_ENVIRONMENT='Production' } -RedirectStandardOutput $log -RedirectStandardError $errorLog

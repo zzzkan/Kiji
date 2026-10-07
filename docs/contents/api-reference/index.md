@@ -240,15 +240,18 @@ checks. Literal URLs in CSS, JavaScript or HTML are not automatically rewritten.
 
 When compression or a service worker needs them, Kiji registers generated HTML,
 page-bundle images, feeds and custom artifacts with the SDK after rendering. These
-keep their existing URLs. Precompression is off by default. Enable it with
-`<CompressionEnabled>true</CompressionEnabled>` in the site project, or use
-`dotnet publish -c Release -p:CompressionEnabled=true` for the entire project graph.
-Publish then emits Gzip/Brotli sidecars according to the SDK's compression rules,
+keep their existing URLs. Publish enables precompression by default and emits
+Gzip/Brotli sidecars according to the SDK's compression rules,
 including beside fingerprinted URLs. A static deployment
 host must be configured to negotiate those sidecars and set HTTP cache headers;
 the files alone cannot configure a host.
 
-For a host that compresses responses itself, keep SDK precompression disabled with
+Build and watch skip precompression by default (`DisableBuildCompression=true`).
+Set `DisableBuildCompression=false` to enable it during build. This site-level
+default does not disable compression in referenced Razor class libraries; use
+`-p:DisableBuildCompression=true` to apply it to the entire project graph.
+
+For a host that compresses responses itself, disable SDK precompression with
 `dotnet publish -c Release -p:CompressionEnabled=false`. This global property also
 applies to referenced projects. Setting it only in the site's project file does
 not disable compression in referenced Razor class libraries, and packages can

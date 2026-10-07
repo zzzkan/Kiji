@@ -16,7 +16,7 @@ public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : ICla
     {
         var site = fixture.CreateSite(nameof(EmptySite_PublishesAndStartsWithoutSdkAssets));
         await fixture.PublishAsync(site);
-        Assert.Equal(["index.html"], Directory.GetFiles(Path.Combine(site, "dist")).Select(Path.GetFileName));
+        Assert.Equal(["index.html", "index.html.br", "index.html.gz"], Directory.GetFiles(Path.Combine(site, "dist")).Select(Path.GetFileName).Order());
         await PackagedSiteFixture.WithServerAsync(site, async client =>
             Assert.Contains("SDK regression", await client.GetStringAsync("/kiji/"), StringComparison.Ordinal));
     }
@@ -91,6 +91,26 @@ public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : ICla
     }
 
     [Fact]
+    public async Task Build_SkipsCompressionByDefaultAndAllowsExplicitOptIn()
+    {
+        var site = fixture.CreateSite(nameof(Build_SkipsCompressionByDefaultAndAllowsExplicitOptIn), assets: true);
+        foreach (var configuration in new[] { "Debug", "Release" })
+        {
+            await fixture.DotnetAsync(site, "build", "-c", configuration);
+            Assert.DoesNotContain(Directory.GetFiles(Path.Combine(site, "obj", configuration), "*", SearchOption.AllDirectories),
+                path => path.EndsWith(".gz", StringComparison.Ordinal) || path.EndsWith(".br", StringComparison.Ordinal));
+        }
+
+        // Publish must still compress when it reuses a build without compressed assets.
+        await fixture.PublishAsync(site, "--no-build");
+        Assert.True(File.Exists(Path.Combine(site, "dist/app.js.gz")));
+        Assert.True(File.Exists(Path.Combine(site, "dist/app.js.br")));
+
+        await fixture.DotnetAsync(site, "build", "-p:DisableBuildCompression=false");
+        Assert.NotEmpty(Directory.GetFiles(Path.Combine(site, "obj/Debug"), "*.gz", SearchOption.AllDirectories));
+    }
+
+    [Fact]
     public async Task Publish_UnchangedSiteDoesNotInvokeCompilerOrAppHost()
     {
         var site = fixture.CreateSite(nameof(Publish_UnchangedSiteDoesNotInvokeCompilerOrAppHost), assets: true);
@@ -107,7 +127,7 @@ public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : ICla
         var site = fixture.CreateSite(nameof(Publish_WorkerCompressionAndManifestStayCorrectAcrossOptionChanges), assets: true, worker: true);
         foreach (var compressed in new[] { true, false, true })
         {
-            await fixture.PublishAsync(site, $"-p:CompressionEnabled={compressed.ToString().ToLowerInvariant()}");
+            await fixture.PublishAsync(site, compressed ? [] : ["-p:CompressionEnabled=false"]);
             var worker = File.ReadAllText(Path.Combine(site, "dist/service-worker.js"));
             Assert.Contains("published worker", worker, StringComparison.Ordinal);
             Assert.Contains("Manifest version", worker, StringComparison.OrdinalIgnoreCase);
@@ -120,7 +140,8 @@ public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : ICla
                 Assert.DoesNotContain(Directory.GetFiles(Path.Combine(site, "dist"), "*", SearchOption.AllDirectories), path => path.EndsWith(".gz", StringComparison.Ordinal) || path.EndsWith(".br", StringComparison.Ordinal));
                 continue;
             }
-            foreach (var file in new[] { "index.html", "service-worker.js" })
+            var asset = Path.GetRelativePath(Path.Combine(site, "dist"), PublicFile(site, AssetUrl(File.ReadAllText(Path.Combine(site, "dist/index.html")))));
+            foreach (var file in new[] { "index.html", "service-worker.js", "app.js", asset })
             {
                 foreach (var extension in new[] { ".gz", ".br" })
                 {
@@ -134,11 +155,13 @@ public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : ICla
         }
     }
 
-    [Fact]
-    public async Task Serve_FingerprintSupportsHttpAndLiveChangesWithoutRebuild()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Serve_FingerprintSupportsHttpAndLiveChangesWithoutRebuild(bool buildCompression)
     {
-        var site = fixture.CreateSite(nameof(Serve_FingerprintSupportsHttpAndLiveChangesWithoutRebuild), assets: true);
-        await fixture.PublishAsync(site, "-p:CompressionEnabled=true");
+        var site = fixture.CreateSite($"{nameof(Serve_FingerprintSupportsHttpAndLiveChangesWithoutRebuild)}-{buildCompression}", assets: true);
+        await fixture.PublishAsync(site, buildCompression ? ["-p:DisableBuildCompression=false"] : []);
         await PackagedSiteFixture.WithServerAsync(site, async client =>
         {
             var html = await client.GetStringAsync("/kiji/");
@@ -147,7 +170,7 @@ public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : ICla
             using var first = await client.GetAsync(url);
             var original = await first.Content.ReadAsByteArrayAsync();
             Assert.Equal(File.ReadAllBytes(Path.Combine(site, "wwwroot/app.js")), original);
-            Assert.Equal(original, await GetGzipAsync(client, url));
+            Assert.Equal(original, await GetWithGzipRequestAsync(client, url, buildCompression));
             Assert.NotNull(first.Headers.ETag);
             using var conditional = new HttpRequestMessage(HttpMethod.Get, url);
             conditional.Headers.IfNoneMatch.Add(first.Headers.ETag);
@@ -161,7 +184,7 @@ public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : ICla
 
             await ChangeLiveFileAsync(() => PackagedSiteFixture.Write(site, "wwwroot/app.js", "export const changed = true;"));
             Assert.Equal("export const changed = true;", await client.GetStringAsync(url));
-            Assert.Equal(File.ReadAllBytes(Path.Combine(site, "wwwroot/app.js")), await GetGzipAsync(client, url));
+            Assert.Equal(File.ReadAllBytes(Path.Combine(site, "wwwroot/app.js")), await GetWithGzipRequestAsync(client, url, buildCompression));
             PackagedSiteFixture.Write(site, "wwwroot/new.js", "new asset");
             Assert.Equal("new asset", await client.GetStringAsync("/kiji/new.js"));
             await ChangeLiveFileAsync(() => File.Delete(Path.Combine(site, "wwwroot/app.js")));
@@ -175,12 +198,17 @@ public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : ICla
     private static string AssetUrl(string html, string id = "asset") =>
         WebUtility.HtmlDecode(Regex.Match(html, $"id=\"{id}\" href=\"([^\"]+)\"").Groups[1].Value);
 
-    private static async Task<byte[]> GetGzipAsync(HttpClient client, string url)
+    private static async Task<byte[]> GetWithGzipRequestAsync(HttpClient client, string url, bool compressed)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.AcceptEncoding.Add(new StringWithQualityHeaderValue("gzip"));
         using var response = await client.SendAsync(request);
         response.EnsureSuccessStatusCode();
+        if (!compressed)
+        {
+            Assert.Empty(response.Content.Headers.ContentEncoding);
+            return await response.Content.ReadAsByteArrayAsync();
+        }
         Assert.Contains("gzip", response.Content.Headers.ContentEncoding);
         await using var source = await response.Content.ReadAsStreamAsync();
         await using var gzip = new GZipStream(source, CompressionMode.Decompress);

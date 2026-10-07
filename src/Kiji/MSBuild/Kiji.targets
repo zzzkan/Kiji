@@ -105,9 +105,10 @@
        ============================================================== -->
   <PropertyGroup Condition="'$(_KijiIsSiteApp)' == 'true'">
     <StaticWebAssetsEnabled Condition="'$(StaticWebAssetsEnabled)' == ''">true</StaticWebAssetsEnabled>
-    <!-- Preserve Kiji's ordinary static-host output unless the site opts into
-         precompression. A project or command-line setting remains authoritative. -->
-    <CompressionEnabled Condition="'$(CompressionEnabled)' == ''">false</CompressionEnabled>
+    <!-- Precompress published assets, but skip compression during build/watch.
+         A project or command-line setting remains authoritative. -->
+    <CompressionEnabled Condition="'$(CompressionEnabled)' == ''">true</CompressionEnabled>
+    <DisableBuildCompression Condition="'$(DisableBuildCompression)' == ''">true</DisableBuildCompression>
     <_KijiConfiguredStaticWebAssetBasePath>$(StaticWebAssetBasePath)</_KijiConfiguredStaticWebAssetBasePath>
     <!-- The site is published at its root, including SDK-generated service-worker
          URLs. Referenced libraries retain their own base paths. -->

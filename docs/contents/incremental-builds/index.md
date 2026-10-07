@@ -25,7 +25,7 @@ it renders the page again. Every successful publish produces a complete static s
 | Content is added, removed, or reordered                            | Collection readers and affected routes are reevaluated. Outputs no longer produced are removed.                |
 | A page's parameters change                                         | That page renders again. Unsupported parameter types always require rendering.                                 |
 | A referenced local image changes                                   | Pages depending on the image render again; required variants are processed.                                    |
-| A file in wwwroot changes                                          | Its output is synchronized. This alone does not require unrelated pages to render.                             |
+| A static asset changes                                             | Its output is updated. Pages using `Assets` or the default `ImportMap` render again.                            |
 | A declared page input changes                                      | Pages that read the input render again.                                                                        |
 | A site-wide build input or relevant site setting changes           | All pages render again.                                                                                        |
 | Compiled site code, a referenced library, or the framework changes | All pages render again.                                                                                        |

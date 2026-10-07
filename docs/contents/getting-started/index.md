@@ -86,8 +86,7 @@ or content file.
 
 ## Add a layout and CSS
 
-Files under `wwwroot/` are static assets. Kiji copies them to the same relative path in
-the published site. Create `wwwroot/css/app.css`:
+Files under `wwwroot/` are static assets. Create `wwwroot/css/app.css`:
 
 ```css
 body {
@@ -118,7 +117,7 @@ link together:
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@Title - @Site.Name</title>
     <link rel="canonical" href="@Page.Url.AbsoluteUri" />
-    <link rel="stylesheet" href="@(Site.ResolveUrl("css/app.css").AbsolutePath)" />
+    <link rel="stylesheet" href="@Assets["css/app.css"]" />
 </StaticHeadContent>
 
 @code {
@@ -183,7 +182,8 @@ Stop and restart `dotnet watch`.
 
 ![Add a layout and CSS](./add-layout-css.png)
 
-The `BaseUrl` path is included in the stylesheet URL so the same markup works at a domain root and under a deployment sub-path such as GitHub Pages.
+`Assets` includes the `BaseUrl` path in the stylesheet URL, so the same markup works at a
+domain root and under a deployment sub-path such as GitHub Pages.
 
 ## Add a Markdown page
 
@@ -324,7 +324,7 @@ MySite/
 ├── Pages/            routed Razor components
 ├── Models/           data models
 ├── contents/         Markdown and page-bundle images
-├── wwwroot/          static assets copied as-is
+├── wwwroot/          CSS, JavaScript, and other static assets
 ├── Program.cs        the site definition
 ├── .kiji/            build cache and development output
 └── dist/             published output

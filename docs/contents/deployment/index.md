@@ -32,16 +32,16 @@ the domain root. Include the full path in `BaseUrl`:
 BaseUrl = new Uri("https://your-name.github.io/my-site/"),
 ```
 
-Resolve links to site-root pages and static assets with `Site.ResolveUrl`:
+Use `Site.ResolveUrl` for page links and `Assets` for static asset links:
 
 ```razor
 @inject SiteInfo Site
 
 <a href="@(Site.ResolveUrl("docs/").AbsolutePath)">Docs</a>
-<link rel="stylesheet" href="@(Site.ResolveUrl("css/app.css").AbsolutePath)" />
+<link rel="stylesheet" href="@Assets["css/app.css"]" />
 ```
 
-The resolved paths are `/my-site/docs/` and `/my-site/css/app.css` for that project site.
+Both URLs include `/my-site/`.
 A single leading `/` is optional: `Site.ResolveUrl("/docs/")` also preserves the deployment
 base path.
 
@@ -122,3 +122,16 @@ Check two host behaviors:
 - Generated pages use `route/index.html`.
 
 If a host provides a local emulator, use it to verify these behaviors before deployment.
+
+## Compression
+
+By default, publishing generates Gzip (`.gz`) and Brotli (`.br`) versions of compressible files.
+Configure your host to serve these files with the appropriate content encoding and cache
+headers. If the host compresses responses itself, you can skip generating compressed files:
+
+```pwsh
+dotnet publish -c Release -p:CompressionEnabled=false
+```
+
+This setting also applies to referenced projects. Check your host's configuration to
+ensure responses are compressed.

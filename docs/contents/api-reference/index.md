@@ -68,10 +68,6 @@ return its process exit code. The method freezes configuration, owns the resourc
 for the run, and disposes them on success, failure, or cancellation. Calling it more than
 once throws.
 
-For site executables, `dotnet publish` always generates the static site. Libraries and
-test projects retain normal SDK behavior. Static assets are optional: a site without
-`wwwroot`, isolated CSS, or library assets can be published and served with `dotnet watch`.
-
 ### SiteInfo
 
 `SiteInfo` contains site-wide metadata used by rendered pages, feeds, and sitemaps.
@@ -214,87 +210,19 @@ Use `StaticHeadContent` with a plain `<title>` element.
 
 ### Static assets
 
-Kiji uses the Razor SDK's static web asset graph for `wwwroot`, CSS isolation,
-linked content, and referenced Razor class libraries. In a Razor component, use
-the inherited `Assets` property to resolve an SDK asset's public URL:
+The inherited `ComponentBase.Assets` property resolves paths such as `Assets["css/app.css"]`
+to public URLs, including fingerprints when available and `SiteInfo.BaseUrl`'s path prefix.
+An unknown path is returned unchanged. Literal URLs in CSS, JavaScript, or HTML are not
+automatically rewritten. Use `SiteInfo.ResolveUrl` for links to pages and generated files.
 
-```razor
-<link rel="stylesheet" href="@Assets["app.css"]" />
-<link rel="stylesheet" href="@Assets["MySite.styles.css"]" />
-<script src="@Assets["app.js"]" defer></script>
-<img src="@Assets["images/logo.svg"]" alt="Logo" />
-<ImportMap />
-```
+Blazor's `ImportMap` component supplies an import map for the site's static assets.
+Place `<ImportMap />` inside `StaticHeadContent` before scripts that use JavaScript imports.
+Its `ImportMapDefinition` parameter accepts a custom map. See the
+[Blazor import map reference](https://learn.microsoft.com/aspnet/core/blazor/fundamentals/static-files?view=aspnetcore-10.0#importmap-component).
 
-Resolved URLs include `SiteInfo.BaseUrl`'s path prefix. The SDK determines fingerprint
-names; Kiji publishes their physical files so links also work on static hosts.
-Images, fonts, data files and other SDK assets can use the same lookup. A missing
-key follows Blazor's behavior and returns the supplied path unchanged. Changing
-the asset collection invalidates cached pages that read `Assets` or the default
-`ImportMap`.
-
-`ImportMap` uses the current SDK resource collection by default. Its explicit
-`ImportMapDefinition` parameter can supply a custom map. Publish includes integrity
-metadata; development omits it so live edits do not invalidate browser integrity
-checks. Literal URLs in CSS, JavaScript or HTML are not automatically rewritten.
-
-When compression or a service worker needs them, Kiji registers generated HTML,
-page-bundle images, feeds and custom artifacts with the SDK after rendering. These
-keep their existing URLs. Publish enables precompression by default and emits
-Gzip/Brotli sidecars according to the SDK's compression rules,
-including beside fingerprinted URLs. A static deployment
-host must be configured to negotiate those sidecars and set HTTP cache headers;
-the files alone cannot configure a host.
-
-Build and watch skip precompression by default (`DisableBuildCompression=true`).
-Set `DisableBuildCompression=false` to enable it during build. This site-level
-default does not disable compression in referenced Razor class libraries; use
-`-p:DisableBuildCompression=true` to apply it to the entire project graph.
-
-For a host that compresses responses itself, disable SDK precompression with
-`dotnet publish -c Release -p:CompressionEnabled=false`. This global property also
-applies to referenced projects. Setting it only in the site's project file does
-not disable compression in referenced Razor class libraries, and packages can
-still supply precompressed files. Kiji's own documentation site disables
-precompression for its CDN deployment.
-
-With compression disabled and no `ServiceWorkerAssetsManifest` or `ServiceWorker`
-items, Kiji publishes generated files directly without adding SDK asset records
-for them. Original static assets, CSS isolation, RCL assets and fingerprint URL
-resolution remain enabled. A custom SDK extension that needs generated asset
-records can set `KijiIncludeGeneratedStaticWebAssets=true`. Service worker manifests
-always retain generated pages, including when compression is disabled.
-
-Omitting `.gz` and `.br` sidecars reduces the output directory's size. Network
-transfer increases only if the host then serves uncompressed bytes; configure
-and verify the host's response compression separately. To enable only Gzip, set
-`CompressionEnabled=true`, `EnableDefaultCompressionFormats=false`, `BuildCompressionFormats=gzip` and
-`PublishCompressionFormats=gzip` globally. These are standard
-[SDK compression properties](https://learn.microsoft.com/aspnet/core/fundamentals/static-files?view=aspnetcore-10.0#msbuild-properties).
-
-SDK-generated service workers and their asset manifests are also finalized after
-page rendering and use stable URLs. Refer to these with `SiteInfo.ResolveUrl`,
-not a pre-render fingerprint lookup. Their cache manifest includes generated pages.
-The worker's JavaScript controls precaching. The SDK manifest contains file paths;
-percent-encode their segments before fetching names containing reserved URL
-characters such as `#` and `%`.
-
-The development server uses `MapStaticAssets` for known SDK assets and discovers
-new files through the SDK's discovery patterns. Page-bundle files created during
-rendering remain available immediately. Project configuration changes require a
-rebuild; ordinary asset edits remain live.
-
-Publishing checks that asset bytes still match the SDK's fingerprints. After changing
-assets, run a normal build or publish; `--no-build` cannot refresh their URLs and fails
-if its saved asset metadata no longer matches the files.
-
-Static asset change detection follows the SDK's metadata caching behavior, including
-for referenced Razor class libraries. Asset edits must update the file's modification
-time; edits that preserve both size and modification time are unsupported.
-
-With .NET SDK 10.0.301 on Windows, asset names containing `;` can fail during
-publish, including in a standard Web SDK project without Kiji. Avoid semicolons
-in asset file names.
+See [Concepts](../concepts/#static-assets) for asset links and component styles,
+[Incremental builds](../incremental-builds/#what-changes-cause-work) for rebuild behavior,
+and [Deployment](../deployment/#compression) for compression settings.
 
 ## Content and images
 

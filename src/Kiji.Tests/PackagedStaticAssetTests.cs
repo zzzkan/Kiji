@@ -1,7 +1,9 @@
 using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.WebSockets;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Kiji.Tests.TestSite;
@@ -183,6 +185,11 @@ public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : ICla
             Assert.Equal(original[..10], await partial.Content.ReadAsByteArrayAsync());
 
             await ChangeLiveFileAsync(() => PackagedSiteFixture.Write(site, "wwwroot/app.js", "export const changed = true;"));
+            using var revalidate = new HttpRequestMessage(HttpMethod.Get, url);
+            revalidate.Headers.IfNoneMatch.Add(first.Headers.ETag);
+            using var edited = await client.SendAsync(revalidate);
+            Assert.Equal(HttpStatusCode.OK, edited.StatusCode);
+            Assert.Equal("export const changed = true;", await edited.Content.ReadAsStringAsync());
             Assert.Equal("export const changed = true;", await client.GetStringAsync(url));
             Assert.Equal(File.ReadAllBytes(Path.Combine(site, "wwwroot/app.js")), await GetWithGzipRequestAsync(client, url, buildCompression));
             PackagedSiteFixture.Write(site, "wwwroot/new.js", "new asset");
@@ -193,6 +200,158 @@ public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : ICla
             using var outsidePrefix = await client.GetAsync("/new.js");
             Assert.Equal(HttpStatusCode.NotFound, outsidePrefix.StatusCode);
         });
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Watch_AssetEditsReloadAndRevalidateBrowserCache(bool buildCompression)
+    {
+        var site = fixture.CreateSite($"{nameof(Watch_AssetEditsReloadAndRevalidateBrowserCache)}-{buildCompression}", assets: true);
+        PackagedSiteFixture.Write(site, "wwwroot/site.css", "h1 { color: teal; }");
+        PackagedSiteFixture.Write(site, "Home.razor.js", "export const value = 'original';");
+        var assets = new[] { ("asset", "wwwroot/app.js"), ("css", "wwwroot/site.css"), ("collocated", "Home.razor.js") };
+        foreach (var (_, path) in assets)
+        {
+            File.SetLastWriteTimeUtc(Path.Combine(site, path), DateTime.UtcNow.AddMinutes(-1));
+        }
+        File.AppendAllText(Path.Combine(site, "Home.razor"), """
+
+            <a id="css" href="@Assets["site.css"]">css</a>
+            <a id="collocated" href="@Assets["Home.razor.js"]">js</a>
+            """);
+        var project = Path.Combine(site, "Site.csproj");
+        File.WriteAllText(project, File.ReadAllText(project).Replace("</Project>",
+            $"<PropertyGroup><DisableBuildCompression>{(!buildCompression).ToString().ToLowerInvariant()}</DisableBuildCompression></PropertyGroup></Project>", StringComparison.Ordinal));
+
+        await PackagedSiteFixture.WithServerAsync(site, async client =>
+        {
+            var html = await client.GetStringAsync("/kiji/");
+            Assert.Contains("/kiji/_kiji/livereload.js", html, StringComparison.Ordinal);
+            foreach (var (id, path) in assets)
+            {
+                var url = AssetUrl(html, id);
+                using var cached = await client.GetAsync(url);
+                cached.EnsureSuccessStatusCode();
+                var original = await cached.Content.ReadAsStringAsync();
+                Assert.NotNull(cached.Headers.ETag);
+                Assert.NotNull(cached.Content.Headers.LastModified);
+                var previousETag = cached.Headers.ETag;
+                var previousDate = cached.Content.Headers.LastModified;
+                for (var edit = 0; edit < 2; edit++)
+                {
+                    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                    using var socket = new ClientWebSocket();
+                    await socket.ConnectAsync(new UriBuilder(client.BaseAddress!) { Scheme = "ws", Path = "/kiji/_kiji/reload" }.Uri, timeout.Token);
+                    var expected = original + $"\n/* edit {edit} */";
+                    await ChangeLiveFileAsync(() =>
+                    {
+                        PackagedSiteFixture.Write(site, path, expected);
+                        // HTTP dates have second precision. Ensure a distinct validator
+                        // even on fast machines and keep the second edit the same size.
+                        File.SetLastWriteTimeUtc(Path.Combine(site, path), DateTime.UtcNow.AddSeconds(-10 + edit));
+                    });
+                    var buffer = new byte[64];
+                    var received = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), timeout.Token);
+                    Assert.Equal("reload", Encoding.UTF8.GetString(buffer, 0, received.Count));
+                    EntityTagHeaderValue? currentETag = null;
+                    DateTimeOffset? currentDate = null;
+                    for (var validator = 0; validator < 2; validator++)
+                    {
+                        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                        if (validator == 0) { request.Headers.IfNoneMatch.Add(previousETag); }
+                        else { request.Headers.IfModifiedSince = previousDate; }
+                        using var response = await client.SendAsync(request);
+                        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+                        Assert.Equal(expected, await response.Content.ReadAsStringAsync());
+                        currentETag = response.Headers.ETag;
+                        currentDate = response.Content.Headers.LastModified;
+                        Assert.NotNull(currentETag);
+                        Assert.NotNull(currentDate);
+                        using var unchanged = new HttpRequestMessage(HttpMethod.Head, url);
+                        unchanged.Headers.IfNoneMatch.Add(currentETag);
+                        using var validated = await client.SendAsync(unchanged);
+                        Assert.Equal(HttpStatusCode.NotModified, validated.StatusCode);
+                    }
+                    previousETag = currentETag!;
+                    previousDate = currentDate;
+                    Assert.Equal(Encoding.UTF8.GetBytes(expected), await GetWithGzipRequestAsync(client, url, buildCompression));
+                    await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
+                }
+            }
+        }, watch: true);
+    }
+
+    [Theory]
+    [InlineData("Microsoft.NET.Sdk.Razor")]
+    [InlineData("Microsoft.NET.Sdk.Web")]
+    public async Task Watch_KijiOwnsRefreshAfterRazorAndScopedCssUpdates(string sdk)
+    {
+        var site = fixture.CreateSite($"{nameof(Watch_KijiOwnsRefreshAfterRazorAndScopedCssUpdates)}-{sdk}", assets: true);
+        // Watch derives the scoped CSS bundle name from the project filename.
+        // Keep it aligned with AssemblyName, as in an ordinary SDK project.
+        var project = Path.Combine(site, "Site.csproj");
+        File.WriteAllText(project, File.ReadAllText(project).Replace("Microsoft.NET.Sdk.Razor", sdk, StringComparison.Ordinal));
+        File.Move(project, Path.Combine(site, "AssetSite.csproj"));
+        // Collocated JS places the project root in ContentRoots, reproducing the
+        // accidental source-file notifications from Razor and scoped CSS edits.
+        PackagedSiteFixture.Write(site, "Home.razor.js", "export const value = 1;");
+        // Include a closing body tag so watch could inject its client if the
+        // host accidentally started enabling browser-refresh middleware.
+        PackagedSiteFixture.Write(site, "Home.razor", """
+            @page "/"
+            <html><head><title>Watch regression</title></head><body>
+            <h1>SDK regression</h1>
+            <link id="scoped" href="@Assets["AssetSite.styles.css"]" rel="stylesheet" />
+            </body></html>
+            """);
+        // Allow watch's browser-refresh machinery while preventing an actual
+        // browser launch. The slim Kiji host must still inject only its own client.
+        PackagedSiteFixture.Write(site, "Properties/launchSettings.json", """
+            { "profiles": { "Site": { "commandName": "Project", "launchBrowser": false } } }
+            """);
+        await PackagedSiteFixture.WithServerAsync(site, async client =>
+        {
+            var html = await client.GetStringAsync("/kiji/");
+            Assert.Contains("/kiji/_kiji/livereload.js", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("aspnetcore-browser-refresh.js", html, StringComparison.Ordinal);
+            var cssUrl = AssetUrl(html, "scoped");
+            for (var edit = 0; edit < 2; edit++)
+            {
+                var code = edit == 0;
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                using var socket = new ClientWebSocket();
+                await socket.ConnectAsync(new UriBuilder(client.BaseAddress!) { Scheme = "ws", Path = "/kiji/_kiji/reload" }.Uri, timeout.Token);
+                if (code)
+                {
+                    var path = Path.Combine(site, "Home.razor");
+                    await File.WriteAllTextAsync(path, File.ReadAllText(path).Replace("SDK regression", "Updated Razor", StringComparison.Ordinal), timeout.Token);
+                }
+                else
+                {
+                    await File.WriteAllTextAsync(Path.Combine(site, "Home.razor.css"), "h1 { color: magenta; }", timeout.Token);
+                }
+                var buffer = new byte[64];
+                var received = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), timeout.Token);
+                Assert.Equal("reload", Encoding.UTF8.GetString(buffer, 0, received.Count));
+                Assert.Contains("Updated Razor", await client.GetStringAsync("/kiji/"), StringComparison.Ordinal);
+                if (!code) { Assert.Contains("magenta", await client.GetStringAsync(cssUrl), StringComparison.Ordinal); }
+
+                // Keep the same client connected long enough to catch a second
+                // notification from the source watcher or generated asset watcher.
+                var duplicate = socket.ReceiveAsync(new ArraySegment<byte>(buffer), timeout.Token);
+                Assert.NotSame(duplicate, await Task.WhenAny(duplicate, Task.Delay(1000, timeout.Token)));
+                socket.Abort();
+                try { await duplicate; }
+                catch (OperationCanceledException) { }
+                catch (WebSocketException) { }
+            }
+        }, watch: true, browserRefresh: true);
+        var log = File.ReadAllText(Path.Combine(site, "server.log"));
+        Assert.Contains("Page cache refreshed after a code update", log, StringComparison.Ordinal);
+        Assert.Contains("Static asset changed:", log, StringComparison.Ordinal);
+        Assert.DoesNotContain(log.Split('\n'), line => line.Contains("Static asset", StringComparison.Ordinal)
+            && (line.TrimEnd().EndsWith("Home.razor", StringComparison.Ordinal) || line.TrimEnd().EndsWith("Home.razor.css", StringComparison.Ordinal)));
     }
 
     private static string AssetUrl(string html, string id = "asset") =>

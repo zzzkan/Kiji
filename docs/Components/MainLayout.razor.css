@@ -213,7 +213,7 @@ main {
     min-width: 0;
 }
 
-main ::deep > :first-child {
+main ::deep> :first-child {
     margin-top: 0;
 }
 

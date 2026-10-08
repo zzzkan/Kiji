@@ -41,6 +41,10 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
     {
         Directory.CreateDirectory(options.OutputDirectory);
 
+        // Kiji owns browser refresh, including content invalidation and BaseUrl.
+        // The slim host does not run hosting startups, so dotnet watch's browser
+        // refresh middleware is not injected. Watch still applies code updates
+        // and rebuilds scoped CSS; Kiji reloads after those outputs change.
         var builder = WebApplication.CreateSlimBuilder(args);
         builder.Logging.SetMinimumLevel(LogLevel.Warning);
         // This host always serves live source files, including outside Development.
@@ -106,7 +110,7 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
             if (options.AssetEndpointsPath is not null && File.Exists(options.AssetEndpointsPath))
             {
                 var files = assets.Assets.ToDictionary(static asset => asset.Target, static asset => asset.Source, StringComparer.OrdinalIgnoreCase);
-                web.Use((context, next) => StaticAssetRangeHandler.HandleAsync(context, next, files));
+                web.Use((context, next) => StaticAssetRequestHandler.HandleAsync(context, next, files));
                 web.MapStaticAssets(options.AssetEndpointsPath);
             }
             // Discovery patterns also expose files added since the SDK manifest was built.
@@ -116,9 +120,10 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
                 ServeUnknownFileTypes = true,
                 OnPrepareResponse = static context => context.Context.Response.Headers.CacheControl = "no-store",
             });
-            foreach (var root in assets.ContentRoots)
+            foreach (var root in assets.ContentRoots.Distinct(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
             {
-                WatchDirectory(root, WatchedPathSource.Static);
+                var filter = new StaticAssetWatchFilter(root, assets);
+                WatchDirectory(root, WatchedPathSource.Static, filter.AffectsAsset);
             }
         }
 
@@ -313,7 +318,7 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
         }
     }
 
-    private void WatchDirectory(string path, WatchedPathSource source)
+    private void WatchDirectory(string path, WatchedPathSource source, Func<string, bool>? affectsAsset = null)
     {
         path = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
         // Watch an existing parent, so creating, deleting or replacing the source
@@ -346,6 +351,12 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
             // A file save also touches its parent directory's timestamp, raising a
             // second Changed event for the directory itself; only files matter here.
             if (args.ChangeType is WatcherChangeTypes.Changed && Directory.Exists(args.FullPath))
+            {
+                return;
+            }
+
+            if (affectsAsset is not null && !affectsAsset(args.FullPath)
+                && (args is not RenamedEventArgs old || !affectsAsset(old.OldFullPath)))
             {
                 return;
             }
@@ -416,6 +427,7 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
             {
                 return;
             }
+
             changes = DeduplicateChanges(_pendingChanges);
             _pendingChanges.Clear();
 

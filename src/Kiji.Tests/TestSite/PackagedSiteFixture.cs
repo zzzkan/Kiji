@@ -89,9 +89,17 @@ public sealed class PackagedSiteFixture : IAsyncLifetime
         return log;
     }
 
-    public static async Task WithServerAsync(string site, Func<HttpClient, Task> check)
+    public static async Task WithServerAsync(string site, Func<HttpClient, Task> check, bool watch = false, bool browserRefresh = false)
     {
-        using var process = new Process { StartInfo = StartInfo(site, ["exec", "bin/Release/net10.0/AssetSite.dll", "--urls", "http://127.0.0.1:0"]) };
+        string[] arguments = watch
+            ? ["watch", "--non-interactive", "--", "--urls", "http://127.0.0.1:0"]
+            : ["exec", "bin/Release/net10.0/AssetSite.dll", "--urls", "http://127.0.0.1:0"];
+        using var process = new Process { StartInfo = StartInfo(site, arguments) };
+        process.StartInfo.Environment["DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER"] = browserRefresh ? "0" : "1";
+        if (browserRefresh)
+        {
+            process.StartInfo.Environment["DOTNET_WATCH_SUPPRESS_BROWSER_REFRESH"] = "0";
+        }
         var ready = new TaskCompletionSource<Uri>(TaskCreationOptions.RunContinuationsAsynchronously);
         var output = new System.Collections.Concurrent.ConcurrentQueue<string>();
         process.OutputDataReceived += (_, args) =>

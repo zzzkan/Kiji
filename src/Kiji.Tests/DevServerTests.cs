@@ -288,6 +288,43 @@ public sealed class DevServerTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Serve_CollocatedAssetsIgnoreRazorAndScopedCssSources()
+    {
+        var components = Path.Combine(_testDir, "Components");
+        Directory.CreateDirectory(components);
+        var script = Path.Combine(components, "Card.razor.js");
+        await File.WriteAllTextAsync(script, "original");
+        using var logs = new StringWriter();
+        var (baseAddress, devServer) = await StartServerAsync(logs, configureAssets: app =>
+            TestSiteAssets.WriteManifest(app.Paths.AssetManifestBasePath + ".staticwebassets.runtime.json",
+                [new(script, "Components/Card.razor.js")], [components]));
+        await using (devServer)
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            using var socket = new ClientWebSocket();
+            await socket.ConnectAsync(new UriBuilder(baseAddress) { Scheme = "ws", Path = "/_kiji/reload" }.Uri, timeout.Token);
+            var buffer = new byte[64];
+            var reload = socket.ReceiveAsync(new ArraySegment<byte>(buffer), timeout.Token);
+            await File.WriteAllTextAsync(Path.Combine(components, "Card.razor"), "<p>changed</p>", timeout.Token);
+            await File.WriteAllTextAsync(Path.Combine(components, "Card.razor.css"), "p { color: red; }", timeout.Token);
+            await File.WriteAllTextAsync(Path.Combine(components, "unregistered.js"), "not served", timeout.Token);
+            await Task.Delay(750, timeout.Token);
+            Assert.False(reload.IsCompleted, logs.ToString());
+
+            // Atomic replacement must still recognize the registered destination.
+            var temporary = Path.Combine(components, "save.tmp");
+            await File.WriteAllTextAsync(temporary, "updated", timeout.Token);
+            File.Move(temporary, script, overwrite: true);
+            var received = await reload;
+            Assert.Equal("reload", Encoding.UTF8.GetString(buffer, 0, received.Count));
+            using var client = CreateClient();
+            Assert.Equal("updated", await client.GetStringAsync(new Uri(baseAddress, "/Components/Card.razor.js")));
+            Assert.DoesNotContain("Card.razor.css", logs.ToString(), StringComparison.Ordinal);
+            Assert.DoesNotContain("unregistered.js", logs.ToString(), StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public async Task Serve_CodeUpdateNotificationBroadcastsReload()
     {
         using var logs = new StringWriter();

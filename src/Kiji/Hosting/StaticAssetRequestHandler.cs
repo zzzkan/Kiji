@@ -5,11 +5,12 @@ using Microsoft.Net.Http.Headers;
 
 namespace Kiji.Hosting;
 
-internal static class StaticAssetRangeHandler
+internal static class StaticAssetRequestHandler
 {
-    // The SDK's development reload handler currently discards the requested offset
-    // and count when sending a file (dotnet/aspnetcore#63320). Keep its ordinary
-    // optimized endpoints and delegate ranges to ASP.NET Core's file result instead.
+    // SDK development endpoints evaluate conditions against build-time metadata,
+    // before patching the response with live bytes, and discard range offsets
+    // (dotnet/aspnetcore#63320). Use a live file result for these requests; ordinary
+    // requests retain the SDK's optimized endpoints and compression.
     internal static async Task HandleAsync(HttpContext context, RequestDelegate next, IReadOnlyDictionary<string, string> files)
     {
         if (context.GetEndpoint()?.Metadata.GetMetadata<StaticAssetDescriptor>() is not { } asset
@@ -25,7 +26,9 @@ internal static class StaticAssetRangeHandler
             context.Response.StatusCode = StatusCodes.Status404NotFound;
             return;
         }
-        if (context.Request.Headers.Range.Count == 0)
+        var headers = context.Request.Headers;
+        if (headers.Range.Count == 0 && headers.IfMatch.Count == 0 && headers.IfNoneMatch.Count == 0
+            && headers.IfModifiedSince.Count == 0 && headers.IfUnmodifiedSince.Count == 0)
         {
             await next(context);
             return;

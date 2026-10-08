@@ -16,7 +16,8 @@
 
   <ItemGroup>
     <PackageReference Include="Markdig" />
-    <PackageReference Include="SixLabors.ImageSharp" />
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
     <PackageReference Include="YamlDotNet" />
   </ItemGroup>
 

@@ -1,6 +1,5 @@
 using Kiji.Assets;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
+using SkiaSharp;
 using Xunit;
 
 namespace Kiji.Tests;
@@ -13,8 +12,9 @@ public sealed class ImageConcurrencyTests : IDisposable
     {
         Directory.CreateDirectory(_root);
         var path = Path.Combine(_root, name + ".png");
-        using var image = new Image<Rgba32>(32, 32);
-        await image.SaveAsPngAsync(path);
+        using var image = new SKBitmap(32, 32);
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
+        await File.WriteAllBytesAsync(path, encoded.ToArray());
         return path;
     }
 

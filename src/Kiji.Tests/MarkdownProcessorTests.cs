@@ -1,8 +1,7 @@
 using Kiji.Markdown;
 using Kiji.Assets;
 using Kiji.Rendering;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
+using SkiaSharp;
 using Xunit;
 
 namespace Kiji.Tests;
@@ -175,16 +174,17 @@ public sealed class MarkdownProcessorTests : IDisposable
 
     private static async Task CreateTestImageAsync(string path, int width, int height)
     {
-        using var image = new Image<Rgba32>(width, height);
+        using var image = new SKBitmap(width, height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
 
         for (var y = 0; y < height; y++)
         {
             for (var x = 0; x < width; x++)
             {
-                image[x, y] = new Rgba32((byte)(x % 255), (byte)(y % 255), 128);
+                image.SetPixel(x, y, new SKColor((byte)(x % 255), (byte)(y % 255), 128));
             }
         }
 
-        await image.SaveAsPngAsync(path);
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
+        await File.WriteAllBytesAsync(path, encoded.ToArray());
     }
 }

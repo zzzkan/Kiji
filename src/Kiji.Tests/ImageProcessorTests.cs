@@ -1,7 +1,7 @@
 using Kiji.Assets;
 using Xunit;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
+using SkiaSharp;
+using System.Buffers.Binary;
 
 namespace Kiji.Tests;
 
@@ -155,9 +155,132 @@ public sealed class ImageProcessorTests : IDisposable
         Assert.Equal(initialEncodes, encodes);
     }
 
+    [Theory]
+    [InlineData(SKEncodedImageFormat.Jpeg, ".jpg")]
+    [InlineData(SKEncodedImageFormat.Png, ".png")]
+    [InlineData(SKEncodedImageFormat.Webp, ".webp")]
+    public async Task ProcessImage_FormatsProduceDecodableWebpWithExpectedDimensions(SKEncodedImageFormat format, string extension)
+    {
+        var path = Path.Combine(_sourceDir, "format" + extension);
+        using var source = new SKBitmap(800, 400);
+        source.Erase(SKColors.Red);
+        using var encoded = source.Encode(format, 100);
+        await File.WriteAllBytesAsync(path, encoded.ToArray());
+
+        var result = await _processor.ProcessAsync(path, _outputDir);
+
+        Assert.Equal(800, result.OriginalWidth);
+        Assert.Equal(400, result.OriginalHeight);
+        Assert.Equal([320, 640, 800], result.Variants.Select(static variant => variant.Width));
+        foreach (var variant in result.Variants)
+        {
+            using var codec = SKCodec.Create(Path.Combine(_outputDir, variant.FileName));
+            Assert.Equal(SKEncodedImageFormat.Webp, codec.EncodedFormat);
+            Assert.Equal(variant.Width, codec.Info.Width);
+            Assert.Equal(variant.Width / 2, codec.Info.Height);
+            using var bitmap = SKBitmap.Decode(codec);
+            var pixel = bitmap.GetPixel(bitmap.Width / 2, bitmap.Height / 2);
+            Assert.InRange(pixel.Red, (byte)240, byte.MaxValue);
+            Assert.InRange(pixel.Green, byte.MinValue, (byte)15);
+            Assert.InRange(pixel.Blue, byte.MinValue, (byte)15);
+        }
+    }
+
+    [Fact]
+    public async Task ProcessImage_ResizingPreservesTransparency()
+    {
+        var path = Path.Combine(_sourceDir, "transparent.png");
+        using var source = new SKBitmap(800, 400);
+        source.Erase(SKColors.Transparent);
+        using (var canvas = new SKCanvas(source))
+        using (var paint = new SKPaint { Color = SKColors.Red })
+        {
+            canvas.DrawRect(400, 0, 400, 400, paint);
+        }
+        using var encoded = source.Encode(SKEncodedImageFormat.Png, 100);
+        await File.WriteAllBytesAsync(path, encoded.ToArray());
+
+        var result = await _processor.ProcessAsync(path, _outputDir);
+
+        foreach (var variant in result.Variants)
+        {
+            using var bitmap = SKBitmap.Decode(Path.Combine(_outputDir, variant.FileName));
+            Assert.Equal(0, bitmap.GetPixel(bitmap.Width / 4, bitmap.Height / 2).Alpha);
+            Assert.Equal(255, bitmap.GetPixel(bitmap.Width * 3 / 4, bitmap.Height / 2).Alpha);
+        }
+    }
+
+    [Fact]
+    public async Task ProcessImage_AnimatedGifUsesFirstFrame()
+    {
+        // Two one-pixel frames, red then blue, with a global two-color palette.
+        var path = Path.Combine(_sourceDir, "animated.gif");
+        await File.WriteAllBytesAsync(path, Convert.FromHexString(
+            "47494638396101000100800000FF00000000FF" +
+            "21F904000A0000002C0000000001000100000202440100" +
+            "21F904000A0000002C00000000010001000002024C01003B"));
+        using (var original = SKCodec.Create(path)) { Assert.Equal(2, original.FrameCount); }
+
+        var result = await _processor.ProcessAsync(path, _outputDir);
+
+        using var codec = SKCodec.Create(Path.Combine(_outputDir, Assert.Single(result.Variants).FileName));
+        Assert.InRange(codec.FrameCount, 0, 1);
+        using var bitmap = SKBitmap.Decode(codec);
+        Assert.InRange(bitmap.GetPixel(0, 0).Red, (byte)240, byte.MaxValue);
+        Assert.InRange(bitmap.GetPixel(0, 0).Blue, byte.MinValue, (byte)15);
+    }
+
+    [Fact]
+    public async Task ProcessImage_DropsSourceExifMetadata()
+    {
+        using var source = new SKBitmap(16, 8);
+        source.Erase(SKColors.Blue);
+        using var encoded = source.Encode(SKEncodedImageFormat.Jpeg, 100);
+        var jpeg = encoded.ToArray();
+        // Valid little-endian EXIF with one ImageDescription ASCII entry.
+        var exif = Convert.FromHexString("45786966000049492A000800000001000E010200080000001A00000000000000")
+            .Concat("private\0"u8.ToArray()).ToArray();
+        var withMetadata = new byte[jpeg.Length + exif.Length + 4];
+        jpeg.AsSpan(0, 2).CopyTo(withMetadata);
+        withMetadata[2] = 0xff;
+        withMetadata[3] = 0xe1;
+        BinaryPrimitives.WriteUInt16BigEndian(withMetadata.AsSpan(4), checked((ushort)(exif.Length + 2)));
+        exif.CopyTo(withMetadata, 6);
+        jpeg.AsSpan(2).CopyTo(withMetadata.AsSpan(6 + exif.Length));
+        var path = Path.Combine(_sourceDir, "metadata.jpg");
+        await File.WriteAllBytesAsync(path, withMetadata);
+
+        var result = await _processor.ProcessAsync(path, _outputDir);
+
+        var webp = await File.ReadAllBytesAsync(Path.Combine(_outputDir, Assert.Single(result.Variants).FileName));
+        using var bitmap = SKBitmap.Decode(webp);
+        Assert.Equal(16, bitmap.Width);
+        for (var offset = 12; offset < webp.Length;)
+        {
+            var chunk = System.Text.Encoding.ASCII.GetString(webp, offset, 4);
+            Assert.NotEqual("EXIF", chunk);
+            Assert.NotEqual("XMP ", chunk);
+            var length = checked((int)BinaryPrimitives.ReadUInt32LittleEndian(webp.AsSpan(offset + 4)));
+            offset += 8 + length + (length & 1);
+        }
+    }
+
+    [Fact]
+    public async Task ProcessImage_TruncatedInputDoesNotPublishVariants()
+    {
+        var path = Path.Combine(_sourceDir, "truncated.png");
+        await CreateTestImageAsync(path, 800, 400);
+        var bytes = await File.ReadAllBytesAsync(path);
+        await File.WriteAllBytesAsync(path, bytes[..(bytes.Length / 2)]);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => _processor.ProcessAsync(path, _outputDir));
+
+        Assert.Empty(Directory.GetFiles(_outputDir));
+    }
+
     private static async Task CreateTestImageAsync(string path, int width, int height)
     {
-        using var image = new Image<Rgba32>(width, height);
+        using var image = new SKBitmap(width, height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
 
         // Fill with a gradient for more realistic content
         for (var y = 0; y < height; y++)
@@ -167,17 +290,19 @@ public sealed class ImageProcessorTests : IDisposable
                 var r = (byte)(x * 255 / width);
                 var g = (byte)(y * 255 / height);
                 var b = (byte)((x + y) * 128 / (width + height));
-                image[x, y] = new Rgba32(r, g, b);
+                image.SetPixel(x, y, new SKColor(r, g, b));
             }
         }
 
         if (Path.GetExtension(path) == ".jpg")
         {
-            await image.SaveAsJpegAsync(path);
+            using var encoded = image.Encode(SKEncodedImageFormat.Jpeg, 90);
+            await File.WriteAllBytesAsync(path, encoded.ToArray());
         }
         else
         {
-            await image.SaveAsPngAsync(path);
+            using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
+            await File.WriteAllBytesAsync(path, encoded.ToArray());
         }
     }
 

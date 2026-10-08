@@ -177,7 +177,10 @@ contents/
 
 For relative `.jpg`, `.jpeg`, `.png`, `.gif`, and `.webp` references, Kiji generates
 responsive WebP variants beside the page's `index.html` and emits an `<img>` with a
-`srcset`.
+`srcset`. The default processor uses SkiaSharp and outputs static images; animated GIF
+and WebP inputs use only their first frame. Source EXIF, IPTC, and XMP metadata is removed,
+and colors are converted to sRGB. To preserve animation, place the original image in
+`wwwroot/` and reference it as a static asset, or provide a custom image processor.
 
 The source image must exist inside the Markdown file's directory tree. A missing image or
 a path that escapes that tree fails the page render.

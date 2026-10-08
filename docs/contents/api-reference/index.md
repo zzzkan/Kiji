@@ -299,6 +299,11 @@ images, because their output directory comes from the current page.
 
 The public image contracts are in `Kiji.Assets`.
 
+The default processor uses SkiaSharp to generate static WebP variants from JPEG, PNG,
+GIF, and WebP inputs. Animated inputs use only the first frame. It converts colors to
+sRGB and drops source EXIF, IPTC, and XMP metadata. SkiaSharp's native libraries for
+Windows, macOS, and Linux are included as package dependencies; no license key is needed.
+
 #### `UseImageProcessor(Func<IImageProcessor> factory)`
 
 Replaces the default responsive-image processor. The last registration wins. The factory

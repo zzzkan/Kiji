@@ -32,7 +32,7 @@ public sealed class MarkdownProcessorTests : IDisposable
     }
 
     [Fact]
-    public async Task SequentialDocuments_ResetImageLoadingState()
+    public async Task SequentialDocuments_UseAutomaticSizesAndKeepPageUrlsIsolated()
     {
         var processor = CreateProcessor();
         var first = CreateMarkdownFile("first.md", "![First](a.png)\n\n![Second](a.png)");
@@ -40,11 +40,13 @@ public sealed class MarkdownProcessorTests : IDisposable
         await CreateTestImageAsync(Path.Combine(_testFilesDir, "a.png"), 32, 32);
         var firstHtml = await WithPageContextAsync("/first/", "first", () => ProcessFileAsync(processor, first));
         var secondHtml = await WithPageContextAsync("/second/", "second", () => ProcessFileAsync(processor, second));
-        Assert.Contains("loading=\"eager\"", firstHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("loading=\"eager\"", firstHtml, StringComparison.Ordinal);
         Assert.Contains("loading=\"lazy\"", firstHtml, StringComparison.Ordinal);
+        Assert.Contains("sizes=\"auto, ", firstHtml, StringComparison.Ordinal);
         Assert.Contains("src=\"/first/a.png.", firstHtml, StringComparison.Ordinal);
-        Assert.Contains("loading=\"eager\"", secondHtml, StringComparison.Ordinal);
-        Assert.DoesNotContain("loading=\"lazy\"", secondHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("loading=\"eager\"", secondHtml, StringComparison.Ordinal);
+        Assert.Contains("loading=\"lazy\"", secondHtml, StringComparison.Ordinal);
+        Assert.Contains("sizes=\"auto, ", secondHtml, StringComparison.Ordinal);
         Assert.Contains("src=\"/second/a.png.", secondHtml, StringComparison.Ordinal);
     }
 

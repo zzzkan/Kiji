@@ -20,7 +20,6 @@ internal sealed class MarkdownProcessor
     private readonly IReadOnlyList<Func<string, string>> _htmlPostProcessors;
     private readonly string _outputPath;
     private readonly string? _imageCachePath;
-    private readonly string? _imageSizes;
 
     /// <param name="options">The resolved site paths.</param>
     /// <param name="imageProcessor">The image backend used to process referenced local images.</param>
@@ -36,7 +35,6 @@ internal sealed class MarkdownProcessor
         _imageProcessor = imageProcessor;
         _outputPath = options.OutputDirectory;
         _imageCachePath = options.ImageCacheDirectory;
-        _imageSizes = contentOptions?.ImageSizes;
         _htmlPostProcessors = contentOptions is null ? [] : [.. contentOptions.HtmlPostProcessors];
         _pipeline = BuildPipeline(contentOptions);
     }
@@ -65,8 +63,7 @@ internal sealed class MarkdownProcessor
         cancellationToken.ThrowIfCancellationRequested();
         var imageContext = new ResponsiveImageContext(
             imageInfoLookup,
-            PageRenderContext.Current?.OutputUrlDirectory ?? "/",
-            _imageSizes);
+            PageRenderContext.Current?.OutputUrlDirectory ?? "/");
 
         var html = Render(document, imageContext);
 

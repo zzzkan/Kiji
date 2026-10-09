@@ -14,12 +14,11 @@ public sealed class ResponsiveImageExtensionTests
     private static string Render(
         string markdown,
         IReadOnlyDictionary<string, ProcessedImageInfo> imageInfoLookup,
-        string outputUrlDirectory = "/kiji/blog/test-post/",
-        string? imageSizes = null)
+        string outputUrlDirectory = "/kiji/blog/test-post/")
     {
         var document = global::Markdig.Markdown.Parse(markdown, Pipeline);
         return PooledMarkdigRenderer.Create(Pipeline).Render(
-            document, new ResponsiveImageContext(imageInfoLookup, outputUrlDirectory, imageSizes));
+            document, new ResponsiveImageContext(imageInfoLookup, outputUrlDirectory));
     }
 
     private static ProcessedImageInfo CreateImageInfo(
@@ -53,19 +52,19 @@ public sealed class ResponsiveImageExtensionTests
         Assert.Contains("srcset=\"", html);
         Assert.Contains("/kiji/blog/test-post/test-image.png.abc12345.320w.webp 320w", html);
         Assert.Contains("/kiji/blog/test-post/test-image.png.abc12345.1920w.webp 1920w", html);
-        Assert.Contains("sizes=\"(max-width: 1920px) 100vw, 1920px\"", html);
+        Assert.Contains("sizes=\"auto, (max-width: 1920px) 100vw, 1920px\"", html);
         Assert.Contains("width=\"1920\"", html);
         Assert.Contains("height=\"1080\"", html);
         Assert.Contains("alt=\"Alt text\"", html);
         Assert.Contains("title=\"Image title\"", html);
-        Assert.Contains("loading=\"eager\"", html);
+        Assert.Contains("loading=\"lazy\"", html);
         Assert.Contains("decoding=\"async\"", html);
         Assert.DoesNotContain("class=", html);
         Assert.DoesNotContain("src=\"https://", html, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Process_LocalImage_SecondImageUsesLazyLoading()
+    public void Process_LocalImages_AllUseLazyLoadingAndAutomaticSizes()
     {
         var imageInfoLookup = new Dictionary<string, ProcessedImageInfo>
         {
@@ -78,27 +77,12 @@ public sealed class ResponsiveImageExtensionTests
 
         var images = html.Split("<img", StringSplitOptions.None).Skip(1).Select(part => part[..part.IndexOf('>')]).ToArray();
         Assert.Equal(2, images.Length);
-        Assert.Contains("loading=\"eager\"", images[0], StringComparison.Ordinal);
-        Assert.Contains("loading=\"lazy\"", images[1], StringComparison.Ordinal);
-        Assert.Contains("sizes=\"auto, (max-width: 1920px) 100vw, 1920px\"", images[1], StringComparison.Ordinal);
-        Assert.DoesNotContain("sizes=\"auto", images[0], StringComparison.Ordinal);
-        Assert.All(images, image => Assert.Contains("decoding=\"async\"", image, StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public void Process_CustomImageSizes_PreservesMediaListAndLazyFallback()
-    {
-        var lookup = new Dictionary<string, ProcessedImageInfo>
+        Assert.All(images, image =>
         {
-            ["image.png"] = CreateImageInfo("image.png"),
-        };
-        const string sizes = "(max-width: 52rem) calc(100vw - 2.5rem), min(calc(100vw - 18rem), 46rem)";
-
-        var html = Render("![First](image.png)\n\n![Second](image.png)", lookup, imageSizes: sizes);
-        var images = html.Split("<img", StringSplitOptions.None).Skip(1).ToArray();
-
-        Assert.Contains($"sizes=\"{sizes}\"", images[0]);
-        Assert.Contains($"sizes=\"auto, {sizes}\"", images[1]);
+            Assert.Contains("loading=\"lazy\"", image, StringComparison.Ordinal);
+            Assert.Contains("sizes=\"auto, (max-width: 1920px) 100vw, 1920px\"", image, StringComparison.Ordinal);
+            Assert.Contains("decoding=\"async\"", image, StringComparison.Ordinal);
+        });
     }
 
     [Fact]
@@ -112,7 +96,7 @@ public sealed class ResponsiveImageExtensionTests
 
         Assert.Contains("src=\"unknown-image.png\"", html);
         Assert.DoesNotContain("srcset", html);
-        Assert.Contains("loading=\"eager\"", html);
+        Assert.Contains("loading=\"lazy\"", html);
     }
 
     [Fact]

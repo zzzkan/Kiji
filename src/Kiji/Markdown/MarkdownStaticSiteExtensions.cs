@@ -37,11 +37,6 @@ public static class MarkdownStaticSiteExtensions
         var contentOptions = new MarkdownOptions();
         configure?.Invoke(contentOptions);
 
-        // Layout settings affect HTML even when source files and code are unchanged.
-        app.AddBuildInput(
-            $"Kiji.Markdown.ImageSizes:{typeof(TModel).FullName}:{contentOptions.ResolveContentSetScope()}",
-            contentOptions.ImageSizes ?? string.Empty);
-
         // A factory rather than a shared instance: front matter parsing runs on
         // multiple threads and YamlDotNet deserializers are not documented as thread-safe.
         IDeserializer CreateFrontMatterDeserializer()

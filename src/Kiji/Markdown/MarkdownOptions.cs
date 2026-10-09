@@ -18,13 +18,6 @@ public sealed class MarkdownOptions
     /// <summary>An optional file filter applied before loading, defaulting to all Markdown files.</summary>
     public Func<FileInfo, bool>? FileFilter { get; set; }
 
-    /// <summary>
-    /// The HTML source-size list for local images, matching the site's content layout.
-    /// Null or whitespace uses the viewport width capped at the largest variant.
-    /// Do not include <c>auto</c>: Kiji adds it only for lazy-loaded images.
-    /// </summary>
-    public string? ImageSizes { get; set; }
-
     /// <summary>Registers a Markdig configuration applied after the default pipeline is configured.</summary>
     public void ConfigureMarkdown(Action<MarkdownPipelineBuilder> configure)
     {

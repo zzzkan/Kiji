@@ -60,7 +60,16 @@ internal sealed class ResponsiveImageWriter
         var largest = variants[^1];
 
         var srcset = string.Join(", ", variants.Select(variant => $"{CreateVariantUrl(publicDirectory, variant.FileName)} {variant.Width}w"));
-        var sizes = $"(max-width: {largest.Width}px) 100vw, {largest.Width}px";
+        var sizes = string.IsNullOrWhiteSpace(context.ImageSizes)
+            ? $"(max-width: {largest.Width}px) 100vw, {largest.Width}px"
+            : context.ImageSizes;
+        // Auto sizes measures the actual layout, including nested containers and
+        // scrollbars. It is valid only for lazy images; retain a fallback for
+        // browsers without support and the eagerly loaded first image.
+        if (context.ImageCount > 0)
+        {
+            sizes = "auto, " + sizes;
+        }
 
         renderer.Write("<img src=\"");
         renderer.WriteEscapeUrl(CreateVariantUrl(publicDirectory, largest.FileName));

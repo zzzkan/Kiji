@@ -671,6 +671,37 @@ public sealed class IncrementalBuildTests : IDisposable
         Assert.Equal(output.Hash, Generation.BuildFingerprint.HashFile(Path.Combine(root, "dist", output.RelativePath)));
     }
 
+    [Fact]
+    public async Task MarkdownImageSizes_ChangedSettingInvalidatesHtmlButReusesImages()
+    {
+        var root = CreateSiteRoot("image-sizes");
+        await WritePostAsync(root, "stable", "Image", "![first](source.png)\n\n![second](source.png)");
+        await File.WriteAllBytesAsync(Path.Combine(root, "contents", "source.png"), [1, 2, 3]);
+        var processor = new TestSite.PageServices.TrackingImageProcessor();
+        var renders = 0;
+        async Task Build(string? sizes)
+        {
+            await using var app = CreateBuildApp(root, () => Interlocked.Increment(ref renders), sizes);
+            app.UseImageProcessor(() => processor);
+            await app.PublishAsync("dist");
+        }
+
+        await Build(null);
+        var previousRenders = renders;
+        const string sizes = "(max-width: 48rem) calc(100vw - 2rem), 46rem";
+        await Build(sizes);
+        Assert.True(renders > previousRenders);
+        var html = string.Join("\n", Directory.GetFiles(Path.Combine(root, "dist"), "*.html", SearchOption.AllDirectories)
+            .Select(File.ReadAllText));
+        Assert.Contains($"sizes=\"{sizes}\"", html);
+        Assert.Contains($"sizes=\"auto, {sizes}\"", html);
+        Assert.Equal(1, processor.Calls);
+
+        previousRenders = renders;
+        await Build(sizes);
+        Assert.Equal(previousRenders, renders);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -765,7 +796,7 @@ public sealed class IncrementalBuildTests : IDisposable
         await app.PublishAsync(Path.Combine(root, "dist"));
     }
 
-    private static StaticSite CreateBuildApp(string root, Action? onRender = null)
+    private static StaticSite CreateBuildApp(string root, Action? onRender = null, string? imageSizes = null)
     {
         var app = StaticSite.Create([]);
         app.Info = TestArticleContents.CreateSiteInfo();
@@ -773,7 +804,11 @@ public sealed class IncrementalBuildTests : IDisposable
         app.Paths.ContentDirectory = "contents";
         app.Paths.StaticDirectory = "static";
 
-        app.UseMarkdownContent<FrontMatter>(options => options.AddHtmlPostProcessor(html => { onRender?.Invoke(); return html; }));
+        app.UseMarkdownContent<FrontMatter>(options =>
+        {
+            options.ImageSizes = imageSizes;
+            options.AddHtmlPostProcessor(html => { onRender?.Invoke(); return html; });
+        });
         app.UseContentSource<Post>(static _ => []);
         TestArticleContents.MapSite(app);
         app.AddPages<MarkdownPostTestPage>(static services => services

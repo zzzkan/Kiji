@@ -8,11 +8,14 @@ namespace Kiji.Markdown;
 /// </summary>
 internal sealed class ResponsiveImageContext(
     IReadOnlyDictionary<string, ProcessedImageInfo> imageInfoLookup,
-    string outputUrlDirectory)
+    string outputUrlDirectory,
+    string? imageSizes = null)
 {
     public IReadOnlyDictionary<string, ProcessedImageInfo> ImageInfoLookup { get; } = imageInfoLookup;
 
     public string OutputUrlDirectory { get; } = outputUrlDirectory;
+
+    public string? ImageSizes { get; } = imageSizes;
 
     public int ImageCount;
 }

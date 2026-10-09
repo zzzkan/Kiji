@@ -14,11 +14,12 @@ public sealed class ResponsiveImageExtensionTests
     private static string Render(
         string markdown,
         IReadOnlyDictionary<string, ProcessedImageInfo> imageInfoLookup,
-        string outputUrlDirectory = "/kiji/blog/test-post/")
+        string outputUrlDirectory = "/kiji/blog/test-post/",
+        string? imageSizes = null)
     {
         var document = global::Markdig.Markdown.Parse(markdown, Pipeline);
         return PooledMarkdigRenderer.Create(Pipeline).Render(
-            document, new ResponsiveImageContext(imageInfoLookup, outputUrlDirectory));
+            document, new ResponsiveImageContext(imageInfoLookup, outputUrlDirectory, imageSizes));
     }
 
     private static ProcessedImageInfo CreateImageInfo(
@@ -79,7 +80,25 @@ public sealed class ResponsiveImageExtensionTests
         Assert.Equal(2, images.Length);
         Assert.Contains("loading=\"eager\"", images[0], StringComparison.Ordinal);
         Assert.Contains("loading=\"lazy\"", images[1], StringComparison.Ordinal);
+        Assert.Contains("sizes=\"auto, (max-width: 1920px) 100vw, 1920px\"", images[1], StringComparison.Ordinal);
+        Assert.DoesNotContain("sizes=\"auto", images[0], StringComparison.Ordinal);
         Assert.All(images, image => Assert.Contains("decoding=\"async\"", image, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Process_CustomImageSizes_PreservesMediaListAndLazyFallback()
+    {
+        var lookup = new Dictionary<string, ProcessedImageInfo>
+        {
+            ["image.png"] = CreateImageInfo("image.png"),
+        };
+        const string sizes = "(max-width: 52rem) calc(100vw - 2.5rem), min(calc(100vw - 18rem), 46rem)";
+
+        var html = Render("![First](image.png)\n\n![Second](image.png)", lookup, imageSizes: sizes);
+        var images = html.Split("<img", StringSplitOptions.None).Skip(1).ToArray();
+
+        Assert.Contains($"sizes=\"{sizes}\"", images[0]);
+        Assert.Contains($"sizes=\"auto, {sizes}\"", images[1]);
     }
 
     [Fact]

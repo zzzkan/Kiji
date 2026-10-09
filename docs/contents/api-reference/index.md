@@ -278,9 +278,26 @@ The configure callback receives a new options instance for that registration.
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `string? Directory`                                  | `null`; scan the content root. A value selects a directory below it and cannot escape the content root.                         |
 | `Func<FileInfo,bool>? FileFilter`                    | `null`; include every discovered Markdown file. The predicate runs before loading.                                              |
+| `string? ImageSizes`                                | HTML source-size list matching the content layout, without `auto`. Null/whitespace defaults to viewport width capped at the largest variant. Lazy images prepend `auto`; eager images use this list directly. Changes invalidate cached HTML. |
 | `ConfigureMarkdown(Action<MarkdownPipelineBuilder>)` | Adds a non-null Markdig configuration after Kiji's default advanced pipeline. Calls run in registration order.                  |
 | `ConfigureYaml(Action<DeserializerBuilder>)`         | Adds a non-null YamlDotNet configuration after the camel-case and ignore-unmatched defaults. Calls run in registration order.   |
 | `AddHtmlPostProcessor(Func<string,string>)`          | Adds a non-null synchronous HTML transformation. Transformations run in registration order, each receiving the previous result. |
+
+Match `ImageSizes` to the CSS width available to Markdown images, including padding,
+sidebars, and breakpoints. For a single-column layout with 1rem padding on each side
+and a maximum content width of 46rem:
+
+```csharp
+site.UseMarkdownContent<FrontMatter>(options =>
+    options.ImageSizes = "min(calc(100vw - 2rem), 46rem)");
+```
+
+Kiji loads the first local image eagerly. Later images use `loading="lazy"` and
+`sizes="auto, ..."`, letting supporting browsers select a variant from the actual
+rendered width, including nested containers. The configured list is also the fallback
+for browsers without auto-size support. Keep it synchronized with your layout CSS;
+Kiji cannot infer a site's layout during static rendering. Remote and site-root images
+are not changed. Include lengths and media conditions, not percentages or `auto`.
 
 #### `MarkdownContent<TFrontMatter>`
 

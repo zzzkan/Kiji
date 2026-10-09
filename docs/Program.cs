@@ -17,7 +17,13 @@ site.Info = new()
 };
 
 site.UseMarkdownContent<FrontMatter, Article>(
-    select: static content => Article.Create(content));
+    select: static content => Article.Create(content),
+    configure: static options =>
+    {
+        // Match .shell in wwwroot/css/app.css: 2.5rem horizontal padding,
+        // plus a 13rem sidebar and 2.5rem gap above the mobile breakpoint.
+        options.ImageSizes = "(max-width: 52rem) calc(100vw - 2.5rem), min(calc(100vw - 18rem), 46rem)";
+    });
 site.UseDefaultLayout<MainLayout>();
 site.UseNotFoundPage<NotFoundPage>();
 

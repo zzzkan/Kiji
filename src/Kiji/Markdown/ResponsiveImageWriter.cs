@@ -44,12 +44,13 @@ internal sealed class ResponsiveImageWriter
 
     private static void WriteResponsiveImage(HtmlRenderer renderer, ResponsiveImageContext context, string url, string alt, string title)
     {
+        var isLazy = context.ImageCount++ > 0;
         var referenceKey = ImageReferenceKey.FromMarkdownUrl(url);
 
         if (!context.ImageInfoLookup.TryGetValue(referenceKey, out var imageInfo) || imageInfo.Variants.Count == 0)
         {
             // Fallback: if no image info found, render as simple img
-            WriteSimpleImage(renderer, url, alt, title);
+            WriteSimpleImage(renderer, url, alt, title, isLazy);
             return;
         }
 
@@ -60,10 +61,13 @@ internal sealed class ResponsiveImageWriter
         var largest = variants[^1];
 
         var srcset = string.Join(", ", variants.Select(variant => $"{CreateVariantUrl(publicDirectory, variant.FileName)} {variant.Width}w"));
-        // All Markdown content images are lazy: their position in the document
-        // cannot tell us whether they are above the fold. Auto sizes uses the
-        // rendered width; older browsers fall back to the capped viewport width.
-        var sizes = $"auto, (max-width: {largest.Width}px) 100vw, {largest.Width}px";
+        // Start the first image before layout; subsequent lazy images can use
+        // their rendered width. Auto sizes requires lazy loading.
+        var sizes = $"(max-width: {largest.Width}px) 100vw, {largest.Width}px";
+        if (isLazy)
+        {
+            sizes = "auto, " + sizes;
+        }
 
         renderer.Write("<img src=\"");
         renderer.WriteEscapeUrl(CreateVariantUrl(publicDirectory, largest.FileName));
@@ -74,7 +78,7 @@ internal sealed class ResponsiveImageWriter
         renderer.Write("\" alt=\"");
         renderer.WriteEscape(alt);
         renderer.Write("\"");
-        WriteCommonImageAttributes(renderer);
+        WriteCommonImageAttributes(renderer, isLazy);
 
         // Add actual image dimensions based on original aspect ratio
         renderer.Write($" width=\"{imageInfo.OriginalWidth}\" height=\"{imageInfo.OriginalHeight}\"");
@@ -83,14 +87,14 @@ internal sealed class ResponsiveImageWriter
         renderer.Write(">");
     }
 
-    private static void WriteSimpleImage(HtmlRenderer renderer, string url, string alt, string title)
+    private static void WriteSimpleImage(HtmlRenderer renderer, string url, string alt, string title, bool isLazy)
     {
         renderer.Write("<img src=\"");
         renderer.WriteEscapeUrl(url);
         renderer.Write("\" alt=\"");
         renderer.WriteEscape(alt);
         renderer.Write("\"");
-        WriteCommonImageAttributes(renderer);
+        WriteCommonImageAttributes(renderer, isLazy);
         WriteTitleAttribute(renderer, title);
         renderer.Write(">");
     }
@@ -113,9 +117,10 @@ internal sealed class ResponsiveImageWriter
         return string.Join('/', path.Split('/').Select(Uri.EscapeDataString));
     }
 
-    private static void WriteCommonImageAttributes(HtmlRenderer renderer)
+    private static void WriteCommonImageAttributes(HtmlRenderer renderer, bool isLazy)
     {
-        renderer.Write(" loading=\"lazy\" decoding=\"async\"");
+        renderer.Write(isLazy ? " loading=\"lazy\"" : " loading=\"eager\"");
+        renderer.Write(" decoding=\"async\"");
     }
 
     private static void WriteTitleAttribute(HtmlRenderer renderer, string title)

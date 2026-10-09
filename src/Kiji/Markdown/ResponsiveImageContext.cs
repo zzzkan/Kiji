@@ -12,4 +12,6 @@ internal sealed class ResponsiveImageContext(
     public IReadOnlyDictionary<string, ProcessedImageInfo> ImageInfoLookup { get; } = imageInfoLookup;
 
     public string OutputUrlDirectory { get; } = outputUrlDirectory;
+
+    public int ImageCount { get; set; }
 }

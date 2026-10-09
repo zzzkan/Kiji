@@ -52,19 +52,19 @@ public sealed class ResponsiveImageExtensionTests
         Assert.Contains("srcset=\"", html);
         Assert.Contains("/kiji/blog/test-post/test-image.png.abc12345.320w.webp 320w", html);
         Assert.Contains("/kiji/blog/test-post/test-image.png.abc12345.1920w.webp 1920w", html);
-        Assert.Contains("sizes=\"auto, (max-width: 1920px) 100vw, 1920px\"", html);
+        Assert.Contains("sizes=\"(max-width: 1920px) 100vw, 1920px\"", html);
         Assert.Contains("width=\"1920\"", html);
         Assert.Contains("height=\"1080\"", html);
         Assert.Contains("alt=\"Alt text\"", html);
         Assert.Contains("title=\"Image title\"", html);
-        Assert.Contains("loading=\"lazy\"", html);
+        Assert.Contains("loading=\"eager\"", html);
         Assert.Contains("decoding=\"async\"", html);
         Assert.DoesNotContain("class=", html);
         Assert.DoesNotContain("src=\"https://", html, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Process_LocalImages_AllUseLazyLoadingAndAutomaticSizes()
+    public void Process_LocalImages_FirstIsEagerAndSubsequentUseAutomaticSizes()
     {
         var imageInfoLookup = new Dictionary<string, ProcessedImageInfo>
         {
@@ -77,12 +77,11 @@ public sealed class ResponsiveImageExtensionTests
 
         var images = html.Split("<img", StringSplitOptions.None).Skip(1).Select(part => part[..part.IndexOf('>')]).ToArray();
         Assert.Equal(2, images.Length);
-        Assert.All(images, image =>
-        {
-            Assert.Contains("loading=\"lazy\"", image, StringComparison.Ordinal);
-            Assert.Contains("sizes=\"auto, (max-width: 1920px) 100vw, 1920px\"", image, StringComparison.Ordinal);
-            Assert.Contains("decoding=\"async\"", image, StringComparison.Ordinal);
-        });
+        Assert.Contains("loading=\"eager\"", images[0], StringComparison.Ordinal);
+        Assert.Contains("sizes=\"(max-width: 1920px) 100vw, 1920px\"", images[0], StringComparison.Ordinal);
+        Assert.Contains("loading=\"lazy\"", images[1], StringComparison.Ordinal);
+        Assert.Contains("sizes=\"auto, (max-width: 1920px) 100vw, 1920px\"", images[1], StringComparison.Ordinal);
+        Assert.All(images, image => Assert.Contains("decoding=\"async\"", image, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -96,7 +95,7 @@ public sealed class ResponsiveImageExtensionTests
 
         Assert.Contains("src=\"unknown-image.png\"", html);
         Assert.DoesNotContain("srcset", html);
-        Assert.Contains("loading=\"lazy\"", html);
+        Assert.Contains("loading=\"eager\"", html);
     }
 
     [Fact]

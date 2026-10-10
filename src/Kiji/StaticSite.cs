@@ -24,6 +24,7 @@ public sealed class StaticSite
     private readonly string[] _args;
     private readonly ContentRuntime _runtime = new();
     private readonly List<string> _buildInputPaths = [];
+    private readonly List<string> _contentPaths = [];
     private readonly List<KeyValuePair<string, string>> _buildInputValues = [];
     private readonly Dictionary<Type, Type> _pageServices = [];
     private Func<IImageProcessor> _imageProcessorFactory = static () => new ImageProcessor();
@@ -49,11 +50,11 @@ public sealed class StaticSite
     private bool _hasRun;
     private bool _disposed;
 
-    private StaticSite(string[] args)
+    private StaticSite(string[] args, SiteExecutionPaths paths)
     {
         _args = [.. args];
         _runtime.Dependencies.Register("image-processor", () => ImageProcessorIdentity.Get(ServiceProvider.GetRequiredService<IImageProcessor>()));
-        Paths = new SitePaths(SitePaths.ResolveDefaultRoot(AppContext.BaseDirectory, Directory.GetCurrentDirectory()));
+        Paths = paths;
     }
 
     /// <summary>The site metadata, required before execution and readable only after assignment.</summary>
@@ -68,8 +69,7 @@ public sealed class StaticSite
         }
     } = null!;
 
-    /// <summary>The site directories, configurable before execution starts.</summary>
-    public SitePaths Paths { get; }
+    internal SiteExecutionPaths Paths { get; }
 
     /// <summary>Registers a concrete service shared by components within one page render.</summary>
     /// <remarks>
@@ -123,8 +123,8 @@ public sealed class StaticSite
         return this;
     }
 
-    internal IEnumerable<string> WatchedBuildInputs => _buildInputPaths
-        .Select(path => Path.GetFullPath(path, Path.GetFullPath(Paths.RootDirectory)));
+    internal string[] WatchedBuildInputs { get; private set; } = [];
+    internal string[] ContentRoots { get; private set; } = [];
 
     // Content must not resolve execution paths before publish/serve has settled them.
     internal IServiceProvider ServiceProvider
@@ -144,11 +144,13 @@ public sealed class StaticSite
     {
         ArgumentNullException.ThrowIfNull(args);
 
-        return new StaticSite(args);
+        return new StaticSite(args, SiteExecutionPaths.FromRuntimeMetadata(AppContext.GetData("Kiji.ProjectDirectory")));
     }
 
+    internal static StaticSite Create(string[] args, SiteExecutionPaths paths) => new(args, paths);
+
     /// <summary>Registers a file or directory whose changes require a full rebuild.</summary>
-    /// <param name="path">An absolute path or a path relative to <see cref="SitePaths.RootDirectory"/>.</param>
+    /// <param name="path">An absolute path or a path relative to the site project directory.</param>
     public StaticSite AddBuildInput(string path)
     {
         EnsureConfigurable();
@@ -193,11 +195,17 @@ public sealed class StaticSite
 
     internal StaticSite RegisterContent<T>(
         Func<IServiceProvider, IReadOnlyList<(string Key, T Item, string? Digest)>> loader,
-        string contentSetScope = "")
+        string contentSetScope = "",
+        string? directory = null)
         where T : class
     {
         EnsureConfigurable();
-        _runtime.Register(new ContentDictionary<T>(_runtime, loader, contentSetScope));
+        // Source identities use the project directory, including when a caller supplied
+        // an absolute path inside the checkout, keeping those identities portable.
+        _runtime.Register(() => new ContentDictionary<T>(_runtime, loader, directory is null
+            ? contentSetScope
+            : Path.GetRelativePath(Path.GetFullPath(Paths.ProjectDirectory), Paths.ResolveAgainstRoot(directory)).Replace('\\', '/')));
+        if (directory is not null) { _contentPaths.Add(directory); }
         return this;
     }
 
@@ -339,8 +347,6 @@ public sealed class StaticSite
             throw new InvalidOperationException("A StaticSite can only be run once.");
         }
         _hasRun = true;
-        Paths.AssetManifestBasePath ??= Path.Combine(AppContext.BaseDirectory,
-            Assembly.GetEntryAssembly()!.GetName().Name!);
 
         try
         {
@@ -385,7 +391,7 @@ public sealed class StaticSite
     }
 
     /// <summary>Generates the site, reusing unchanged output from a previous publish.</summary>
-    /// <param name="outputPath">An absolute output directory or a path relative to <see cref="SitePaths.RootDirectory"/>.</param>
+    /// <param name="outputPath">An absolute output directory or a path relative to the site project directory.</param>
     /// <remarks>Repeated publication uses the same output directory; switching directories or execution modes requires a new site.</remarks>
     internal async Task PublishAsync(string outputPath, CancellationToken cancellationToken = default)
     {
@@ -398,7 +404,7 @@ public sealed class StaticSite
             : StaticAssetManifest.Load(options.AssetManifestPath, options.AssetEndpointsPath, Info.BaseUrl);
         UseAssetResources(assetManifest.Resources);
         var assets = assetManifest.Assets;
-        OutputPathValidator.Validate(options, assetManifest, Paths.RootDirectory, Paths.ResolveKijiPath());
+        OutputPathValidator.Validate(options, assetManifest, Paths.ProjectDirectory, Paths.ResolveKijiPath(), ContentRoots.Concat(WatchedBuildInputs));
         UseRunOptions(options);
         InvalidateContent();
 
@@ -412,7 +418,7 @@ public sealed class StaticSite
 
         var planner = new IncrementalBuildPlanner(
             options,
-            Paths.RootDirectory,
+            Paths.ProjectDirectory,
             Paths.ResolveCachePath(),
             Info,
             _buildInputPaths,
@@ -566,6 +572,7 @@ public sealed class StaticSite
     {
         FreezeConfiguration();
         var options = UseRunOptions(Paths.ResolveForDevelopment());
+        OutputPathValidator.ValidateInputs(options.OutputDirectory, ContentRoots.Concat(WatchedBuildInputs));
         EnsureServices();
 
         var devServer = new DevServer(this, reporter);
@@ -966,7 +973,9 @@ public sealed class StaticSite
         }
 
         _ = Info;
-        Paths.Freeze();
+        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        ContentRoots = [.. _contentPaths.Select(Paths.ResolveAgainstRoot).Distinct(comparer)];
+        WatchedBuildInputs = [.. _buildInputPaths.Select(Paths.ResolveAgainstRoot).Distinct(comparer)];
         _configurationFrozen = true;
     }
 

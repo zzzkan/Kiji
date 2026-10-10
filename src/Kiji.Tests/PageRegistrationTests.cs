@@ -164,8 +164,7 @@ public sealed class PageRegistrationTests
         {
             Directory.CreateDirectory(Path.Combine(root, "wwwroot"));
             await File.WriteAllTextAsync(Path.Combine(root, "wwwroot", "404.html"), "existing");
-            await using var site = CreateSite();
-            site.Paths.RootDirectory = root;
+            await using var site = CreateSite(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
             TestSite.TestSiteAssets.Bind(site, Path.Combine(root, "wwwroot"));
             site.UseNotFoundPage<Fixed>();
             await Assert.ThrowsAsync<InvalidOperationException>(() => site.PublishAsync("dist"));
@@ -205,8 +204,7 @@ public sealed class PageRegistrationTests
         var root = Path.Combine(Path.GetTempPath(), $"KijiRegistration_{Guid.NewGuid():N}");
         try
         {
-            await using var site = CreateSite();
-            site.Paths.RootDirectory = root;
+            await using var site = CreateSite(new SiteExecutionPaths(root));
             var type = CreatePageType(notFound ? "/missing/" : "/items/{Value}/");
             if (notFound)
             {
@@ -245,9 +243,9 @@ public sealed class PageRegistrationTests
         Assert.Equal(typed.Select(page => page.SourceIdentifier), refreshed.Select(page => page.SourceIdentifier));
     }
 
-    private static StaticSite CreateSite()
+    private static StaticSite CreateSite(SiteExecutionPaths? paths = null)
     {
-        var site = StaticSite.Create([]);
+        var site = StaticSite.Create([], paths ?? new SiteExecutionPaths(AppContext.BaseDirectory));
         site.Info = TestArticleContents.CreateSiteInfo();
         return site;
     }

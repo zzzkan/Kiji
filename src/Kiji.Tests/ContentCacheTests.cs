@@ -61,8 +61,7 @@ public sealed class ContentCacheTests : IDisposable
     private StaticSite CreateSite(Func<IReadOnlyList<ContentEntry<CacheItem>>> load, Func<string> prefix)
     {
         Directory.CreateDirectory(_root);
-        var site = StaticSite.Create([]);
-        site.Paths.RootDirectory = _root;
+        var site = StaticSite.Create([], new SiteExecutionPaths(_root));
         site.Info = TestArticleContents.CreateSiteInfo();
         site.UseContentSource<CacheItem>("data", _ => load());
         site.AddPageInput("prefix", prefix);

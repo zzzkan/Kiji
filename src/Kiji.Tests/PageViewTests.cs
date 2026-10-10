@@ -110,7 +110,7 @@ public sealed class PageViewTests
     {
         var siteInfo = TestArticleContents.CreateSiteInfo();
 
-        var app = StaticSite.Create([]);
+        var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = siteInfo;
         return app;
     }

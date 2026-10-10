@@ -120,7 +120,7 @@
     <!-- Page and bundle URLs remain stable. The SDK still computes content hashes,
          compression and service-worker entries for these outputs. -->
     <DefineStaticWebAssets Condition="'$(_KijiNeedsGeneratedAssets)' == 'true'" CandidateAssets="@(_KijiGeneratedFile)" SourceId="$(PackageId)"
-      SourceType="Computed" ContentRoot="$(KijiStagingDir)" BasePath="/"
+      SourceType="Computed" ContentRoot="$(_KijiStagingDir)" BasePath="/"
       AssetKind="Publish" AssetMode="CurrentProject" FingerprintCandidates="false">
       <Output TaskParameter="Assets" ItemName="_KijiGeneratedAsset" />
     </DefineStaticWebAssets>
@@ -240,8 +240,8 @@
       <!-- Publish existing inputs through Kiji's verified mirror.
            Late publish replacements (e.g. Service Worker) use their SDK source. -->
       <_KijiPublicFile PublishSource="%(Identity)" />
-      <_KijiPublicFile PublishSource="$(KijiStagingDir)%(RelativePath)"
-                      Condition="'%(_KijiPublicFile.AssetKind)' != 'Publish' and Exists('$(KijiStagingDir)%(_KijiPublicFile.RelativePath)')" />
+      <_KijiPublicFile PublishSource="$(_KijiStagingDir)%(RelativePath)"
+                      Condition="'%(_KijiPublicFile.AssetKind)' != 'Publish' and Exists('$(_KijiStagingDir)%(_KijiPublicFile.RelativePath)')" />
       <_KijiPublicFile Include="@(_KijiGeneratedFile)" KeepMetadata="RelativePath"
                        Condition="'$(_KijiNeedsGeneratedAssets)' == 'false'">
         <PublishSource>%(Identity)</PublishSource>

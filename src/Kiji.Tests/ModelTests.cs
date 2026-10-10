@@ -28,7 +28,6 @@ public sealed class ModelTests
     {
         var exception = Assert.Throws<ArgumentException>(() => new ResolvedSitePaths
         {
-            ContentDirectory = Path.GetTempPath(),
             OutputDirectory = "relative-output",
         });
         Assert.Contains("The path must be absolute.", exception.Message, StringComparison.Ordinal);

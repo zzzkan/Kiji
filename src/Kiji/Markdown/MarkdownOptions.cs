@@ -12,8 +12,8 @@ public sealed class MarkdownOptions
 
     internal List<Action<DeserializerBuilder>> FrontMatterConfigurations { get; } = [];
 
-    /// <summary>The directory to scan recursively for <c>*.md</c>, relative to the content directory and defaulting to its root.</summary>
-    public string? Directory { get; set; }
+    /// <summary>The directory to scan recursively for <c>*.md</c>. Absolute or relative to the site project directory; defaults to <c>contents</c>.</summary>
+    public string Directory { get; set; } = "contents";
 
     /// <summary>An optional file filter applied before loading, defaulting to all Markdown files.</summary>
     public Func<FileInfo, bool>? FileFilter { get; set; }
@@ -37,30 +37,5 @@ public sealed class MarkdownOptions
     {
         ArgumentNullException.ThrowIfNull(configure);
         FrontMatterConfigurations.Add(configure);
-    }
-
-    internal string ResolveContentsDirectory(string contentsPath)
-    {
-        if (string.IsNullOrWhiteSpace(Directory))
-        {
-            return contentsPath;
-        }
-
-        var resolved = Path.GetFullPath(Path.Combine(contentsPath, Directory));
-        if (!resolved.StartsWith(contentsPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(resolved, contentsPath, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                $"Markdown content directory '{Directory}' resolves outside the content directory '{contentsPath}'.");
-        }
-
-        return resolved;
-    }
-
-    internal string ResolveContentSetScope()
-    {
-        return string.IsNullOrWhiteSpace(Directory)
-            ? string.Empty
-            : Directory.Replace('\\', '/').Trim('/');
     }
 }

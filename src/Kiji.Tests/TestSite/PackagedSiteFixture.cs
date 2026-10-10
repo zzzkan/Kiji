@@ -89,12 +89,13 @@ public sealed class PackagedSiteFixture : IAsyncLifetime
         return log;
     }
 
-    public static async Task WithServerAsync(string site, Func<HttpClient, Task> check, bool watch = false, bool browserRefresh = false)
+    public static async Task WithServerAsync(string site, Func<HttpClient, Task> check, bool watch = false, bool browserRefresh = false,
+        string? workingDirectory = null, string? assemblyPath = null)
     {
         string[] arguments = watch
-            ? ["watch", "--non-interactive", "--", "--urls", "http://127.0.0.1:0"]
-            : ["exec", "bin/Release/net10.0/AssetSite.dll", "--urls", "http://127.0.0.1:0"];
-        using var process = new Process { StartInfo = StartInfo(site, arguments) };
+            ? ["watch", "--project", site, "--non-interactive", "--", "--urls", "http://127.0.0.1:0"]
+            : ["exec", assemblyPath ?? Path.Combine(site, "bin/Release/net10.0/AssetSite.dll"), "--urls", "http://127.0.0.1:0"];
+        using var process = new Process { StartInfo = StartInfo(workingDirectory ?? site, arguments) };
         process.StartInfo.Environment["DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER"] = browserRefresh ? "0" : "1";
         if (browserRefresh)
         {

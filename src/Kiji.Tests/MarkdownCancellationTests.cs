@@ -106,7 +106,6 @@ public sealed class MarkdownCancellationTests
         var root = Path.GetTempPath();
         var processor = new MarkdownProcessor(new ResolvedSitePaths
         {
-            ContentDirectory = root,
             OutputDirectory = root,
         }, new ImageProcessor(), options);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => processor.ProcessBodyAsync(

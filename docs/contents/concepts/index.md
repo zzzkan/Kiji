@@ -23,7 +23,7 @@ MySite/
 ```
 
 These names are conventions rather than a separate Kiji project format. Change the
-content directory through `SitePaths.ContentDirectory`, and organize components however
+Markdown directory through `UseMarkdownContent` options, and organize components however
 you prefer.
 
 ## The site definition

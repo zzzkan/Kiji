@@ -13,7 +13,7 @@ public sealed class ComponentRendererTests
     [InlineData(typeof(ConstructorNavigationPage))]
     public async Task RenderComponentAsync_MissingNavigationManagerAddsGuidance(Type pageType)
     {
-        await using var app = StaticSite.Create([]);
+        await using var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = TestArticleContents.CreateSiteInfo();
         var renderer = new ComponentRenderer(app.ServiceProvider);
         using var output = new StringWriter();
@@ -40,7 +40,7 @@ public sealed class ComponentRendererTests
     [InlineData("Cannot provide a value for property 'Clock' on type 'Example'. There is no registered service of type 'System.TimeProvider'.")]
     public async Task RenderComponentAsync_UnrelatedFailuresPreserveOriginalException(string message)
     {
-        await using var app = StaticSite.Create([]);
+        await using var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = TestArticleContents.CreateSiteInfo();
         var renderer = new ComponentRenderer(app.ServiceProvider);
         var original = new InvalidOperationException(message);
@@ -57,7 +57,7 @@ public sealed class ComponentRendererTests
     [Fact]
     public async Task RenderPageAsync_KeepsHeadContentIsolatedAcrossSequentialRenders()
     {
-        await using var app = StaticSite.Create([]);
+        await using var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = TestArticleContents.CreateSiteInfo();
         app.UseDefaultLayout<MainLayout>();
 

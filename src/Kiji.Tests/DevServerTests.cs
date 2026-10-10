@@ -1,7 +1,9 @@
 using System.Net;
 using System.Net.WebSockets;
 using System.Text;
+using Kiji.Markdown;
 using Kiji.Tests.TestSite;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Kiji.Tests;
@@ -71,7 +73,6 @@ public sealed class DevServerTests : IAsyncDisposable
 
             var output = logs.ToString();
             Assert.Contains("Dev server started at", output, StringComparison.Ordinal);
-            Assert.Contains("Watching content:", output, StringComparison.Ordinal);
             Assert.Contains("Watching static assets.", output, StringComparison.Ordinal);
             Assert.Contains("Watching build input:", output, StringComparison.Ordinal);
         }
@@ -152,7 +153,7 @@ public sealed class DevServerTests : IAsyncDisposable
 
             var output = logs.ToString();
             Assert.Contains(
-                $"Content changed: {Path.Combine(_contentsDir, "hello-world.txt")}",
+                $"Build input changed: {Path.Combine(_contentsDir, "hello-world.txt")}",
                 output,
                 StringComparison.Ordinal);
             Assert.Contains("Reloaded 1 browser client(s).", output, StringComparison.Ordinal);
@@ -464,6 +465,75 @@ public sealed class DevServerTests : IAsyncDisposable
         return new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Serve_MultipleMarkdownRoots_ReloadsAfterEditsAndAncestorReplacement(bool absolute)
+    {
+        var inputs = Path.Combine(_testDir, "inputs");
+        var posts = Path.Combine(inputs, "posts");
+        var notes = Path.Combine(inputs, "notes");
+        Directory.CreateDirectory(posts);
+        Directory.CreateDirectory(notes);
+        await File.WriteAllTextAsync(Path.Combine(posts, "post.md"), "---\ntitle: Post\n---\n\nOriginal body");
+        await File.WriteAllTextAsync(Path.Combine(notes, "note.md"), "---\ntitle: Original note\n---\n");
+        _app = StaticSite.Create([], new SiteExecutionPaths(Path.Combine(_testDir, "site")));
+        _app.Info = TestArticleContents.CreateSiteInfoWithBasePath();
+        _app.AddBuildInput(Path.Combine(_testDir, "title.txt"));
+        string SourcePath(string path)
+        {
+            return absolute ? path : Path.GetRelativePath(_app.Paths.ProjectDirectory, path);
+        }
+        _app.UseMarkdownContent<FrontMatter>(options => options.Directory = SourcePath(posts));
+        _app.UseMarkdownContent<FrontMatter, ScopedNote>(ScopedNote.Create,
+            options => options.Directory = SourcePath(notes));
+        _app.AddPages<MarkdownPostTestPage>(services => services
+            .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
+            .Select(post => new { Slug = "post", ContentKey = post.Key }));
+        _app.AddPages<ScopedNotesIndexPage>(_ => [new { Kind = "all" }]);
+        using var logs = new StringWriter();
+        var (server, web) = await _app.StartDevServerAsync(TestUrls.EphemeralPort, CancellationToken.None,
+            new Kiji.Hosting.DevServerStatusReporter(logs, "kiji", useEmoji: false));
+        await using (server)
+        {
+            var address = new Uri(web.Urls.First());
+            using var client = CreateClient();
+            var postPage = new Uri(address, "/kiji/md/post/");
+            var notePage = new Uri(address, "/kiji/notes/all/");
+            Assert.Contains("Original body", await client.GetStringAsync(postPage), StringComparison.Ordinal);
+            Assert.Contains("Original note", await client.GetStringAsync(notePage), StringComparison.Ordinal);
+            using var socket = new ClientWebSocket();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            await socket.ConnectAsync(new UriBuilder(address) { Scheme = "ws", Path = "/kiji/_kiji/reload" }.Uri, timeout.Token);
+            var reload = socket.ReceiveAsync(new ArraySegment<byte>(new byte[64]), timeout.Token);
+            await File.WriteAllTextAsync(Path.Combine(inputs, "ignored.md"), "unregistered sibling", timeout.Token);
+            await File.WriteAllTextAsync(Path.Combine(_contentsDir, "ignored.md"), "unused convention", timeout.Token);
+            await Task.Delay(750, timeout.Token);
+            Assert.False(reload.IsCompleted, logs.ToString());
+
+            await File.WriteAllTextAsync(Path.Combine(posts, "post.md"), "---\ntitle: Post\n---\n\nEdited body", timeout.Token);
+            await reload;
+            Assert.Contains("Edited body", await client.GetStringAsync(postPage), StringComparison.Ordinal);
+
+            await File.WriteAllTextAsync(Path.Combine(notes, "note.md"), "---\ntitle: Edited note\n---\n", timeout.Token);
+            await socket.ReceiveAsync(new byte[64], timeout.Token);
+            Assert.Contains("Edited note", await client.GetStringAsync(notePage), StringComparison.Ordinal);
+
+            Directory.Move(inputs, Path.Combine(_testDir, "old-inputs"));
+            Directory.CreateDirectory(posts);
+            Directory.CreateDirectory(notes);
+            await File.WriteAllTextAsync(Path.Combine(posts, "post.md"), "---\ntitle: Post\n---\n\nReplacement body", timeout.Token);
+            await File.WriteAllTextAsync(Path.Combine(notes, "note.md"), "---\ntitle: Replacement note\n---\n", timeout.Token);
+            await socket.ReceiveAsync(new byte[64], timeout.Token);
+            Assert.Contains("Replacement body", await client.GetStringAsync(postPage), StringComparison.Ordinal);
+            Assert.Contains("Replacement note", await client.GetStringAsync(notePage), StringComparison.Ordinal);
+
+            await File.WriteAllTextAsync(Path.Combine(posts, "post.md"), "---\ntitle: Post\n---\n\nSubsequent edit", timeout.Token);
+            await socket.ReceiveAsync(new byte[64], timeout.Token);
+            Assert.Contains("Subsequent edit", await client.GetStringAsync(postPage), StringComparison.Ordinal);
+        }
+    }
+
     private Task<(Uri BaseAddress, IAsyncDisposable DevServer)> StartServerAsync()
     {
         return StartServerAsync(new StringWriter());
@@ -477,16 +547,15 @@ public sealed class DevServerTests : IAsyncDisposable
     {
         await File.WriteAllTextAsync(Path.Combine(_contentsDir, "hello-world.txt"), "Hello World");
 
-        var app = StaticSite.Create([]);
+        var app = StaticSite.Create([], new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
         app.Info = site ?? TestArticleContents.CreateSiteInfo();
-        app.Paths.RootDirectory = _testDir;
-        app.Paths.ContentDirectory = _contentsDir;
         TestSiteAssets.Bind(app, _staticDir);
         configureAssets?.Invoke(app);
 
         var contentsDir = _contentsDir;
         var settingsPath = Path.Combine(_testDir, "title.txt");
         app.AddBuildInput(settingsPath);
+        app.AddBuildInput(contentsDir);
         app.UseContentSource<Post>(_ =>
             {
                 Interlocked.Increment(ref _contentLoads);

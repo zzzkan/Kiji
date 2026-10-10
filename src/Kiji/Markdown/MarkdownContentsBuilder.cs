@@ -10,7 +10,6 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
     Func<IDeserializer>? frontMatterDeserializerFactory = null,
     MarkdownSourceCache<TFrontMatter>? sourceCache = null,
     ContentFileRegistry? hashRegistry = null,
-    string? scanDirectory = null,
     Func<FileInfo, bool>? filter = null)
 {
     private readonly Func<IDeserializer> _frontMatterDeserializerFactory =
@@ -18,7 +17,7 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
 
     public IReadOnlyList<MarkdownContent<TFrontMatter>> Build()
     {
-        var directory = scanDirectory ?? contentsDirectory;
+        var directory = contentsDirectory;
         if (!Directory.Exists(directory))
         {
             throw new DirectoryNotFoundException($"Contents directory not found: {directory}");

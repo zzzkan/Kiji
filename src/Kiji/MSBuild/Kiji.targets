@@ -86,10 +86,6 @@
        Where the site is staged, and the two execution-control knobs
        ============================================================== -->
   <PropertyGroup Condition="'$(_KijiIsSiteApp)' == 'true'">
-    <!-- Where .kiji lives, matching SitePaths.Root's default. Override this if the site
-         sets SitePaths.Root in C#, which MSBuild cannot see. -->
-    <KijiSiteRoot Condition="'$(KijiSiteRoot)' == ''">$(MSBuildProjectDirectory)</KijiSiteRoot>
-
     <KijiForce Condition="'$(KijiForce)' == ''">false</KijiForce>
     <KijiVerbose Condition="'$(KijiVerbose)' == ''">false</KijiVerbose>
 
@@ -99,6 +95,11 @@
     <_KijiDotNetHost>$(DOTNET_HOST_PATH)</_KijiDotNetHost>
     <_KijiDotNetHost Condition="'$(_KijiDotNetHost)' == ''">dotnet</_KijiDotNetHost>
   </PropertyGroup>
+
+  <!-- Runtime-only metadata keeps checkout paths out of the compiler's code identity. -->
+  <ItemGroup Condition="'$(_KijiIsSiteApp)' == 'true'">
+    <RuntimeHostConfigurationOption Include="Kiji.ProjectDirectory" Value="$(MSBuildProjectDirectory)" />
+  </ItemGroup>
 
   <!-- ==============================================================
        Hand static assets to Kiji
@@ -164,7 +165,7 @@
          relative, so anchor it on the project directory rather than the MSBuild working
          directory. -->
     <PropertyGroup>
-      <KijiStagingDir Condition="'$(KijiStagingDir)' == ''">$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'kiji', 'site'))</KijiStagingDir>
+      <_KijiStagingDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'kiji', 'site'))</_KijiStagingDir>
     </PropertyGroup>
   </Target>
 
@@ -180,27 +181,25 @@
            Code="KIJI1001"
            Text="Kiji cannot generate the site: '$(TargetPath)' does not exist. Build the project before publishing." />
 
-    <MakeDir Directories="$(KijiStagingDir)" />
+    <MakeDir Directories="$(_KijiStagingDir)" />
 
-    <!-- Run the assembly in bin, never one under $(PublishDir): SitePaths.Root walks up from
-         AppContext.BaseDirectory looking for a project file, and `-o` can point anywhere,
-         including outside the project tree. bin is always inside it. WorkingDirectory is set
-         for the same reason — the current directory is Kiji's second probe. -->
+    <!-- Run the build output with its runtimeconfig and static asset manifests.
+         The final publish directory contains only the generated site. -->
     <Exec Command="&quot;$(_KijiDotNetHost)&quot; exec &quot;$(TargetPath)&quot;"
           WorkingDirectory="$(MSBuildProjectDirectory)"
-          EnvironmentVariables="KIJI_OUTPUT=$(KijiStagingDir);KIJI_FORCE=$(KijiForce);KIJI_VERBOSE=$(KijiVerbose)"
+          EnvironmentVariables="KIJI_OUTPUT=$(_KijiStagingDir);KIJI_FORCE=$(KijiForce);KIJI_VERBOSE=$(KijiVerbose)"
           StandardOutputImportance="$(_KijiGeneratorOutputImportance)"
           StandardErrorImportance="high" />
 
     <!-- Evaluated after the Exec above, because elements inside a target run in order and an
          item glob written here expands at execution time rather than at project evaluation. -->
     <ItemGroup>
-      <KijiSiteFile Include="$(KijiStagingDir)**\*" />
+      <KijiSiteFile Include="$(_KijiStagingDir)**\*" />
     </ItemGroup>
 
     <Error Condition="'@(KijiSiteFile)' == ''"
            Code="KIJI1002"
-           Text="Kiji generated no files into '$(KijiStagingDir)'. The site exited successfully without writing anything — check that its entry point awaits KijiApp.RunAsync." />
+           Text="Kiji generated no files into '$(_KijiStagingDir)'. The site exited successfully without writing anything — check that its entry point awaits KijiApp.RunAsync." />
   </Target>
 
   <!-- ==============================================================
@@ -243,7 +242,7 @@
          instead would then need its own handling for a tree that was never built.
          The staging directory sits under obj but is not tracked in @(FileWrites), so Clean
          would otherwise leave it. -->
-    <RemoveDir Directories="$([MSBuild]::NormalizeDirectory('$(KijiSiteRoot)', '.kiji'));$(KijiStagingDir)"
+    <RemoveDir Directories="$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '.kiji'));$(_KijiStagingDir)"
                ContinueOnError="WarnAndContinue" />
   </Target>
 

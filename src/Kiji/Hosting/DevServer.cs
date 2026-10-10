@@ -28,6 +28,7 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
     private readonly string _displayRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Directory.GetCurrentDirectory()));
     private readonly Lock _snapshotLock = new();
     private readonly List<FileSystemWatcher> _watchers = [];
+    private readonly List<WatchedPath> _watchedPaths = [];
     private readonly List<WatchedChange> _pendingChanges = [];
     private SiteSnapshot? _snapshot;
     private Timer? _debounceTimer;
@@ -151,18 +152,22 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
             }
         });
 
-        var buildInputs = app.WatchedBuildInputs.ToArray();
-        WatchDirectory(options.ContentDirectory, WatchedPathSource.Content);
+        var buildInputs = app.WatchedBuildInputs;
+        foreach (var root in app.ContentRoots)
+        {
+            WatchDirectory(root, WatchedPathSource.Content);
+        }
         foreach (var input in buildInputs)
         {
             WatchDirectory(input, WatchedPathSource.BuildInput);
         }
+        StartWatchers();
 
         await web.StartAsync(cancellationToken);
         ActiveServers.TryAdd(this, 0);
         _reporter.DevServerStarted(
             new Uri(new Uri(web.Urls.First()), app.Info.BaseUrl.AbsolutePath),
-            options.ContentDirectory,
+            app.ContentRoots,
             assets?.ContentRoots.Length > 0,
             buildInputs);
 
@@ -320,22 +325,29 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
 
     private void WatchDirectory(string path, WatchedPathSource source, Func<string, bool>? affectsAsset = null)
     {
-        path = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
-        // Watch an existing parent, so creating, deleting or replacing the source
-        // directory itself does not permanently detach the watcher.
-        var ancestor = Directory.GetParent(path);
-        while (ancestor is not null && !ancestor.Exists)
-        {
-            ancestor = ancestor.Parent;
-        }
+        _watchedPaths.Add(new WatchedPath(path, source, affectsAsset));
+    }
 
-        var watchRoot = ancestor?.FullName ?? path;
-        if (!Directory.Exists(watchRoot))
+    private void StartWatchers()
+    {
+        // Parent watchers also cover nested inputs. Share their native buffer and
+        // callback, while retaining each input's filtering and invalidation rules.
+        var remaining = _watchedPaths.Select(path => (Input: path, Root: path.WatchRoot))
+            .OrderBy(static entry => entry.Root.Length).ToList();
+        while (remaining.Count > 0)
         {
-            return;
+            var root = remaining[0].Root;
+            var inputs = remaining.Where(entry => WatchedPath.Contains(root, entry.Root))
+                .Select(static entry => entry.Input).ToArray();
+            remaining.RemoveAll(entry => WatchedPath.Contains(root, entry.Root));
+            if (!Directory.Exists(root)) { continue; }
+            StartWatcher(root, inputs);
         }
+    }
 
-        var watcher = new FileSystemWatcher(watchRoot)
+    private void StartWatcher(string root, WatchedPath[] inputs)
+    {
+        var watcher = new FileSystemWatcher(root)
         {
             IncludeSubdirectories = true,
             NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite,
@@ -343,38 +355,22 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
 
         void HandleChange(object sender, FileSystemEventArgs args)
         {
-            if (!IsWatchedPath(args.FullPath) && (args is not RenamedEventArgs renamed || !IsWatchedPath(renamed.OldFullPath)))
+            var oldPath = (args as RenamedEventArgs)?.OldFullPath;
+            WatchedPath? affected = null;
+            foreach (var input in inputs)
             {
-                return;
+                if (!input.Affects(args.FullPath, args.ChangeType)
+                    && (oldPath is null || !input.Affects(oldPath, args.ChangeType))) { continue; }
+                affected = input;
+                // A shared static/content path still has to invalidate content.
+                if (input.Source is not WatchedPathSource.Static) { break; }
             }
+            if (affected is null) { return; }
 
-            // A file save also touches its parent directory's timestamp, raising a
-            // second Changed event for the directory itself; only files matter here.
-            if (args.ChangeType is WatcherChangeTypes.Changed && Directory.Exists(args.FullPath))
-            {
-                return;
-            }
-
-            if (affectsAsset is not null && !affectsAsset(args.FullPath)
-                && (args is not RenamedEventArgs old || !affectsAsset(old.OldFullPath)))
-            {
-                return;
-            }
-
-            ScheduleReload(
-                CreateWatchedChange(
-                    source,
-                    args.ChangeType,
-                    args.FullPath,
-                    args is RenamedEventArgs renamedEvent ? renamedEvent.OldFullPath : null),
-                source is not WatchedPathSource.Static);
-        }
-
-        bool IsWatchedPath(string candidate)
-        {
-            var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-            return string.Equals(candidate, path, comparison)
-                || candidate.StartsWith(path + Path.DirectorySeparatorChar, comparison);
+            // Ignore directory timestamps generated alongside ordinary file saves.
+            if (args.ChangeType is WatcherChangeTypes.Changed && Directory.Exists(args.FullPath)) { return; }
+            ScheduleReload(CreateWatchedChange(affected.Source, args.ChangeType, args.FullPath, oldPath),
+                affected.Source is not WatchedPathSource.Static);
         }
 
         watcher.Changed += HandleChange;
@@ -384,19 +380,16 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
         watcher.Error += (_, args) =>
         {
             var exception = args.GetException();
-            if (exception is not null)
+            foreach (var input in inputs)
             {
-                _reporter.WatcherError(source, path, exception);
+                if (exception is not null) { _reporter.WatcherError(input.Source, input.Path, exception); }
+                // Lost events require conservative invalidation of every covered input.
+                ScheduleReload(CreateWatchedChange(input.Source, WatcherChangeTypes.Changed, input.Path),
+                    input.Source is not WatchedPathSource.Static);
             }
-            // Events may have been lost (e.g. buffer overflow). Rebuild the snapshot
-            // conservatively instead of continuing to serve potentially stale content.
-            ScheduleReload(
-                CreateWatchedChange(source, WatcherChangeTypes.Changed, path),
-                source is not WatchedPathSource.Static);
         };
-        watcher.EnableRaisingEvents = true;
-
         _watchers.Add(watcher);
+        watcher.EnableRaisingEvents = true;
     }
 
     private void ScheduleReload(WatchedChange change, bool contentChanged)

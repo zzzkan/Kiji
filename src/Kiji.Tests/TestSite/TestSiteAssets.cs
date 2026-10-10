@@ -9,13 +9,12 @@ internal static class TestSiteAssets
     internal static void Bind(StaticSite app, string directory)
     {
         Directory.CreateDirectory(directory);
-        var prefix = Path.Combine(app.Paths.RootDirectory, "obj", "test-assets");
+        var prefix = app.Paths.AssetManifestBasePath!;
         Directory.CreateDirectory(Path.GetDirectoryName(prefix)!);
         var assets = Directory.GetFiles(directory, "*", SearchOption.AllDirectories)
             .Select(source => new StaticAsset(source, Path.GetRelativePath(directory, source).Replace('\\', '/'))).ToArray();
         WriteManifest(prefix + ".staticwebassets.publish.runtime.json", assets, [directory], discover: true);
         WriteManifest(prefix + ".staticwebassets.runtime.json", assets, [directory], discover: true);
-        app.Paths.AssetManifestBasePath = prefix;
     }
 
     internal static void WriteManifest(string path, StaticAsset[] assets, string[] roots, bool discover = false)

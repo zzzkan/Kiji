@@ -40,17 +40,20 @@ internal sealed class DevServerStatusReporter
 
     internal void DevServerStarted(
         Uri address,
-        string contentPath,
+        IReadOnlyList<string> contentPaths,
         bool watchesStaticAssets,
         IReadOnlyList<string> buildInputPaths)
     {
         ArgumentNullException.ThrowIfNull(address);
-        ArgumentException.ThrowIfNullOrWhiteSpace(contentPath);
+        ArgumentNullException.ThrowIfNull(contentPaths);
         ArgumentNullException.ThrowIfNull(buildInputPaths);
 
         var displayAddress = _useAnsiColor ? $"{EmphasizedUrl}{address}{Reset}" : address.ToString();
         WriteLine(StatusKind.Started, $"Dev server started at {displayAddress}");
-        WriteLine(StatusKind.Change, $"Watching content: '{contentPath}'.");
+        foreach (var contentPath in contentPaths)
+        {
+            WriteLine(StatusKind.Change, $"Watching content: '{contentPath}'.");
+        }
 
         if (watchesStaticAssets)
         {

@@ -179,10 +179,10 @@ foreach ($variant in $variants) {
     }
     $runner = Join-Path $site 'BuildRunner.cs'
     $code = [IO.File]::ReadAllText($runner)
-    $manifestLine = '        app.Paths.AssetManifestBasePath = Path.Combine(root, "obj", "synthetic");'
+    $createLine = 'StaticSite.Create([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "synthetic")))'
     $publishLine = 'await app.PublishAsync(Path.Combine(root, "dist"));'
-    if (!$code.Contains($manifestLine) -or !$code.Contains($publishLine)) { throw 'Frozen harness adapter no longer matches. Review it before measuring.' }
-    [IO.File]::WriteAllText($runner, $code.Replace($manifestLine, '').Replace($publishLine, 'await app.RunAsync();'))
+    if (!$code.Contains($createLine) -or !$code.Contains($publishLine)) { throw 'Frozen harness adapter no longer matches. Review it before measuring.' }
+    [IO.File]::WriteAllText($runner, $code.Replace($createLine, 'StaticSite.Create([])').Replace($publishLine, 'await app.RunAsync();'))
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PublishEntry.cs') -Destination (Join-Path $site 'Program.cs')
     '<Project><PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup></Project>' | Set-Content -LiteralPath (Join-Path $site 'Directory.Build.props')
     '<Project />' | Set-Content -LiteralPath (Join-Path $site 'Directory.Build.targets')

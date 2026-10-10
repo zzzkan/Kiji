@@ -40,6 +40,7 @@ public sealed class RunAsyncTests : IDisposable
         foreach (var output in new[] { _testDir, "contents", "contents/generated", "static", "static/generated", ".kiji", ".kiji/cache/site" })
         {
             await using var app = CreateApp();
+            app.AddBuildInput("contents");
             await Assert.ThrowsAsync<InvalidOperationException>(() => app.PublishAsync(output));
             Assert.Equal("source data", await File.ReadAllTextAsync(source));
         }
@@ -206,11 +207,9 @@ public sealed class RunAsyncTests : IDisposable
 
     private StaticSite CreateApp()
     {
-        var app = StaticSite.Create([]);
+        var app = StaticSite.Create([], new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
         app.Info = TestArticleContents.CreateSiteInfo();
-        app.Paths.RootDirectory = _testDir;
-        app.Paths.ContentDirectory = "contents";
-        TestSiteAssets.Bind(app, Path.Combine(app.Paths.RootDirectory, "static"));
+        TestSiteAssets.Bind(app, Path.Combine(app.Paths.ProjectDirectory, "static"));
 
         app.UseContentSource<Post>(static _ => []);
         TestArticleContents.MapSite(app);

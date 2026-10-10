@@ -197,10 +197,8 @@ public sealed class SiteArtifactTests : IDisposable
         IReadOnlyList<RecordingArtifact> artifacts,
         string? staticPath)
     {
-        var app = StaticSite.Create([]);
+        var app = StaticSite.Create([], new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
         app.Info = TestArticleContents.CreateSiteInfo();
-        app.Paths.RootDirectory = _testDir;
-        app.Paths.ContentDirectory = _contentsDir;
         TestSiteAssets.Bind(app, staticPath ?? TestSitePaths.StaticDirectory);
 
         IReadOnlyList<Post> items =

@@ -1,0 +1,251 @@
+<Project>
+  <!-- Publish through ResolvedFileToPublish below so the SDK also reconciles the flat
+       static-site layout, instead of copying a second tree under wwwroot. -->
+  <Target Name="_SplitPublishStaticWebAssetsByCopyOptions" AfterTargets="CopyStaticWebAssetsToPublishDirectory" />
+  <Target Name="CopyStaticWebAssetsEndpointsManifest" AfterTargets="CopyStaticWebAssetsToPublishDirectory" />
+
+  <!-- Match resolved paths: ServiceWorker and Content can use different separators.
+       These sources are replaced by SDK-generated Build/Publish assets; retaining
+       the original would expose the development worker and give the publish cache
+       manifest an integrity hash for the wrong bytes. -->
+  <Target Name="KijiExcludeServiceWorkerSources" BeforeTargets="ResolveProjectStaticWebAssets" Condition="'@(ServiceWorker)' != ''">
+    <ItemGroup>
+      <_KijiServiceWorkerSource Include="@(ServiceWorker);@(ServiceWorker->'%(PublishedContent)')" />
+      <Content Remove="@(_KijiServiceWorkerSource)" MatchOnMetadata="FullPath" MatchOnMetadataOptions="PathLike" />
+    </ItemGroup>
+  </Target>
+
+  <!-- Kiji handles newly discovered files without recompilation. Set this only
+       after SDK discovery includes referenced libraries, so all assets remain available.
+       SDK 10.0.301 otherwise forwards asset additions to Roslyn as source additions. -->
+  <Target Name="KijiWatchAssetDiscovery" AfterTargets="ResolveCoreStaticWebAssets"
+          Condition="'$(DesignTimeBuild)' == 'true'">
+    <PropertyGroup>
+      <DefaultItemExcludes>$(DefaultItemExcludes);@(StaticWebAssetDiscoveryPattern->'%(ContentRoot)%(Pattern)')</DefaultItemExcludes>
+    </PropertyGroup>
+  </Target>
+
+  <Target Name="KijiValidateStaticWebAssets" BeforeTargets="PrepareForBuild;KijiGenerateSite">
+    <Error Condition="'$(_KijiConfiguredStaticWebAssetBasePath)' != '' and '$(_KijiConfiguredStaticWebAssetBasePath)' != '/'"
+           Code="KIJI1004" Text="Set SiteInfo.BaseUrl to host a Kiji site under a path prefix. StaticWebAssetBasePath is supported on libraries, not on the site project." />
+  </Target>
+
+  <!-- Linked Content can live outside its logical wwwroot. Root each SDK mapping
+       at the actual file, while keeping discovery patterns for newly added files. -->
+  <Target Name="KijiBuildAssets" AfterTargets="GenerateStaticWebAssetsManifest" Condition="'$(DesignTimeBuild)' != 'true'">
+    <ComputeStaticWebAssetsForCurrentProject Assets="@(StaticWebAsset)" ProjectMode="$(StaticWebAssetProjectMode)" AssetKind="Build" Source="$(PackageId)">
+      <Output TaskParameter="StaticWebAssets" ItemName="_KijiBuildAsset" />
+    </ComputeStaticWebAssetsForCurrentProject>
+    <ItemGroup>
+      <_KijiBuildAsset Remove="@(_KijiBuildAsset)" Condition="'%(AssetKind)' == 'Publish'" />
+      <_KijiBuildAsset ContentRoot="%(RootDir)%(Directory)" />
+    </ItemGroup>
+    <GenerateStaticWebAssetsDevelopmentManifest Assets="@(_KijiBuildAsset)" DiscoveryPatterns="@(StaticWebAssetDiscoveryPattern)"
+      Source="$(PackageId)" ManifestPath="$(StaticWebAssetDevelopmentManifestPath)" CacheFilePath="$(StaticWebAssetDevelopmentManifestPath)" />
+    <!-- The SDK omits an empty runtime manifest and can leave an older one behind. -->
+    <WriteLinesToFile Condition="'@(_KijiBuildAsset)' == '' and '@(StaticWebAssetDiscoveryPattern)' == ''"
+                      File="$(StaticWebAssetDevelopmentManifestPath)"
+                      Lines="{&quot;ContentRoots&quot;:[],&quot;Root&quot;:{}}" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <FileWrites Include="$(StaticWebAssetDevelopmentManifestPath)" />
+    </ItemGroup>
+  </Target>
+
+  <!-- Existing assets are ready before page rendering. Service-worker manifests and
+       compression run afterwards, when Kiji's generated assets are also available. -->
+  <Target Name="KijiPublishAssets" BeforeTargets="KijiGenerateSite" DependsOnTargets="ResolveStaticWebAssetsConfiguration;ResolvePublishStaticWebAssets">
+    <ComputeStaticWebAssetsForCurrentProject Assets="@(StaticWebAsset)" ProjectMode="$(StaticWebAssetProjectMode)" AssetKind="Publish" Source="$(PackageId)">
+      <Output TaskParameter="StaticWebAssets" ItemName="_KijiPublishAsset" />
+    </ComputeStaticWebAssetsForCurrentProject>
+    <ItemGroup>
+      <_KijiPublishAsset Remove="@(_KijiPublishAsset)" Condition="'%(AssetKind)' == 'Build' or '%(CopyToPublishDirectory)' == 'Never'" />
+    </ItemGroup>
+    <ComputeStaticWebAssetsTargetPaths Assets="@(_KijiPublishAsset)" PathPrefix="" UseAlternatePathDirectorySeparator="true">
+      <Output TaskParameter="AssetsWithTargetPath" ItemName="_KijiInputAsset" />
+    </ComputeStaticWebAssetsTargetPaths>
+    <FilterStaticWebAssetEndpoints Endpoints="@(StaticWebAssetEndpoint)" Assets="@(_KijiPublishAsset)" Filters="">
+      <Output TaskParameter="FilteredEndpoints" ItemName="_KijiInputEndpoint" />
+    </FilterStaticWebAssetEndpoints>
+    <GenerateStaticWebAssetEndpointsManifest Source="$(PackageId)" ManifestType="Publish"
+      Assets="@(_KijiPublishAsset)" Endpoints="@(_KijiInputEndpoint)"
+      ManifestPath="$(TargetDir)$(TargetName).staticwebassets.publish.endpoints.json"
+      ExclusionPatterns="$(StaticWebAssetEndpointExclusionPattern)" />
+    <ItemGroup>
+      <!-- Selection already used publish semantics. Encode the selected files with
+           the SDK runtime format. Root each mapping at its actual source directory:
+           linked Content can live outside the SDK's logical wwwroot. -->
+      <!-- Preserve the SDK's preference for a publish-specific version over All. -->
+      <_KijiPublishAsset AssetKind="Build" Condition="'%(AssetKind)' == 'Publish'" />
+      <_KijiPublishAsset ContentRoot="%(RootDir)%(Directory)" />
+    </ItemGroup>
+    <!-- Using the output itself as the cache input disables timestamp skipping:
+         transformed metadata must be re-evaluated, even when only Kiji changed.
+         The SDK still avoids writing an identical manifest. -->
+    <GenerateStaticWebAssetsDevelopmentManifest Assets="@(_KijiPublishAsset)" DiscoveryPatterns="@(StaticWebAssetDiscoveryPattern)"
+      Source="$(PackageId)" ManifestPath="$(TargetDir)$(TargetName).staticwebassets.publish.runtime.json"
+      CacheFilePath="$(TargetDir)$(TargetName).staticwebassets.publish.runtime.json" />
+    <WriteLinesToFile Condition="'@(_KijiPublishAsset)' == '' and '@(StaticWebAssetDiscoveryPattern)' == ''"
+      File="$(TargetDir)$(TargetName).staticwebassets.publish.runtime.json"
+      Lines="{&quot;ContentRoots&quot;:[],&quot;Root&quot;:{}}" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <FileWrites Include="$(TargetDir)$(TargetName).staticwebassets.publish.runtime.json" />
+      <FileWrites Include="$(TargetDir)$(TargetName).staticwebassets.publish.endpoints.json" />
+    </ItemGroup>
+  </Target>
+
+  <PropertyGroup>
+    <ResolvePublishRelatedStaticWebAssetsDependsOn>KijiRegisterGeneratedAssets;$(ResolvePublishRelatedStaticWebAssetsDependsOn)</ResolvePublishRelatedStaticWebAssetsDependsOn>
+  </PropertyGroup>
+
+  <Target Name="KijiRegisterGeneratedAssets" DependsOnTargets="KijiGenerateSite">
+    <!-- Only optimizers and service-worker manifests consume generated asset
+         records. Keep normal publication when neither needs them. Custom SDK
+         extensions can request those records explicitly. -->
+    <PropertyGroup>
+      <_KijiNeedsGeneratedAssets>true</_KijiNeedsGeneratedAssets>
+      <_KijiNeedsGeneratedAssets Condition="'$(CompressionEnabled)' == 'false' and '$(ServiceWorkerAssetsManifest)' == '' and '@(ServiceWorker)' == '' and '$(KijiIncludeGeneratedStaticWebAssets)' != 'true'">false</_KijiNeedsGeneratedAssets>
+    </PropertyGroup>
+    <ItemGroup>
+      <_KijiExistingPath Include="@(_KijiInputAsset)">
+        <RelativePath>%(TargetPath)</RelativePath>
+      </_KijiExistingPath>
+      <_KijiExistingPath Include="@(_KijiInputEndpoint)">
+        <RelativePath>%(Identity)</RelativePath>
+      </_KijiExistingPath>
+      <_KijiGeneratedFile Include="@(KijiSiteFile)">
+        <RelativePath>%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
+      </_KijiGeneratedFile>
+      <_KijiGeneratedFile Remove="@(_KijiExistingPath)" MatchOnMetadata="RelativePath" MatchOnMetadataOptions="PathLike" />
+    </ItemGroup>
+    <!-- Page and bundle URLs remain stable. The SDK still computes content hashes,
+         compression and service-worker entries for these outputs. -->
+    <DefineStaticWebAssets Condition="'$(_KijiNeedsGeneratedAssets)' == 'true'" CandidateAssets="@(_KijiGeneratedFile)" SourceId="$(PackageId)"
+      SourceType="Computed" ContentRoot="$(KijiStagingDir)" BasePath="/"
+      AssetKind="Publish" AssetMode="CurrentProject" FingerprintCandidates="false">
+      <Output TaskParameter="Assets" ItemName="_KijiGeneratedAsset" />
+    </DefineStaticWebAssets>
+    <ItemGroup>
+      <StaticWebAsset Include="@(_KijiGeneratedAsset)" />
+    </ItemGroup>
+  </Target>
+
+  <!-- The SDK's compressor prefers OriginalItemSpec when it exists. For a
+       published service worker that is the untransformed source, missing the
+       manifest-version prefix. Compress the finalized worker instead. -->
+  <Target Name="KijiFixServiceWorkerCompression" AfterTargets="ResolvePublishCompressedStaticWebAssetsConfiguration"
+          Condition="'@(_PublishServiceWorker)' != ''">
+    <PropertyGroup>
+      <_KijiPublishWorkerPath>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(_PublishServiceWorkerFile)'))</_KijiPublishWorkerPath>
+    </PropertyGroup>
+    <ItemGroup>
+      <_KijiWorkerCompression Include="@(_CompressedStaticWebAssetsForPublish)"
+        Condition="'%(_CompressedStaticWebAssetsForPublish.RelatedAsset)' == '$(_KijiPublishWorkerPath)'">
+        <RelatedAssetOriginalItemSpec>%(_CompressedStaticWebAssetsForPublish.RelatedAsset)</RelatedAssetOriginalItemSpec>
+      </_KijiWorkerCompression>
+      <!-- A distinct cache path also retires incorrectly compressed outputs from
+           older Kiji versions without recompressing unchanged workers every time. -->
+      <_CompressedStaticWebAssetsForPublish Remove="@(_KijiWorkerCompression)" />
+      <_CompressedStaticWebAssetsForPublish Include="@(_KijiWorkerCompression->'%(RootDir)%(Directory)kiji-worker-%(Filename)%(Extension)')" />
+    </ItemGroup>
+  </Target>
+
+  <!-- Generated pages are published as files. Keep their SDK asset records and
+       compression, without constructing HTTP endpoints that no Kiji host consumes.
+       Existing assets still need those endpoints for fingerprint URL resolution. -->
+  <Target Name="ResolvePublishCompressedStaticWebAssets" DependsOnTargets="$(ResolvePublishCompressedStaticWebAssetsDependsOn)">
+    <!-- These files are SDK-owned compression outputs. Validate external source
+         assets against their resolved SDK metadata before publication. -->
+    <DefineStaticWebAssets CandidateAssets="@(_CompressedStaticWebAssetsForPublish)"
+                           CacheManifestPath="$(IntermediateOutputPath)kiji-compressed-assets.cache.json">
+      <Output TaskParameter="Assets" ItemName="_CompressionPublishStaticWebAsset" />
+    </DefineStaticWebAssets>
+    <ItemGroup>
+      <_KijiGeneratedAssetKey Include="@(_KijiGeneratedAsset)" KeepMetadata="RelatedAsset">
+        <RelatedAsset>%(Identity)</RelatedAsset>
+      </_KijiGeneratedAssetKey>
+      <_KijiCompressionEndpointCandidate Include="@(_CompressionPublishStaticWebAsset)" />
+      <_KijiCompressionEndpointCandidate Remove="@(_KijiGeneratedAssetKey)"
+                                         MatchOnMetadata="RelatedAsset" MatchOnMetadataOptions="PathLike" />
+    </ItemGroup>
+    <DefineStaticWebAssetEndpoints CandidateAssets="@(_KijiCompressionEndpointCandidate)"
+                                  ExistingEndpoints="@(StaticWebAssetEndpoint)"
+                                  ContentTypeMappings="@(StaticWebAssetContentTypeMapping)">
+      <Output TaskParameter="Endpoints" ItemName="_CompressionPublishStaticWebAssetEndpoint" />
+    </DefineStaticWebAssetEndpoints>
+    <ItemGroup>
+      <StaticWebAsset Include="@(_CompressionPublishStaticWebAsset)" />
+      <StaticWebAssetEndpoint Include="@(_CompressionPublishStaticWebAssetEndpoint)" />
+      <_CompressionCurrentProjectPublishAssets Include="@(StaticWebAsset)"
+        Exclude="@(_KijiGeneratedAsset);@(_CompressionPublishStaticWebAsset)" Condition="'%(AssetKind)' != 'Build'" />
+      <_CompressionCurrentProjectPublishAssets Include="@(_KijiCompressionEndpointCandidate)" Condition="'%(AssetKind)' != 'Build'" />
+    </ItemGroup>
+    <ApplyCompressionNegotiation CandidateEndpoints="@(StaticWebAssetEndpoint)"
+                                 CandidateAssets="@(_CompressionCurrentProjectPublishAssets)"
+                                 AttachWeakETagToCompressedAssets="$(LinkAlternativeRepresentationsToOriginalResource)">
+      <Output TaskParameter="UpdatedEndpoints" ItemName="_UpdatedCompressionPublishEndpoints" />
+    </ApplyCompressionNegotiation>
+    <ItemGroup>
+      <StaticWebAssetEndpoint Remove="@(_UpdatedCompressionPublishEndpoints)" />
+      <StaticWebAssetEndpoint Include="@(_UpdatedCompressionPublishEndpoints)" />
+      <FileWrites Include="$(IntermediateOutputPath)kiji-compressed-assets.cache.json" />
+    </ItemGroup>
+  </Target>
+
+  <!-- The SDK reloads this manifest before copying. Reuse the lists just written
+       during this publish, without adding a persistent cache or skipping validation. -->
+  <Target Name="KijiRetainPublishManifest" AfterTargets="GenerateStaticWebAssetsPublishManifest"
+          Condition="'@(_CachedPublishStaticWebAssets)' == '' and '@(_CachedPublishStaticWebAssetEndpoints)' == '' and '@(_CachedPublishStaticWebAssetDiscoveryPatterns)' == ''">
+    <ItemGroup>
+      <_CachedPublishStaticWebAssets Include="@(_FinalPublishStaticWebAsset)" />
+      <_CachedPublishStaticWebAssetEndpoints Include="@(StaticWebAssetEndpoint)" />
+      <_CachedPublishStaticWebAssetDiscoveryPatterns Include="@(StaticWebAssetDiscoveryPattern)" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="KijiResolvePublicAssets" DependsOnTargets="StaticWebAssetsPrepareForPublish">
+    <!-- Compression may read the original sources after page rendering. Reject a
+         source edit in that interval before publishing mixed compressed/plain bytes. -->
+    <!-- Batch by file to avoid GetFileHash blocking parallel workers on async I/O. -->
+    <GetFileHash Files="@(_KijiInputAsset)" Algorithm="SHA256" HashEncoding="base64" MetadataName="CurrentIntegrity"
+                 Condition="'%(_KijiInputAsset.Identity)' != ''">
+      <Output TaskParameter="Items" ItemName="_KijiVerifiedInput" />
+    </GetFileHash>
+    <Error Condition="'%(_KijiVerifiedInput.Integrity)' != '' and !$([System.String]::Equals('%(_KijiVerifiedInput.Integrity)', '%(_KijiVerifiedInput.CurrentIntegrity)', System.StringComparison.Ordinal))"
+           Code="KIJI1005" Text="Static asset '%(_KijiVerifiedInput.Identity)' changed during SDK optimization. Rebuild the site before publishing." />
+    <ComputeStaticWebAssetsForCurrentProject Assets="@(StaticWebAsset)" ProjectMode="$(StaticWebAssetProjectMode)" AssetKind="Publish" Source="$(PackageId)">
+      <Output TaskParameter="StaticWebAssets" ItemName="_KijiFinalAsset" />
+    </ComputeStaticWebAssetsForCurrentProject>
+    <ComputeStaticWebAssetsTargetPaths Assets="@(_KijiFinalAsset)" PathPrefix="" UseAlternatePathDirectorySeparator="true">
+      <Output TaskParameter="AssetsWithTargetPath" ItemName="_KijiFinalAssetPath" />
+    </ComputeStaticWebAssetsTargetPaths>
+    <FilterStaticWebAssetEndpoints Endpoints="@(StaticWebAssetEndpoint)" Assets="@(_KijiFinalAsset)" Filters="">
+      <Output TaskParameter="FilteredEndpoints" ItemName="_KijiFinalEndpoint" />
+    </FilterStaticWebAssetEndpoints>
+    <ItemGroup>
+      <!-- Endpoint aliases must exist as real files on static hosts. Compressed
+           representations use the usual .gz/.br sidecars beside every public URL. -->
+      <_KijiPublishOverride Include="@(_KijiFinalAssetPath)" Condition="'%(AssetKind)' == 'Publish'" />
+      <_KijiBaseAssetPath Include="@(_KijiFinalAssetPath)" Condition="'%(AssetKind)' != 'Publish'" />
+      <_KijiBaseAssetPath Remove="@(_KijiPublishOverride)" MatchOnMetadata="TargetPath" MatchOnMetadataOptions="PathLike" />
+      <_KijiPublicFile Include="@(_KijiBaseAssetPath);@(_KijiPublishOverride)" Condition="'%(CopyToPublishDirectory)' != 'Never'"
+                       KeepMetadata="AssetKind;TargetPath;CopyToPublishDirectory">
+        <RelativePath>%(TargetPath)</RelativePath>
+      </_KijiPublicFile>
+      <_KijiPublicEndpoint Include="@(_KijiFinalEndpoint)" KeepMetadata="AssetFile;Selectors">
+        <RelativePath>%(Identity)</RelativePath>
+        <RelativePath Condition="'%(Selectors)' != '' and '%(Selectors)' != '[]'">%(Identity)$([System.IO.Path]::GetExtension('%(AssetFile)'))</RelativePath>
+      </_KijiPublicEndpoint>
+      <_KijiAliasEndpoint Include="@(_KijiPublicEndpoint->'%(RelativePath)')" Exclude="@(_KijiPublicFile->'%(RelativePath)')" />
+      <_KijiPublicFile Include="@(_KijiAliasEndpoint->'%(AssetFile)')" KeepMetadata="RelativePath" KeepDuplicates="false" />
+      <!-- Publish existing inputs through Kiji's verified mirror.
+           Late publish replacements (e.g. Service Worker) use their SDK source. -->
+      <_KijiPublicFile PublishSource="%(Identity)" />
+      <_KijiPublicFile PublishSource="$(KijiStagingDir)%(RelativePath)"
+                      Condition="'%(_KijiPublicFile.AssetKind)' != 'Publish' and Exists('$(KijiStagingDir)%(_KijiPublicFile.RelativePath)')" />
+      <_KijiPublicFile Include="@(_KijiGeneratedFile)" KeepMetadata="RelativePath"
+                       Condition="'$(_KijiNeedsGeneratedAssets)' == 'false'">
+        <PublishSource>%(Identity)</PublishSource>
+      </_KijiPublicFile>
+    </ItemGroup>
+  </Target>
+</Project>

@@ -1,6 +1,7 @@
 using Kiji.Rendering;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging;
@@ -39,10 +40,19 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
     internal async Task<WebApplication> StartAsync(ResolvedSitePaths options, string[] args, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(options.OutputDirectory);
-        Directory.CreateDirectory(options.StaticDirectory);
 
+        // Kiji owns browser refresh, including content invalidation and BaseUrl.
+        // The slim host does not run hosting startups, so dotnet watch's browser
+        // refresh middleware is not injected. Watch still applies code updates
+        // and rebuilds scoped CSS; Kiji reloads after those outputs change.
         var builder = WebApplication.CreateSlimBuilder(args);
         builder.Logging.SetMinimumLevel(LogLevel.Warning);
+        // This host always serves live source files, including outside Development.
+        // Its own fallback renders pages and discovers new assets without stealing routes.
+        builder.Configuration["ReloadStaticAssetsAtRuntime"] = "true";
+        builder.Configuration["DisableStaticAssetNotFoundRuntimeFallback"] = "true";
+        builder.Configuration["EnableStaticAssetsDevelopmentCaching"] = "false";
+        builder.Configuration["EnableStaticAssetsDevelopmentIntegrity"] = "false";
 
         // Only fill in an address when nothing else supplied one, so ASPNETCORE_URLS,
         // --urls, and launchSettings.json behave exactly as they do for any other
@@ -83,14 +93,38 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
             await context.Response.WriteAsync(LiveReloadScript.Value, context.RequestAborted);
         });
 
-        if (Directory.Exists(options.StaticDirectory))
+        var assets = options.AssetManifestPath is null ? null
+            : Assets.StaticAssetManifest.Load(options.AssetManifestPath, options.AssetEndpointsPath, app.Info.BaseUrl, includeIntegrity: false);
+        app.UseAssetResources(assets?.Resources ?? Assets.AssetResources.Empty);
+        if (assets?.ContentRoots.Length > 0)
         {
+            // Match ASP.NET Core: SDK mappings are loaded at startup. Project/asset
+            // configuration changes take effect on rebuild/restart; file bytes stay live.
+            builder.Environment.WebRootFileProvider = new NullFileProvider();
+            builder.Configuration[WebHostDefaults.StaticWebAssetsKey] = options.AssetManifestPath;
+            StaticWebAssetsLoader.UseStaticWebAssets(builder.Environment, builder.Configuration);
+            if (builder.Environment.WebRootFileProvider is NullFileProvider)
+            {
+                throw new InvalidOperationException($"Static asset manifest '{options.AssetManifestPath}' could not be loaded. Rebuild the site.");
+            }
+            if (options.AssetEndpointsPath is not null && File.Exists(options.AssetEndpointsPath))
+            {
+                var files = assets.Assets.ToDictionary(static asset => asset.Target, static asset => asset.Source, StringComparer.OrdinalIgnoreCase);
+                web.Use((context, next) => StaticAssetRequestHandler.HandleAsync(context, next, files));
+                web.MapStaticAssets(options.AssetEndpointsPath);
+            }
+            // Discovery patterns also expose files added since the SDK manifest was built.
             web.UseStaticFiles(new StaticFileOptions
             {
-                FileProvider = new PhysicalFileProvider(options.StaticDirectory),
+                FileProvider = builder.Environment.WebRootFileProvider,
                 ServeUnknownFileTypes = true,
                 OnPrepareResponse = static context => context.Context.Response.Headers.CacheControl = "no-store",
             });
+            foreach (var root in assets.ContentRoots.Distinct(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
+            {
+                var filter = new StaticAssetWatchFilter(root, assets);
+                WatchDirectory(root, WatchedPathSource.Static, filter.AffectsAsset);
+            }
         }
 
         // Page-bundle assets (e.g. optimized images) are materialized into the output
@@ -119,7 +153,6 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
 
         var buildInputs = app.WatchedBuildInputs.ToArray();
         WatchDirectory(options.ContentDirectory, WatchedPathSource.Content);
-        WatchDirectory(options.StaticDirectory, WatchedPathSource.Static);
         foreach (var input in buildInputs)
         {
             WatchDirectory(input, WatchedPathSource.BuildInput);
@@ -130,7 +163,7 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
         _reporter.DevServerStarted(
             new Uri(new Uri(web.Urls.First()), app.Info.BaseUrl.AbsolutePath),
             options.ContentDirectory,
-            Directory.Exists(options.StaticDirectory) ? options.StaticDirectory : null,
+            assets?.ContentRoots.Length > 0,
             buildInputs);
 
         // Warm the snapshot (page discovery + content materialization) in the
@@ -285,7 +318,7 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
         }
     }
 
-    private void WatchDirectory(string path, WatchedPathSource source)
+    private void WatchDirectory(string path, WatchedPathSource source, Func<string, bool>? affectsAsset = null)
     {
         path = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
         // Watch an existing parent, so creating, deleting or replacing the source
@@ -318,6 +351,12 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
             // A file save also touches its parent directory's timestamp, raising a
             // second Changed event for the directory itself; only files matter here.
             if (args.ChangeType is WatcherChangeTypes.Changed && Directory.Exists(args.FullPath))
+            {
+                return;
+            }
+
+            if (affectsAsset is not null && !affectsAsset(args.FullPath)
+                && (args is not RenamedEventArgs old || !affectsAsset(old.OldFullPath)))
             {
                 return;
             }
@@ -384,6 +423,11 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
 
         lock (_snapshotLock)
         {
+            if (_disposed)
+            {
+                return;
+            }
+
             changes = DeduplicateChanges(_pendingChanges);
             _pendingChanges.Clear();
 

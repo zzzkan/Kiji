@@ -24,12 +24,7 @@ public sealed class SitePaths
         set { EnsureMutable(); field = value; }
     } = "contents";
 
-    /// <summary>The static assets directory relative to the root, defaulting to <c>wwwroot</c>.</summary>
-    public string StaticDirectory
-    {
-        get;
-        set { EnsureMutable(); field = value; }
-    } = "wwwroot";
+    internal string? AssetManifestBasePath { get; set; }
 
     internal void Freeze() => _frozen = true;
 
@@ -60,6 +55,8 @@ public sealed class SitePaths
         return Resolve(ResolveAgainstRoot(outputPath)) with
         {
             ImageCacheDirectory = Path.Combine(ResolveCachePath(), "images"),
+            AssetManifestPath = FindAssetManifest("staticwebassets.publish.runtime.json"),
+            AssetEndpointsPath = FindAssetManifest("staticwebassets.publish.endpoints.json"),
         };
     }
 
@@ -69,7 +66,16 @@ public sealed class SitePaths
     /// </summary>
     internal ResolvedSitePaths ResolveForDevelopment()
     {
-        return Resolve(Path.Combine(ResolveKijiPath(), "dev-site"));
+        return Resolve(Path.Combine(ResolveKijiPath(), "dev-site")) with
+        {
+            AssetManifestPath = FindAssetManifest("staticwebassets.runtime.json"),
+            AssetEndpointsPath = FindAssetManifest("staticwebassets.endpoints.json"),
+        };
+    }
+
+    private string? FindAssetManifest(string suffix)
+    {
+        return AssetManifestBasePath is null ? null : $"{AssetManifestBasePath}.{suffix}";
     }
 
     private ResolvedSitePaths Resolve(string outputPath)
@@ -77,7 +83,6 @@ public sealed class SitePaths
         return new ResolvedSitePaths
         {
             ContentDirectory = ResolveAgainstRoot(ContentDirectory),
-            StaticDirectory = ResolveAgainstRoot(StaticDirectory),
             OutputDirectory = outputPath,
         };
     }

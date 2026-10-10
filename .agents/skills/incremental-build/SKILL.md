@@ -17,7 +17,13 @@ Ambiguity always falls back to rendering. A page may be reused only when:
 Content inputs and cached bytes always use hashes, never timestamps. Kiji exclusively
 owns generated HTML/images: in the same output directory a matching size/mtime can
 reuse an output; otherwise compare with verified bytes. Same-size/same-mtime external
-output edits are outside this ownership contract. This exception never applies to inputs.
+output edits are outside this ownership contract. This output ownership exception
+never applies to content inputs.
+
+Static web assets follow the SDK's metadata caching behavior. Edits must update
+modification times; preserving both size and modification time is unsupported.
+Keep normal SDK caching and ProjectReference properties so shared projects are
+not built with conflicting global properties.
 
 ## Dependencies
 
@@ -64,6 +70,23 @@ For cache identity, MSBuild or package changes, run:
 ```pwsh
 ./.agents/skills/incremental-build/scripts/Verify-PortableCache.ps1
 ```
+
+For static asset pipeline changes, also run `./.agents/skills/incremental-build/scripts/Verify-StaticAssets.ps1`. It verifies isolated Razor/Web package consumers, resource URLs, every supported asset category, compression, service workers, asset edits and live HTTP delivery. Servers are stopped by the script; evidence stays in ignored artifacts.
+
+`dotnet test -c Release` includes the selected package regressions in
+`PackagedStaticAssetTests`: empty site publish/startup, scoped/RCL CSS and
+fingerprint replacement after edits, shared-library solution builds, unchanged
+compiler/apphost skipping, service worker compression and option transitions, and HTTP ranges/ETags/compression/live
+asset changes under a BaseUrl prefix. These pack the already-built local library
+once, then use isolated real SDK consumers. They run in the existing CI test job
+on Windows and Linux; no extra test flag or PowerShell invocation is required.
+Logs and fixtures remain under ignored `artifacts/package-tests`.
+
+The broad script's reported counts are individual assertions, including repeated
+asset/SDK/format combinations, not independent test cases. Keep it for the wider
+SDK matrix, special filenames, JS initializer metadata, generated images/artifacts,
+and deliberately late source edits. Do not duplicate its entire matrix in ordinary
+tests; core per-asset byte/URL behavior is also covered by `StaticAssetTests`.
 
 It validates the package and isolated Razor consumers across checkout/revision,
 content/code edits, corruption, PathMap and build modes. Logs stay in `artifacts`.

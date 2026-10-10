@@ -1,7 +1,6 @@
 using System.Text.Encodings.Web;
 using System.Text.Unicode;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -41,13 +40,15 @@ internal sealed class ComponentRenderer(IServiceProvider services)
     {
         await using var scope = services.CreateAsyncScope();
         // HtmlRenderer captures its scope and cannot reset root component state.
-        await using var renderer = new HtmlRenderer(
-            scope.ServiceProvider, scope.ServiceProvider.GetRequiredService<ILoggerFactory>());
+        await using var renderer = new AssetHtmlRenderer(
+            scope.ServiceProvider, scope.ServiceProvider.GetRequiredService<ILoggerFactory>(),
+            PageRenderContext.Current?.Assets ?? Assets.AssetResources.Empty);
         try
         {
             await renderer.Dispatcher.InvokeAsync(async () =>
             {
-                var document = await renderer.RenderComponentAsync<TComponent>(CreateParameterView(parameters));
+                var document = renderer.BeginRenderingComponent(typeof(TComponent), CreateParameterView(parameters));
+                await document.QuiescenceTask;
                 document.WriteHtmlTo(output);
             });
         }

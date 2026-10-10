@@ -15,6 +15,20 @@ internal sealed class BuildDependencyRecorder
     internal bool Cacheable { get; private set; } = true;
     internal void DisableCache() { lock (_gate) { Cacheable = false; } }
 
+    internal void UseAssets(string fingerprint)
+    {
+        lock (_gate)
+        {
+            if (AssetsFingerprint is not null && AssetsFingerprint != fingerprint)
+            {
+                throw new IOException("Static asset URLs changed during rendering.");
+            }
+            AssetsFingerprint = fingerprint;
+        }
+    }
+
+    internal string? AssetsFingerprint { get; private set; }
+
     internal void AddFile(string absolutePath, string digest)
     {
         lock (_gate)

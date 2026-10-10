@@ -3,6 +3,8 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <RootNamespace>Kiji.Docs</RootNamespace>
+    <!-- The deployment host handles response compression; sidecars are unused. -->
+    <CompressionEnabled>false</CompressionEnabled>
   </PropertyGroup>
 
   <ItemGroup>
@@ -12,7 +14,7 @@
   <Import Project="../src/Kiji/MSBuild/Kiji.targets" />
 
   <!-- This explicit import runs before the SDK computes its default PublishDir. -->
-  <PropertyGroup Condition="'$(KijiGenerateOnPublish)' == 'true' and '$(UseArtifactsOutput)' != 'true'">
+  <PropertyGroup Condition="'$(_KijiIsSiteApp)' == 'true' and '$(UseArtifactsOutput)' != 'true'">
     <PublishDir Condition="'$(PublishDir)' == ''">$(MSBuildProjectDirectory)/dist/</PublishDir>
   </PropertyGroup>
 

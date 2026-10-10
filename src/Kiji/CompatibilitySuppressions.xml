@@ -8,4 +8,19 @@
     <Right>lib/net10.0/Kiji.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
+  <!-- Static assets are resolved by the SDK; the runtime directory override is removed. -->
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Kiji.SitePaths.get_StaticDirectory</Target>
+    <Left>lib/net10.0/Kiji.dll</Left>
+    <Right>lib/net10.0/Kiji.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Kiji.SitePaths.set_StaticDirectory(System.String)</Target>
+    <Left>lib/net10.0/Kiji.dll</Left>
+    <Right>lib/net10.0/Kiji.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
 </Suppressions>

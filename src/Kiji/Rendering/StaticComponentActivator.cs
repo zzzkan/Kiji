@@ -12,6 +12,15 @@ internal sealed class StaticComponentActivator(IServiceProvider services) : ICom
 
     public IComponent CreateInstance(Type componentType)
     {
+        if (componentType == typeof(ImportMap))
+        {
+            // This is the framework component, with a default for its public parameter.
+            // Explicit component parameters can still replace the default during rendering.
+#pragma warning disable BL0005
+            return new ImportMap { ImportMapDefinition = (PageRenderContext.Current?.Assets ?? Assets.AssetResources.Empty).ReadImportMap() };
+#pragma warning restore BL0005
+        }
+
         if (typeof(PageTitle).IsAssignableFrom(componentType)
             || typeof(HeadContent).IsAssignableFrom(componentType)
             || typeof(HeadOutlet).IsAssignableFrom(componentType))

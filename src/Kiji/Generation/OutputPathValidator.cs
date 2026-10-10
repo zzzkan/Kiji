@@ -28,7 +28,7 @@ internal static class OutputPathValidator
         return fullPath;
     }
 
-    internal static void Validate(ResolvedSitePaths options, string? siteRoot = null, string? cachePath = null)
+    internal static void Validate(ResolvedSitePaths options, Kiji.Assets.StaticAssetManifest assets, string? siteRoot = null, string? cachePath = null)
     {
         var output = Normalize(options.OutputDirectory);
         if (siteRoot is not null && Contains(output, Normalize(siteRoot)))
@@ -36,8 +36,16 @@ internal static class OutputPathValidator
             throw new InvalidOperationException("The output directory must not be the site root or one of its ancestors.");
         }
 
-        foreach (var input in new[] { options.ContentDirectory, options.StaticDirectory, options.ImageCacheDirectory, cachePath,
-            siteRoot is null ? null : Path.Combine(siteRoot, ".git") })
+        foreach (var asset in assets.Assets)
+        {
+            if (Contains(output, Normalize(asset.Source)))
+            {
+                throw new InvalidOperationException($"Output directory '{output}' contains static asset source '{asset.Source}'. Choose a separate output directory.");
+            }
+        }
+
+        foreach (var input in new[] { options.ContentDirectory, options.ImageCacheDirectory, cachePath,
+            siteRoot is null ? null : Path.Combine(siteRoot, ".git") }.Concat(assets.DiscoveryRoots))
         {
             if (input is not null && (Contains(output, Normalize(input)) || Contains(Normalize(input), output)))
             {

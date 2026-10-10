@@ -26,6 +26,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="MSBuild/Kiji.StaticWebAssets.targets" Pack="true" PackagePath="build/Kiji.StaticWebAssets.targets" />
     <!-- build/, not buildTransitive/: these targets turn a project's publish output into a
          generated site, which is only ever right for a project that references Kiji directly.
          buildTransitive would also reach whatever references that project — a site's own test

@@ -3,15 +3,11 @@ namespace Kiji;
 /// <summary>The absolute directories resolved for the current execution.</summary>
 internal sealed record ResolvedSitePaths
 {
+    internal string? AssetManifestPath { get; init; }
+    internal string? AssetEndpointsPath { get; init; }
+
     /// <summary>The absolute content directory, which content loaders may require to exist.</summary>
     public required string ContentDirectory
-    {
-        get;
-        init => field = ValidateAbsolutePath(value);
-    }
-
-    /// <summary>The absolute static assets directory, skipped when it does not exist.</summary>
-    public required string StaticDirectory
     {
         get;
         init => field = ValidateAbsolutePath(value);

@@ -72,7 +72,7 @@ public sealed class DevServerTests : IAsyncDisposable
             var output = logs.ToString();
             Assert.Contains("Dev server started at", output, StringComparison.Ordinal);
             Assert.Contains("Watching content:", output, StringComparison.Ordinal);
-            Assert.Contains("Watching static assets:", output, StringComparison.Ordinal);
+            Assert.Contains("Watching static assets.", output, StringComparison.Ordinal);
             Assert.Contains("Watching build input:", output, StringComparison.Ordinal);
         }
     }
@@ -185,15 +185,48 @@ public sealed class DevServerTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task Serve_StaticDirectoryCreatedDuringStartupServesNewFiles()
+    public async Task Serve_AssetDiscoveryServesNewFiles()
     {
-        Directory.Delete(_staticDir);
         var (baseAddress, devServer) = await StartServerAsync();
         await using (devServer)
         {
             await File.WriteAllTextAsync(Path.Combine(_staticDir, "new.css"), "body{}");
             using var client = CreateClient();
             Assert.Equal("body{}", await client.GetStringAsync(new Uri(baseAddress, "/new.css")));
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Serve_RequiresManifest_AndAcceptsEmptyAssets(bool missing)
+    {
+        using var logs = new StringWriter();
+        Task<(Uri BaseAddress, IAsyncDisposable DevServer)> Start()
+        {
+            return StartServerAsync(logs, configureAssets: app =>
+            {
+                var prefix = app.Paths.AssetManifestBasePath!;
+                var path = prefix + ".staticwebassets.runtime.json";
+                if (missing) { File.Delete(path); }
+                else { TestSiteAssets.WriteManifest(path, [], []); }
+            });
+        }
+
+        if (missing)
+        {
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(Start);
+            Assert.Contains("is missing", error.Message, StringComparison.Ordinal);
+            return;
+        }
+
+        var (baseAddress, devServer) = await Start();
+        await using (devServer)
+        {
+            using var client = CreateClient();
+            var html = await client.GetStringAsync(baseAddress);
+            Assert.Contains("<title>Home - zzzkan.me</title>", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("Watching static assets.", logs.ToString(), StringComparison.Ordinal);
         }
     }
 
@@ -251,6 +284,43 @@ public sealed class DevServerTests : IAsyncDisposable
                 output,
                 StringComparison.Ordinal);
             Assert.Contains("Reloaded 1 browser client(s).", output, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task Serve_CollocatedAssetsIgnoreRazorAndScopedCssSources()
+    {
+        var components = Path.Combine(_testDir, "Components");
+        Directory.CreateDirectory(components);
+        var script = Path.Combine(components, "Card.razor.js");
+        await File.WriteAllTextAsync(script, "original");
+        using var logs = new StringWriter();
+        var (baseAddress, devServer) = await StartServerAsync(logs, configureAssets: app =>
+            TestSiteAssets.WriteManifest(app.Paths.AssetManifestBasePath + ".staticwebassets.runtime.json",
+                [new(script, "Components/Card.razor.js")], [components]));
+        await using (devServer)
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            using var socket = new ClientWebSocket();
+            await socket.ConnectAsync(new UriBuilder(baseAddress) { Scheme = "ws", Path = "/_kiji/reload" }.Uri, timeout.Token);
+            var buffer = new byte[64];
+            var reload = socket.ReceiveAsync(new ArraySegment<byte>(buffer), timeout.Token);
+            await File.WriteAllTextAsync(Path.Combine(components, "Card.razor"), "<p>changed</p>", timeout.Token);
+            await File.WriteAllTextAsync(Path.Combine(components, "Card.razor.css"), "p { color: red; }", timeout.Token);
+            await File.WriteAllTextAsync(Path.Combine(components, "unregistered.js"), "not served", timeout.Token);
+            await Task.Delay(750, timeout.Token);
+            Assert.False(reload.IsCompleted, logs.ToString());
+
+            // Atomic replacement must still recognize the registered destination.
+            var temporary = Path.Combine(components, "save.tmp");
+            await File.WriteAllTextAsync(temporary, "updated", timeout.Token);
+            File.Move(temporary, script, overwrite: true);
+            var received = await reload;
+            Assert.Equal("reload", Encoding.UTF8.GetString(buffer, 0, received.Count));
+            using var client = CreateClient();
+            Assert.Equal("updated", await client.GetStringAsync(new Uri(baseAddress, "/Components/Card.razor.js")));
+            Assert.DoesNotContain("Card.razor.css", logs.ToString(), StringComparison.Ordinal);
+            Assert.DoesNotContain("unregistered.js", logs.ToString(), StringComparison.Ordinal);
         }
     }
 
@@ -402,7 +472,8 @@ public sealed class DevServerTests : IAsyncDisposable
     private async Task<(Uri BaseAddress, IAsyncDisposable DevServer)> StartServerAsync(
         StringWriter logs,
         SiteInfo? site = null,
-        string? additionalSlug = null)
+        string? additionalSlug = null,
+        Action<StaticSite>? configureAssets = null)
     {
         await File.WriteAllTextAsync(Path.Combine(_contentsDir, "hello-world.txt"), "Hello World");
 
@@ -410,7 +481,8 @@ public sealed class DevServerTests : IAsyncDisposable
         app.Info = site ?? TestArticleContents.CreateSiteInfo();
         app.Paths.RootDirectory = _testDir;
         app.Paths.ContentDirectory = _contentsDir;
-        app.Paths.StaticDirectory = _staticDir;
+        TestSiteAssets.Bind(app, _staticDir);
+        configureAssets?.Invoke(app);
 
         var contentsDir = _contentsDir;
         var settingsPath = Path.Combine(_testDir, "title.txt");

@@ -114,6 +114,7 @@ public sealed class PageServiceContentTests : IDisposable
         var app = StaticSite.Create([]);
         app.Info = new SiteInfo { Name = "Related", BaseUrl = new Uri("https://example.test/") };
         app.Paths.RootDirectory = _root;
+        TestSite.TestSiteAssets.Bind(app, Path.Combine(_root, "wwwroot"));
         app.UseMarkdownContent<FrontMatter>();
         app.UseContentSource<RelatedTag>("tags", provider => includeTags?.Invoke() == false ? []
             : [.. RelatedTag.Collect(provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>(), probe)

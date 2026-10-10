@@ -22,9 +22,9 @@ MySite/
 └── dist/             generated site after publishing
 ```
 
-These names are conventions rather than a separate Kiji project format. `contents/` and
-`wwwroot/` can be changed through `SitePaths`, and you can organize components however you
-prefer.
+These names are conventions rather than a separate Kiji project format. Change the
+content directory through `SitePaths.ContentDirectory`, and organize components however
+you prefer.
 
 ## The site definition
 
@@ -106,10 +106,43 @@ collection, list its items, or look up one item by the key supplied through `Add
 Markdown support parses YAML front matter and renders the body to HTML; your mapping code
 still decides which content becomes a page and what URL it receives.
 
-Files under `wwwroot/` are copied to the published site without modification. Use it for
-shared CSS, JavaScript, fonts, and images. Images referenced relative to a Markdown file
-can instead stay beside that file and be processed as responsive page-bundle images. See
+Images referenced relative to a Markdown file can stay beside that file and be
+processed as responsive page-bundle images. See
 [Markdown and images](../markdown/) for both content registration and local images.
+
+### Static assets
+
+Keep shared CSS, JavaScript, fonts, and images in `wwwroot/`. Use `Assets` in Razor
+components to link to them:
+
+```razor
+<link rel="stylesheet" href="@Assets["css/app.css"]" />
+<script src="@Assets["js/app.js"]" defer></script>
+```
+
+The URLs include the deployment base path and change when file contents change, so
+browsers load the updated files.
+Assets from referenced Razor class libraries are also available, normally under
+`_content/{PackageId}/`. See the [static asset API](../api-reference/#static-assets)
+for URL resolution and JavaScript import maps.
+
+### Component styles
+
+Put component-specific rules beside the component: `Pages/Home.razor.css` styles
+`Pages/Home.razor`. Keep shared colors, typography, and resets in `wwwroot/`.
+Add the generated CSS bundle to your shared `StaticHeadContent`, after your shared CSS:
+
+```razor
+<link rel="stylesheet" href="@Assets["MySite.styles.css"]" />
+```
+
+Replace `MySite` with the project's `PackageId`, which defaults to its assembly name.
+The bundle also includes referenced libraries' isolated CSS.
+
+Scoped rules match HTML rendered by the component. For child components or generated
+Markdown HTML, use `::deep` from an HTML element owned by the component, such as
+`.doc-content ::deep h2`. See [Blazor CSS isolation](https://learn.microsoft.com/aspnet/core/blazor/components/css-isolation)
+for selector rules.
 
 ## Site-wide output
 

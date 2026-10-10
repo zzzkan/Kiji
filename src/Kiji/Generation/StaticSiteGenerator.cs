@@ -77,8 +77,12 @@ internal static class StaticSiteGenerator
         // Kiji owns generated outputs. Matching stamps avoid reopening unchanged
         // files, but newly rendered bytes must still match the recorded hash.
         var stamp = previous?.OutputHash == outputHash ? OutputStamp.Read(fullPath) : null;
-        var written = previous?.OutputHash != outputHash
-            || (!(outputStampsValid && stamp is not null && stamp == previous.Stamp) && !writer.MatchesFile(fullPath));
+        // A forced render or missing cache still produces verified fresh bytes.
+        // Keep identical files so downstream SDK compression remains incremental.
+        var written = previous is null
+            ? !File.Exists(fullPath) || !writer.MatchesFile(fullPath)
+            : previous.OutputHash != outputHash
+                || (!(outputStampsValid && stamp is not null && stamp == previous.Stamp) && !writer.MatchesFile(fullPath));
         if (written)
         {
             writer.WriteToFile(fullPath);
@@ -88,13 +92,8 @@ internal static class StaticSiteGenerator
         return new RenderedPage(pageRequest, outputHash, written, writer.ToArray());
     }
 
-    internal static void ValidateNoStaticFileCollisions(ResolvedSitePaths options, IReadOnlyList<PageRenderRequest> pageRequests)
+    internal static void ValidateNoStaticFileCollisions(ResolvedSitePaths options, IReadOnlyList<PageRenderRequest> pageRequests, IReadOnlyList<Kiji.Assets.StaticAsset> assets)
     {
-        if (!Directory.Exists(options.StaticDirectory))
-        {
-            return;
-        }
-
         var pageOutputPaths = pageRequests
             .Select(request => OutputPathValidator.ResolveUnderRoot(
                 options.OutputDirectory,
@@ -102,9 +101,9 @@ internal static class StaticSiteGenerator
                 "Page output path"))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var file in Directory.EnumerateFiles(options.StaticDirectory, "*", SearchOption.AllDirectories))
+        foreach (var file in assets)
         {
-            var relativePath = Path.GetRelativePath(options.StaticDirectory, file);
+            var relativePath = file.Target;
             var staticOutputPath = Path.GetFullPath(Path.Combine(options.OutputDirectory, relativePath));
             if (pageOutputPaths.Contains(staticOutputPath))
             {

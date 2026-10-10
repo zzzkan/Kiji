@@ -17,6 +17,7 @@ methods return the same site instance and may be chained. Configure the site bef
   - [Layout](#layout)
   - [Page service](#page-service)
   - [Page metadata](#page-metadata)
+  - [Static assets](#static-assets)
 - [Content and images](#content-and-images)
   - [Content sources and ContentDictionary](#content-sources-and-contentdictionary)
   - [Markdown APIs](#markdown-apis)
@@ -98,7 +99,6 @@ public constructor. Relative paths are resolved from `RootDirectory`.
 | ------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
 | `string RootDirectory`    | Nearest project directory, then nearest Git root, then current directory | Base for relative site paths.                                                               |
 | `string ContentDirectory` | `contents`                                                               | Root used by content sources.                                                               |
-| `string StaticDirectory`  | `wwwroot`                                                                | Directory copied unchanged to generated output. It may be absolute or relative to the root. |
 
 Changing a property after execution starts throws.
 
@@ -207,6 +207,22 @@ contribution. Content is neither replaced nor automatically deduplicated.
 Blazor's `Microsoft.AspNetCore.Components.Web.PageTitle`, `HeadContent`, and `HeadOutlet`
 are unsupported and throw an actionable error during rendering (publish and development).
 Use `StaticHeadContent` with a plain `<title>` element.
+
+### Static assets
+
+The inherited `ComponentBase.Assets` property resolves paths such as `Assets["css/app.css"]`
+to public URLs, including fingerprints when available and `SiteInfo.BaseUrl`'s path prefix.
+An unknown path is returned unchanged. Literal URLs in CSS, JavaScript, or HTML are not
+automatically rewritten. Use `SiteInfo.ResolveUrl` for links to pages and generated files.
+
+Blazor's `ImportMap` component supplies an import map for the site's static assets.
+Place `<ImportMap />` inside `StaticHeadContent` before scripts that use JavaScript imports.
+Its `ImportMapDefinition` parameter accepts a custom map. See the
+[Blazor import map reference](https://learn.microsoft.com/aspnet/core/blazor/fundamentals/static-files?view=aspnetcore-10.0#importmap-component).
+
+See [Concepts](../concepts/#static-assets) for asset links and component styles,
+[Incremental builds](../incremental-builds/#what-changes-cause-work) for rebuild behavior,
+and [Deployment](../deployment/#compression) for compression settings.
 
 ## Content and images
 

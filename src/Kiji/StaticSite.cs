@@ -302,12 +302,18 @@ public sealed class StaticSite
     public StaticSite AddArtifact(
         string outputRelativePath,
         Func<Stream, SiteOutputContext, CancellationToken, Task> write)
+        => AddArtifact(outputRelativePath, write, preserveUnchangedOutput: false);
+
+    internal StaticSite AddArtifact(
+        string outputRelativePath,
+        Func<Stream, SiteOutputContext, CancellationToken, Task> write,
+        bool preserveUnchangedOutput)
     {
         EnsureConfigurable();
         ArgumentException.ThrowIfNullOrWhiteSpace(outputRelativePath);
         ArgumentNullException.ThrowIfNull(write);
 
-        _artifacts.Add(new SiteArtifactRegistration(outputRelativePath, write));
+        _artifacts.Add(new SiteArtifactRegistration(outputRelativePath, write, preserveUnchangedOutput));
         return this;
     }
 
@@ -333,6 +339,8 @@ public sealed class StaticSite
             throw new InvalidOperationException("A StaticSite can only be run once.");
         }
         _hasRun = true;
+        Paths.AssetManifestBasePath ??= Path.Combine(AppContext.BaseDirectory,
+            Assembly.GetEntryAssembly()!.GetName().Name!);
 
         try
         {
@@ -386,7 +394,11 @@ public sealed class StaticSite
 
         await using var cacheLease = await CacheLease.AcquireAsync(Paths.ResolveCachePath(), cancellationToken);
         var options = Paths.ResolveForPublish(outputPath);
-        OutputPathValidator.Validate(options, Paths.RootDirectory, Paths.ResolveKijiPath());
+        var assetManifest = options.AssetManifestPath is null ? new StaticAssetManifest { Assets = [] }
+            : StaticAssetManifest.Load(options.AssetManifestPath, options.AssetEndpointsPath, Info.BaseUrl);
+        UseAssetResources(assetManifest.Resources);
+        var assets = assetManifest.Assets;
+        OutputPathValidator.Validate(options, assetManifest, Paths.RootDirectory, Paths.ResolveKijiPath());
         UseRunOptions(options);
         InvalidateContent();
 
@@ -395,7 +407,7 @@ public sealed class StaticSite
         var snapshot = CreateSnapshot();
         var renderer = GetRenderer();
 
-        StaticSiteGenerator.ValidateNoStaticFileCollisions(options, snapshot.Pages);
+        StaticSiteGenerator.ValidateNoStaticFileCollisions(options, snapshot.Pages, assets);
         phases.Mark(BuildPhaseTimer.Snapshot);
 
         var planner = new IncrementalBuildPlanner(
@@ -406,7 +418,7 @@ public sealed class StaticSite
             _buildInputPaths,
             _buildInputValues,
             _services!.GetService<ContentFileRegistry>(), _runtime.Dependencies,
-            _services!.GetRequiredService<IImageProcessor>());
+            _services!.GetRequiredService<IImageProcessor>(), assetManifest.Resources);
 
         // Helpers and custom encoder factories may live outside the page assemblies.
         // Their code is a build input even when pages only reach it through injection.
@@ -429,7 +441,7 @@ public sealed class StaticSite
         Directory.CreateDirectory(options.OutputDirectory);
         phases.Mark(BuildPhaseTimer.Clean);
 
-        var staticFiles = await planner.SyncStaticFilesAsync();
+        var staticFiles = await planner.SyncStaticFilesAsync(assets);
         phases.Mark(BuildPhaseTimer.Static);
 
         // Render only the pages the plan could not prove unchanged, recording what
@@ -452,7 +464,7 @@ public sealed class StaticSite
             planner.OutputStampsValid);
         phases.Mark(BuildPhaseTimer.Render);
 
-        var artifacts = await GenerateArtifactsAsync(options, snapshot, cancellationToken);
+        var artifacts = await GenerateArtifactsAsync(options, snapshot, assets, cancellationToken);
         phases.Mark(BuildPhaseTimer.Artifacts);
 
         // Input verification is independent of output reconciliation and entry
@@ -769,8 +781,13 @@ public sealed class StaticSite
             Dependencies = dependencies,
             CancellationToken = cancellationToken,
             SharedRenders = sharedRenders,
+            Assets = _assetResources,
         };
     }
+
+    private AssetResources _assetResources = AssetResources.Empty;
+
+    internal void UseAssetResources(AssetResources resources) => _assetResources = resources;
 
     private Dictionary<string, object?> CreateRootParameters(PageRenderRequest request)
     {
@@ -792,7 +809,7 @@ public sealed class StaticSite
             ServiceProvider);
     }
 
-    private async Task<IReadOnlyList<string>> GenerateArtifactsAsync(ResolvedSitePaths options, SiteSnapshot snapshot, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<string>> GenerateArtifactsAsync(ResolvedSitePaths options, SiteSnapshot snapshot, IReadOnlyList<StaticAsset> assets, CancellationToken cancellationToken)
     {
         if (_artifacts.Count == 0)
         {
@@ -801,7 +818,7 @@ public sealed class StaticSite
 
         var artifactRelativePaths = new List<string>(_artifacts.Count);
         var context = CreateOutputContext(snapshot);
-        var reservedPaths = CreateReservedArtifactPaths(options, snapshot);
+        var reservedPaths = CreateReservedArtifactPaths(options, snapshot, assets);
 
         foreach (var artifact in _artifacts)
         {
@@ -818,8 +835,7 @@ public sealed class StaticSite
             reservedPaths[fullPath] = "another artifact output path";
             Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
 
-            await using var stream = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 64 * 1024, useAsync: true);
-            await artifact.WriteAsync(stream, context, cancellationToken);
+            await artifact.WriteFileAsync(fullPath, context, cancellationToken);
 
             artifactRelativePaths.Add(Path.GetRelativePath(options.OutputDirectory, fullPath));
             BuildOutput.Info($"Generated: {fullPath}");
@@ -828,7 +844,7 @@ public sealed class StaticSite
         return artifactRelativePaths;
     }
 
-    private static Dictionary<string, string> CreateReservedArtifactPaths(ResolvedSitePaths options, SiteSnapshot snapshot)
+    private static Dictionary<string, string> CreateReservedArtifactPaths(ResolvedSitePaths options, SiteSnapshot snapshot, IReadOnlyList<StaticAsset> assets)
     {
         var reservedPaths = snapshot.Pages.ToDictionary(
             page => OutputPathValidator.ResolveUnderRoot(
@@ -838,14 +854,9 @@ public sealed class StaticSite
             static _ => "a generated page output path",
             StringComparer.OrdinalIgnoreCase);
 
-        if (!Directory.Exists(options.StaticDirectory))
+        foreach (var file in assets)
         {
-            return reservedPaths;
-        }
-
-        foreach (var file in Directory.EnumerateFiles(options.StaticDirectory, "*", SearchOption.AllDirectories))
-        {
-            var relativePath = Path.GetRelativePath(options.StaticDirectory, file);
+            var relativePath = file.Target;
             var outputPath = OutputPathValidator.ResolveUnderRoot(
                 options.OutputDirectory,
                 relativePath,

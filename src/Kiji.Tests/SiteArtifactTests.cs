@@ -83,6 +83,48 @@ public sealed class SiteArtifactTests : IDisposable
         Assert.False(File.Exists(Path.Combine(_testDir, "evil.txt")));
     }
 
+    [Theory]
+    [InlineData(32)]
+    [InlineData(2 * 1024 * 1024)]
+    public async Task PublishAsync_RegeneratesBufferedArtifacts_PreservingOnlyUnchangedOutput(int length)
+    {
+        await using var app = await CreateAppAsync([], staticPath: null);
+        var writes = 0;
+        var original = new string('a', length);
+        var text = original;
+        var fail = false;
+        app.AddArtifact("meta/state.txt", async (output, _, token) =>
+        {
+            writes++;
+            await output.WriteAsync(Encoding.UTF8.GetBytes(text), token);
+            if (fail) { throw new IOException("Artifact failed."); }
+        }, preserveUnchangedOutput: true);
+        var path = Path.Combine(_outputDir, "meta", "state.txt");
+        await app.PublishAsync(_outputDir);
+        var stamp = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(path, stamp);
+        await app.PublishAsync(_outputDir);
+        Assert.Equal(2, writes);
+        Assert.Equal(stamp, File.GetLastWriteTimeUtc(path));
+
+        text = new string('b', length);
+        var changed = text;
+        await app.PublishAsync(_outputDir);
+        Assert.Equal(text, await File.ReadAllTextAsync(path));
+        Assert.NotEqual(stamp, File.GetLastWriteTimeUtc(path));
+
+        fail = true;
+        text = original;
+        await Assert.ThrowsAsync<IOException>(() => app.PublishAsync(_outputDir));
+        Assert.Equal(4, writes);
+        fail = false;
+        Assert.Equal(changed, await File.ReadAllTextAsync(path));
+        text = changed;
+        await app.PublishAsync(_outputDir);
+        Assert.Equal(changed, await File.ReadAllTextAsync(path));
+        Assert.Single(Directory.GetFiles(Path.GetDirectoryName(path)!));
+    }
+
     [Fact]
     public async Task PublishAsync_ArtifactPathCollidingWithGeneratedPage_Throws()
     {
@@ -159,7 +201,7 @@ public sealed class SiteArtifactTests : IDisposable
         app.Info = TestArticleContents.CreateSiteInfo();
         app.Paths.RootDirectory = _testDir;
         app.Paths.ContentDirectory = _contentsDir;
-        app.Paths.StaticDirectory = staticPath ?? TestSitePaths.StaticDirectory;
+        TestSiteAssets.Bind(app, staticPath ?? TestSitePaths.StaticDirectory);
 
         IReadOnlyList<Post> items =
         [

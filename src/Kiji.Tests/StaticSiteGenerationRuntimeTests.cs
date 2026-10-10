@@ -54,7 +54,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         app.Info = TestArticleContents.CreateSiteInfo();
         app.Paths.RootDirectory = _testDir;
         app.Paths.ContentDirectory = _contentsDir;
-        app.Paths.StaticDirectory = GetStaticDirectory();
+        TestSiteAssets.Bind(app, GetStaticDirectory());
 
         IReadOnlyList<Post> items =
         [
@@ -145,7 +145,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         app.Info = TestArticleContents.CreateSiteInfoWithBasePath();
         app.Paths.RootDirectory = _testDir;
         app.Paths.ContentDirectory = _contentsDir;
-        app.Paths.StaticDirectory = GetStaticDirectory();
+        TestSiteAssets.Bind(app, GetStaticDirectory());
 
         app.UseMarkdownContent<FrontMatter>();
         app.UseContentSource<Post>(static _ => []);

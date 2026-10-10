@@ -37,6 +37,15 @@ jobs:
       - name: Test
         run: dotnet test -c Release
 
+      - name: Upload package regression logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-tests-${{ matrix.os }}
+          path: artifacts/package-tests/**/*.log
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Pack
         if: matrix.os == 'ubuntu-latest'
         run: dotnet pack -c Release --no-build -o artifacts

@@ -23,7 +23,8 @@ internal sealed class IncrementalBuildPlanner(
     IReadOnlyList<KeyValuePair<string, string>> buildInputValues,
     ContentFileRegistry? hashRegistry = null,
     DependencyCatalog? catalog = null,
-    IImageProcessor? imageProcessor = null)
+    IImageProcessor? imageProcessor = null,
+    AssetResources? assets = null)
 {
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Assembly, IReadOnlyList<string>> CodeDependencies = [];
     private readonly ArtifactCache _cache = new(cacheDirectory);
@@ -121,6 +122,10 @@ internal sealed class IncrementalBuildPlanner(
                     if (catalog?.Resolve(dependency.Key) is not { } value || BuildFingerprint.HashText(value) != dependency.Fingerprint) { return false; }
                     break;
 
+                case "assets":
+                    if (dependency.Fingerprint != (assets ?? AssetResources.Empty).Fingerprint) { return false; }
+                    break;
+
                 default:
                     return false; // Unknown kind from a newer schema: re-render.
             }
@@ -184,6 +189,10 @@ internal sealed class IncrementalBuildPlanner(
         }
 
         dependencies.AddRange(recorder.Values);
+        if (recorder.AssetsFingerprint is { } assetsFingerprint)
+        {
+            dependencies.Add(new BuildManifestDependency("assets", "", assetsFingerprint));
+        }
         var additionalOutputs = recorder.AdditionalOutputs.Select(path => new BuildManifestOutput(
             Path.GetRelativePath(options.OutputDirectory, path),
             _cache.Store(path))).ToArray();
@@ -208,42 +217,58 @@ internal sealed class IncrementalBuildPlanner(
     /// <summary>
     /// Copies static files whose source and destination content hashes differ.
     /// </summary>
-    internal async Task<IReadOnlyList<string>> SyncStaticFilesAsync()
+    internal async Task<IReadOnlyList<string>> SyncStaticFilesAsync(IReadOnlyList<StaticAsset> files)
     {
-        if (!Directory.Exists(options.StaticDirectory))
-        {
-            return [];
-        }
-
-        var files = new DirectoryInfo(options.StaticDirectory).EnumerateFiles("*", SearchOption.AllDirectories).ToArray();
-        var entries = new string[files.Length];
+        var entries = new string[files.Count];
         var copied = 0;
 
         await Parallel.ForEachAsync(
-            Enumerable.Range(0, files.Length),
+            Enumerable.Range(0, files.Count),
             new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
             (index, _) =>
             {
                 var source = files[index];
-                var relativePath = Path.GetRelativePath(options.StaticDirectory, source.FullName);
-                var destinationPath = Path.Combine(options.OutputDirectory, relativePath);
+                var relativePath = source.Target.Replace('/', Path.DirectorySeparatorChar);
+                var destinationPath = OutputPathValidator.ResolveUnderRoot(options.OutputDirectory, relativePath, "Static asset path");
                 entries[index] = relativePath;
 
-                if (BuildFingerprint.HashFile(source.FullName) == BuildFingerprint.HashFile(destinationPath))
+                if (!File.Exists(source.Source))
+                {
+                    throw new FileNotFoundException("A static asset is missing. Rebuild the site to refresh its asset manifest.", source.Source);
+                }
+
+                // SDK URLs identify exact bytes. Otherwise a missing output needs
+                // only copying; two unreadable files must never count as equal.
+                var outputHash = BuildFingerprint.HashFile(destinationPath);
+                var inputHash = source.ExpectedHash is not null || outputHash != BuildFingerprint.Missing
+                    ? BuildFingerprint.HashFile(source.Source) : null;
+                if (source.ExpectedHash is not null && source.ExpectedHash != inputHash)
+                {
+                    throw new IOException($"Static asset '{source.Source}' changed after the SDK computed its URL. Rebuild the site before publishing.");
+                }
+                if (outputHash != BuildFingerprint.Missing && outputHash == inputHash)
                 {
                     return ValueTask.CompletedTask;
                 }
 
                 Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
-                File.Copy(source.FullName, destinationPath, overwrite: true);
+                File.Copy(source.Source, destinationPath, overwrite: true);
+                if (source.ExpectedHash is not null && BuildFingerprint.HashFile(destinationPath) != source.ExpectedHash)
+                {
+                    throw new IOException($"Static asset '{source.Source}' changed while being copied. Rebuild the site before publishing.");
+                }
+                // File.Copy preserves the input timestamp. The SDK's final
+                // PreserveNewest copy must see a changed staging file even when
+                // source bytes changed without a timestamp change.
+                File.SetLastWriteTimeUtc(destinationPath, DateTime.UtcNow);
                 Interlocked.Increment(ref copied);
 
                 return ValueTask.CompletedTask;
             });
 
-        if (copied > 0 || files.Length > 0)
+        if (files.Count > 0)
         {
-            BuildOutput.Info($"Static files: {copied} copied, {files.Length - copied} unchanged.");
+            BuildOutput.Info($"Static files: {copied} copied, {files.Count - copied} unchanged.");
         }
 
         return entries;

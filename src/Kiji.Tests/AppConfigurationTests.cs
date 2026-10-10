@@ -105,7 +105,6 @@ public sealed class AppConfigurationTests : IDisposable
                 () => throw new Xunit.Sdk.XunitException("Factory must not run after execution starts.")));
             Assert.Throws<InvalidOperationException>(() => paths.RootDirectory = _root);
             Assert.Throws<InvalidOperationException>(() => paths.ContentDirectory = "other");
-            Assert.Throws<InvalidOperationException>(() => paths.StaticDirectory = "other");
             Assert.Throws<InvalidOperationException>(() => app.Info = TestArticleContents.CreateSiteInfo());
             Assert.Throws<InvalidOperationException>(() => app.AddBuildInput("input.json"));
             Assert.Throws<InvalidOperationException>(() => app.AddBuildInput("version", "2"));

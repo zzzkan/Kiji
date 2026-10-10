@@ -121,7 +121,6 @@ public sealed class MarkdownOptionsTests : IDisposable
             new ResolvedSitePaths
             {
                 ContentDirectory = _testFilesDir,
-                StaticDirectory = _testDir,
                 OutputDirectory = _testDir,
             },
             new ImageProcessor(),

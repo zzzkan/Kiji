@@ -42,6 +42,8 @@ internal sealed class PageRenderContext
 
     internal SharedRenderLifetime? SharedRenders { get; init; }
 
+    internal Kiji.Assets.AssetResources Assets { get; init; } = Kiji.Assets.AssetResources.Empty;
+
     internal static string CreateOutputUrlDirectory(Uri baseUrl, string outputRelativeDirectory)
     {
         ArgumentNullException.ThrowIfNull(baseUrl);

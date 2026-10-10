@@ -76,6 +76,7 @@ public static class BuildRunner
             Author = "bench",
         };
         app.Paths.RootDirectory = root;
+        app.Paths.AssetManifestBasePath = Path.Combine(root, "obj", "synthetic");
 
         app.UseMarkdownContent<PostFrontMatter>();
         app.UseDefaultLayout<MainLayout>();

@@ -20,6 +20,8 @@ public sealed class RunAsyncTests : IDisposable
         _testDir = Path.Combine(Path.GetTempPath(), $"kiji-run-{Guid.NewGuid():N}");
         _outputDir = Path.Combine(_testDir, "publish");
         Directory.CreateDirectory(Path.Combine(_testDir, "contents"));
+        Directory.CreateDirectory(Path.Combine(_testDir, "static"));
+        File.WriteAllText(Path.Combine(_testDir, "static", "keep.css"), "body{}");
     }
 
     public void Dispose()
@@ -35,7 +37,7 @@ public sealed class RunAsyncTests : IDisposable
     {
         var source = Path.Combine(_testDir, "contents", "keep.txt");
         await File.WriteAllTextAsync(source, "source data");
-        foreach (var output in new[] { _testDir, "contents", "contents/generated", "static", ".kiji", ".kiji/cache/site" })
+        foreach (var output in new[] { _testDir, "contents", "contents/generated", "static", "static/generated", ".kiji", ".kiji/cache/site" })
         {
             await using var app = CreateApp();
             await Assert.ThrowsAsync<InvalidOperationException>(() => app.PublishAsync(output));
@@ -52,6 +54,17 @@ public sealed class RunAsyncTests : IDisposable
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => app.PublishAsync(other));
         Assert.Contains("Create a new app", exception.Message, StringComparison.Ordinal);
         Assert.False(Directory.Exists(other));
+    }
+
+    [Fact]
+    public async Task RunAsync_MissingAssetCatalog_FailsWithoutPublishingPartialSite()
+    {
+        await using var app = CreateApp();
+        File.Delete(app.Paths.AssetManifestBasePath + ".staticwebassets.publish.runtime.json");
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            app.RunAsync(EnvironmentWith([("KIJI_OUTPUT", _outputDir)]), CancellationToken.None));
+        Assert.Contains("Razor SDK and Kiji targets", error.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(_outputDir));
     }
 
     [Fact]
@@ -102,23 +115,40 @@ public sealed class RunAsyncTests : IDisposable
     [Fact]
     public async Task RunAsync_WithForce_RebuildsEveryPage()
     {
-        await using (var first = CreateApp())
+        var renders = new AssetRenderLog();
+        StaticSite CreateMeasuredApp()
+        {
+            var app = CreateApp();
+            app.UseContentSource<AssetRenderLog>("force-render-log", _ => [new("log", renders, "stable")]);
+            app.AddPages<AssetPage>(_ => [new { Kind = "first" }, new { Kind = "second" }]);
+            return app;
+        }
+        await using (var first = CreateMeasuredApp())
         {
             await first.RunAsync(EnvironmentWith([("KIJI_OUTPUT", _outputDir)]), CancellationToken.None);
         }
+
+        await using (var unchanged = CreateMeasuredApp())
+        {
+            await unchanged.RunAsync(EnvironmentWith([("KIJI_OUTPUT", _outputDir)]), CancellationToken.None);
+        }
+        Assert.Equal(1, renders.Counts["first"]);
+        Assert.Equal(1, renders.Counts["second"]);
 
         var indexPath = Path.Combine(_outputDir, "index.html");
         File.SetLastWriteTimeUtc(indexPath, new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
         var stampBefore = File.GetLastWriteTimeUtc(indexPath);
 
-        await using (var forced = CreateApp())
+        await using (var forced = CreateMeasuredApp())
         {
             await forced.RunAsync(
                 EnvironmentWith([("KIJI_OUTPUT", _outputDir), ("KIJI_FORCE", "1")]),
                 CancellationToken.None);
         }
 
-        Assert.NotEqual(stampBefore, File.GetLastWriteTimeUtc(indexPath));
+        Assert.Equal(2, renders.Counts["first"]);
+        Assert.Equal(2, renders.Counts["second"]);
+        Assert.Equal(stampBefore, File.GetLastWriteTimeUtc(indexPath));
     }
 
     [Fact]
@@ -180,7 +210,7 @@ public sealed class RunAsyncTests : IDisposable
         app.Info = TestArticleContents.CreateSiteInfo();
         app.Paths.RootDirectory = _testDir;
         app.Paths.ContentDirectory = "contents";
-        app.Paths.StaticDirectory = "static";
+        TestSiteAssets.Bind(app, Path.Combine(app.Paths.RootDirectory, "static"));
 
         app.UseContentSource<Post>(static _ => []);
         TestArticleContents.MapSite(app);

@@ -43,8 +43,9 @@ internal sealed class SiteExecutionPaths
     /// </summary>
     internal ResolvedSitePaths ResolveForPublish(string outputPath)
     {
-        return Resolve(ResolveAgainstRoot(outputPath)) with
+        return new ResolvedSitePaths
         {
+            OutputDirectory = ResolveAgainstRoot(outputPath),
             ImageCacheDirectory = Path.Combine(ResolveCachePath(), "images"),
             AssetManifestPath = FindAssetManifest("staticwebassets.publish.runtime.json"),
             AssetEndpointsPath = FindAssetManifest("staticwebassets.publish.endpoints.json"),
@@ -57,8 +58,9 @@ internal sealed class SiteExecutionPaths
     /// </summary>
     internal ResolvedSitePaths ResolveForDevelopment()
     {
-        return Resolve(Path.Combine(ResolveKijiPath(), "dev-site")) with
+        return new ResolvedSitePaths
         {
+            OutputDirectory = Path.Combine(ResolveKijiPath(), "dev-site"),
             AssetManifestPath = FindAssetManifest("staticwebassets.runtime.json"),
             AssetEndpointsPath = FindAssetManifest("staticwebassets.endpoints.json"),
         };
@@ -67,14 +69,6 @@ internal sealed class SiteExecutionPaths
     private string? FindAssetManifest(string suffix)
     {
         return AssetManifestBasePath is null ? null : $"{AssetManifestBasePath}.{suffix}";
-    }
-
-    private static ResolvedSitePaths Resolve(string outputPath)
-    {
-        return new ResolvedSitePaths
-        {
-            OutputDirectory = outputPath,
-        };
     }
 
     internal string ResolveAgainstRoot(string path)

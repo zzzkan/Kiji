@@ -69,23 +69,14 @@ public sealed class RunAsyncTests : IDisposable
     }
 
     [Fact]
-    public async Task RunAsync_WithOutputPath_GeneratesTheSiteThere()
+    public async Task RunAsync_DisposesTheSite_AndRejectsASecondRun()
     {
-        await using var app = CreateApp();
+        var app = CreateApp();
 
         var exitCode = await app.RunAsync(EnvironmentWith([("KIJI_OUTPUT", _outputDir)]), CancellationToken.None);
 
         Assert.Equal(0, exitCode);
         Assert.True(File.Exists(Path.Combine(_outputDir, "index.html")));
-    }
-
-    [Fact]
-    public async Task RunAsync_DisposesTheSite_AndRejectsASecondRun()
-    {
-        var app = CreateApp();
-
-        await app.RunAsync(EnvironmentWith([("KIJI_OUTPUT", _outputDir)]), CancellationToken.None);
-
         Assert.Throws<ObjectDisposedException>(() => app.ServiceProvider);
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => app.RunAsync(EnvironmentWith([("KIJI_OUTPUT", _outputDir)]), CancellationToken.None));

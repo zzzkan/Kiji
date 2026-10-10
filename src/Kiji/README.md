@@ -1,10 +1,14 @@
 # Kiji
 
-A static site generator for .NET that turns Razor components into static HTML.
+**Write Razor. Publish a static site.** Build with .NET components and typed
+Markdown, preview with `dotnet watch`, and publish with `dotnet publish`.
+
+Responsive WebP images, RSS, sitemaps, and incremental builds come in one package.
+The output needs no .NET server or Blazor runtime.
 
 ## Documentation
 
-<https://kiji-docs.zzzkan.workers.dev/>
+[Get started](https://kiji-docs.zzzkan.workers.dev/docs/getting-started/)
 
 ## License
 

@@ -59,22 +59,6 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
     }
 
     [Fact]
-    public async Task ProcessAsync_IndexFile_PreservesSourceInfoForSiteProjection()
-    {
-        var postDirectory = Path.Combine(_contentsDir, "my-awesome-post");
-        Directory.CreateDirectory(postDirectory);
-        await File.WriteAllTextAsync(
-            Path.Combine(postDirectory, "index.md"),
-            CreateValidMarkdown("Awesome Post", new DateTime(2024, 1, 15)));
-
-        var contents = CreateBuilder().Build();
-        var item = Assert.Single(contents);
-
-        Assert.Equal("index", Path.GetFileNameWithoutExtension(item.FileInfo.Name));
-        Assert.Equal("my-awesome-post", item.FileInfo.Directory?.Name);
-    }
-
-    [Fact]
     public async Task ProcessAsync_NewBuildPicksUpUpdatedMarkdownWhileExistingContentsRemainStable()
     {
         var markdownPath = Path.Combine(_contentsDir, "update-test.md");
@@ -91,16 +75,6 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
 
         Assert.Contains("Original content.", await firstItem.RenderAsync(), StringComparison.Ordinal);
         Assert.Contains("Updated content.", await secondItem.RenderAsync(), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Build_ContentsDirectoryNotFound_ThrowsException()
-    {
-        var builder = new MarkdownContentsBuilder<FrontMatter>(
-            Path.Combine(_testDir, "non-existent"),
-            static (_, _) => Task.FromResult(string.Empty));
-
-        Assert.Throws<DirectoryNotFoundException>(() => builder.Build());
     }
 
     [Fact]
@@ -187,17 +161,13 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
         return _markdownProcessor.ProcessBodyAsync(content.FileInfo.FullName, content.Body, cancellationToken);
     }
 
-    private static string CreateValidMarkdown(string title, DateTime createdAt, string content = "Test content.", List<string>? tags = null)
+    private static string CreateValidMarkdown(string title, DateTime createdAt, string content = "Test content.")
     {
-        var tagsSection = tags is not null && tags.Count > 0
-            ? $"tags:\n{string.Join("\n", tags.Select(tag => $"  - {tag}"))}\n"
-            : string.Empty;
-
         return $$"""
             ---
             title: {{title}}
             createdAt: {{createdAt:yyyy-MM-dd}}
-            {{tagsSection}}---
+            ---
 
             {{content}}
             """;

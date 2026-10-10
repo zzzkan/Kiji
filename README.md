@@ -4,7 +4,8 @@
 [![NuGet](https://img.shields.io/nuget/v/Kiji.svg)](https://www.nuget.org/packages/Kiji)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A static site generator for .NET that turns Razor components into static HTML.
+**Write Razor. Publish a static site.** Kiji brings your .NET components and Markdown
+together in plain HTML, ready for any static host.
 
 <p align="center">
     <img width="720" alt="kiji demo" src="https://github.com/user-attachments/assets/85bffb06-7001-4d41-95e8-c8b92a412b2f" />
@@ -17,25 +18,17 @@ A static site generator for .NET that turns Razor components into static HTML.
 
 ## Why Kiji
 
-### 🧰Build with the .NET tools you know
+- **Your .NET workflow.** Razor pages, layouts, and C# models. Preview with
+  `dotnet watch`; ship with `dotnet publish`.
+- **Publishing essentials included.** Typed Markdown, responsive WebP images,
+  RSS, and sitemaps in one package.
+- **Work on what changed.** Live browser reloads while you write; unchanged pages
+  can be reused when you publish.
+- **Make it yours.** Customize Markdown, transform HTML, or bring your own content
+  source and image processor.
 
-Pages are Razor components with an `@page` route, rendered through Blazor's `HtmlRenderer`. Layouts, injection, and parameters work the way you already know. An ordinary `Program.cs` defines the site with `Create` -> `Add*` / `Use*` -> `RunAsync`; there is no separate Kiji CLI or configuration language.
-
-### 📦Get publishing essentials in one package
-
-Markdown with your own YAML front matter shape, responsive WebP image optimization, RSS feeds, sitemaps, and a live-reloading dev server work together without a set of extension packages to assemble.
-
-### ⚡Fast builds, focused rebuilds
-
-Kiji renders Razor components directly in process and generates pages in parallel. Dependency tracking lets subsequent publishes reuse valid output, while on-demand rendering keeps previews focused on the pages you visit.
-
-### 🔄Develop quickly and adapt when needed
-
-`dotnet watch` shares its rendering path with publishing and reloads the browser when content changes. Extend the Markdig pipeline, post-process HTML, project Markdown into your own model, or replace image processing.
-
-### 🔕One thing it does not do: interactivity
-
-Rendering is one-shot and static, so `@onclick` and `OnAfterRenderAsync` do not survive into the output. The generated site is plain HTML with no Blazor runtime.
+The output needs no .NET server or Blazor runtime. Use JavaScript for browser
+interactivity; Razor event handlers such as `@onclick` are not included.
 
 ## Quick start
 

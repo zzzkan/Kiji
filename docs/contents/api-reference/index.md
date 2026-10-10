@@ -282,6 +282,19 @@ The configure callback receives a new options instance for that registration.
 | `ConfigureYaml(Action<DeserializerBuilder>)`         | Adds a non-null YamlDotNet configuration after the camel-case and ignore-unmatched defaults. Calls run in registration order.   |
 | `AddHtmlPostProcessor(Func<string,string>)`          | Adds a non-null synchronous HTML transformation. Transformations run in registration order, each receiving the previous result. |
 
+The first processed local Markdown image uses `loading="eager"` so its request can
+start before layout. Its `sizes` uses the viewport width capped at the largest
+variant, which may overestimate the display width within a narrower content area.
+Subsequent images use `loading="lazy"` and `sizes="auto, ..."`: supporting browsers
+select a variant from the actual rendered width without site-specific configuration.
+Browsers without auto-size support retain the capped viewport fallback. All images
+use `decoding="async"`, and original dimensions reserve space while they load.
+
+Prioritizing the first image is a heuristic; Markdown order does not identify
+above-the-fold images. For finer control, use explicit HTML or Razor markup,
+with appropriate `loading`, `fetchpriority`, and `sizes` attributes. Such markup,
+remote images, and site-root images are not processed by the Markdown image pipeline.
+
 #### `MarkdownContent<TFrontMatter>`
 
 This type has no public constructor. Kiji creates it for a source file.
@@ -298,6 +311,11 @@ images, because their output directory comes from the current page.
 ### Image processing
 
 The public image contracts are in `Kiji.Assets`.
+
+The default processor uses SkiaSharp to generate static WebP variants from JPEG, PNG,
+GIF, and WebP inputs. Animated inputs use only the first frame. It converts colors to
+sRGB and drops source EXIF, IPTC, and XMP metadata. SkiaSharp's native libraries for
+Windows, macOS, and Linux are included as package dependencies; no license key is needed.
 
 #### `UseImageProcessor(Func<IImageProcessor> factory)`
 

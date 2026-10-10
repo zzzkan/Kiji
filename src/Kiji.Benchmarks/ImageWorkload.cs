@@ -1,6 +1,5 @@
 using Kiji.Assets;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
+using SkiaSharp;
 
 namespace Kiji.Benchmarks;
 
@@ -19,19 +18,16 @@ internal sealed class ImageWorkload : IDisposable
         {
             _sources[i] = Path.Combine(Root, $"source-{(shared ? 0 : i)}.png");
             if (File.Exists(_sources[i])) { continue; }
-            using var image = new Image<Rgba32>(width, width * 3 / 4);
-            image.ProcessPixelRows(accessor =>
+            using var image = new SKBitmap(width, width * 3 / 4, SKColorType.Rgba8888, SKAlphaType.Unpremul);
+            for (var y = 0; y < image.Height; y++)
             {
-                for (var y = 0; y < accessor.Height; y++)
+                for (var x = 0; x < image.Width; x++)
                 {
-                    var row = accessor.GetRowSpan(y);
-                    for (var x = 0; x < row.Length; x++)
-                    {
-                        row[x] = new Rgba32((byte)(x * 255 / width), (byte)(y * 255 / accessor.Height), (byte)((x + y + i) % 256));
-                    }
+                    image.SetPixel(x, y, new SKColor((byte)(x * 255 / width), (byte)(y * 255 / image.Height), (byte)((x + y + i) % 256)));
                 }
-            });
-            await image.SaveAsPngAsync(_sources[i]);
+            }
+            using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
+            await File.WriteAllBytesAsync(_sources[i], encoded.ToArray());
         }
     }
 

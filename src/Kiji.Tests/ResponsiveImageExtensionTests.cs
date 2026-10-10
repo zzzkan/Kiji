@@ -64,7 +64,7 @@ public sealed class ResponsiveImageExtensionTests
     }
 
     [Fact]
-    public void Process_LocalImage_SecondImageUsesLazyLoading()
+    public void Process_LocalImages_FirstIsEagerAndSubsequentUseAutomaticSizes()
     {
         var imageInfoLookup = new Dictionary<string, ProcessedImageInfo>
         {
@@ -78,7 +78,9 @@ public sealed class ResponsiveImageExtensionTests
         var images = html.Split("<img", StringSplitOptions.None).Skip(1).Select(part => part[..part.IndexOf('>')]).ToArray();
         Assert.Equal(2, images.Length);
         Assert.Contains("loading=\"eager\"", images[0], StringComparison.Ordinal);
+        Assert.Contains("sizes=\"(max-width: 1920px) 100vw, 1920px\"", images[0], StringComparison.Ordinal);
         Assert.Contains("loading=\"lazy\"", images[1], StringComparison.Ordinal);
+        Assert.Contains("sizes=\"auto, (max-width: 1920px) 100vw, 1920px\"", images[1], StringComparison.Ordinal);
         Assert.All(images, image => Assert.Contains("decoding=\"async\"", image, StringComparison.Ordinal));
     }
 

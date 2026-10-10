@@ -1,8 +1,6 @@
 using Kiji.Generation;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats;
-using SixLabors.ImageSharp.Formats.Webp;
-using SixLabors.ImageSharp.Processing;
+using SkiaSharp;
+using System.Runtime.InteropServices;
 
 namespace Kiji.Assets;
 
@@ -10,8 +8,7 @@ namespace Kiji.Assets;
 internal sealed class ImageProcessor : IImageProcessor
 {
     /// <summary>
-    /// Caps the number of decoded images alive across pages. ImageSharp retains
-    /// its own default parallelism; changing it requires workload measurements.
+    /// Caps the number of decoded images alive across pages.
     /// </summary>
     private static readonly SemaphoreSlim ConcurrencyGate = new(Environment.ProcessorCount);
 
@@ -19,7 +16,6 @@ internal sealed class ImageProcessor : IImageProcessor
     private const int MaxSourceWidth = 1920;
     private const int Quality = 80;
     private readonly SemaphoreSlim _generationGate;
-    private readonly Configuration _configuration = Configuration.Default.Clone();
     internal Func<string, CancellationToken, Task>? BeforeEncodeAsync { get; init; }
 
     internal ImageProcessor(SemaphoreSlim? generationGate = null)
@@ -27,10 +23,13 @@ internal sealed class ImageProcessor : IImageProcessor
         _generationGate = generationGate ?? ConcurrencyGate;
     }
 
-    private static readonly string EncoderIdentity = $"mvid:{typeof(WebpEncoder).Assembly.ManifestModule.ModuleVersionId:N}";
+    // Native code is not covered by managed assembly dependency tracking. Include
+    // its version and platform so caches cannot cross incompatible native builds.
+    private static readonly string EncoderIdentity =
+        $"mvid:{typeof(SKWebpEncoder).Assembly.ManifestModule.ModuleVersionId:N}:{SkiaSharpVersion.Native}:{RuntimeInformation.RuntimeIdentifier}";
 
     public string CacheIdentity => BuildFingerprint.HashText(FormattableString.Invariant(
-        $"webp-v2:{Quality}:{MaxSourceWidth}:{string.Join(",", Widths)}:{EncoderIdentity}"));
+        $"skia-webp-v1:{Quality}:{MaxSourceWidth}:{string.Join(",", Widths)}:{EncoderIdentity}"));
 
     /// <inheritdoc/>
     public async Task<ProcessedImageInfo> ProcessAsync(
@@ -53,10 +52,9 @@ internal sealed class ImageProcessor : IImageProcessor
         cancellationToken.ThrowIfCancellationRequested();
         var contentHash = BuildFingerprint.HashText(CacheIdentity + ":" + sourceHash);
         using var source = new MemoryStream(bytes, writable: false);
-        var identity = await Image.IdentifyAsync(source, cancellationToken);
-        source.Position = 0;
-        var originalWidth = identity.Width;
-        var originalHeight = identity.Height;
+        using var codec = SKCodec.Create(source) ?? throw new InvalidDataException($"Cannot read image '{fileNameBase}'.");
+        var originalWidth = codec.Info.Width;
+        var originalHeight = codec.Info.Height;
 
         Directory.CreateDirectory(outputDirectory);
         // Another page may still reference an older variant with this basename.
@@ -76,7 +74,7 @@ internal sealed class ImageProcessor : IImageProcessor
         using (await ImageGenerationLock.AcquireAsync(
             Path.Combine(outputDirectory, $"{fileNameBase}.{contentHash}"), cancellationToken))
         {
-            Image? image = null;
+            SKBitmap? image = null;
             var ownsSlot = false;
             try
             {
@@ -95,7 +93,7 @@ internal sealed class ImageProcessor : IImageProcessor
                         }
                         if (!File.Exists(materializedPath))
                         {
-                            image ??= await LoadImageWithoutMetadataAsync(source, cancellationToken);
+                            image ??= DecodeImage(codec, cancellationToken);
                             if (BeforeEncodeAsync is { } beforeEncode)
                             {
                                 await beforeEncode(materializedPath, cancellationToken);
@@ -124,52 +122,57 @@ internal sealed class ImageProcessor : IImageProcessor
         };
     }
 
-    private async Task<Image> LoadImageWithoutMetadataAsync(Stream source, CancellationToken cancellationToken)
+    private static SKBitmap DecodeImage(SKCodec codec, CancellationToken cancellationToken)
     {
-        var image = await Image.LoadAsync(new DecoderOptions { Configuration = _configuration }, source, cancellationToken);
-
-        // Remove metadata for privacy/security.
-        image.Metadata.ExifProfile = null;
-        image.Metadata.IptcProfile = null;
-        image.Metadata.XmpProfile = null;
-
-        return image;
+        cancellationToken.ThrowIfCancellationRequested();
+        // Decode the first frame into sRGB pixels. Re-encoding pixels alone drops
+        // source EXIF/IPTC/XMP metadata without changing the interpreted colors.
+        using var colorSpace = SKColorSpace.CreateSrgb();
+        var info = new SKImageInfo(codec.Info.Width, codec.Info.Height, SKColorType.Rgba8888, SKAlphaType.Premul, colorSpace);
+        var image = new SKBitmap(info);
+        try
+        {
+            var result = codec.GetPixels(info, image.GetPixels());
+            if (result != SKCodecResult.Success)
+            {
+                throw new InvalidDataException($"Cannot decode image: {result}.");
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            return image;
+        }
+        catch
+        {
+            image.Dispose();
+            throw;
+        }
     }
 
     private static async Task EncodeVariantAsync(
-        Image image,
+        SKBitmap image,
         int originalWidth,
         int originalHeight,
         int targetWidth,
         string destinationPath,
         CancellationToken cancellationToken)
     {
-        var encoder = new WebpEncoder
-        {
-            Quality = Quality,
-            FileFormat = WebpFileFormatType.Lossy,
-        };
-
         // Write to a temp file and move into place so concurrent renders of the same
         // image never observe a partially written variant.
         var temporaryPath = $"{destinationPath}.{Guid.NewGuid():N}.tmp";
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (targetWidth == originalWidth)
+            var targetHeight = Math.Max(1, (int)Math.Round((double)originalHeight * targetWidth / originalWidth));
+            using var resized = targetWidth == originalWidth ? null :
+                image.Resize(new SKSizeI(targetWidth, targetHeight), new SKSamplingOptions(SKCubicResampler.Mitchell))
+                    ?? throw new InvalidDataException("Cannot resize image.");
+            using var pixels = (resized ?? image).PeekPixels();
+            using var encoded = SKWebpEncoder.Encode(pixels, new SKWebpEncoderOptions(SKWebpEncoderCompression.Lossy, Quality))
+                ?? throw new InvalidDataException("Cannot encode WebP image.");
+            cancellationToken.ThrowIfCancellationRequested();
+            await using (var output = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, useAsync: true))
             {
-                await image.SaveAsync(temporaryPath, encoder, cancellationToken);
-            }
-            else
-            {
-                var targetHeight = (int)Math.Round((double)originalHeight * targetWidth / originalWidth);
-                using var resized = image.Clone(ctx => ctx.Resize(new ResizeOptions
-                {
-                    Size = new Size(targetWidth, targetHeight),
-                    Mode = ResizeMode.Max,
-                    Sampler = KnownResamplers.Lanczos3,
-                }));
-                await resized.SaveAsync(temporaryPath, encoder, cancellationToken);
+                using var stream = encoded.AsStream();
+                await stream.CopyToAsync(output, cancellationToken);
             }
 
             cancellationToken.ThrowIfCancellationRequested();

@@ -3,8 +3,7 @@ using Kiji.Assets;
 namespace Kiji.Markdown;
 
 /// <summary>
-/// Per-document state for responsive image rendering: the processed image lookup
-/// and the image counter driving eager/lazy loading.
+/// Per-document image lookup and output URL directory for responsive rendering.
 /// </summary>
 internal sealed class ResponsiveImageContext(
     IReadOnlyDictionary<string, ProcessedImageInfo> imageInfoLookup,
@@ -14,5 +13,5 @@ internal sealed class ResponsiveImageContext(
 
     public string OutputUrlDirectory { get; } = outputUrlDirectory;
 
-    public int ImageCount;
+    public int ImageCount { get; set; }
 }

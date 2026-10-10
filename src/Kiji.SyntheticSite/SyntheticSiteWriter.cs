@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
+using SkiaSharp;
 
 namespace Kiji.SyntheticSite;
 
@@ -121,15 +120,16 @@ public static class SyntheticSiteWriter
 
     private static async Task WriteImageAsync(string path, int width, int height, int seed)
     {
-        using var image = new Image<Rgba32>(width, height);
+        using var image = new SKBitmap(width, height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
         for (var y = 0; y < height; y++)
         {
             for (var x = 0; x < width; x++)
             {
-                image[x, y] = new Rgba32((byte)((x + seed) % 255), (byte)((y + seed) % 255), (byte)(seed % 255));
+                image.SetPixel(x, y, new SKColor((byte)((x + seed) % 255), (byte)((y + seed) % 255), (byte)(seed % 255)));
             }
         }
 
-        await image.SaveAsPngAsync(path);
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
+        await File.WriteAllBytesAsync(path, encoded.ToArray());
     }
 }

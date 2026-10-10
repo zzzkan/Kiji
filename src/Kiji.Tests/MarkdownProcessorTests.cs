@@ -124,7 +124,6 @@ public sealed class MarkdownProcessorTests : IDisposable
     {
         return new MarkdownProcessor(new ResolvedSitePaths
         {
-            ContentDirectory = _testFilesDir,
             OutputDirectory = _outputDir,
             ImageCacheDirectory = _cacheDir,
         }, new ImageProcessor());

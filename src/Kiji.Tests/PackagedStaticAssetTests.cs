@@ -14,6 +14,44 @@ namespace Kiji.Tests;
 public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : IClassFixture<PackagedSiteFixture>
 {
     [Fact]
+    public async Task ProjectDirectory_IsSharedByPublishServeWatchAndCleanOutsideTheProject()
+    {
+        var site = fixture.CreateSite(Path.Combine(nameof(ProjectDirectory_IsSharedByPublishServeWatchAndCleanOutsideTheProject), "site"));
+        var parent = Path.GetDirectoryName(site)!;
+        var project = Path.Combine(site, "Site.csproj");
+        File.WriteAllText(project, File.ReadAllText(project).Replace("</Project>",
+            "<PropertyGroup><BaseOutputPath>../build-output/</BaseOutputPath></PropertyGroup></Project>", StringComparison.Ordinal));
+        var program = Path.Combine(site, "Program.cs");
+        File.WriteAllText(program, "using Kiji.Markdown;\n" + File.ReadAllText(program).Replace("site.AddStaticPages();",
+            "site.UseMarkdownContent<ArticleFrontMatter>();\nsite.AddStaticPages();", StringComparison.Ordinal)
+            + "\npublic sealed class ArticleFrontMatter { public string Title { get; set; } = string.Empty; }");
+        PackagedSiteFixture.Write(site, "contents/article.md", "---\ntitle: Correct project\n---\nArticle");
+        PackagedSiteFixture.Write(site, "Home.razor", """
+            @page "/"
+            @inject Kiji.ContentDictionary<Kiji.Markdown.MarkdownContent<ArticleFrontMatter>> Articles
+            <h1>@Articles["article.md"].FrontMatter.Title</h1>
+            """);
+        await fixture.DotnetAsync(parent, "publish", project, "-c", "Release", "-o", Path.Combine(site, "dist"));
+        var expected = File.ReadAllBytes(Path.Combine(site, "dist/index.html"));
+        Assert.Contains("Correct project", Encoding.UTF8.GetString(expected), StringComparison.Ordinal);
+        Assert.True(Directory.Exists(Path.Combine(site, ".kiji/cache")));
+        await fixture.DotnetAsync(parent, "publish", project, "-c", "Release", "--no-build", "-o", Path.Combine(parent, "other-output"));
+        Assert.Equal(expected, File.ReadAllBytes(Path.Combine(parent, "other-output/index.html")));
+        foreach (var watch in new[] { false, true })
+        {
+            await PackagedSiteFixture.WithServerAsync(site, async client =>
+                Assert.Contains("Correct project", await client.GetStringAsync("/kiji/"), StringComparison.Ordinal),
+                watch: watch, workingDirectory: parent,
+                assemblyPath: Path.Combine(parent, "build-output/Release/net10.0/AssetSite.dll"));
+            Assert.True(Directory.Exists(Path.Combine(site, ".kiji/dev-site")));
+        }
+        Assert.False(Directory.Exists(Path.Combine(parent, ".kiji")));
+        await fixture.DotnetAsync(parent, "clean", project, "-c", "Release");
+        Assert.False(Directory.Exists(Path.Combine(site, ".kiji")));
+        Assert.False(Directory.Exists(Path.Combine(site, "obj/Release/net10.0/kiji/site")));
+    }
+
+    [Fact]
     public async Task EmptySite_PublishesAndStartsWithoutSdkAssets()
     {
         var site = fixture.CreateSite(nameof(EmptySite_PublishesAndStartsWithoutSdkAssets));

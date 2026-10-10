@@ -27,7 +27,7 @@ public sealed class PageDiscoveryTests
     [Fact]
     public void AddStaticPages_EntryAssembly_RegistersThePages()
     {
-        var app = StaticSite.Create([]);
+        var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = TestArticleContents.CreateSiteInfo();
         app.UseContentSource<Post>(static _ => []);
         // Under the MTP runner the test project is its own executable, so the
@@ -45,7 +45,7 @@ public sealed class PageDiscoveryTests
     [Fact]
     public void AddStaticPages_AssemblyWithoutRoutedComponents_ReturnsEmptySnapshot()
     {
-        var app = StaticSite.Create([]);
+        var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = TestArticleContents.CreateSiteInfo();
 
         app.AddStaticPages(typeof(StaticSite).Assembly);
@@ -87,7 +87,7 @@ public sealed class PageDiscoveryTests
     [Fact]
     public void CreateSnapshot_UnregisteredParameterizedRoute_IsIgnored()
     {
-        var app = StaticSite.Create([]);
+        var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = TestArticleContents.CreateSiteInfo();
         app.UseContentSource<Post>(static _ => []);
         app.UseDefaultLayout<MainLayout>();
@@ -156,7 +156,7 @@ public sealed class PageDiscoveryTests
     [Fact]
     public void CreateSnapshot_UseNotFoundPageWithoutPageTemplate_ThrowsInformativeException()
     {
-        var app = StaticSite.Create([]);
+        var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = TestArticleContents.CreateSiteInfo();
         app.UseDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(app);
@@ -169,7 +169,7 @@ public sealed class PageDiscoveryTests
 
     private static (StaticSite App, ContentDictionary<Post> Posts) CreateAppWithTagRoutes(Func<IEnumerable<object>> tagRoutes)
     {
-        var app = StaticSite.Create([]);
+        var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = TestArticleContents.CreateSiteInfo();
         app.UseContentSource<Post>(static _ => []);
         app.UseDefaultLayout<MainLayout>();

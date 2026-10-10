@@ -6,13 +6,6 @@ internal sealed record ResolvedSitePaths
     internal string? AssetManifestPath { get; init; }
     internal string? AssetEndpointsPath { get; init; }
 
-    /// <summary>The absolute content directory, which content loaders may require to exist.</summary>
-    public required string ContentDirectory
-    {
-        get;
-        init => field = ValidateAbsolutePath(value);
-    }
-
     /// <summary>The absolute directory for generated files.</summary>
     public required string OutputDirectory
     {

@@ -29,7 +29,7 @@ internal sealed class ContentRuntime
     /// resolving is by type, so a second one of the same type would silently
     /// displace the first rather than coexist with it.
     /// </summary>
-    internal void Register<T>(ContentDictionary<T> dictionary)
+    internal void Register<T>(Func<ContentDictionary<T>> createDictionary)
         where T : class
     {
         if (!_registeredElementTypes.Add(typeof(T)))
@@ -38,7 +38,7 @@ internal sealed class ContentRuntime
                 $"A content dictionary of type '{typeof(T).Name}' is already registered. Each one is identified by its element type, so declare a distinct model type per source.");
         }
 
-        _registrations.Add(services => services.AddSingleton(dictionary));
+        _registrations.Add(services => services.AddSingleton(createDictionary()));
     }
 
     internal void ApplyRegistrations(IServiceCollection services)

@@ -66,7 +66,7 @@ public static class BuildRunner
     /// </summary>
     public static async Task BuildSiteAsync(string root)
     {
-        await using var app = StaticSite.Create([]);
+        await using var app = StaticSite.Create([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "synthetic")));
         app.Info = new SiteInfo
         {
             BaseUrl = new Uri("https://bench.example.com/"),
@@ -75,8 +75,6 @@ public static class BuildRunner
             Language = "en",
             Author = "bench",
         };
-        app.Paths.RootDirectory = root;
-        app.Paths.AssetManifestBasePath = Path.Combine(root, "obj", "synthetic");
 
         app.UseMarkdownContent<PostFrontMatter>();
         app.UseDefaultLayout<MainLayout>();

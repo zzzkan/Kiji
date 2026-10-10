@@ -43,7 +43,6 @@ public sealed class IncrementalBuildTests : IDisposable
         WriteCatalog("_content/library/first.css");
         var options = new ResolvedSitePaths
         {
-            ContentDirectory = Path.Combine(_testDir, "contents"),
             OutputDirectory = Path.Combine(_testDir, "dist"),
             AssetManifestPath = catalogPath,
         };
@@ -426,11 +425,9 @@ public sealed class IncrementalBuildTests : IDisposable
 
     private static async Task BuildRelatedAsync(string root)
     {
-        await using var app = StaticSite.Create([]);
+        await using var app = StaticSite.Create([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
         app.Info = TestArticleContents.CreateSiteInfo();
-        app.Paths.RootDirectory = root;
-        app.Paths.ContentDirectory = "contents";
-        TestSiteAssets.Bind(app, Path.Combine(app.Paths.RootDirectory, "static"));
+        TestSiteAssets.Bind(app, Path.Combine(app.Paths.ProjectDirectory, "static"));
 
         app.UseMarkdownContent<FrontMatter>();
         app.UseContentSource<Post>(static _ => []);
@@ -453,16 +450,14 @@ public sealed class IncrementalBuildTests : IDisposable
 
     private static async Task BuildScopedAsync(string root, string notesDirectory)
     {
-        await using var app = StaticSite.Create([]);
+        await using var app = StaticSite.Create([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
         app.Info = TestArticleContents.CreateSiteInfo();
-        app.Paths.RootDirectory = root;
-        app.Paths.ContentDirectory = "contents";
-        TestSiteAssets.Bind(app, Path.Combine(app.Paths.RootDirectory, "static"));
+        TestSiteAssets.Bind(app, Path.Combine(app.Paths.ProjectDirectory, "static"));
 
-        app.UseMarkdownContent<FrontMatter>(static options => options.Directory = "posts");
+        app.UseMarkdownContent<FrontMatter>(static options => options.Directory = "contents/posts");
         app.UseMarkdownContent<FrontMatter, ScopedNote>(
             select: ScopedNote.Create,
-            configure: options => options.Directory = notesDirectory);
+            configure: options => options.Directory = Path.Combine("contents", notesDirectory));
         app.UseContentSource<Post>(static _ => []);
         app.UseDefaultLayout<MainLayout>();
         app.AddStaticPages(typeof(TestArticleContents).Assembly);
@@ -667,8 +662,7 @@ public sealed class IncrementalBuildTests : IDisposable
         var renders = 0;
         async Task Build()
         {
-            await using var app = CreateBuildApp(root, () => Interlocked.Increment(ref renders));
-            app.Paths.ContentDirectory = Path.Combine(external, "contents");
+            await using var app = CreateBuildApp(root, () => Interlocked.Increment(ref renders), Path.Combine(external, "contents"));
             app.UseImageProcessor(() => new TestSite.PageServices.TrackingImageProcessor());
             await app.PublishAsync("dist");
         }
@@ -840,15 +834,17 @@ public sealed class IncrementalBuildTests : IDisposable
         await app.PublishAsync(Path.Combine(root, "dist"));
     }
 
-    private static StaticSite CreateBuildApp(string root, Action? onRender = null)
+    private static StaticSite CreateBuildApp(string root, Action? onRender = null, string directory = "contents")
     {
-        var app = StaticSite.Create([]);
+        var app = StaticSite.Create([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
         app.Info = TestArticleContents.CreateSiteInfo();
-        app.Paths.RootDirectory = root;
-        app.Paths.ContentDirectory = "contents";
-        TestSiteAssets.Bind(app, Path.Combine(app.Paths.RootDirectory, "static"));
+        TestSiteAssets.Bind(app, Path.Combine(app.Paths.ProjectDirectory, "static"));
 
-        app.UseMarkdownContent<FrontMatter>(options => options.AddHtmlPostProcessor(html => { onRender?.Invoke(); return html; }));
+        app.UseMarkdownContent<FrontMatter>(options =>
+        {
+            options.Directory = directory;
+            options.AddHtmlPostProcessor(html => { onRender?.Invoke(); return html; });
+        });
         app.UseContentSource<Post>(static _ => []);
         TestArticleContents.MapSite(app);
         app.AddPages<MarkdownPostTestPage>(static services => services

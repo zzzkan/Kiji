@@ -38,10 +38,10 @@ foreach ($pageCount in $Pages) {
         }
         $runner = Join-Path $site 'BuildRunner.cs'
         $code = [IO.File]::ReadAllText($runner)
-        $manifestLine = '        app.Paths.AssetManifestBasePath = Path.Combine(root, "obj", "synthetic");'
+        $createLine = 'StaticSite.Create([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "synthetic")))'
         $publishLine = 'await app.PublishAsync(Path.Combine(root, "dist"));'
-        if (!$code.Contains($manifestLine) -or !$code.Contains($publishLine)) { throw 'Frozen site adapter requires review.' }
-        Write-File $runner ($code.Replace($manifestLine, '').Replace($publishLine, 'await app.RunAsync();'))
+        if (!$code.Contains($createLine) -or !$code.Contains($publishLine)) { throw 'Frozen site adapter requires review.' }
+        Write-File $runner ($code.Replace($createLine, 'StaticSite.Create([])').Replace($publishLine, 'await app.RunAsync();'))
         Write-File (Join-Path $site 'Program.cs') 'Console.WriteLine($"Kiji probe PID: {Environment.ProcessId}"); await Kiji.SyntheticSite.BuildRunner.BuildSiteAsync(Directory.GetCurrentDirectory());'
         $package = [IO.Path]::GetFullPath($(if ($variant -eq 'baseline') { $BaselinePackage } else { $CandidatePackage }))
         $archive = [IO.Compression.ZipFile]::OpenRead($package)

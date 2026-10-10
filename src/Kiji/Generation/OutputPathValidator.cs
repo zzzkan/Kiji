@@ -28,7 +28,8 @@ internal static class OutputPathValidator
         return fullPath;
     }
 
-    internal static void Validate(ResolvedSitePaths options, Kiji.Assets.StaticAssetManifest assets, string? siteRoot = null, string? cachePath = null)
+    internal static void Validate(ResolvedSitePaths options, Kiji.Assets.StaticAssetManifest assets, string? siteRoot = null, string? cachePath = null,
+        IEnumerable<string>? inputPaths = null)
     {
         var output = Normalize(options.OutputDirectory);
         if (siteRoot is not null && Contains(output, Normalize(siteRoot)))
@@ -44,10 +45,20 @@ internal static class OutputPathValidator
             }
         }
 
-        foreach (var input in new[] { options.ContentDirectory, options.ImageCacheDirectory, cachePath,
-            siteRoot is null ? null : Path.Combine(siteRoot, ".git") }.Concat(assets.DiscoveryRoots))
+        var inputs = new[] { options.ImageCacheDirectory, cachePath,
+            siteRoot is null ? null : Path.Combine(siteRoot, ".git") }
+            .Concat(assets.DiscoveryRoots).Concat(inputPaths ?? [])
+            .OfType<string>();
+        ValidateInputs(output, inputs);
+    }
+
+    internal static void ValidateInputs(string outputPath, IEnumerable<string> inputPaths)
+    {
+        var output = Normalize(outputPath);
+        foreach (var input in inputPaths.Select(Normalize)
+            .Distinct(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
         {
-            if (input is not null && (Contains(output, Normalize(input)) || Contains(Normalize(input), output)))
+            if (Contains(output, input) || Contains(input, output))
             {
                 throw new InvalidOperationException($"Output directory '{output}' overlaps source or cache directory '{input}'. Choose a separate output directory.");
             }

@@ -35,9 +35,8 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
     [Fact]
     public async Task PublishAsync_NavigationManagerInjectionFailsWithoutPublishingPage()
     {
-        await using var app = StaticSite.Create([]);
+        await using var app = StaticSite.Create([], new SiteExecutionPaths(_testDir));
         app.Info = TestArticleContents.CreateSiteInfoWithBasePath();
-        app.Paths.RootDirectory = _testDir;
         app.AddPages<UnsupportedNavigationPage>(_ => [new { Id = "original" }]);
 
         var exception = await Assert.ThrowsAsync<NotSupportedException>(() => app.PublishAsync(_outputDir));
@@ -50,10 +49,8 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
     [Fact]
     public async Task PublishAsync_WritesDynamicBlogAndTagPagesAndFeed()
     {
-        await using var app = StaticSite.Create([]);
+        await using var app = StaticSite.Create([], new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
         app.Info = TestArticleContents.CreateSiteInfo();
-        app.Paths.RootDirectory = _testDir;
-        app.Paths.ContentDirectory = _contentsDir;
         TestSiteAssets.Bind(app, GetStaticDirectory());
 
         IReadOnlyList<Post> items =
@@ -141,10 +138,8 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         await CreateTestImageAsync(Path.Combine(postDir, "photo.png"), 800, 600);
         await CreateTestImageAsync(Path.Combine(postDir, "images", "nested.png"), 400, 300);
 
-        await using var app = StaticSite.Create([]);
+        await using var app = StaticSite.Create([], new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
         app.Info = TestArticleContents.CreateSiteInfoWithBasePath();
-        app.Paths.RootDirectory = _testDir;
-        app.Paths.ContentDirectory = _contentsDir;
         TestSiteAssets.Bind(app, GetStaticDirectory());
 
         app.UseMarkdownContent<FrontMatter>();

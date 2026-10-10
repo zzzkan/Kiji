@@ -54,17 +54,18 @@ the build.
 ## Choose the files
 
 By default, Kiji recursively loads `*.md` files from `contents/`. Set `Directory` to use a
-subdirectory, and `FileFilter` to exclude files before they are loaded:
+different directory, and `FileFilter` to exclude files before they are loaded:
 
 ```csharp
 app.UseMarkdownContent<FrontMatter>(options =>
 {
-    options.Directory = "posts";
+    options.Directory = "contents/posts";
     options.FileFilter = file => !file.Name.StartsWith('_');
 });
 ```
 
-`Directory` is relative to the configured content directory. File selection and URL
+`Directory` accepts an absolute path or a path relative to the site project directory.
+Kiji watches each registered directory during development. File selection and URL
 mapping are separate: excluding a draft decides whether it is loaded, while `AddPages`
 decides the URL of every included item.
 

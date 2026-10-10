@@ -20,7 +20,6 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
         Directory.CreateDirectory(_outputDir);
         _markdownProcessor = new MarkdownProcessor(new ResolvedSitePaths
         {
-            ContentDirectory = _contentsDir,
             OutputDirectory = _outputDir,
         }, new ImageProcessor());
     }

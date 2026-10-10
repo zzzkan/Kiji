@@ -161,9 +161,8 @@ public sealed class PageServiceTests : IDisposable
 
     private StaticSite CreateApp(ServiceProbe? probe = null)
     {
-        var app = StaticSite.Create([]);
+        var app = StaticSite.Create([], new SiteExecutionPaths(_root));
         app.Info = new SiteInfo { Name = "Services", BaseUrl = new Uri("https://example.test/") };
-        app.Paths.RootDirectory = _root;
         if (probe is not null)
         {
             app.UseContentSource<ServiceProbe>(_ => [probe]);

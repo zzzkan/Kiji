@@ -16,8 +16,7 @@ public sealed class AppConfigurationTests : IDisposable
     [InlineData("dev")]
     public async Task MissingSite_FailsBeforeCreatingOutput_AndCanBeCorrected(string entry)
     {
-        await using var app = StaticSite.Create([]);
-        app.Paths.RootDirectory = _root;
+        await using var app = StaticSite.Create([], new SiteExecutionPaths(_root));
         var output = Path.Combine(_root, "output");
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
@@ -42,10 +41,8 @@ public sealed class AppConfigurationTests : IDisposable
     [InlineData(true)]
     public async Task Execution_FreezesConfiguration_AndLoadsContentOnlyAfterPathsSettle(bool serve)
     {
-        await using var app = StaticSite.Create([]);
+        await using var app = StaticSite.Create([], new SiteExecutionPaths(_root));
         app.Info = TestArticleContents.CreateSiteInfo();
-        app.Paths.RootDirectory = _root;
-        var paths = app.Paths;
         app.AddPageService<object>();
         var loads = 0;
         var routeCalls = 0;
@@ -103,8 +100,6 @@ public sealed class AppConfigurationTests : IDisposable
             Assert.Throws<InvalidOperationException>(() => app.AddPageService<object, object>());
             Assert.Throws<InvalidOperationException>(() => app.UseImageProcessor(
                 () => throw new Xunit.Sdk.XunitException("Factory must not run after execution starts.")));
-            Assert.Throws<InvalidOperationException>(() => paths.RootDirectory = _root);
-            Assert.Throws<InvalidOperationException>(() => paths.ContentDirectory = "other");
             Assert.Throws<InvalidOperationException>(() => app.Info = TestArticleContents.CreateSiteInfo());
             Assert.Throws<InvalidOperationException>(() => app.AddBuildInput("input.json"));
             Assert.Throws<InvalidOperationException>(() => app.AddBuildInput("version", "2"));

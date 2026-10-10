@@ -102,9 +102,8 @@ public sealed class StaticAssetTests : IDisposable
 
     private StaticSite CreateSite(AssetRenderLog log, string path = "app.js")
     {
-        var site = StaticSite.Create([]);
+        var site = StaticSite.Create([], new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")));
         site.Info = TestArticleContents.CreateSiteInfoWithBasePath();
-        site.Paths.RootDirectory = _root;
         site.UseContentSource<AssetRenderLog>("render-log", _ => [new("log", log, "stable")]);
         site.AddPages<AssetPage>(_ => PageKinds
             .Select(kind => new { Kind = kind, Path = path }));

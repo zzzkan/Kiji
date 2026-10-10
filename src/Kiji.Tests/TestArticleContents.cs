@@ -41,7 +41,7 @@ internal static class TestArticleContents
     /// </summary>
     private static StaticSite CreateApp(params (Post Metadata, string Html)[] entries)
     {
-        var app = StaticSite.Create([]);
+        var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = CreateSiteInfo();
 
         IReadOnlyList<Post> items = [.. entries.Select(static entry => ClonePost(entry.Metadata, entry.Html))];

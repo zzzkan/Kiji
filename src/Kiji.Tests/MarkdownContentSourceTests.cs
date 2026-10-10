@@ -28,7 +28,7 @@ public sealed class MarkdownContentSourceTests : IDisposable
         WriteMarkdown("posts/first.md", "First");
         WriteMarkdown("notes/alpha.md", "Alpha");
 
-        var posts = LoadKeys(static options => options.Directory = "posts");
+        var posts = LoadKeys(static options => options.Directory = "contents/posts");
 
         Assert.Equal(["first"], posts);
     }
@@ -45,15 +45,18 @@ public sealed class MarkdownContentSourceTests : IDisposable
         Assert.Equal(["published"], keys);
     }
 
-    [Fact]
-    public void Directory_EscapingTheContentDirectory_Throws()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Directory_ResolvesFromProjectDirectoryOrAbsolutePath(bool absolute)
     {
         WriteMarkdown("inside.md", "Inside");
-
-        var exception = Assert.Throws<InvalidOperationException>(
-            () => LoadKeys(static options => options.Directory = "../outside"));
-
-        Assert.Contains("resolves outside the content directory", exception.Message, StringComparison.Ordinal);
+        await using var app = CreateApp(Path.Combine(_testDir, "site"));
+        app.UseMarkdownContent<FrontMatter>(options => options.Directory = absolute
+            ? Path.Combine(_testDir, "contents") : "../contents");
+        app.UsePlanningOptions();
+        Assert.Equal("inside.md", Assert.Single(app.ServiceProvider
+            .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>().Keys));
     }
 
     [Fact]
@@ -90,6 +93,35 @@ public sealed class MarkdownContentSourceTests : IDisposable
 
     private sealed record ProjectedNote(string Key, string? Title);
 
+    [Theory]
+    [InlineData("publish", "publish")]
+    [InlineData("publish/nested", "publish")]
+    [InlineData("publish", "publish/nested")]
+    [InlineData(".kiji/dev-site", null)]
+    public async Task Execution_RejectsOutputOverlappingAnyRegisteredSource(string directory, string? output)
+    {
+        var input = Path.Combine(_testDir, directory, "keep.md");
+        System.IO.Directory.CreateDirectory(Path.GetDirectoryName(input)!);
+        await File.WriteAllTextAsync(input, "original");
+        await using var app = CreateApp();
+        app.UseMarkdownContent<FrontMatter>();
+        app.UseMarkdownContent<FrontMatter, ProjectedNote>(
+            content => new ProjectedNote(content.FileInfo.Name, content.FrontMatter.Title),
+            options => options.Directory = directory);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            if (output is not null) { await app.PublishAsync(output); }
+            else
+            {
+                var (server, _) = await app.StartDevServerAsync(TestUrls.EphemeralPort, CancellationToken.None);
+                await server.DisposeAsync();
+            }
+        });
+        Assert.Contains("overlaps source", error.Message, StringComparison.Ordinal);
+        Assert.Equal("original", await File.ReadAllTextAsync(input));
+    }
+
     private sealed class OrderedFrontMatter
     {
         public string? Title { get; set; }
@@ -113,12 +145,10 @@ public sealed class MarkdownContentSourceTests : IDisposable
             """);
     }
 
-    private StaticSite CreateApp()
+    private StaticSite CreateApp(string? projectDirectory = null)
     {
-        var app = StaticSite.Create([]);
+        var app = StaticSite.Create([], new SiteExecutionPaths(projectDirectory ?? _testDir));
         app.Info = TestArticleContents.CreateSiteInfo();
-        app.Paths.RootDirectory = _testDir;
-        app.Paths.ContentDirectory = "contents";
         return app;
     }
 

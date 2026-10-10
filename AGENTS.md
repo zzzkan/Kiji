@@ -39,7 +39,7 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
 - Routes allow literals and simple parameters only. UseNotFoundPage still requires
   its component's own route. AddPages supplies the whole parameter set; non-route
   values must name writable [Parameter] properties.
-- SitePaths chooses the nearest project ancestor, then Git ancestor, then cwd.
+- MSBuild supplies the project directory through runtimeconfig; missing metadata is an error.
   Content becomes accessible through factories/loaders/artifacts only after execution
   paths settle. Do not expose a provider or content dictionary on StaticSite.
 - The dev server enforces BaseUrl's path prefix and uses `.kiji/dev-site`.

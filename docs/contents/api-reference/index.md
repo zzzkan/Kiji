@@ -11,7 +11,6 @@ methods return the same site instance and may be chained. Configure the site bef
 - [Site setup](#site-setup)
   - [StaticSite lifecycle](#staticsite-lifecycle)
   - [SiteInfo](#siteinfo)
-  - [SitePaths](#sitepaths)
 - [Pages and rendering](#pages-and-rendering)
   - [Pages](#pages)
   - [Layout](#layout)
@@ -49,16 +48,13 @@ return await app.RunAsync();
 
 Creates one site. `args` cannot be null and are forwarded to ASP.NET Core configuration
 when the development server runs. Each `StaticSite` instance can execute once.
+Kiji’s MSBuild targets supply the project directory through runtimeconfig. Missing or invalid
+project metadata throws; rebuild the site with the targets imported before running it.
 
 #### `StaticSite.Info`
 
 Gets or sets the required `SiteInfo`. Reading it before assignment throws. It may be
 reassigned until execution starts; setting it afterward throws.
-
-#### `StaticSite.Paths`
-
-Gets the site's `SitePaths`. The object is created with the site and remains mutable until
-execution starts.
 
 #### `StaticSite.RunAsync(CancellationToken cancellationToken = default)`
 
@@ -89,18 +85,6 @@ An empty string or `"/"` returns `BaseUrl`.
 
 This differs from standard `System.Uri` resolution: `/about/` stays under the site's base
 path, and external URLs and parent-directory traversal are not accepted.
-
-### SitePaths
-
-`SitePaths` configures input directories. Kiji creates it as `StaticSite.Paths`; it has no
-public constructor. Relative paths are resolved from `RootDirectory`.
-
-| Property                  | Default                                                                  | Behavior                                                                                    |
-| ------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
-| `string RootDirectory`    | Nearest project directory, then nearest Git root, then current directory | Base for relative site paths.                                                               |
-| `string ContentDirectory` | `contents`                                                               | Root used by content sources.                                                               |
-
-Changing a property after execution starts throws.
 
 ## Pages and rendering
 
@@ -246,6 +230,9 @@ lose HTML reuse.
 Values are immutable for one build snapshot. Collection enumeration tracks item order,
 membership, and all item digests. A missing lookup tracks the collection too.
 
+For either overload, declare file or directory inputs with `AddBuildInput(path)` so
+changes refresh the content during development.
+
 #### `ContentDictionary<T>`
 
 `ContentDictionary<T>` implements `IReadOnlyDictionary<string, T>` and is resolved through
@@ -292,7 +279,7 @@ The configure callback receives a new options instance for that registration.
 
 | Member                                               | Default/behavior                                                                                                                |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `string? Directory`                                  | `null`; scan the content root. A value selects a directory below it and cannot escape the content root.                         |
+| `string Directory`                                  | `"contents"`; absolute or relative to the site project directory. Registered directories are watched during development.                         |
 | `Func<FileInfo,bool>? FileFilter`                    | `null`; include every discovered Markdown file. The predicate runs before loading.                                              |
 | `ConfigureMarkdown(Action<MarkdownPipelineBuilder>)` | Adds a non-null Markdig configuration after Kiji's default advanced pipeline. Calls run in registration order.                  |
 | `ConfigureYaml(Action<DeserializerBuilder>)`         | Adds a non-null YamlDotNet configuration after the camel-case and ignore-unmatched defaults. Calls run in registration order.   |
@@ -375,7 +362,7 @@ properties are read-only.
 ### `AddBuildInput(string path)`
 
 Declares a file or directory outside Kiji's known inputs. A relative path uses
-`SitePaths.RootDirectory`. Changes require a full rebuild; the development server also
+the site project directory. Changes require a full rebuild; the development server also
 watches declared paths. The path cannot be null, empty, or whitespace.
 
 ### `AddBuildInput(string key, string value)`

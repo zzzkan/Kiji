@@ -12,7 +12,7 @@ public sealed class ContentDictionaryTests
     [Fact]
     public async Task ConcurrentReaders_MaterializeContentOnlyOnce()
     {
-        await using var app = StaticSite.Create([]);
+        await using var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = TestArticleContents.CreateSiteInfo();
         var calls = 0;
         using var entered = new ManualResetEventSlim();
@@ -97,7 +97,7 @@ public sealed class ContentDictionaryTests
     [Fact]
     public void UseContentSource_AssignsOpaqueOrdinalKeysInLoaderOrder()
     {
-        var app = StaticSite.Create([]);
+        var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = TestArticleContents.CreateSiteInfo();
         app.UseContentSource<Item>(static _ => [new("b", 2), new("a", 1)]);
         var dictionary = app.ServiceProvider.GetRequiredService<ContentDictionary<Item>>();
@@ -110,7 +110,7 @@ public sealed class ContentDictionaryTests
     [Fact]
     public void UseContentSource_SameElementTypeTwice_Throws()
     {
-        var app = StaticSite.Create([]);
+        var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = TestArticleContents.CreateSiteInfo();
         app.UseContentSource<Item>(static _ => []);
 
@@ -129,7 +129,7 @@ public sealed class ContentDictionaryTests
     [Fact]
     public void Dictionary_CanBeDerivedFromAnother()
     {
-        var app = StaticSite.Create([]);
+        var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = TestArticleContents.CreateSiteInfo();
         app.UseContentSource<Item>(static _ => [new("a", 1), new("b", 2)]);
         app.UseContentSource<Derived>(
@@ -143,7 +143,7 @@ public sealed class ContentDictionaryTests
     [Fact]
     public void Dictionary_CircularDerivation_ThrowsNamingThePath()
     {
-        var app = StaticSite.Create([]);
+        var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = TestArticleContents.CreateSiteInfo();
         app.UseContentSource<Item>(
             static services => [.. services.GetRequiredService<ContentDictionary<Derived>>().Values.Select(static d => new Item(d.Slug, 1))]);
@@ -167,7 +167,7 @@ public sealed class ContentDictionaryTests
     public void ResolvingTheDictionary_TakesTheHandleWithoutLoading()
     {
         var loads = 0;
-        var app = StaticSite.Create([]);
+        var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = TestArticleContents.CreateSiteInfo();
         app.UseContentSource<Item>(
             _ =>

@@ -36,6 +36,8 @@ public static class MarkdownStaticSiteExtensions
 
         var contentOptions = new MarkdownOptions();
         configure?.Invoke(contentOptions);
+        var directory = contentOptions.Directory;
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
 
         // A factory rather than a shared instance: front matter parsing runs on
         // multiple threads and YamlDotNet deserializers are not documented as thread-safe.
@@ -54,10 +56,10 @@ public static class MarkdownStaticSiteExtensions
                 var options = services.GetRequiredService<ResolvedSitePaths>();
                 var imageProcessor = services.GetRequiredService<IImageProcessor>();
                 var markdownProcessor = new MarkdownProcessor(options, imageProcessor, contentOptions);
-                var sourceDirectory = contentOptions.ResolveContentsDirectory(options.ContentDirectory);
+                var sourceDirectory = app.Paths.ResolveAgainstRoot(directory);
 
                 var sources = new MarkdownContentsBuilder<TFrontMatter>(
-                    options.ContentDirectory,
+                    sourceDirectory,
                     (content, cancellationToken) => markdownProcessor.ProcessBodyAsync(
                         content.FileInfo.FullName,
                         content.Body,
@@ -65,7 +67,6 @@ public static class MarkdownStaticSiteExtensions
                     CreateFrontMatterDeserializer,
                     sourceCache,
                     services.GetService<ContentFileRegistry>(),
-                    sourceDirectory,
                     contentOptions.FileFilter)
                     .Build();
 
@@ -78,6 +79,6 @@ public static class MarkdownStaticSiteExtensions
 
                 return items;
             },
-            contentOptions.ResolveContentSetScope());
+            directory: directory);
     }
 }

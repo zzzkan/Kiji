@@ -1,6 +1,6 @@
 # Kiji
 
-**Write Razor. Publish a static site.** Build with .NET components and typed
+**Write Razor. Publish a purely static site.** Build with .NET components and typed
 Markdown, preview with `dotnet watch`, and publish with `dotnet publish`.
 
 Responsive WebP images, RSS, sitemaps, and incremental builds come in one package.

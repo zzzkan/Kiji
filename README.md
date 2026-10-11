@@ -4,7 +4,7 @@
 [![NuGet](https://img.shields.io/nuget/v/Kiji.svg)](https://www.nuget.org/packages/Kiji)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Write Razor. Publish a static site.** Kiji brings your .NET components and Markdown
+**Write Razor. Publish a purely static site.** Kiji brings your .NET components and Markdown
 together in plain HTML, ready for any static host.
 
 <p align="center">

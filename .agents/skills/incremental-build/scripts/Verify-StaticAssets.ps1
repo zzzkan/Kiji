@@ -96,7 +96,7 @@ using Kiji.Markdown;
 using Kiji.Sitemaps;
 var site = StaticSite.Create(args);
 site.Info = new() { Name = "Asset audit", BaseUrl = new Uri("https://example.test/kiji/") };
-site.AddStaticPages();
+site.AddPages();
 site.UseMarkdownContent<Dictionary<string, object>>();
 site.AddArtifact("meta/generated.json", async (output, _, token) =>
     await output.WriteAsync(System.Text.Encoding.UTF8.GetBytes("{\"generated\":true}"), token));

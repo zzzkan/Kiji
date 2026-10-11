@@ -42,7 +42,7 @@ app.Info = new SiteInfo
     Name = "My Site",
 };
 
-app.AddStaticPages();
+app.AddPages();
 
 return await app.RunAsync();
 ```
@@ -56,7 +56,7 @@ Create `Pages/Home.razor`:
 <p>This page is a Razor component rendered to static HTML.</p>
 ```
 
-`AddStaticPages()` finds public components with fixed `@page` routes. Start the
+`AddPages()` finds public components with fixed `@page` routes. Start the
 development server:
 
 ```pwsh
@@ -143,7 +143,7 @@ app.Info = new SiteInfo
 };
 
 app.UseDefaultLayout<Layout>();
-app.AddStaticPages();
+app.AddPages();
 
 return await app.RunAsync();
 ```
@@ -252,7 +252,7 @@ app.Info = new SiteInfo
 
 app.UseMarkdownContent<FrontMatter>();
 app.UseDefaultLayout<Layout>();
-app.AddStaticPages();
+app.AddPages();
 app.AddPages<Post>(services => services
     .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
     .Select(post => new

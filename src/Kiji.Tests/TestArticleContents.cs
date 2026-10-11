@@ -55,7 +55,7 @@ internal static class TestArticleContents
     /// </summary>
     public static StaticSite MapTestAssemblyPages(StaticSite app)
     {
-        app.AddStaticPages(typeof(TestArticleContents).Assembly);
+        app.AddPages(typeof(TestArticleContents).Assembly);
         return app;
     }
 
@@ -65,7 +65,7 @@ internal static class TestArticleContents
 
         app.UseDefaultLayout<MainLayout>();
         MapTestAssemblyPages(app);
-        app.UseNotFoundPage<NotFoundPage>();
+        app.AddNotFoundPage<NotFoundPage>();
 
         app.AddPages<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));

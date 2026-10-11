@@ -106,10 +106,10 @@ public sealed class AppConfigurationTests : IDisposable
             Assert.Throws<InvalidOperationException>(() => app.UseContentSource<object>(static _ => []));
             Assert.Throws<InvalidOperationException>(() => app.UseMarkdownContent<FrontMatter>(
                 _ => throw new Xunit.Sdk.XunitException("Configuration callback must not run after execution starts.")));
-            Assert.Throws<InvalidOperationException>(() => app.AddStaticPages());
-            Assert.Throws<InvalidOperationException>(() => app.AddStaticPages(typeof(PostPage).Assembly));
+            Assert.Throws<InvalidOperationException>(() => app.AddPages());
+            Assert.Throws<InvalidOperationException>(() => app.AddPages(typeof(PostPage).Assembly));
             Assert.Throws<InvalidOperationException>(() => app.UseDefaultLayout<MainLayout>());
-            Assert.Throws<InvalidOperationException>(() => app.UseNotFoundPage<NotFoundPage>());
+            Assert.Throws<InvalidOperationException>(() => app.AddNotFoundPage<NotFoundPage>());
             Assert.Throws<InvalidOperationException>(() => app.AddPages<PostPage>(static _ => []));
             Assert.Throws<InvalidOperationException>(() => app.AddSitemap());
         }

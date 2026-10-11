@@ -48,7 +48,7 @@ public sealed class PackagedSiteFixture : IAsyncLifetime
             using Kiji;
             var site = StaticSite.Create(args);
             site.Info = new() { Name = "SDK regression", BaseUrl = new Uri("https://example.test/kiji/") };
-            site.AddStaticPages();
+            site.AddPages();
             await site.RunAsync();
             """);
         Write(site, "Home.razor", "@page \"/\"\n<h1>SDK regression</h1>" + (assets ? "\n<a id=\"asset\" href=\"@Assets[\"app.js\"]\">asset</a>\n<Microsoft.AspNetCore.Components.ImportMap />" : ""));

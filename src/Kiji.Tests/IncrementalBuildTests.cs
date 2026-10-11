@@ -432,8 +432,8 @@ public sealed class IncrementalBuildTests : IDisposable
         app.UseMarkdownContent<FrontMatter>();
         app.UseContentSource<Post>(static _ => []);
         app.UseDefaultLayout<MainLayout>();
-        app.AddStaticPages(typeof(TestArticleContents).Assembly);
-        app.UseNotFoundPage<NotFoundPage>();
+        app.AddPages(typeof(TestArticleContents).Assembly);
+        app.AddNotFoundPage<NotFoundPage>();
 
         app.AddPages<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
@@ -460,8 +460,8 @@ public sealed class IncrementalBuildTests : IDisposable
             configure: options => options.Directory = Path.Combine("contents", notesDirectory));
         app.UseContentSource<Post>(static _ => []);
         app.UseDefaultLayout<MainLayout>();
-        app.AddStaticPages(typeof(TestArticleContents).Assembly);
-        app.UseNotFoundPage<NotFoundPage>();
+        app.AddPages(typeof(TestArticleContents).Assembly);
+        app.AddNotFoundPage<NotFoundPage>();
         app.AddPages<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
         app.AddPages<MarkdownPostTestPage>(static services => services

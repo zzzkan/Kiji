@@ -8,4 +8,41 @@ updates:
       timezone: Asia/Tokyo
     cooldown:
       default-days: 3
-    open-pull-requests-limit: 1
+    # One stalled update must not block all other packages.
+    open-pull-requests-limit: 10
+    groups:
+      test-framework:
+        patterns:
+          - xunit.v3
+          - Microsoft.Testing.Platform
+      skiasharp:
+        patterns:
+          - SkiaSharp
+          - SkiaSharp.*
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: daily
+      time: "02:00"
+      timezone: Asia/Tokyo
+    cooldown:
+      default-days: 3
+    open-pull-requests-limit: 5
+    groups:
+      actions-minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: dotnet-sdk
+    directory: "/"
+    schedule:
+      interval: daily
+      time: "02:00"
+      timezone: Asia/Tokyo
+    cooldown:
+      default-days: 3
+    open-pull-requests-limit: 5

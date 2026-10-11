@@ -22,12 +22,12 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # MinVer derives the package version from git tags and history.
           fetch-depth: 0
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
 
@@ -39,7 +39,7 @@ jobs:
 
       - name: Upload package regression logs
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: package-tests-${{ matrix.os }}
           path: artifacts/package-tests/**/*.log
@@ -55,7 +55,7 @@ jobs:
         run: dotnet publish docs -c Release --no-build -o docs/dist
 
       # Upload once per PR run; Docs Deploy waits for the entire CI matrix.
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request'
         with:
           name: docs-site

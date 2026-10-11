@@ -18,14 +18,24 @@ together in plain HTML, ready for any static host.
 
 ## Why Kiji
 
-- **Your .NET workflow.** Razor pages, layouts, and C# models. Preview with
-  `dotnet watch`; ship with `dotnet publish`.
-- **Publishing essentials included.** Typed Markdown, responsive WebP images,
-  RSS, and sitemaps in one package.
-- **Work on what changed.** Live browser reloads while you write; unchanged pages
-  can be reused when you publish.
-- **Make it yours.** Customize Markdown, transform HTML, or bring your own content
-  source and image processor.
+### 🧰 Your .NET workflow
+
+Razor pages, layouts, and C# models. Preview with `dotnet watch`; ship with
+`dotnet publish`.
+
+### 📦 Publishing essentials included
+
+Typed Markdown, responsive WebP images, RSS, and sitemaps in one package.
+
+### ⚡ Work on what changed
+
+Live browser reloads while you write; unchanged pages can be reused when you publish.
+
+### 🔄 Make it yours
+
+Customize Markdown, transform HTML, or bring your own content source and image processor.
+
+### 🔕 Static by design
 
 The output needs no .NET server or Blazor runtime. Use JavaScript for browser
 interactivity; Razor event handlers such as `@onclick` are not included.

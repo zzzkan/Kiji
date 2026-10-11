@@ -1,5 +1,4 @@
 version: 2
-# See README.md for coverage, review steps, and dependencies checked manually.
 updates:
   - package-ecosystem: nuget
     directory: "/"

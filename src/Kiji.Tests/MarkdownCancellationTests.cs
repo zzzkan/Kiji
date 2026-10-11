@@ -68,14 +68,25 @@ public sealed class MarkdownCancellationTests
         }
     }
 
-    [Fact]
-    public async Task CanceledSharedRender_CanRetry()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FailedSharedRender_RetriesAndCachesSuccess(bool canceled)
     {
         var calls = 0;
         var content = Content(_ => ++calls == 1
-            ? Task.FromCanceled<string>(new CancellationToken(true))
+            ? canceled ? Task.FromCanceled<string>(new CancellationToken(true))
+                : Task.FromException<string>(new IOException("temporary failure"))
             : Task.FromResult("retry"));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => content.RenderAsync().AsTask());
+        if (canceled)
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => content.RenderAsync().AsTask());
+        }
+        else
+        {
+            await Assert.ThrowsAsync<IOException>(() => content.RenderAsync().AsTask());
+        }
+        Assert.Equal("retry", await content.RenderAsync());
         Assert.Equal("retry", await content.RenderAsync());
         Assert.Equal(2, calls);
     }

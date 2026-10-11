@@ -15,7 +15,7 @@ internal static class StaticPagePlanner
     /// <returns>A read-only list of planned pages ordered by their output relative path.</returns>
     public static IReadOnlyList<PageRenderRequest> PlanPages(
         IReadOnlyList<PageDiscovery.DiscoveredPage> pages,
-        IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyDictionary<string, object?>>> dynamicRoutesByPage)
+        IReadOnlyDictionary<string, List<IReadOnlyDictionary<string, object?>>> dynamicRoutesByPage)
     {
         ArgumentNullException.ThrowIfNull(pages);
         ArgumentNullException.ThrowIfNull(dynamicRoutesByPage);
@@ -32,11 +32,10 @@ internal static class StaticPagePlanner
             plannedPages.AddRange(CreateDynamicPages(page, dynamicRoutesByPage[page.SourceIdentifier]));
         }
 
-        var orderedPages = plannedPages
-            .OrderBy(static page => page.OutputRelativePath, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        ValidateUniqueOutputPaths(orderedPages);
-        return orderedPages;
+        plannedPages.Sort(static (left, right) => StringComparer.OrdinalIgnoreCase.Compare(
+            left.OutputRelativePath, right.OutputRelativePath));
+        ValidateUniqueOutputPaths(plannedPages);
+        return plannedPages;
     }
 
     private static PageRenderRequest CreateStaticPage(PageDiscovery.DiscoveredPage page)
@@ -51,11 +50,11 @@ internal static class StaticPagePlanner
             outputRelativePath);
     }
 
-    private static List<PageRenderRequest> CreateDynamicPages(
+    private static IEnumerable<PageRenderRequest> CreateDynamicPages(
         PageDiscovery.DiscoveredPage page,
         IReadOnlyList<IReadOnlyDictionary<string, object?>> matches)
     {
-        return [.. matches.Select(match =>
+        foreach (var match in matches)
         {
             var routeValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var name in page.PageDefinition.ParameterNames)
@@ -79,13 +78,13 @@ internal static class StaticPagePlanner
                 routeValues.Add(name, value);
             }
             var (routePath, outputRelativePath) = page.PageDefinition.BindPath(routeValues);
-            return new PageRenderRequest(
+            yield return new PageRenderRequest(
                 page.SourceIdentifier,
                 page.ComponentType,
                 match,
                 routePath,
                 outputRelativePath);
-        })];
+        }
     }
 
     private static void ValidateUniqueOutputPaths(IReadOnlyList<PageRenderRequest> pages)

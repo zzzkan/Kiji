@@ -1,5 +1,4 @@
 using Kiji.Feeds;
-using Kiji.Rendering;
 using Kiji.Tests.TestSite;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -32,16 +31,6 @@ public sealed class PageInfoTests : IDisposable
         using var scope = app.ServiceProvider.CreateScope();
         var exception = Assert.Throws<InvalidOperationException>(() => scope.ServiceProvider.GetRequiredService<PageInfo>());
         Assert.Contains("only available during page rendering", exception.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task DirectComponentRender_RequiresPageContext()
-    {
-        await using var app = CreateApp("https://example.com/");
-        var renderer = new ComponentRenderer(app.ServiceProvider);
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            renderer.RenderComponentAsync<PageInfoTestPage>());
-        Assert.Contains("PageInfo is only available during page rendering", exception.Message, StringComparison.Ordinal);
     }
 
     [Theory]

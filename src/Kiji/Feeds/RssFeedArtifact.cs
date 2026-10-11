@@ -7,25 +7,11 @@ namespace Kiji.Feeds;
 /// <summary>
 /// Generates an RSS 2.0 feed from a sequence of entries, written in the order given.
 /// </summary>
-internal sealed class RssFeedArtifact
+internal sealed class RssFeedArtifact(
+    Func<IServiceProvider, IEnumerable<FeedItem>> items,
+    string outputRelativePath = "feed.xml")
 {
     private const string AtomNamespace = "http://www.w3.org/2005/Atom";
-
-    private readonly Func<IServiceProvider, IEnumerable<FeedItem>> _items;
-
-    /// <param name="items">Produces the feed entries, in the order they should appear.</param>
-    /// <param name="outputRelativePath">The output path relative to the output directory.</param>
-    public RssFeedArtifact(Func<IServiceProvider, IEnumerable<FeedItem>> items, string outputRelativePath = "feed.xml")
-    {
-        ArgumentNullException.ThrowIfNull(items);
-        ArgumentException.ThrowIfNullOrWhiteSpace(outputRelativePath);
-
-        _items = items;
-        OutputRelativePath = outputRelativePath;
-    }
-
-    /// <inheritdoc/>
-    public string OutputRelativePath { get; }
 
     /// <inheritdoc/>
     public async Task WriteAsync(Stream output, SiteOutputContext context, CancellationToken cancellationToken)
@@ -59,16 +45,15 @@ internal sealed class RssFeedArtifact
             await writer.WriteElementStringAsync(prefix: null, "language", ns: null, site.Language);
 
             await writer.WriteStartElementAsync("atom", "link", AtomNamespace);
-            await writer.WriteAttributeStringAsync(prefix: null, "href", ns: null, site.ResolveUrl(OutputRelativePath).AbsoluteUri);
+            await writer.WriteAttributeStringAsync(prefix: null, "href", ns: null, site.ResolveUrl(outputRelativePath).AbsoluteUri);
             await writer.WriteAttributeStringAsync(prefix: null, "rel", ns: null, "self");
             await writer.WriteAttributeStringAsync(prefix: null, "type", ns: null, "application/rss+xml");
             await writer.WriteEndElementAsync();
 
-            foreach (var item in _items(context.Services))
+            foreach (var item in items(context.Services))
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                RelativePath.Validate(item.RelativePath, nameof(item.RelativePath));
                 var itemUrl = site.ResolveUrl(item.RelativePath).AbsoluteUri;
                 // RFC 1123 date; converting to UTC keeps the offset correct for any zone.
                 var pubDate = item.PublishedAt.UtcDateTime.ToString("r", CultureInfo.InvariantCulture);

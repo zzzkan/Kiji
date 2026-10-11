@@ -98,13 +98,8 @@ jobs:
         uses: actions/deploy-pages@v4
 ```
 
-The workflow works without a saved build cache.
-
-To preserve Kiji's incremental output
-between runs, restore `MySite/.kiji/cache` before publishing and save it after a successful
-publish. Caching `.kiji/cache` does not necessarily make CI builds faster. Restoring and saving
-the cache also takes time, and changes may leave little output to reuse. Compare total
-job time with and without caching for your site.
+The workflow works without a saved cache. To reuse output between runs, see
+[CI caching](../incremental-builds/#cache-locations).
 
 ## Other static hosts
 

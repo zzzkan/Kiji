@@ -113,11 +113,15 @@ internal static class PageDiscovery
     /// </summary>
     internal static IReadOnlyList<DiscoveredPage> EnsureUniqueRoutes(IReadOnlyList<DiscoveredPage> pages)
     {
-        return [.. pages
-            .GroupBy(static page => page.SourceIdentifier, StringComparer.OrdinalIgnoreCase)
-            .Select(static group => group.Count() == 1
-                ? group.Single()
-                : throw new InvalidOperationException($"Multiple components declare the route template '{group.Key}'."))];
+        var routes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var page in pages)
+        {
+            if (!routes.Add(page.SourceIdentifier))
+            {
+                throw new InvalidOperationException($"Multiple components declare the route template '{page.SourceIdentifier}'.");
+            }
+        }
+        return pages;
     }
 
     /// <summary>

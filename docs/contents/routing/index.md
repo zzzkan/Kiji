@@ -118,5 +118,5 @@ app.UseNotFoundPage<NotFoundPage>();
 Kiji writes it as `404.html` at the output root. The component still needs one `@page`
 route, but do not also register it with `AddPages`.
 
-See the [API reference](../api-reference/#pages-layouts-and-page-services) for registration
+See the [API reference](../api-reference/#pages) for registration
 timing and the full method contracts.

@@ -141,6 +141,20 @@ public sealed class ContentDictionaryTests
     }
 
     [Fact]
+    public async Task Dictionary_CanReadTheSameModelFromAnotherSite()
+    {
+        await using var source = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
+        source.Info = TestArticleContents.CreateSiteInfo();
+        source.UseContentSource<Item>(static _ => [new("a", 1)]);
+        await using var destination = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
+        destination.Info = TestArticleContents.CreateSiteInfo();
+        destination.UseContentSource<Item>(_ => [.. source.ServiceProvider.GetRequiredService<ContentDictionary<Item>>().Values]);
+
+        var item = Assert.Single(destination.ServiceProvider.GetRequiredService<ContentDictionary<Item>>());
+        Assert.Equal("a", item.Value.Slug);
+    }
+
+    [Fact]
     public void Dictionary_CircularDerivation_ThrowsNamingThePath()
     {
         var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));

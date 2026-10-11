@@ -119,8 +119,8 @@ dictionary, look up the item by the `ContentKey` supplied through `AddPages`, an
 }
 ```
 
-With the projected `Post` model above, replace the injection with
-`@inject ContentDictionary<Post> Posts`.
+With the projected `Post` model above, inject `ContentDictionary<Post>` and render
+`await Posts[ContentKey].Content.RenderAsync()`.
 
 The returned string contains HTML and must be rendered as `MarkupString`. Only render
 trusted Markdown, or add your own sanitization step before displaying it.

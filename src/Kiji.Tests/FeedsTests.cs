@@ -64,8 +64,6 @@ public sealed class FeedsTests
     {
         var artifact = new RssFeedArtifact(static _ => [], outputRelativePath: "rss/all.xml");
 
-        Assert.Equal("rss/all.xml", artifact.OutputRelativePath);
-
         var document = XDocument.Parse(await WriteFeedAsync(artifact, CreateContext()));
 
         XNamespace atom = "http://www.w3.org/2005/Atom";

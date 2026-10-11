@@ -14,8 +14,9 @@ public static class RssFeedStaticSiteExtensions
         string path = "feed.xml")
     {
         ArgumentNullException.ThrowIfNull(app);
+        ArgumentNullException.ThrowIfNull(items);
 
         var artifact = new RssFeedArtifact(items, path);
-        return app.AddArtifact(artifact.OutputRelativePath, artifact.WriteAsync, preserveUnchangedOutput: true);
+        return app.AddArtifact(path, artifact.WriteAsync, preserveUnchangedOutput: true);
     }
 }

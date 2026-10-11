@@ -1,31 +1,17 @@
 ---
 title: API reference
-description: Every public Kiji type, member, default, and execution contract.
+description: Configure pages, content, images, and generated files.
 order: 100
 ---
 
-This page covers Kiji's complete public site-authoring API. All `StaticSite` registration
-methods return the same site instance and may be chained. Configure the site before
-`RunAsync`; execution makes its configuration read-only.
+Configure the site before `RunAsync`. All `StaticSite` registration methods return
+the site and may be chained.
 
 - [Site setup](#site-setup)
-  - [StaticSite lifecycle](#staticsite-lifecycle)
-  - [SiteInfo](#siteinfo)
 - [Pages and rendering](#pages-and-rendering)
-  - [Pages](#pages)
-  - [Layout](#layout)
-  - [Page service](#page-service)
-  - [Page metadata](#page-metadata)
-  - [Static assets](#static-assets)
 - [Content and images](#content-and-images)
-  - [Content sources and ContentDictionary](#content-sources-and-contentdictionary)
-  - [Markdown APIs](#markdown-apis)
-  - [Image processing](#image-processing)
 - [Build inputs and controls](#build-inputs-and-controls)
 - [Generated files](#generated-files)
-  - [Feeds](#feeds)
-  - [Sitemaps](#sitemaps)
-  - [Custom artifacts](#custom-artifacts)
 
 ## Site setup
 
@@ -46,23 +32,19 @@ return await app.RunAsync();
 
 #### `StaticSite.Create(string[] args)`
 
-Creates one site. `args` cannot be null and are forwarded to ASP.NET Core configuration
-when the development server runs. Each `StaticSite` instance can execute once.
-Kiji’s MSBuild targets supply the project directory through runtimeconfig. Missing or invalid
-project metadata throws; rebuild the site with the targets imported before running it.
+Creates a site rooted at its project directory. `args` are forwarded to ASP.NET Core
+configuration during development, for example `--urls`. Build the project with Kiji's
+targets before running the executable.
 
 #### `StaticSite.Info`
 
-Gets or sets the required `SiteInfo`. Reading it before assignment throws. It may be
-reassigned until execution starts; setting it afterward throws.
+Required site metadata. Assign it before execution.
 
 #### `StaticSite.RunAsync(CancellationToken cancellationToken = default)`
 
-Starts the development server during `dotnet watch`, and generates the
-site when invoked by Kiji's `dotnet publish` targets. Await it from the entry point and
-return its process exit code. The method freezes configuration, owns the resources created
-for the run, and disposes them on success, failure, or cancellation. Calling it more than
-once throws.
+Serves during `dotnet watch` and generates the site during `dotnet publish`.
+Await it and return its exit code. A site can run once; configuration becomes read-only
+when execution starts, and Kiji disposes its resources when the run ends.
 
 ### SiteInfo
 
@@ -152,12 +134,8 @@ writers.
 
 #### PageInfo
 
-Inject `Kiji.PageInfo` to read the page's public URL. Kiji creates one immutable instance
-per render and shares it with the page, layouts, child components, and page services.
-
-| Property  | Behavior                                                                                                                  |
-| --------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `Uri Url` | Read-only absolute public URL, resolved from `SiteInfo.BaseUrl` and the page's route, including the deployment base path. |
+Inject `Kiji.PageInfo` during rendering. Its read-only `Uri Url` is the page's public
+URL, including the deployment base path.
 
 ```razor
 @inject PageInfo Page
@@ -184,9 +162,8 @@ inside the generated document `<head>`:
 </StaticHeadContent>
 ```
 
-It renders no markup at its position in the body. All instances append in registration
-order. Updating an instance preserves its position; removing it removes only its own
-contribution. Content is neither replaced nor automatically deduplicated.
+All instances append to the head in registration order, with no markup at their position
+in the body. Updating or removing one affects only its contribution. Tags are not deduplicated.
 
 Blazor's `Microsoft.AspNetCore.Components.Web.PageTitle`, `HeadContent`, and `HeadOutlet`
 are unsupported and throw an actionable error during rendering (publish and development).
@@ -235,31 +212,18 @@ changes refresh the content during development.
 
 #### `ContentDictionary<T>`
 
-`ContentDictionary<T>` implements `IReadOnlyDictionary<string, T>` and is resolved through
-dependency injection. It has no public constructor. Keys are case-insensitive opaque
-lookup values. Markdown keys are source-relative paths using `/`, independent of the
-checkout directory. Custom sources with explicit entries supply their own stable IDs.
-Keys do not determine public URLs.
+Inject this `IReadOnlyDictionary<string, T>` to access `Count`, `Keys`, `Values`, the
+indexer, `ContainsKey`, `TryGetValue`, and enumeration. Keys are case-insensitive;
+enumeration preserves source order. Markdown keys are source-relative paths using `/`;
+explicit custom entries use their supplied IDs. Keys do not determine public URLs.
 
-| Member                                                | Behavior                                                                                     |
-| ----------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `int Count`                                           | Number of items.                                                                             |
-| `IEnumerable<string> Keys`                            | Keys in source order.                                                                        |
-| `IEnumerable<T> Values`                               | Items in source order.                                                                       |
-| `T this[string key]`                                  | Returns the case-insensitive match; throws `KeyNotFoundException` when absent.               |
-| `bool ContainsKey(string key)`                        | Returns whether the key exists; a null key throws.                                           |
-| `bool TryGetValue(string key, out T? item)`           | Performs a case-insensitive lookup; returns `false` and null when absent. A null key throws. |
-| `IEnumerator<KeyValuePair<string,T>> GetEnumerator()` | Enumerates entries in source order; non-generic enumeration uses the same entries.           |
-
-During a tracked page render, a successful keyed lookup observes that item. Inspecting the
-dictionary through `Count`, `Keys`, `Values`, enumeration, or a missing lookup observes
-the collection's order, membership, and every item digest. A body-only edit can therefore
-invalidate a collection reader even when its count and keys stay the same. Reads from
-layouts and child components are dependencies of the page too.
+A successful lookup tracks one item. Enumeration, `Count`, `Keys`, `Values`, and missing
+lookups track the collection. Layout and child-component reads count too.
+See [page dependencies](../incremental-builds/#understand-page-dependencies).
 
 ### Markdown APIs
 
-The public Markdown extensions are declared by `Kiji.Markdown.MarkdownStaticSiteExtensions`.
+Import `Kiji.Markdown` to use these extensions.
 
 #### `UseMarkdownContent<TFrontMatter>(Action<MarkdownOptions>? configure = null)`
 
@@ -285,22 +249,14 @@ The configure callback receives a new options instance for that registration.
 | `ConfigureYaml(Action<DeserializerBuilder>)`         | Adds a non-null YamlDotNet configuration after the camel-case and ignore-unmatched defaults. Calls run in registration order.   |
 | `AddHtmlPostProcessor(Func<string,string>)`          | Adds a non-null synchronous HTML transformation. Transformations run in registration order, each receiving the previous result. |
 
-The first processed local Markdown image uses `loading="eager"` so its request can
-start before layout. Its `sizes` uses the viewport width capped at the largest
-variant, which may overestimate the display width within a narrower content area.
-Subsequent images use `loading="lazy"` and `sizes="auto, ..."`: supporting browsers
-select a variant from the actual rendered width without site-specific configuration.
-Browsers without auto-size support retain the capped viewport fallback. All images
-use `decoding="async"`, and original dimensions reserve space while they load.
-
-Prioritizing the first image is a heuristic; Markdown order does not identify
-above-the-fold images. For finer control, use explicit HTML or Razor markup,
-with appropriate `loading`, `fetchpriority`, and `sizes` attributes. Such markup,
-remote images, and site-root images are not processed by the Markdown image pipeline.
+Local images get responsive variants and dimensions to reserve layout space. The first
+loads eagerly; later images load lazily and use automatic sizing where supported, with
+a viewport fallback. Use explicit HTML or Razor for finer control. Remote images,
+site-root images, and explicit markup are not processed.
 
 #### `MarkdownContent<TFrontMatter>`
 
-This type has no public constructor. Kiji creates it for a source file.
+Kiji creates one instance per source file.
 
 | Member                                                                         | Behavior                                                                                                                                                                  |
 | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -392,8 +348,7 @@ dependencies shared by all pages and watches declared paths in development. See 
 
 ### Feeds
 
-The public feed types are in `Kiji.Feeds`; `AddRssFeed` is declared by
-`RssFeedStaticSiteExtensions`.
+Import `Kiji.Feeds`.
 
 #### `AddRssFeed(Func<IServiceProvider,IEnumerable<FeedItem>> items, string path = "feed.xml")`
 
@@ -407,18 +362,14 @@ absolute URLs come from `SiteInfo`.
 Construct an item with
 `FeedItem(string Title, string Description, DateTimeOffset PublishedAt, string RelativePath)`.
 
-| Property                     | Behavior                                                                                                                                         |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `string Title`               | Required entry title.                                                                                                                            |
-| `string Description`         | Required entry description.                                                                                                                      |
-| `DateTimeOffset PublishedAt` | Written as the RSS publication time in UTC.                                                                                                      |
-| `string RelativePath`        | Combined with `SiteInfo.BaseUrl` for the link and GUID. It must be site-relative: no leading slash, absolute URI, backslash, query, or fragment. |
-
-Null titles or descriptions and invalid relative paths throw during construction.
+The four arguments become read-only properties. Title and description must be non-null;
+publication time is written in UTC. `RelativePath` supplies the link and GUID under
+`SiteInfo.BaseUrl`: use a site-relative path with no leading slash, absolute URI,
+backslash, query, or fragment. Use `""` for the home page.
 
 ### Sitemaps
 
-`AddSitemap` is declared by `Kiji.Sitemaps.SitemapStaticSiteExtensions`:
+Import `Kiji.Sitemaps`:
 
 ```csharp
 app.AddSitemap(

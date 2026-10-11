@@ -1,51 +1,30 @@
-﻿@page "/"
+@page "/"
 @inject SiteInfo Site
 
 <PageHead Title="Home" Description="@Site.Description" />
 
 <div class="hero">
     <h1>Kiji</h1>
-    <p class="lede">
-        A static site generator for .NET that turns Razor components into static HTML.
-    </p>
+    <p class="lede">Write Razor. Publish a purely static site.</p>
 </div>
 
 <section class="pitch">
     <article>
-        <h2><span class="heading-emoji" aria-hidden="true">🧰</span><span>Build with the .NET tools you know</span></h2>
-        <p>
-            Pages are Razor components with familiar routes, layouts, dependency injection,
-            and parameters. Define the site in one <code>Program.cs</code> with
-            <code>Create</code>, <code>Add*</code>, <code>Use*</code>, and <code>RunAsync</code>.
-        </p>
+        <h2><span class="heading-emoji" aria-hidden="true">🧰</span><span>Your .NET workflow</span></h2>
+        <p>Razor pages, layouts, and C# models. Preview with <code>dotnet watch</code>;
+            ship with <code>dotnet publish</code>.</p>
     </article>
-
     <article>
-        <h2><span class="heading-emoji" aria-hidden="true">📦</span><span>Get publishing essentials in one
-            package</span></h2>
-            <p>
-                Markdown with YAML front matter, responsive WebP image optimization, RSS,
-                sitemaps, and a live-reloading development server work together without a
-                collection of extensions to assemble.
-            </p>
-        </article>
-
-        <article>
-            <h2><span class="heading-emoji" aria-hidden="true">⚡</span><span>Fast builds, focused rebuilds</span></h2>
-            <p>
-                Kiji renders Razor components directly in process and generates pages in parallel.
-                Dependency tracking lets subsequent publishes reuse valid output, while on-demand
-                rendering keeps previews focused on the pages you visit.
-            </p>
-        </article>
-
-        <article>
-            <h2><span class="heading-emoji" aria-hidden="true">🔄</span><span>Develop quickly and adapt when needed</span>
-            </h2>
-            <p>
-                <code>dotnet watch</code> reloads the browser as content changes and shares its
-                rendering path with publishing. Customize Markdown, HTML processing, and image
-                processing as your site grows.
-            </p>
-        </article>
-    </section>
+        <h2><span class="heading-emoji" aria-hidden="true">📦</span><span>Publishing essentials included</span></h2>
+        <p>Typed Markdown, responsive WebP images, RSS, and sitemaps in one package.
+            The output needs no .NET server or Blazor runtime.</p>
+    </article>
+    <article>
+        <h2><span class="heading-emoji" aria-hidden="true">⚡</span><span>Work on what changed</span></h2>
+        <p>Live browser reloads while you write. Unchanged pages can be reused when you publish.</p>
+    </article>
+    <article>
+        <h2><span class="heading-emoji" aria-hidden="true">🔄</span><span>Make it yours</span></h2>
+        <p>Customize Markdown, transform HTML, or bring your own content source and image processor.</p>
+    </article>
+</section>

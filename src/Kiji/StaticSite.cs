@@ -413,7 +413,7 @@ public sealed class StaticSite
         var snapshot = CreateSnapshot();
         var renderer = GetRenderer();
 
-        StaticSiteGenerator.ValidateNoStaticFileCollisions(options, snapshot.Pages, assets);
+        var reservedPaths = CreateReservedArtifactPaths(options, snapshot, assets);
         phases.Mark(BuildPhaseTimer.Snapshot);
 
         var planner = new IncrementalBuildPlanner(
@@ -470,7 +470,7 @@ public sealed class StaticSite
             planner.OutputStampsValid);
         phases.Mark(BuildPhaseTimer.Render);
 
-        var artifacts = await GenerateArtifactsAsync(options, snapshot, assets, cancellationToken);
+        var artifacts = await GenerateArtifactsAsync(options, snapshot, reservedPaths, cancellationToken);
         phases.Mark(BuildPhaseTimer.Artifacts);
 
         // Input verification is independent of output reconciliation and entry
@@ -531,7 +531,7 @@ public sealed class StaticSite
     /// <remarks>The address comes from ASP.NET Core configuration, defaulting to <c>http://127.0.0.1:8080</c>.</remarks>
     internal async Task ServeAsync(CancellationToken cancellationToken = default)
     {
-        var (devServer, web) = await StartDevServerAsync(cancellationToken);
+        var (devServer, web) = await StartDevServerAsync(_args, cancellationToken);
         await using (devServer)
         {
             await web.WaitForShutdownAsync(cancellationToken);
@@ -550,12 +550,6 @@ public sealed class StaticSite
         {
             await _services.DisposeAsync();
         }
-    }
-
-    internal Task<(DevServer DevServer, WebApplication WebApplication)> StartDevServerAsync(
-        CancellationToken cancellationToken)
-    {
-        return StartDevServerAsync(_args, cancellationToken);
     }
 
     /// <param name="args">
@@ -588,10 +582,12 @@ public sealed class StaticSite
         }
     }
 
-    internal Task<string> RenderPageAsync(PageRenderRequest request, CancellationToken cancellationToken,
+    internal async Task<string> RenderPageAsync(PageRenderRequest request, CancellationToken cancellationToken,
         SharedRenderLifetime? sharedRenders = null)
     {
-        return RenderPageAsync(GetRenderer(), request, sharedRenders, cancellationToken);
+        using var output = new StringWriter();
+        await RenderPageAsync(GetRenderer(), request, output, dependencies: null, cancellationToken, sharedRenders);
+        return output.ToString();
     }
 
     internal void InvalidateContent()
@@ -605,7 +601,7 @@ public sealed class StaticSite
         FreezeConfiguration();
         // Planning expands route factories, which read content. If nothing has settled
         // the options yet, fall back to paths that cannot be mistaken for a deliverable.
-        UseOptions(Paths.ResolveForDevelopment());
+        _activeOptions ??= Paths.ResolveForDevelopment();
         EnsureServices();
 
         var snapshotPhases = new BuildPhaseTimer();
@@ -615,27 +611,29 @@ public sealed class StaticSite
             scanned.AddRange(PageDiscovery.FromAssembly(assembly));
         }
 
-        foreach (var componentType in _routeRegistrations.Select(static registration => registration.ComponentType).Distinct())
-        {
-            scanned.Add(FindDynamicPage(PageDiscovery.FromType(componentType), componentType));
-        }
+        var dynamicPages = _routeRegistrations.Select(static registration => registration.ComponentType)
+            .Distinct().ToDictionary(static type => type,
+                static type => FindDynamicPage(PageDiscovery.FromType(type), type));
+        scanned.AddRange(dynamicPages.Values);
 
         var discovered = PageDiscovery.EnsureUniqueRoutes(ApplyNotFoundOverride(scanned));
 
         snapshotPhases.Mark(BuildPhaseTimer.Discovery);
 
-        var dynamicRoutes = new Dictionary<string, IReadOnlyList<IReadOnlyDictionary<string, object?>>>(StringComparer.OrdinalIgnoreCase);
+        var dynamicRoutes = new Dictionary<string, List<IReadOnlyDictionary<string, object?>>>(StringComparer.OrdinalIgnoreCase);
         foreach (var registration in _routeRegistrations)
         {
-            var page = FindDynamicPage(discovered, registration.ComponentType);
+            var page = dynamicPages[registration.ComponentType];
             var entries = registration.CreateEntries();
             snapshotPhases.Mark(BuildPhaseTimer.RouteEntries);
             ValidateRouteEntries(page, entries);
             snapshotPhases.Mark(BuildPhaseTimer.RouteValidation);
 
-            dynamicRoutes[page.SourceIdentifier] = dynamicRoutes.TryGetValue(page.SourceIdentifier, out var existing)
-                ? [.. existing, .. entries]
-                : entries;
+            if (!dynamicRoutes.TryGetValue(page.SourceIdentifier, out var combined))
+            {
+                dynamicRoutes.Add(page.SourceIdentifier, combined = []);
+            }
+            combined.AddRange(entries);
         }
 
         // Expanding a route factory is where content is first read, so this is where
@@ -678,14 +676,13 @@ public sealed class StaticSite
         PageDiscovery.DiscoveredPage page,
         IReadOnlyList<IReadOnlyDictionary<string, object?>> entries)
     {
-        var routeParameterNames = page.PageDefinition.ParameterNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var routeParameterNames = page.PageDefinition.ParameterNames;
         var declaredParameters = PageDiscovery.Parameters(page.ComponentType);
 
         foreach (var entry in entries)
         {
-            var suppliedNames = entry.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
             var missing = routeParameterNames
-                .Where(name => !suppliedNames.Contains(name))
+                .Where(name => !entry.ContainsKey(name))
                 .OrderBy(static name => name, StringComparer.Ordinal)
                 .ToArray();
             if (missing.Length > 0)
@@ -740,14 +737,6 @@ public sealed class StaticSite
 
         return [.. discovered.Where(page => page.ComponentType != _notFoundComponentType),
             new PageDiscovery.DiscoveredPage(overridden.SourceIdentifier, _notFoundComponentType, overridden)];
-    }
-
-    private async Task<string> RenderPageAsync(ComponentRenderer renderer, PageRenderRequest request,
-        SharedRenderLifetime? sharedRenders, CancellationToken cancellationToken)
-    {
-        using var output = new StringWriter();
-        await RenderPageAsync(renderer, request, output, dependencies: null, cancellationToken, sharedRenders);
-        return output.ToString();
     }
 
     private async Task RenderPageAsync(
@@ -816,7 +805,8 @@ public sealed class StaticSite
             ServiceProvider);
     }
 
-    private async Task<IReadOnlyList<string>> GenerateArtifactsAsync(ResolvedSitePaths options, SiteSnapshot snapshot, IReadOnlyList<StaticAsset> assets, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<string>> GenerateArtifactsAsync(ResolvedSitePaths options, SiteSnapshot snapshot,
+        Dictionary<string, string> reservedPaths, CancellationToken cancellationToken)
     {
         if (_artifacts.Count == 0)
         {
@@ -825,7 +815,6 @@ public sealed class StaticSite
 
         var artifactRelativePaths = new List<string>(_artifacts.Count);
         var context = CreateOutputContext(snapshot);
-        var reservedPaths = CreateReservedArtifactPaths(options, snapshot, assets);
 
         foreach (var artifact in _artifacts)
         {
@@ -868,21 +857,15 @@ public sealed class StaticSite
                 options.OutputDirectory,
                 relativePath,
                 "Static file output path");
-            reservedPaths.TryAdd(outputPath, "a static file output path");
+            if (reservedPaths.TryGetValue(outputPath, out var existing) && existing == "a generated page output path")
+            {
+                throw new InvalidOperationException(
+                    $"Static file '{relativePath}' collides with a generated page output path. Rename the static file or change the page route.");
+            }
+            reservedPaths[outputPath] = "a static file output path";
         }
 
         return reservedPaths;
-    }
-
-    /// <summary>
-    /// Settles the paths the running command works against. First caller wins:
-    /// <see cref="ResolvedSitePaths"/> is a singleton, so what is fixed here is what every
-    /// loader and renderer sees for the rest of the process.
-    /// </summary>
-    private ResolvedSitePaths UseOptions(ResolvedSitePaths options)
-    {
-        _activeOptions ??= options;
-        return _activeOptions;
     }
 
     private static IReadOnlyDictionary<string, object?> ConvertParameters(object values)
@@ -900,7 +883,7 @@ public sealed class StaticSite
                 "This StaticSite has already settled its paths. Create a new app to use a different output directory or switch between publishing and serving.");
         }
 
-        return UseOptions(options);
+        return _activeOptions = options;
     }
 
     /// <summary>
@@ -910,7 +893,7 @@ public sealed class StaticSite
     internal void UsePlanningOptions()
     {
         FreezeConfiguration();
-        UseOptions(Paths.ResolveForDevelopment());
+        _activeOptions ??= Paths.ResolveForDevelopment();
     }
 
     private void EnsureServices()

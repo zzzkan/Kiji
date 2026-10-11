@@ -11,18 +11,15 @@ namespace Kiji.Hosting;
 internal sealed class ContentRuntime
 {
     internal Generation.DependencyCatalog Dependencies { get; } = new();
-    private readonly List<Action<IServiceCollection>> _registrations = [];
-    private readonly HashSet<Type> _registeredElementTypes = [];
+    private readonly Dictionary<Type, Action<IServiceCollection>> _registrations = [];
     private readonly ConcurrentDictionary<object, object> _materialized = new();
     private readonly Lock _materializationLock = new();
     private IServiceProvider? _services;
 
     // A loader may resolve another dictionary (a tag list derived from posts, say),
-    // so materialization nests. Tracking the chain turns a cycle into a named error
-    // instead of unbounded recursion. Per-thread because a materialization runs to
-    // completion on the thread that started it.
-    [ThreadStatic]
-    private static List<string>? _materializing;
+    // so materialization nests under the reentrant lock. Track dictionary instances
+    // within this site; display names need not be unique across types or sites.
+    private readonly List<object> _materializing = [];
 
     /// <summary>
     /// Registers a dictionary for injection. The element type is its identity —
@@ -32,18 +29,16 @@ internal sealed class ContentRuntime
     internal void Register<T>(Func<ContentDictionary<T>> createDictionary)
         where T : class
     {
-        if (!_registeredElementTypes.Add(typeof(T)))
+        if (!_registrations.TryAdd(typeof(T), services => services.AddSingleton(createDictionary())))
         {
             throw new InvalidOperationException(
                 $"A content dictionary of type '{typeof(T).Name}' is already registered. Each one is identified by its element type, so declare a distinct model type per source.");
         }
-
-        _registrations.Add(services => services.AddSingleton(createDictionary()));
     }
 
     internal void ApplyRegistrations(IServiceCollection services)
     {
-        foreach (var registration in _registrations)
+        foreach (var registration in _registrations.Values)
         {
             registration(services);
         }
@@ -92,18 +87,16 @@ internal sealed class ContentRuntime
             ?? throw new InvalidOperationException(
                 "Content cannot be materialized before the site's services have been initialized.");
 
-        var name = DescribeHandle(handle);
-        var chain = _materializing ??= [];
-        if (chain.Contains(name, StringComparer.Ordinal))
+        if (_materializing.Contains(handle))
         {
             // Thrown before pushing, so the outer frames' finally blocks unwind the
             // chain as this propagates. Clearing it here would leave them popping an
             // empty list.
             throw new InvalidOperationException(
-                $"Content dictionaries form a cycle: {string.Join(" → ", chain.Append(name))}. A loader cannot depend, directly or indirectly, on the dictionary it is building.");
+                $"Content dictionaries form a cycle: {string.Join(" → ", _materializing.Append(handle).Select(DescribeHandle))}. A loader cannot depend, directly or indirectly, on the dictionary it is building.");
         }
 
-        chain.Add(name);
+        _materializing.Add(handle);
         try
         {
             var materialized = factory(services);
@@ -112,7 +105,7 @@ internal sealed class ContentRuntime
         }
         finally
         {
-            chain.RemoveAt(chain.Count - 1);
+            _materializing.RemoveAt(_materializing.Count - 1);
         }
     }
 

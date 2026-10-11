@@ -92,25 +92,4 @@ internal static class StaticSiteGenerator
         return new RenderedPage(pageRequest, outputHash, written, writer.ToArray());
     }
 
-    internal static void ValidateNoStaticFileCollisions(ResolvedSitePaths options, IReadOnlyList<PageRenderRequest> pageRequests, IReadOnlyList<Kiji.Assets.StaticAsset> assets)
-    {
-        var pageOutputPaths = pageRequests
-            .Select(request => OutputPathValidator.ResolveUnderRoot(
-                options.OutputDirectory,
-                request.OutputRelativePath,
-                "Page output path"))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var file in assets)
-        {
-            var relativePath = file.Target;
-            var staticOutputPath = Path.GetFullPath(Path.Combine(options.OutputDirectory, relativePath));
-            if (pageOutputPaths.Contains(staticOutputPath))
-            {
-                throw new InvalidOperationException(
-                    $"Static file '{relativePath}' collides with a generated page output path. Rename the static file or change the page route.");
-            }
-        }
-    }
-
 }

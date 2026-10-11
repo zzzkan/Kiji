@@ -38,15 +38,4 @@ public sealed class MarkdownFrontMatterParserTests
                 MarkdownFrontMatterParser.CreateDeserializer(null)));
     }
 
-    [Fact]
-    public void ParseContentAndBody_ExtractsBothFromOneDelimiterScan()
-    {
-        var parsed = MarkdownFrontMatterParser.ParseContentAndBody<FrontMatter>(
-            "---\r\ntitle: Combined\r\n---\r\n\r\nBody.\r\n",
-            MarkdownFrontMatterParser.CreateDeserializer(null));
-
-        Assert.Equal("Combined", parsed.FrontMatter.Title);
-        Assert.Equal("Body.\r\n", parsed.Body);
-    }
-
 }

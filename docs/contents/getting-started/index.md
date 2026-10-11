@@ -8,8 +8,7 @@ This guide starts with an empty .NET project and ends with a static site that ha
 home page, a Markdown-backed page, and a stylesheet. Kiji is a library rather than a
 separate CLI, so you will use the usual `dotnet` commands throughout.
 
-Each file example shows its complete contents at that step. Highlighted lines mark
-additions or changes to an existing file.
+Razor and C# examples show complete files. Highlighted lines mark additions or changes.
 
 ## Create the project
 
@@ -27,19 +26,6 @@ Open `MySite.csproj` and change its first line to use the Razor SDK:
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk.Razor">
-
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Kiji" Version="0.1.0" />
-  </ItemGroup>
-
-</Project>
 ```
 
 ## Build the smallest site

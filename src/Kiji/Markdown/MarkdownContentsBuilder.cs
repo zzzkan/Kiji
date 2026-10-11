@@ -17,13 +17,12 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
 
     public IReadOnlyList<MarkdownContent<TFrontMatter>> Build()
     {
-        var directory = contentsDirectory;
-        if (!Directory.Exists(directory))
+        if (!Directory.Exists(contentsDirectory))
         {
-            throw new DirectoryNotFoundException($"Contents directory not found: {directory}");
+            throw new DirectoryNotFoundException($"Contents directory not found: {contentsDirectory}");
         }
 
-        var markdownFiles = new DirectoryInfo(directory)
+        var markdownFiles = new DirectoryInfo(contentsDirectory)
             .EnumerateFiles("*.md", SearchOption.AllDirectories)
             .OrderBy(static file => file.FullName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -35,8 +34,6 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
         // used for rendering, and the content hash the incremental planner needs.
         var items = new MarkdownContent<TFrontMatter>[markdownFiles.Length];
         var errors = new Exception?[markdownFiles.Length];
-        // Only allocated when filtering, so the common path keeps the array as-is.
-        var included = filter is null ? null : new bool[markdownFiles.Length];
         using var deserializers = new ThreadLocal<IDeserializer>(_frontMatterDeserializerFactory);
 
         Parallel.For(0, markdownFiles.Length, index =>
@@ -44,14 +41,9 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
             try
             {
                 var fileInfo = markdownFiles[index];
-                if (filter is not null)
+                if (filter?.Invoke(fileInfo) == false)
                 {
-                    if (!filter(fileInfo))
-                    {
-                        return;
-                    }
-
-                    included![index] = true;
+                    return;
                 }
 
                 var source = sourceCache is not null
@@ -77,8 +69,8 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
         sourceCache?.Prune(markdownFiles.Select(static file => file.FullName).ToHashSet(StringComparer.OrdinalIgnoreCase));
 
         // Filtered-out slots were never assigned; compacting keeps the order above.
-        return included is null
+        return filter is null
             ? items
-            : [.. items.Where((_, index) => included[index])];
+            : [.. items.Where(static item => item is not null)];
     }
 }

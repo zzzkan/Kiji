@@ -32,7 +32,7 @@ app.Info = new SiteInfo
     BaseUrl = new Uri("https://example.com/"),
 };
 
-app.AddStaticPages();
+app.AddPages();
 return await app.RunAsync();
 ```
 
@@ -52,7 +52,7 @@ host; see [Deployment](../deployment/) for hosting and sub-paths, and
 
 ## Pages and routes
 
-`AddStaticPages()` discovers components with fixed `@page` routes such as `/about/`.
+`AddPages()` discovers components with fixed `@page` routes such as `/about/`.
 For a route such as `/posts/{Slug}/`, use `AddPages<TPage>` to supply each page's
 parameters. `/about/` becomes `about/index.html`.
 See [Routing](../routing/) for parameter mapping and 404 pages.

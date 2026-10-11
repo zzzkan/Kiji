@@ -72,13 +72,13 @@ path, and external URLs and parent-directory traversal are not accepted.
 
 ### Pages
 
-#### `AddStaticPages()`
+#### `AddPages()`
 
 Finds public, non-abstract components with fixed routes in the entry assembly. Components
 with parameterized routes are ignored. If there is no entry assembly, use the assembly
 overload.
 
-#### `AddStaticPages(Assembly assembly)`
+#### `AddPages(Assembly assembly)`
 
 Finds fixed routed components in the supplied non-null assembly. Registering the same
 assembly repeatedly has no additional effect.
@@ -106,10 +106,10 @@ HTML can be reused when parameter values are `null` or have one of these types:
 HTML reuse for that page. Prefer passing a content key and looking up the item during
 rendering. See [Incremental builds](../incremental-builds/#pass-stable-page-parameters).
 
-#### `UseNotFoundPage<TComponent>()`
+#### `AddNotFoundPage<TPage>()`
 
 Writes a routed `IComponent` as `/404.html`. The component must declare exactly one route
-and cannot also be registered through `AddPages`.
+and cannot also be registered through `AddPages<TPage>`.
 
 ### Layout
 

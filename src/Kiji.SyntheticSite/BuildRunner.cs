@@ -78,8 +78,8 @@ public static class BuildRunner
 
         app.UseMarkdownContent<PostFrontMatter>();
         app.UseDefaultLayout<MainLayout>();
-        app.AddStaticPages(typeof(BuildRunner).Assembly);
-        app.UseNotFoundPage<NotFoundPage>();
+        app.AddPages(typeof(BuildRunner).Assembly);
+        app.AddNotFoundPage<NotFoundPage>();
 
         app.AddPages<PostPage>(static services => services
             .GetRequiredService<ContentDictionary<MarkdownContent<PostFrontMatter>>>()

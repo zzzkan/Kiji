@@ -66,7 +66,7 @@ app.Info = new SiteInfo
     BaseUrl = new Uri("https://example.com/"),
     Name = "My Site",
 };
-app.AddStaticPages();
+app.AddPages();
 
 return await app.RunAsync();
 ```

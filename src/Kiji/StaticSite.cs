@@ -240,20 +240,21 @@ public sealed class StaticSite
         return this;
     }
 
-    /// <summary>Registers public, non-abstract pages with parameterless routes from the entry assembly.</summary>
-    public StaticSite AddStaticPages()
+    /// <summary>Registers public, non-abstract pages with fixed routes from the entry assembly.</summary>
+    /// <remarks>Parameterized routes are ignored; register their parameter sets with <c>AddPages&lt;TPage&gt;</c>.</remarks>
+    public StaticSite AddPages()
     {
         EnsureConfigurable();
         var entryAssembly = Assembly.GetEntryAssembly()
             ?? throw new InvalidOperationException(
-                "No entry assembly is available in this host. Call AddStaticPages(Assembly) with the assembly containing your pages.");
+                "No entry assembly is available in this host. Call AddPages(Assembly) with the assembly containing your pages.");
 
-        return AddStaticPages(entryAssembly);
+        return AddPages(entryAssembly);
     }
 
-    /// <summary>Registers public, non-abstract pages with parameterless routes from an assembly.</summary>
+    /// <summary>Registers public, non-abstract pages with fixed routes from an assembly.</summary>
     /// <remarks>Repeated registration of the same assembly has no effect; parameterized routes are ignored.</remarks>
-    public StaticSite AddStaticPages(Assembly assembly)
+    public StaticSite AddPages(Assembly assembly)
     {
         EnsureConfigurable();
         ArgumentNullException.ThrowIfNull(assembly);
@@ -268,16 +269,16 @@ public sealed class StaticSite
     }
 
     /// <summary>Registers a page as <c>404.html</c>.</summary>
-    /// <remarks>The component must declare exactly one route and cannot also be registered with <c>AddPages</c>.</remarks>
-    public StaticSite UseNotFoundPage<TComponent>()
-        where TComponent : IComponent
+    /// <remarks>The component must declare exactly one route and cannot also be registered with <c>AddPages&lt;TPage&gt;</c>.</remarks>
+    public StaticSite AddNotFoundPage<TPage>()
+        where TPage : IComponent
     {
         EnsureConfigurable();
-        if (_routeRegistrations.Any(registration => registration.ComponentType == typeof(TComponent)))
+        if (_routeRegistrations.Any(registration => registration.ComponentType == typeof(TPage)))
         {
-            throw new InvalidOperationException("A not-found page cannot also be registered with AddPages.");
+            throw new InvalidOperationException("A not-found page cannot also be registered with AddPages<TPage>.");
         }
-        _notFoundComponentType = typeof(TComponent);
+        _notFoundComponentType = typeof(TPage);
         return this;
     }
 
@@ -297,7 +298,7 @@ public sealed class StaticSite
 
         if (_notFoundComponentType == typeof(TPage))
         {
-            throw new InvalidOperationException("A not-found page cannot also be registered with AddPages.");
+            throw new InvalidOperationException("A not-found page cannot also be registered with AddPages<TPage>.");
         }
 
         _routeRegistrations.Add(new RouteRegistration(

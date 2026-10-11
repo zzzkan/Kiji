@@ -112,7 +112,7 @@ dotnet publish
 
 Check two host behaviors:
 
-- `UseNotFoundPage<NotFoundPage>()` writes `404.html` at the output root.
+- `AddNotFoundPage<NotFoundPage>()` writes `404.html` at the output root.
   Most static hosts use that file for unmatched paths.
 - Generated pages use `route/index.html`.
 

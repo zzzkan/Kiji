@@ -22,8 +22,8 @@ public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : ICla
         File.WriteAllText(project, File.ReadAllText(project).Replace("</Project>",
             "<PropertyGroup><BaseOutputPath>../build-output/</BaseOutputPath></PropertyGroup></Project>", StringComparison.Ordinal));
         var program = Path.Combine(site, "Program.cs");
-        File.WriteAllText(program, "using Kiji.Markdown;\n" + File.ReadAllText(program).Replace("site.AddStaticPages();",
-            "site.UseMarkdownContent<ArticleFrontMatter>();\nsite.AddStaticPages();", StringComparison.Ordinal)
+        File.WriteAllText(program, "using Kiji.Markdown;\n" + File.ReadAllText(program).Replace("site.AddPages();",
+            "site.UseMarkdownContent<ArticleFrontMatter>();\nsite.AddPages();", StringComparison.Ordinal)
             + "\npublic sealed class ArticleFrontMatter { public string Title { get; set; } = string.Empty; }");
         PackagedSiteFixture.Write(site, "contents/article.md", "---\ntitle: Correct project\n---\nArticle");
         PackagedSiteFixture.Write(site, "Home.razor", """

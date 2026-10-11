@@ -60,7 +60,7 @@ public sealed class PageRegistrationTests
     {
         await using var site = CreateSite();
         var type = CreatePageType("/missing/{Value}/");
-        typeof(StaticSite).GetMethod(nameof(StaticSite.AddPages))!.MakeGenericMethod(type)
+        typeof(StaticSite).GetMethod(nameof(StaticSite.AddPages), 1, [typeof(Func<IServiceProvider, IEnumerable<object>>)])!.MakeGenericMethod(type)
             .Invoke(site, [new Func<IServiceProvider, IEnumerable<object>>(static _ => [new { Value = "one" }])]);
         var error = Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
         Assert.Contains("'Value'", error.Message, StringComparison.Ordinal);
@@ -74,8 +74,8 @@ public sealed class PageRegistrationTests
         var second = CreatePageType("/second/", "/ignored/{Value}/");
         var parameterizedOnly = CreatePageType("/ignored/{Value}/");
         await using var site = CreateSite();
-        site.AddStaticPages(first.Assembly).AddStaticPages(first.Assembly)
-            .AddStaticPages(second.Assembly).AddStaticPages(parameterizedOnly.Assembly);
+        site.AddPages(first.Assembly).AddPages(first.Assembly)
+            .AddPages(second.Assembly).AddPages(parameterizedOnly.Assembly);
 
         Assert.Equal(["/first/", "/second/"], site.CreateSnapshot().Pages.Select(page => page.RoutePath).Order());
     }
@@ -84,8 +84,8 @@ public sealed class PageRegistrationTests
     public async Task StaticDiscovery_DuplicateRegisteredRoutesAreRejected()
     {
         await using var site = CreateSite();
-        site.AddStaticPages(CreatePageType("/duplicate/").Assembly);
-        site.AddStaticPages(CreatePageType("/duplicate/").Assembly);
+        site.AddPages(CreatePageType("/duplicate/").Assembly);
+        site.AddPages(CreatePageType("/duplicate/").Assembly);
         Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
     }
 
@@ -118,7 +118,7 @@ public sealed class PageRegistrationTests
         await using var site = CreateSite();
         if (scan)
         {
-            site.AddStaticPages(type.Assembly);
+            site.AddPages(type.Assembly);
         }
         RegisterNotFound(site, type);
 
@@ -131,7 +131,7 @@ public sealed class PageRegistrationTests
     public async Task NotFound_MultipleRouteDeclarationsAreRejected()
     {
         await using var site = CreateSite();
-        site.UseNotFoundPage<MultipleRoutes>();
+        site.AddNotFoundPage<MultipleRoutes>();
         var exception = Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
         Assert.Contains("exactly one", exception.Message, StringComparison.Ordinal);
     }
@@ -140,8 +140,8 @@ public sealed class PageRegistrationTests
     public async Task NotFound_CannotOverwriteDirectoryRequiredByAnotherPage()
     {
         await using var site = CreateSite();
-        site.AddStaticPages(CreatePageType("/404.html/nested/").Assembly);
-        site.UseNotFoundPage<Fixed>();
+        site.AddPages(CreatePageType("/404.html/nested/").Assembly);
+        site.AddNotFoundPage<Fixed>();
         var exception = Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
         Assert.Contains("also a page output file", exception.Message, StringComparison.Ordinal);
     }
@@ -151,7 +151,7 @@ public sealed class PageRegistrationTests
     {
         var notFound = CreatePageType("/missing/");
         await using var site = CreateSite();
-        site.AddStaticPages(notFound.Assembly).AddStaticPages(CreatePageType("/missing/").Assembly);
+        site.AddPages(notFound.Assembly).AddPages(CreatePageType("/missing/").Assembly);
         RegisterNotFound(site, notFound);
         Assert.Equal(["/404.html", "/missing/"], site.CreateSnapshot().Pages.Select(page => page.RoutePath).Order());
     }
@@ -166,7 +166,7 @@ public sealed class PageRegistrationTests
             await File.WriteAllTextAsync(Path.Combine(root, "wwwroot", "404.html"), "existing");
             await using var site = CreateSite(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
             TestSite.TestSiteAssets.Bind(site, Path.Combine(root, "wwwroot"));
-            site.UseNotFoundPage<Fixed>();
+            site.AddNotFoundPage<Fixed>();
             await Assert.ThrowsAsync<InvalidOperationException>(() => site.PublishAsync("dist"));
         }
         finally
@@ -186,13 +186,13 @@ public sealed class PageRegistrationTests
         await using var site = CreateSite();
         if (notFoundFirst)
         {
-            site.UseNotFoundPage<Parameterized>();
+            site.AddNotFoundPage<Parameterized>();
             Assert.Throws<InvalidOperationException>(() => site.AddPages<Parameterized>(static _ => []));
         }
         else
         {
             site.AddPages<Parameterized>(static _ => []);
-            Assert.Throws<InvalidOperationException>(() => site.UseNotFoundPage<Parameterized>());
+            Assert.Throws<InvalidOperationException>(() => site.AddNotFoundPage<Parameterized>());
         }
     }
 
@@ -252,13 +252,13 @@ public sealed class PageRegistrationTests
 
     private static void RegisterTyped(StaticSite site, Type type)
     {
-        typeof(StaticSite).GetMethod(nameof(StaticSite.AddPages))!.MakeGenericMethod(type)
+        typeof(StaticSite).GetMethod(nameof(StaticSite.AddPages), 1, [typeof(Func<IServiceProvider, IEnumerable<object>>)])!.MakeGenericMethod(type)
             .Invoke(site, [new Func<IServiceProvider, IEnumerable<object>>(static _ => [])]);
     }
 
     private static void RegisterNotFound(StaticSite site, Type type)
     {
-        typeof(StaticSite).GetMethod(nameof(StaticSite.UseNotFoundPage))!.MakeGenericMethod(type).Invoke(site, null);
+        typeof(StaticSite).GetMethod(nameof(StaticSite.AddNotFoundPage))!.MakeGenericMethod(type).Invoke(site, null);
     }
 
     private static Type CreatePageType(params string[] routes)

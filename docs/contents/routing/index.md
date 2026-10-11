@@ -9,11 +9,11 @@ discovered from components; parameterized routes also need the set of values to 
 
 ## Fixed routes
 
-`AddStaticPages()` finds public, non-abstract components with fixed routes in the entry
+`AddPages()` finds public, non-abstract components with fixed routes in the entry
 assembly:
 
 ```csharp
-app.AddStaticPages();
+app.AddPages();
 ```
 
 ```razor
@@ -23,7 +23,7 @@ app.AddStaticPages();
 ```
 
 This generates `about/index.html`, served as `/about/`. The `/` route generates the root
-`index.html`. If pages live in another assembly, pass it to `AddStaticPages(assembly)`.
+`index.html`. If pages live in another assembly, pass it to `AddPages(assembly)`.
 
 Parameterized routes are ignored during this scan because Kiji cannot infer which values
 you want to publish.
@@ -103,10 +103,10 @@ resolve to the same output path. These errors are reported before pages are rend
 
 ## Not-found pages
 
-Register a routed component with `UseNotFoundPage<TPage>()`:
+Register a routed component with `AddNotFoundPage<TPage>()`:
 
 ```csharp
-app.UseNotFoundPage<NotFoundPage>();
+app.AddNotFoundPage<NotFoundPage>();
 ```
 
 ```razor
@@ -116,7 +116,7 @@ app.UseNotFoundPage<NotFoundPage>();
 ```
 
 Kiji writes it as `404.html` at the output root. The component still needs one `@page`
-route, but do not also register it with `AddPages`.
+route, but do not also register it with `AddPages<TPage>`.
 
 See the [API reference](../api-reference/#pages) for registration
 timing and the full method contracts.

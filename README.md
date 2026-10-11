@@ -97,6 +97,36 @@ For the complete walkthrough—including layouts, CSS, and Markdown—see [Getti
 
 Contributions to Kiji and its documentation are welcome. [Open an issue](https://github.com/zzzkan/kiji/issues) to report a bug or suggest a feature.
 
+### Dependency maintenance
+
+[Dependabot](.github/dependabot.yml) checks NuGet packages, GitHub Actions, and the
+.NET SDK each weekday at 02:00 Asia/Tokyo. Version updates wait three days after
+release; security updates do not wait for that cooldown. Major updates are allowed
+and require review. Version update coverage and grouping are listed below.
+
+| Dependencies | Version source | Update handling |
+| --- | --- | --- |
+| NuGet packages | `Directory.Packages.props` | Up to 10 open PRs; xUnit and Microsoft.Testing.Platform update together, as do SkiaSharp and its native assets |
+| GitHub Actions | `.github/workflows/*.yml` | SHA pins and version comments are updated; minor/patch updates are grouped, major updates are separate |
+| .NET SDK | `global.json` | SDK updates get their own PRs |
+| Wrangler CLI | `wranglerVersion` in `.github/workflows/docs-deploy.yml` | Manual: Dependabot does not update Action input values |
+| Prism.js | CDN URLs in `docs/Components/PageHead.razor` | Manual: Dependabot does not update these URLs; update all five references together |
+
+Review the [Dependabot update jobs](https://github.com/zzzkan/kiji/network/updates),
+open dependency PRs, and [security alerts](https://github.com/zzzkan/kiji/security/dependabot)
+weekly, and check [Wrangler releases](https://github.com/cloudflare/workers-sdk/releases)
+and [Prism releases](https://github.com/PrismJS/prism/releases) at the same time.
+Investigate failed jobs and blocked PRs rather than treating an empty PR list as
+proof that everything is current. Keep new dependencies in a supported manifest;
+document any exceptions in this table.
+
+Before merging an update, review its release notes and require successful CI:
+Release builds and tests on Linux and Windows, package compatibility validation,
+and docs publishing. For manual Wrangler updates, also run a deployment dry run;
+for Prism updates, check syntax highlighting and line highlighting in the docs.
+Keep Actions pinned to full commit SHAs with version comments. Updates are merged
+after review, not automatically.
+
 ## License
 
 [MIT](LICENSE)

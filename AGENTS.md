@@ -37,7 +37,7 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
 ## Constraints worth preserving
 
 - Routes allow literals and simple parameters only. AddNotFoundPage still requires
-  its component's own route. AddPages<TPage> supplies the whole parameter set; non-route
+  its component's own route. `AddPages<TPage>` supplies the whole parameter set; non-route
   values must name writable [Parameter] properties.
 - MSBuild supplies the project directory through runtimeconfig; missing metadata is an error.
   Content becomes accessible through factories/loaders/artifacts only after execution

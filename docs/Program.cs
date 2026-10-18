@@ -1,5 +1,5 @@
 using Kiji;
-using Kiji.Docs.Components;
+using Kiji.Docs.Layout;
 using Kiji.Docs.Models;
 using Kiji.Docs.Pages;
 using Kiji.Markdown;
@@ -11,7 +11,7 @@ site.Info = new()
 {
     BaseUrl = new Uri("https://kiji-docs.zzzkan.workers.dev/"),
     Name = "Kiji",
-    Description = "A static site generator for .NET. Write pages as Razor components.",
+    Description = "Write Razor. Publish a purely static site. Kiji brings your .NET components and Markdown together in plain HTML, ready for any static host.",
     Language = "en",
     Author = "zzzkan",
 };

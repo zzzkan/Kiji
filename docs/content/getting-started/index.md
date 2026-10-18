@@ -89,8 +89,7 @@ body {
 }
 ```
 
-Create `Components/PageHead.razor` to keep the page title, metadata, and stylesheet
-link together:
+Create `Components/PageHead.razor` for the page title and canonical URL:
 
 ```razor
 @using Kiji
@@ -99,11 +98,8 @@ link together:
 @inject PageInfo Page
 
 <StaticHeadContent>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@Title - @Site.Name</title>
     <link rel="canonical" href="@Page.Url.AbsoluteUri" />
-    <link rel="stylesheet" href="@Assets["css/app.css"]" />
 </StaticHeadContent>
 
 @code {
@@ -111,12 +107,19 @@ link together:
 }
 ```
 
-Create `Components/Layout.razor` for the shared page structure:
+Create `Layout/MainLayout.razor` for the shared head tags and page structure:
 
 ```razor
 @using Kiji
+@using Kiji.Components
 @inherits LayoutComponentBase
 @inject SiteInfo Site
+
+<StaticHeadContent>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="@Assets["css/app.css"]" />
+</StaticHeadContent>
 
 <header>
     <a href="@Site.BaseUrl.AbsolutePath">@Site.Name</a>
@@ -127,13 +130,13 @@ Create `Components/Layout.razor` for the shared page structure:
 </main>
 ```
 
-Update `Program.cs` to import the component namespace and register the layout:
+Update `Program.cs` to import the layout namespace and register the layout:
 
 {data-line="2,11"}
 
 ```csharp
 using Kiji;
-using MySite.Components;
+using MySite.Layout;
 
 var app = StaticSite.Create(args);
 app.Info = new SiteInfo
@@ -142,7 +145,7 @@ app.Info = new SiteInfo
     Name = "My Site",
 };
 
-app.UseDefaultLayout<Layout>();
+app.UseDefaultLayout<MainLayout>();
 app.AddPages();
 
 return await app.RunAsync();
@@ -162,7 +165,8 @@ Add `PageHead` to `Pages/Home.razor`:
 <p>This page is a Razor component rendered to static HTML.</p>
 ```
 
-Use `PageHead` once in each page so its title and shared head tags are supplied together.
+Use `PageHead` once in each page for its title and canonical URL. `MainLayout` supplies
+the shared head tags. Kiji combines both `StaticHeadContent` contributions in `<head>`.
 
 Stop and restart `dotnet watch`.
 
@@ -239,7 +243,7 @@ Add the required namespaces and registrations to `Program.cs`:
 using Kiji;
 using Kiji.Markdown;
 using Microsoft.Extensions.DependencyInjection;
-using MySite.Components;
+using MySite.Layout;
 using MySite.Models;
 using MySite.Pages;
 
@@ -251,7 +255,7 @@ app.Info = new SiteInfo
 };
 
 app.UseMarkdownContent<FrontMatter>();
-app.UseDefaultLayout<Layout>();
+app.UseDefaultLayout<MainLayout>();
 app.AddPages();
 app.AddPages<Post>(services => services
     .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
@@ -306,7 +310,8 @@ The project now has this shape:
 
 ```text
 MySite/
-├── Components/       shared layouts and components
+├── Layout/           shared layouts and navigation
+├── Components/       reusable components
 ├── Pages/            routed Razor components
 ├── Models/           data models
 ├── content/          Markdown and page-bundle images

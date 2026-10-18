@@ -11,7 +11,8 @@ them to content, and standard .NET commands preview and publish the result.
 
 ```text
 MySite/
-├── Components/       layouts and reusable components
+├── Layout/           shared layouts and navigation
+├── Components/       reusable components
 ├── Pages/            components with @page routes
 ├── Models/           content models
 ├── content/          Markdown and its local images

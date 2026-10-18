@@ -25,7 +25,7 @@ public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : ICla
         File.WriteAllText(program, "using Kiji.Markdown;\n" + File.ReadAllText(program).Replace("site.AddPages();",
             "site.UseMarkdownContent<ArticleFrontMatter>();\nsite.AddPages();", StringComparison.Ordinal)
             + "\npublic sealed class ArticleFrontMatter { public string Title { get; set; } = string.Empty; }");
-        PackagedSiteFixture.Write(site, "contents/article.md", "---\ntitle: Correct project\n---\nArticle");
+        PackagedSiteFixture.Write(site, "content/article.md", "---\ntitle: Correct project\n---\nArticle");
         PackagedSiteFixture.Write(site, "Home.razor", """
             @page "/"
             @inject Kiji.ContentDictionary<Kiji.Markdown.MarkdownContent<ArticleFrontMatter>> Articles

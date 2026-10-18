@@ -19,7 +19,7 @@ public sealed class DevServerTests : IAsyncDisposable
     public DevServerTests()
     {
         _testDir = Path.Combine(Path.GetTempPath(), $"DevServerTests_{Guid.NewGuid():N}");
-        _contentsDir = Path.Combine(_testDir, "contents");
+        _contentsDir = Path.Combine(_testDir, "content");
         _staticDir = Path.Combine(_testDir, "wwwroot");
         Directory.CreateDirectory(_contentsDir);
         Directory.CreateDirectory(_staticDir);
@@ -243,7 +243,7 @@ public sealed class DevServerTests : IAsyncDisposable
             using var socket = new ClientWebSocket();
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             await socket.ConnectAsync(new UriBuilder(baseAddress) { Scheme = "ws", Path = "/_kiji/reload" }.Uri, timeout.Token);
-            Directory.Move(_contentsDir, Path.Combine(_testDir, "old-contents"));
+            Directory.Move(_contentsDir, Path.Combine(_testDir, "old-content"));
             Directory.CreateDirectory(_contentsDir);
             await File.WriteAllTextAsync(Path.Combine(_contentsDir, "hello-world.txt"), "Replacement content", timeout.Token);
             await socket.ReceiveAsync(new byte[64], timeout.Token);
@@ -348,13 +348,13 @@ public sealed class DevServerTests : IAsyncDisposable
     [Fact]
     public void DeduplicateChanges_CollapsesRepeatedEventsPerFileKeepingLatestChangeType()
     {
-        var contentPath = Path.Combine(Path.GetTempPath(), "site", "contents", "2026", "post", "index.md");
+        var contentPath = Path.Combine(Path.GetTempPath(), "site", "content", "2026", "post", "index.md");
         var staticPath = Path.Combine(Path.GetTempPath(), "site", "wwwroot", "site.css");
         List<Kiji.Hosting.WatchedChange> events =
         [
-            new(Kiji.Hosting.WatchedPathSource.Content, WatcherChangeTypes.Created, contentPath, Path.Combine("contents", "2026", "post", "index.md")),
-            new(Kiji.Hosting.WatchedPathSource.BuildInput, WatcherChangeTypes.Changed, contentPath, Path.Combine("contents", "2026", "post", "index.md")),
-            new(Kiji.Hosting.WatchedPathSource.Content, WatcherChangeTypes.Changed, contentPath, Path.Combine("contents", "2026", "post", "index.md")),
+            new(Kiji.Hosting.WatchedPathSource.Content, WatcherChangeTypes.Created, contentPath, Path.Combine("content", "2026", "post", "index.md")),
+            new(Kiji.Hosting.WatchedPathSource.BuildInput, WatcherChangeTypes.Changed, contentPath, Path.Combine("content", "2026", "post", "index.md")),
+            new(Kiji.Hosting.WatchedPathSource.Content, WatcherChangeTypes.Changed, contentPath, Path.Combine("content", "2026", "post", "index.md")),
             new(Kiji.Hosting.WatchedPathSource.Static, WatcherChangeTypes.Changed, staticPath, Path.Combine("wwwroot", "site.css")),
         ];
 
@@ -372,11 +372,11 @@ public sealed class DevServerTests : IAsyncDisposable
     public void GetDisplayPath_UsesWorkingDirectoryStylePathAndKeepsExternalPathAbsolute()
     {
         var displayRoot = Path.Combine(Path.GetTempPath(), "workspace");
-        var siteFile = Path.Combine(displayRoot, "docs", "contents", "index.md");
+        var siteFile = Path.Combine(displayRoot, "docs", "content", "index.md");
         var externalFile = Path.Combine(Path.GetTempPath(), "external", "authors.json");
 
         Assert.Equal(
-            $".{Path.DirectorySeparatorChar}{Path.Combine("docs", "contents", "index.md")}",
+            $".{Path.DirectorySeparatorChar}{Path.Combine("docs", "content", "index.md")}",
             Kiji.Hosting.DevServer.GetDisplayPath(siteFile, displayRoot));
         Assert.Equal(
             Path.GetFullPath(externalFile),

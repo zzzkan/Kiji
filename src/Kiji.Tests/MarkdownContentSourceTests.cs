@@ -11,7 +11,7 @@ public sealed class MarkdownContentSourceTests : IDisposable
     public MarkdownContentSourceTests()
     {
         _testDir = Path.Combine(Path.GetTempPath(), $"MarkdownContentSourceTests_{Guid.NewGuid():N}");
-        Directory.CreateDirectory(Path.Combine(_testDir, "contents"));
+        Directory.CreateDirectory(Path.Combine(_testDir, "content"));
     }
 
     public void Dispose()
@@ -28,7 +28,7 @@ public sealed class MarkdownContentSourceTests : IDisposable
         WriteMarkdown("posts/first.md", "First");
         WriteMarkdown("notes/alpha.md", "Alpha");
 
-        var posts = LoadKeys(static options => options.Directory = "contents/posts");
+        var posts = LoadKeys(static options => options.Directory = "content/posts");
 
         Assert.Equal(["first"], posts);
     }
@@ -53,7 +53,7 @@ public sealed class MarkdownContentSourceTests : IDisposable
         WriteMarkdown("inside.md", "Inside");
         await using var app = CreateApp(Path.Combine(_testDir, "site"));
         app.UseMarkdownContent<FrontMatter>(options => options.Directory = absolute
-            ? Path.Combine(_testDir, "contents") : "../contents");
+            ? Path.Combine(_testDir, "content") : "../content");
         app.UsePlanningOptions();
         Assert.Equal("inside.md", Assert.Single(app.ServiceProvider
             .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>().Keys));
@@ -131,7 +131,7 @@ public sealed class MarkdownContentSourceTests : IDisposable
 
     private void WriteMarkdown(string relativePath, string title, int order = 0)
     {
-        var filePath = Path.Combine(_testDir, "contents", relativePath.Replace('/', Path.DirectorySeparatorChar));
+        var filePath = Path.Combine(_testDir, "content", relativePath.Replace('/', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
         File.WriteAllText(
             filePath,

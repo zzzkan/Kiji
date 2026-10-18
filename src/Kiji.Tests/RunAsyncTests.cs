@@ -19,7 +19,7 @@ public sealed class RunAsyncTests : IDisposable
     {
         _testDir = Path.Combine(Path.GetTempPath(), $"kiji-run-{Guid.NewGuid():N}");
         _outputDir = Path.Combine(_testDir, "publish");
-        Directory.CreateDirectory(Path.Combine(_testDir, "contents"));
+        Directory.CreateDirectory(Path.Combine(_testDir, "content"));
         Directory.CreateDirectory(Path.Combine(_testDir, "static"));
         File.WriteAllText(Path.Combine(_testDir, "static", "keep.css"), "body{}");
     }
@@ -35,12 +35,12 @@ public sealed class RunAsyncTests : IDisposable
     [Fact]
     public async Task PublishSite_RejectsSourceAndCacheOutputPathsWithoutChangingSources()
     {
-        var source = Path.Combine(_testDir, "contents", "keep.txt");
+        var source = Path.Combine(_testDir, "content", "keep.txt");
         await File.WriteAllTextAsync(source, "source data");
-        foreach (var output in new[] { _testDir, "contents", "contents/generated", "static", "static/generated", ".kiji", ".kiji/cache/site" })
+        foreach (var output in new[] { _testDir, "content", "content/generated", "static", "static/generated", ".kiji", ".kiji/cache/site" })
         {
             await using var app = CreateApp();
-            app.AddBuildInput("contents");
+            app.AddBuildInput("content");
             await Assert.ThrowsAsync<InvalidOperationException>(() => app.PublishAsync(output));
             Assert.Equal("source data", await File.ReadAllTextAsync(source));
         }

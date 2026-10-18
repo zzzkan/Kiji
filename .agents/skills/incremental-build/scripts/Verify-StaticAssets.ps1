@@ -108,8 +108,8 @@ await site.RunAsync();
         Write-File (Join-Path $site 'Home.razor') '@page "/"
 <h1>Empty site</h1>'
     } else {
-        Write-File (Join-Path $site 'contents/bundle/index.md') "---`ntitle: Bundle`n---`n![Generated image](cover.png)"
-        Copy-Item -LiteralPath (Join-Path $Repository 'docs/contents/getting-started/smallest-site.png') -Destination (Join-Path $site 'contents/bundle/cover.png')
+        Write-File (Join-Path $site 'content/bundle/index.md') "---`ntitle: Bundle`n---`n![Generated image](cover.png)"
+        Copy-Item -LiteralPath (Join-Path $Repository 'docs/content/getting-started/smallest-site.png') -Destination (Join-Path $site 'content/bundle/cover.png')
         Write-File (Join-Path $site 'Bundle.razor') @'
 @page "/bundle/"
 @using Kiji

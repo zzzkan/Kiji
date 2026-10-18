@@ -243,7 +243,7 @@ The configure callback receives a new options instance for that registration.
 
 | Member                                               | Default/behavior                                                                                                                |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `string Directory`                                  | `"contents"`; absolute or relative to the site project directory. Registered directories are watched during development.                         |
+| `string Directory`                                  | `"content"`; absolute or relative to the site project directory. Registered directories are watched during development.                         |
 | `Func<FileInfo,bool>? FileFilter`                    | `null`; include every discovered Markdown file. The predicate runs before loading.                                              |
 | `ConfigureMarkdown(Action<MarkdownPipelineBuilder>)` | Adds a non-null Markdig configuration after Kiji's default advanced pipeline. Calls run in registration order.                  |
 | `ConfigureYaml(Action<DeserializerBuilder>)`         | Adds a non-null YamlDotNet configuration after the camel-case and ignore-unmatched defaults. Calls run in registration order.   |

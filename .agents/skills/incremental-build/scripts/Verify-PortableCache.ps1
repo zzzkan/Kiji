@@ -23,7 +23,7 @@ try {
 
 function New-Fixture([string] $name) {
     $root = Join-Path $runRoot $name
-    New-Item -ItemType Directory -Path (Join-Path $root 'contents') -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $root 'content') -Force | Out-Null
     @"
 <Project Sdk="Microsoft.NET.Sdk.Razor">
   <PropertyGroup><OutputType>Exe</OutputType><RootNamespace>Portable</RootNamespace></PropertyGroup>
@@ -61,9 +61,9 @@ namespace Portable { public sealed class FrontMatter { public string? Title { ge
     New-Item -ItemType Directory -Path (Join-Path $root 'wwwroot/css') -Force | Out-Null
     'body { margin: 0; }' | Set-Content (Join-Path $root 'wwwroot/css/shared.css')
     'excluded from publish' | Set-Content (Join-Path $root 'wwwroot/excluded.txt')
-    "---`ntitle: First`n---`n`nStable body.`n`n![image](source.png)" | Set-Content (Join-Path $root 'contents/first.md')
-    "---`ntitle: Second`n---`n`nSecond body." | Set-Content (Join-Path $root 'contents/second.md')
-    [IO.File]::WriteAllBytes((Join-Path $root 'contents/source.png'), [Convert]::FromBase64String('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGP4z8DwH4QZYAwAR8oH+WdZbrcAAAAASUVORK5CYII='))
+    "---`ntitle: First`n---`n`nStable body.`n`n![image](source.png)" | Set-Content (Join-Path $root 'content/first.md')
+    "---`ntitle: Second`n---`n`nSecond body." | Set-Content (Join-Path $root 'content/second.md')
+    [IO.File]::WriteAllBytes((Join-Path $root 'content/source.png'), [Convert]::FromBase64String('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGP4z8DwH4QZYAwAR8oH+WdZbrcAAAAASUVORK5CYII='))
     return $root
 }
 
@@ -126,7 +126,7 @@ if (!([IO.File]::ReadAllText((Join-Path $second 'dist/Portable.styles.css'))).Co
     throw 'CSS-only edit was not published.'
 }
 
-$post = Join-Path $second 'contents/first.md'
+$post = Join-Path $second 'content/first.md'
 $stamp = [IO.File]::GetLastWriteTimeUtc($post)
 [IO.File]::WriteAllText($post, [IO.File]::ReadAllText($post).Replace('Stable', 'Edited'))
 [IO.File]::SetLastWriteTimeUtc($post, $stamp)
@@ -153,7 +153,7 @@ Clear-FixtureOutputs $second
 Publish-Fixture $second 'page-repair' 1
 
 $full = New-Fixture 'full'
-Copy-Item -LiteralPath $post -Destination (Join-Path $full 'contents/first.md') -Force
+Copy-Item -LiteralPath $post -Destination (Join-Path $full 'content/first.md') -Force
 Copy-Item -LiteralPath $page -Destination (Join-Path $full 'Article.razor') -Force
 Copy-Item -LiteralPath $scopedCss -Destination (Join-Path $full 'Article.razor.css') -Force
 Publish-Fixture $full 'full-comparison' 2
@@ -182,9 +182,9 @@ Copy-Item -LiteralPath (Join-Path $ciFirst '.kiji') -Destination (Join-Path $ciS
 Publish-Fixture $ciSecond 'ci-checkout' 0 $ciSettings
 Assert-SameOutputs $ciFirst $ciSecond
 
-$ciPost = Join-Path $ciSecond 'contents/first.md'
+$ciPost = Join-Path $ciSecond 'content/first.md'
 [IO.File]::WriteAllText($ciPost, [IO.File]::ReadAllText($ciPost).Replace('Stable', 'Edited'))
-& git -C $ciCheckout add -- site/contents
+& git -C $ciCheckout add -- site/content
 & git -C $ciCheckout -c user.name=Fixture -c user.email=fixture@example.invalid commit --quiet -m 'Content only'
 if ($LASTEXITCODE) { throw 'CI content commit failed.' }
 Clear-FixtureOutputs $ciSecond
@@ -205,7 +205,7 @@ if (-not $repositoryHtml.Contains('/_/site/Article.razor')) { throw 'SDK reposit
 # Moving the project within its repository changes CallerFilePath and must invalidate.
 $ciMoved = New-Fixture 'ci-second/moved'
 Copy-Item -LiteralPath (Join-Path $ciSecond 'Directory.Build.targets') -Destination (Join-Path $ciMoved 'Directory.Build.targets')
-Copy-Item -LiteralPath $ciPost -Destination (Join-Path $ciMoved 'contents/first.md') -Force
+Copy-Item -LiteralPath $ciPost -Destination (Join-Path $ciMoved 'content/first.md') -Force
 Copy-Item -LiteralPath (Join-Path $ciSecond '.kiji') -Destination (Join-Path $ciMoved '.kiji') -Recurse
 Publish-Fixture $ciMoved 'ci-project-moved' 2 $ciSettings
 $movedHtml = [IO.File]::ReadAllText((Join-Path $ciMoved 'dist/first.md/index.html'))

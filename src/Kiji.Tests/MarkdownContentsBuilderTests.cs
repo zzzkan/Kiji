@@ -14,7 +14,7 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
     public MarkdownContentsBuilderTests()
     {
         _testDir = Path.Combine(Path.GetTempPath(), $"MarkdownContentsBuilderTests_{Guid.NewGuid():N}");
-        _contentsDir = Path.Combine(_testDir, "contents");
+        _contentsDir = Path.Combine(_testDir, "content");
         _outputDir = Path.Combine(_testDir, "output");
         Directory.CreateDirectory(_contentsDir);
         Directory.CreateDirectory(_outputDir);

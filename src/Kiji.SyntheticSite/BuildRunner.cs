@@ -76,7 +76,7 @@ public static class BuildRunner
             Author = "bench",
         };
 
-        app.UseMarkdownContent<PostFrontMatter>();
+        app.UseMarkdownContent<PostFrontMatter>(static options => options.Directory = "contents");
         app.UseDefaultLayout<MainLayout>();
         app.AddPages(typeof(BuildRunner).Assembly);
         app.AddNotFoundPage<NotFoundPage>();

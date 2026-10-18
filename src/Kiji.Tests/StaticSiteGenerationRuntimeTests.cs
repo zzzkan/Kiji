@@ -17,7 +17,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
     public StaticSiteGenerationRuntimeTests()
     {
         _testDir = Path.Combine(Path.GetTempPath(), $"StaticSiteGenerationRuntimeTests_{Guid.NewGuid():N}");
-        _contentsDir = Path.Combine(_testDir, "contents");
+        _contentsDir = Path.Combine(_testDir, "content");
         _outputDir = Path.Combine(_testDir, "output");
 
         Directory.CreateDirectory(_contentsDir);
@@ -172,7 +172,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
 
         var manifest = await ReadManifestAsync();
         var detail = manifest.Pages.Single(page => page.OutputRelativePath == Path.Combine("md", "hello-world", "index.html"));
-        Assert.Contains(detail.Dependencies, static dependency => dependency is { Kind: "file", Key: "contents/hello/hello-world.md" });
+        Assert.Contains(detail.Dependencies, static dependency => dependency is { Kind: "file", Key: "content/hello/hello-world.md" });
     }
 
     private async Task<Kiji.Generation.BuildManifest> ReadManifestAsync()

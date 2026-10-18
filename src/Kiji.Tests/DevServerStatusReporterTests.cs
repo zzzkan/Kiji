@@ -12,14 +12,14 @@ public sealed class DevServerStatusReporterTests
         var reporter = new DevServerStatusReporter(output, prefix: "kiji", useEmoji: false, useAnsiColor: false);
         reporter.DevServerStarted(
             new Uri("http://127.0.0.1:8080/"),
-            [@"C:\site\contents"],
+            [@"C:\site\content"],
             watchesStaticAssets: false,
             [@"C:\site\data\authors.json"]);
-        reporter.WatcherError(WatchedPathSource.Content, @"C:\site\contents", new IOException("access denied"));
+        reporter.WatcherError(WatchedPathSource.Content, @"C:\site\content", new IOException("access denied"));
 
         var log = output.ToString();
         Assert.Contains("http://127.0.0.1:8080/", log, StringComparison.Ordinal);
-        Assert.Contains(@"C:\site\contents", log, StringComparison.Ordinal);
+        Assert.Contains(@"C:\site\content", log, StringComparison.Ordinal);
         Assert.Contains(@"Watching build input: 'C:\site\data\authors.json'.", log, StringComparison.Ordinal);
         Assert.Contains("access denied", log, StringComparison.Ordinal);
         Assert.DoesNotContain(((char)0x1b).ToString(), log, StringComparison.Ordinal);
@@ -35,15 +35,15 @@ public sealed class DevServerStatusReporterTests
             new(
                 WatchedPathSource.Content,
                 WatcherChangeTypes.Renamed,
-                @"C:\site\contents\new.md",
-                @"contents\new.md",
-                @"contents\old.md"),
+                @"C:\site\content\new.md",
+                @"content\new.md",
+                @"content\old.md"),
         ];
 
         reporter.ChangesDetected(changes, reloadedClientCount: 0);
 
         var log = output.ToString();
-        Assert.Contains(@"Content renamed: contents\old.md -> contents\new.md", log, StringComparison.Ordinal);
+        Assert.Contains(@"Content renamed: content\old.md -> content\new.md", log, StringComparison.Ordinal);
         Assert.Contains("Browser reload skipped: no clients connected", log, StringComparison.Ordinal);
     }
 
@@ -69,7 +69,7 @@ public sealed class DevServerStatusReporterTests
 
         reporter.DevServerStarted(
             new Uri("http://127.0.0.1:8080/kiji/"),
-            [@"C:\site\contents"],
+            [@"C:\site\content"],
             watchesStaticAssets: true,
             []);
 

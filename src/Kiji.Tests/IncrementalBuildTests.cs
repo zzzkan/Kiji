@@ -271,7 +271,7 @@ public sealed class IncrementalBuildTests : IDisposable
         var removedPage = Path.Combine(root, "dist", "md", "changing", "index.html");
         Assert.True(File.Exists(removedPage));
 
-        File.Delete(Path.Combine(root, "contents", "changing.md"));
+        File.Delete(Path.Combine(root, "content", "changing.md"));
         await BuildAsync(root);
 
         Assert.False(File.Exists(removedPage));
@@ -320,7 +320,7 @@ public sealed class IncrementalBuildTests : IDisposable
         {
             if (Interlocked.Exchange(ref changed, 1) == 0)
             {
-                var input = Path.Combine(root, "contents", "stable.md");
+                var input = Path.Combine(root, "content", "stable.md");
                 var stamp = File.GetLastWriteTimeUtc(input);
                 File.WriteAllText(input, File.ReadAllText(input).Replace("Stable body.", "Edited body.", StringComparison.Ordinal));
                 File.SetLastWriteTimeUtc(input, stamp);
@@ -351,12 +351,12 @@ public sealed class IncrementalBuildTests : IDisposable
 
     [Theory]
     [InlineData("notes")]
-    [InlineData("contents")]
+    [InlineData("content")]
     public async Task IncrementalBuild_EditInOneContentDirectory_SkipsPagesReadingAnother(string notesDirectory)
     {
         var root = Path.Combine(_testDir, "scoped");
-        Directory.CreateDirectory(Path.Combine(root, "contents", "posts"));
-        Directory.CreateDirectory(Path.Combine(root, "contents", notesDirectory));
+        Directory.CreateDirectory(Path.Combine(root, "content", "posts"));
+        Directory.CreateDirectory(Path.Combine(root, "content", notesDirectory));
         Directory.CreateDirectory(Path.Combine(root, "static"));
 
         await WriteMarkdownAsync(root, Path.Combine("posts", "first"), "First Post", "Post body.");
@@ -454,10 +454,10 @@ public sealed class IncrementalBuildTests : IDisposable
         app.Info = TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(app, Path.Combine(app.Paths.ProjectDirectory, "static"));
 
-        app.UseMarkdownContent<FrontMatter>(static options => options.Directory = "contents/posts");
+        app.UseMarkdownContent<FrontMatter>(static options => options.Directory = "content/posts");
         app.UseMarkdownContent<FrontMatter, ScopedNote>(
             select: ScopedNote.Create,
-            configure: options => options.Directory = Path.Combine("contents", notesDirectory));
+            configure: options => options.Directory = Path.Combine("content", notesDirectory));
         app.UseContentSource<Post>(static _ => []);
         app.UseDefaultLayout<MainLayout>();
         app.AddPages(typeof(TestArticleContents).Assembly);
@@ -475,7 +475,7 @@ public sealed class IncrementalBuildTests : IDisposable
     private static async Task WriteMarkdownAsync(string root, string relativePath, string title, string body)
     {
         await File.WriteAllTextAsync(
-            Path.Combine(root, "contents", $"{relativePath}.md"),
+            Path.Combine(root, "content", $"{relativePath}.md"),
             $"""
             ---
             title: {title}
@@ -551,7 +551,7 @@ public sealed class IncrementalBuildTests : IDisposable
         var root = CreateSiteRoot("stamp");
         await using var app = CreateBuildApp(root);
         await app.PublishAsync("dist");
-        var path = Path.Combine(root, "contents", "stable.md");
+        var path = Path.Combine(root, "content", "stable.md");
         var stamp = File.GetLastWriteTimeUtc(path);
         var original = await File.ReadAllTextAsync(path);
         await File.WriteAllTextAsync(path, original.Replace("Stable body.", "Edited body.", StringComparison.Ordinal));
@@ -658,11 +658,11 @@ public sealed class IncrementalBuildTests : IDisposable
         var root = CreateSiteRoot("external-site");
         var external = CreateSiteRoot("external-content");
         await WritePostAsync(external, "stable", "External image", "![image](source.png)");
-        await File.WriteAllBytesAsync(Path.Combine(external, "contents", "source.png"), [1, 2, 3]);
+        await File.WriteAllBytesAsync(Path.Combine(external, "content", "source.png"), [1, 2, 3]);
         var renders = 0;
         async Task Build()
         {
-            await using var app = CreateBuildApp(root, () => Interlocked.Increment(ref renders), Path.Combine(external, "contents"));
+            await using var app = CreateBuildApp(root, () => Interlocked.Increment(ref renders), Path.Combine(external, "content"));
             app.UseImageProcessor(() => new TestSite.PageServices.TrackingImageProcessor());
             await app.PublishAsync("dist");
         }
@@ -686,7 +686,7 @@ public sealed class IncrementalBuildTests : IDisposable
     {
         var root = CreateSiteRoot("dev-images");
         await WritePostAsync(root, "stable", "Image", "![image](source.png)");
-        await File.WriteAllBytesAsync(Path.Combine(root, "contents", "source.png"), [1, 2, 3]);
+        await File.WriteAllBytesAsync(Path.Combine(root, "content", "source.png"), [1, 2, 3]);
         await using (var publishing = CreateBuildApp(root))
         {
             publishing.UseImageProcessor(() => new TestSite.PageServices.TrackingImageProcessor());
@@ -718,7 +718,7 @@ public sealed class IncrementalBuildTests : IDisposable
     {
         var root = CreateSiteRoot("images");
         await WritePostAsync(root, "stable", "Image", "![image](source.png)");
-        await File.WriteAllBytesAsync(Path.Combine(root, "contents", "source.png"), [1, 2, 3]);
+        await File.WriteAllBytesAsync(Path.Combine(root, "content", "source.png"), [1, 2, 3]);
         var processor = new TestSite.PageServices.TrackingImageProcessor();
         var renders = 0;
         void Record() { Interlocked.Increment(ref renders); }
@@ -747,7 +747,7 @@ public sealed class IncrementalBuildTests : IDisposable
     {
         var root = CreateSiteRoot("image-stamps");
         await WritePostAsync(root, "stable", "Image", "![image](source.png)");
-        await File.WriteAllBytesAsync(Path.Combine(root, "contents", "source.png"), [1, 2, 3]);
+        await File.WriteAllBytesAsync(Path.Combine(root, "content", "source.png"), [1, 2, 3]);
         var processor = new TestSite.PageServices.TrackingImageProcessor();
         async Task Build()
         {
@@ -805,7 +805,7 @@ public sealed class IncrementalBuildTests : IDisposable
     private string CreateSiteRoot(string name)
     {
         var root = Path.Combine(_testDir, name);
-        Directory.CreateDirectory(Path.Combine(root, "contents"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
         Directory.CreateDirectory(Path.Combine(root, "static"));
 
         File.WriteAllText(Path.Combine(root, "static", "app.css"), "body { margin: 0; }");
@@ -817,7 +817,7 @@ public sealed class IncrementalBuildTests : IDisposable
     private static async Task WritePostAsync(string root, string slug, string title, string body)
     {
         await File.WriteAllTextAsync(
-            Path.Combine(root, "contents", $"{slug}.md"),
+            Path.Combine(root, "content", $"{slug}.md"),
             $"""
             ---
             title: {title}
@@ -834,7 +834,7 @@ public sealed class IncrementalBuildTests : IDisposable
         await app.PublishAsync(Path.Combine(root, "dist"));
     }
 
-    private static StaticSite CreateBuildApp(string root, Action? onRender = null, string directory = "contents")
+    private static StaticSite CreateBuildApp(string root, Action? onRender = null, string directory = "content")
     {
         var app = StaticSite.Create([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
         app.Info = TestArticleContents.CreateSiteInfo();

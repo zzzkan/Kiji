@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/zzzkan/kiji/actions/workflows/ci.yml/badge.svg)](https://github.com/zzzkan/kiji/actions/workflows/ci.yml)
 [![NuGet](https://img.shields.io/nuget/v/Kiji.svg)](https://www.nuget.org/packages/Kiji)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/zzzkan/kiji/blob/main/LICENSE)
 
 **Write Razor. Publish a purely static site.** Kiji brings your .NET components and Markdown
 together in plain HTML, ready for any static host.
@@ -13,7 +13,7 @@ together in plain HTML, ready for any static host.
 
 ## Demo
 
-- [Kiji documentation](https://kiji-docs.zzzkan.workers.dev/) ([source](docs/))
+- [Kiji documentation](https://kiji-docs.zzzkan.workers.dev/) ([source](https://github.com/zzzkan/kiji/tree/main/docs))
 - [zzzkan.me](https://zzzkan.me/) (the author's blog)
 
 ## Why Kiji
@@ -99,4 +99,4 @@ Contributions to Kiji and its documentation are welcome. [Open an issue](https:/
 
 ## License
 
-[MIT](LICENSE)
+[MIT](https://github.com/zzzkan/kiji/blob/main/LICENSE)

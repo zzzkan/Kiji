@@ -6,7 +6,7 @@
     <PackageId>Kiji</PackageId>
     <EnablePackageValidation>true</EnablePackageValidation>
     <PackageValidationBaselineVersion>0.1.0</PackageValidationBaselineVersion>
-    <Description>A static site generator for .NET. Use Razor components to build pages, with Markdown, layouts, and static assets.</Description>
+    <Description>Write Razor. Publish a purely static site. Kiji brings your .NET components and Markdown together in plain HTML, ready for any static host.</Description>
     <PackageTags>static-site-generator;ssg;razor;blazor;markdown;kiji;</PackageTags>
   </PropertyGroup>
 

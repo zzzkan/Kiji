@@ -185,7 +185,7 @@ public sealed class FrontMatter
 }
 ```
 
-Create `contents/hello-kiji/index.md`:
+Create `content/hello-kiji/index.md`:
 
 ```markdown
 ---
@@ -309,7 +309,7 @@ MySite/
 ├── Components/       shared layouts and components
 ├── Pages/            routed Razor components
 ├── Models/           data models
-├── contents/         Markdown and page-bundle images
+├── content/          Markdown and page-bundle images
 ├── wwwroot/          CSS, JavaScript, and other static assets
 ├── Program.cs        the site definition
 ├── .kiji/            build cache and development output

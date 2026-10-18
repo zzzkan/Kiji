@@ -14,7 +14,7 @@ MySite/
 ├── Components/       layouts and reusable components
 ├── Pages/            components with @page routes
 ├── Models/           content models
-├── contents/         Markdown and its local images
+├── content/          Markdown and its local images
 ├── wwwroot/          shared CSS, JavaScript, fonts, and images
 └── Program.cs        site metadata and registrations
 ```

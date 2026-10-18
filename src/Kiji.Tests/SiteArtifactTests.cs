@@ -18,7 +18,7 @@ public sealed class SiteArtifactTests : IDisposable
     public SiteArtifactTests()
     {
         _testDir = Path.Combine(Path.GetTempPath(), $"SiteArtifactTests_{Guid.NewGuid():N}");
-        _contentsDir = Path.Combine(_testDir, "contents");
+        _contentsDir = Path.Combine(_testDir, "content");
         _outputDir = Path.Combine(_testDir, "output");
 
         Directory.CreateDirectory(_contentsDir);

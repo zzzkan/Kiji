@@ -69,7 +69,7 @@ public sealed class PageServiceContentTests : IDisposable
                 {
                     if (change == "delete")
                     {
-                        File.Delete(Path.Combine(_root, "contents", "third.md"));
+                        File.Delete(Path.Combine(_root, "content", "third.md"));
                     }
                     else
                     {
@@ -134,14 +134,14 @@ public sealed class PageServiceContentTests : IDisposable
         {
             case "edit": WritePost("second", "different-tag"); break;
             case "add": WritePost("third", "shared"); break;
-            case "delete": File.Delete(Path.Combine(_root, "contents", "second.md")); break;
+            case "delete": File.Delete(Path.Combine(_root, "content", "second.md")); break;
         }
     }
 
     private void WritePost(string key, string tag)
     {
-        Directory.CreateDirectory(Path.Combine(_root, "contents"));
-        File.WriteAllText(Path.Combine(_root, "contents", $"{key}.md"), $"---\ntitle: {key}\ntags: [{tag}]\n---\nBody.\n");
+        Directory.CreateDirectory(Path.Combine(_root, "content"));
+        File.WriteAllText(Path.Combine(_root, "content", $"{key}.md"), $"---\ntitle: {key}\ntags: [{tag}]\n---\nBody.\n");
     }
 
     private static Dictionary<string, string> ReadHtml(string directory) => Directory

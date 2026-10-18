@@ -53,13 +53,13 @@ the build.
 
 ## Choose the files
 
-By default, Kiji recursively loads `*.md` files from `contents/`. Set `Directory` to use a
+By default, Kiji recursively loads `*.md` files from `content/`. Set `Directory` to use a
 different directory, and `FileFilter` to exclude files before they are loaded:
 
 ```csharp
 app.UseMarkdownContent<FrontMatter>(options =>
 {
-    options.Directory = "contents/posts";
+    options.Directory = "content/posts";
     options.FileFilter = file => !file.Name.StartsWith('_');
 });
 ```
@@ -166,7 +166,7 @@ sub-path setup.
 Place an image beside a Markdown file and reference it with a relative URL:
 
 ```text
-contents/
+content/
 └── hello-kiji/
     ├── index.md
     └── photo.jpg

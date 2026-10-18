@@ -12,8 +12,8 @@ public sealed class MarkdownOptions
 
     internal List<Action<DeserializerBuilder>> FrontMatterConfigurations { get; } = [];
 
-    /// <summary>The directory to scan recursively for <c>*.md</c>. Absolute or relative to the site project directory; defaults to <c>contents</c>.</summary>
-    public string Directory { get; set; } = "contents";
+    /// <summary>The directory to scan recursively for <c>*.md</c>. Absolute or relative to the site project directory; defaults to <c>content</c>.</summary>
+    public string Directory { get; set; } = "content";
 
     /// <summary>An optional file filter applied before loading, defaulting to all Markdown files.</summary>
     public Func<FileInfo, bool>? FileFilter { get; set; }

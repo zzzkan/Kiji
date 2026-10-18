@@ -33,9 +33,9 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
     [Fact]
     public async Task CustomProcessor_IsUsedByMarkdownPublish_AndItsOutputIsPreserved()
     {
-        Directory.CreateDirectory(Path.Combine(_root, "contents"));
-        File.WriteAllText(Path.Combine(_root, "contents", "post.md"), "---\ntitle: Image\n---\n![custom](./source.png)");
-        File.WriteAllText(Path.Combine(_root, "contents", "source.png"), "custom processor input");
+        Directory.CreateDirectory(Path.Combine(_root, "content"));
+        File.WriteAllText(Path.Combine(_root, "content", "post.md"), "---\ntitle: Image\n---\n![custom](./source.png)");
+        File.WriteAllText(Path.Combine(_root, "content", "source.png"), "custom processor input");
         var processor = new TrackingImageProcessor();
         await using var app = CreateApp();
         app.UseImageProcessor(() => processor);

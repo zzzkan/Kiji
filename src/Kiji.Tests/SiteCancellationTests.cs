@@ -133,9 +133,9 @@ public sealed class SiteCancellationTests : IDisposable
 
     private void WriteContent(string text)
     {
-        Directory.CreateDirectory(Path.Combine(_root, "contents"));
-        File.WriteAllText(Path.Combine(_root, "contents", "post.md"), $"---\ntitle: Post\n---\n{text}\n![image](source.png)");
-        File.WriteAllText(Path.Combine(_root, "contents", "source.png"), text);
+        Directory.CreateDirectory(Path.Combine(_root, "content"));
+        File.WriteAllText(Path.Combine(_root, "content", "post.md"), $"---\ntitle: Post\n---\n{text}\n![image](source.png)");
+        File.WriteAllText(Path.Combine(_root, "content", "source.png"), text);
     }
 
     private static TaskCompletionSource Signal() => new(TaskCreationOptions.RunContinuationsAsynchronously);

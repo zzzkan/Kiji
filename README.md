@@ -11,11 +11,6 @@ together in plain HTML, ready for any static host.
     <img width="720" alt="kiji demo" src="https://github.com/user-attachments/assets/85bffb06-7001-4d41-95e8-c8b92a412b2f" />
 </p>
 
-## Demo
-
-- [Kiji documentation](https://kiji-docs.zzzkan.workers.dev/) ([source](https://github.com/zzzkan/kiji/tree/main/docs))
-- [zzzkan.me](https://zzzkan.me/) (the author's blog)
-
 ## Why Kiji
 
 ### 🧰 Your .NET workflow
@@ -40,44 +35,17 @@ Customize Markdown, transform HTML, or bring your own content source and image p
 The output needs no .NET server or Blazor runtime. Use JavaScript for browser
 interactivity; Razor event handlers such as `@onclick` are not included.
 
-## Quick start
+## Getting started
 
 ```pwsh
-dotnet new console -f net10.0 -o MySite
-cd MySite
-dotnet add package Kiji
+dotnet new install Kiji.Templates
+dotnet new kiji-blog -o MyBlog
+cd MyBlog
 ```
 
-Change the first line of `MySite.csproj` to use the Razor SDK:
-
-```xml
-<Project Sdk="Microsoft.NET.Sdk.Razor">
-```
-
-Replace `Program.cs` with the site definition and create `Pages/Home.razor`:
-
-```csharp
-// Program.cs
-using Kiji;
-
-var app = StaticSite.Create(args);
-app.Info = new SiteInfo
-{
-    BaseUrl = new Uri("https://example.com/"),
-    Name = "My Site",
-};
-app.AddPages();
-
-return await app.RunAsync();
-```
-
-```razor
-@* Pages/Home.razor *@
-@page "/"
-
-<h1>Hello from Kiji</h1>
-<p>This page is a Razor component rendered to static HTML.</p>
-```
+Edit `SiteInfo` in `Program.cs` to set your site name, author, and public `BaseUrl`,
+including any deployment subpath. The template includes dated Markdown posts, an
+article list, shared styles, and RSS.
 
 Start the development server and open <http://localhost:8080>:
 
@@ -85,13 +53,24 @@ Start the development server and open <http://localhost:8080>:
 dotnet watch
 ```
 
-Generate the static site in `dist/`:
+The development server reflects content changes immediately and reloads your browser automatically.
+
+Stop the development server with `Ctrl+C`, then generate the static site in `dist/`:
 
 ```pwsh
 dotnet publish
 ```
 
-For the complete walkthrough—including layouts, CSS, and Markdown—see [Getting started](https://kiji-docs.zzzkan.workers.dev/docs/getting-started/).
+See [Kiji.Templates](https://github.com/zzzkan/Kiji.Templates) for all templates and options,
+or follow [Getting started](https://kiji-docs.zzzkan.workers.dev/docs/getting-started/)
+to use a template or build a minimal blog from scratch.
+
+## Demo
+
+- [Kiji documentation site](https://kiji-docs.zzzkan.workers.dev/) ([source code](https://github.com/zzzkan/kiji/tree/main/docs))
+- [Blog template with Markdown posts](https://zzzkan.github.io/Kiji.Templates/kiji-blog/)
+- [Blazor WebAssembly template recreated with Kiji and JavaScript](https://zzzkan.github.io/Kiji.Templates/kiji-interactive/)
+- [Author's personal blog (zzzkan.me)](https://zzzkan.me/)
 
 ## Contributing
 

@@ -1,21 +1,77 @@
 ---
 title: Getting started
-description: Install Kiji, build a site with Razor, Markdown, and CSS, then publish it.
+description: Start with the Kiji Blog template or build a minimal blog with Razor, Markdown, and CSS from scratch.
 order: 10
 ---
 
-This guide starts with an empty .NET project and ends with a static site that has a Razor
-home page, a Markdown-backed page, and a stylesheet. Kiji is a library rather than a
-separate CLI, so you will use the usual `dotnet` commands throughout.
+Start with the Blog template for a ready-to-customize site, or follow the walkthrough below to build a minimal blog from scratch.
+
+## Start from a template
+
+[Kiji.Templates](https://github.com/zzzkan/Kiji.Templates) provides templates for
+`dotnet new`. Install the package and create a site with the
+[Blog template](https://github.com/zzzkan/Kiji.Templates#kiji-blog):
+
+```pwsh
+dotnet new install Kiji.Templates
+dotnet new kiji-blog -o MyBlog
+cd MyBlog
+```
+
+Edit `SiteInfo` in `Program.cs` to set the site name, description, language, and
+author. Set `BaseUrl` to your public URL, including any deployment subpath such as
+`https://example.com/blog/`.
+
+### Preview and customize
+
+Start the development server:
+
+```pwsh
+dotnet watch
+```
+
+Open <http://localhost:8080>. If you chose a base URL with a subpath, open that path
+instead, for example <http://localhost:8080/blog/>.
+
+The Blog template includes dated Markdown posts, an article list, About and Policy
+pages, shared styles, syntax highlighting, and RSS.
+
+- Edit posts in `content/posts/<slug>/index.md`. Each post has `title`, `description`,
+  and `date` fields in its YAML front matter. Copy a sample post into a new directory
+  to add another post; its directory name becomes the slug in `/posts/<slug>/`.
+- Edit general pages in `content/pages/`.
+- Customize the Razor components in `Pages/`, `Layout/`, and `Components/`, and the
+  stylesheet in `wwwroot/css/app.css`.
+- Update the site name, public URL, description, language, and author in `Program.cs`.
+
+The server reloads the browser as you edit files.
+
+### Publish the blog
+
+Stop the development server with `Ctrl+C`, then publish:
+
+```pwsh
+dotnet publish
+```
+
+Upload the contents of `dist/` to your static host. See [Deployment](../deployment/)
+for hosting and subpaths. You can now customize the template, or continue below to
+learn how the core pieces fit together.
+
+## Build from scratch
+
+This walkthrough builds the core of the Blog template: a home page listing dated
+Markdown posts, individual post pages, and a shared layout and stylesheet.
+Kiji is a library, so the project uses the usual `dotnet` commands throughout.
 
 Razor and C# examples show complete files. Highlighted lines mark additions or changes.
 
-## Create the project
+### Create the project
 
-Kiji requires the .NET 10 SDK. Create a console project and add the package:
+Create a console project and add the package:
 
 ```pwsh
-dotnet new console -f net10.0 -o MySite
+dotnet new console -o MySite
 cd MySite
 dotnet add package Kiji
 ```
@@ -28,7 +84,7 @@ Open `MySite.csproj` and change its first line to use the Razor SDK:
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 ```
 
-## Build the smallest site
+### Build the smallest site
 
 Replace `Program.cs` with the site definition:
 
@@ -70,7 +126,7 @@ Open <http://localhost:8080>.
 The server reloads the browser when you change a component
 or content file.
 
-## Add a layout and CSS
+### Add a layout and CSS
 
 Files under `wwwroot/` are static assets. Create `wwwroot/css/app.css`:
 
@@ -89,17 +145,15 @@ body {
 }
 ```
 
-Create `Components/PageHead.razor` for the page title and canonical URL:
+Create `Components/PageHead.razor` for the page title:
 
 ```razor
 @using Kiji
 @using Kiji.Components
 @inject SiteInfo Site
-@inject PageInfo Page
 
 <StaticHeadContent>
     <title>@Title - @Site.Name</title>
-    <link rel="canonical" href="@Page.Url.AbsoluteUri" />
 </StaticHeadContent>
 
 @code {
@@ -165,7 +219,7 @@ Add `PageHead` to `Pages/Home.razor`:
 <p>This page is a Razor component rendered to static HTML.</p>
 ```
 
-Use `PageHead` once in each page for its title and canonical URL. `MainLayout` supplies
+Use `PageHead` once in each page for its title. `MainLayout` supplies
 the shared head tags. Kiji combines both `StaticHeadContent` contributions in `<head>`.
 
 Stop and restart `dotnet watch`.
@@ -175,47 +229,80 @@ Stop and restart `dotnet watch`.
 `Assets` includes the `BaseUrl` path in the stylesheet URL, so the same markup works at a
 domain root and under a deployment sub-path such as GitHub Pages.
 
-## Add a Markdown page
+### Add a Markdown page
 
-Create `Models/FrontMatter.cs` to define the YAML fields your posts use:
+Create `Models/PostFrontMatter.cs` to define the YAML fields your posts use:
 
 ```csharp
 namespace MySite.Models;
 
-public sealed class FrontMatter
+public sealed class PostFrontMatter
 {
-    public string? Title { get; set; }
-    public string? Description { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public DateTimeOffset? Date { get; set; }
 }
 ```
 
-Create `content/hello-kiji/index.md`:
+Create `content/posts/hello-kiji/index.md`:
 
 ```markdown
 ---
 title: Hello, Kiji
 description: The first post on my site.
+date: 2026-01-12T09:00:00Z
 ---
 
 This page is written in Markdown.
 ```
+
+Create `Models/BlogPost.cs` to represent a post. It exposes the metadata and URL
+used by pages and keeps the Markdown content for rendering the body:
+
+```csharp
+using Kiji.Markdown;
+
+namespace MySite.Models;
+
+public sealed record BlogPost(
+    string Slug, string Title, string Description, DateTimeOffset Date,
+    MarkdownContent<PostFrontMatter> Content)
+{
+    public string RelativePath => $"posts/{Uri.EscapeDataString(Slug)}/";
+
+    public static BlogPost Create(MarkdownContent<PostFrontMatter> content)
+    {
+        if (string.IsNullOrWhiteSpace(content.FrontMatter.Title) || content.FrontMatter.Date is null)
+        {
+            throw new InvalidOperationException($"{content.FileInfo.FullName}: posts require a title and date.");
+        }
+
+        return new BlogPost(content.FileInfo.Directory!.Name,
+            content.FrontMatter.Title, content.FrontMatter.Description,
+            content.FrontMatter.Date.Value, content);
+    }
+}
+```
+
+This walkthrough uses one directory per post, with its Markdown in `index.md`.
+`BlogPost.Create` uses that directory name as the slug and requires a title and date.
 
 Create `Pages/Post.razor`. `Slug` supplies the route value, while `ContentKey` tells the component which Markdown item to render:
 
 ```razor
 @page "/posts/{Slug}/"
 @using Kiji
-@using Kiji.Markdown
 @using MySite.Components
 @using MySite.Models
-@inject ContentDictionary<MarkdownContent<FrontMatter>> Posts
+@inject ContentDictionary<BlogPost> Posts
 
 @if (_post is not null)
 {
-    <PageHead Title="@(_post.FrontMatter.Title ?? "Untitled")" />
+    <PageHead Title="@_post.Title" />
 
     <article>
-        <h1>@_post.FrontMatter.Title</h1>
+        <h1>@_post.Title</h1>
+        <time datetime="@_post.Date.ToString("yyyy-MM-dd")">@_post.Date.ToString("yyyy-MM-dd")</time>
         <div>@((MarkupString)_html)</div>
     </article>
 }
@@ -224,20 +311,20 @@ Create `Pages/Post.razor`. `Slug` supplies the route value, while `ContentKey` t
     [Parameter] public string Slug { get; set; } = string.Empty;
     [Parameter] public string ContentKey { get; set; } = string.Empty;
 
-    private MarkdownContent<FrontMatter>? _post;
+    private BlogPost? _post;
     private string _html = string.Empty;
 
     protected override async Task OnParametersSetAsync()
     {
         _post = Posts[ContentKey];
-        _html = await _post.RenderAsync();
+        _html = await _post.Content.RenderAsync();
     }
 }
 ```
 
 Add the required namespaces and registrations to `Program.cs`:
 
-{data-line="2-3,5-6,15,18-24"}
+{data-line="2-3,5-6,15-16,19-21"}
 
 ```csharp
 using Kiji;
@@ -254,45 +341,64 @@ app.Info = new SiteInfo
     Name = "My Site",
 };
 
-app.UseMarkdownContent<FrontMatter>();
+app.UseMarkdownContent<PostFrontMatter, BlogPost>(BlogPost.Create,
+    options => options.Directory = "content/posts");
 app.UseDefaultLayout<MainLayout>();
 app.AddPages();
 app.AddPages<Post>(services => services
-    .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
-    .Select(post => new
-    {
-        Slug = post.Value.FileInfo.Directory!.Name,
-        ContentKey = post.Key,
-    }));
+    .GetRequiredService<ContentDictionary<BlogPost>>()
+    .Select(post => new { post.Value.Slug, ContentKey = post.Key }));
 
 return await app.RunAsync();
 ```
 
-Update `Pages/Home.razor` so the post is reachable from the home page:
+`UseMarkdownContent<PostFrontMatter, BlogPost>` calls `BlogPost.Create` for each
+Markdown item and makes a `ContentDictionary<BlogPost>` available through dependency
+injection. The route registration uses each post's `Slug` and the dictionary key
+to generate its page in `/posts/<slug>/`.
 
-{data-line="2,4,10"}
+Open <http://localhost:8080/posts/hello-kiji/> to see the Markdown post.
+
+![Markdown post with its publication date](./markdown.png)
+
+### List the posts
+
+Replace `Pages/Home.razor` with a list of posts, newest first:
 
 ```razor
 @page "/"
 @using Kiji
 @using MySite.Components
+@using MySite.Models
 @inject SiteInfo Site
+@inject ContentDictionary<BlogPost> Posts
 
 <PageHead Title="Home" />
 
-<h1>Hello from Kiji</h1>
-<p>This page is a Razor component rendered to static HTML.</p>
-<p><a href="@(Site.ResolveUrl("posts/hello-kiji/").AbsolutePath)">Read the first post</a></p>
+<h1>@Site.Name</h1>
+<ul>
+    @foreach (var post in Posts.Values.OrderByDescending(post => post.Date))
+    {
+        <li>
+            <time datetime="@post.Date.ToString("yyyy-MM-dd")">@post.Date.ToString("yyyy-MM-dd")</time>
+            <a href="@Site.ResolveUrl(post.RelativePath).AbsolutePath">@post.Title</a>
+        </li>
+    }
+</ul>
 ```
 
-The directory name becomes the slug, so the new page is available at
-<http://localhost:8080/posts/hello-kiji/>.
+Return to <http://localhost:8080> to see the post list.
 
-![Add a Markdown page](./markdown.png)
+![Post list on the home page](./post-list.png)
 
-Kiji loads Markdown into a typed collection; your route mapping decides which URLs to generate.
+To add another post, create
+`content/posts/second-post/index.md` with a title, description, date, and Markdown body.
+It will appear in the list and have its own page at `/posts/second-post/`.
 
-## Publish the site
+Both pages use the same `BlogPost` model: the home page lists its metadata, while
+the post page renders its Markdown body.
+
+### Publish the site
 
 Stop the development server and publish:
 
@@ -310,12 +416,24 @@ The project now has this shape:
 
 ```text
 MySite/
-├── Layout/           shared layouts and navigation
-├── Components/       reusable components
-├── Pages/            routed Razor components
-├── Models/           data models
-├── content/          Markdown and page-bundle images
-├── wwwroot/          CSS, JavaScript, and other static assets
+├── Layout/
+│   └── MainLayout.razor
+├── Components/
+│   └── PageHead.razor
+├── Pages/
+│   ├── Home.razor
+│   └── Post.razor
+├── Models/
+│   ├── PostFrontMatter.cs
+│   └── BlogPost.cs
+├── content/
+│   └── posts/
+│       └── hello-kiji/
+│           └── index.md
+├── wwwroot/
+│   └── css/
+│       └── app.css
+├── MySite.csproj      the Razor SDK project with a Kiji package reference
 ├── Program.cs        the site definition
 ├── .kiji/            build cache and development output
 └── dist/             published output

@@ -12,6 +12,7 @@ the site and may be chained.
 - [Content and images](#content-and-images)
 - [Build inputs and controls](#build-inputs-and-controls)
 - [Generated files](#generated-files)
+- [Unsupported Blazor features](#unsupported-blazor-features)
 
 ## Site setup
 
@@ -130,19 +131,6 @@ instance. Kiji disposes it when that render finishes.
 Page services are unavailable to content loaders, route/feed factories, and artifact
 writers.
 
-### JavaScript interop
-
-`Microsoft.JSInterop.IJSRuntime` is registered for each page render, matching Blazor's
-static SSR behavior. Components can inject it through `[Inject]` or a constructor,
-and page services can depend on it without a custom registration.
-`IJSRuntime` is managed by Kiji and cannot be replaced with `AddPageService`.
-
-Injection succeeds, but every interop operation throws `InvalidOperationException`
-with static-rendering guidance, including function calls, constructor calls, and
-property reads and writes. Kiji does not call `OnAfterRender` or `OnAfterRenderAsync`,
-so components that defer JS interop to those lifecycle methods can render their static
-HTML. For behavior in the browser, include a `<script>` element or JavaScript module.
-
 ### Page metadata
 
 #### PageInfo
@@ -160,8 +148,7 @@ URL, including the deployment base path.
 <a href="@Site.ResolveUrl("about/").AbsolutePath">About</a>
 ```
 
-Blazor's `NavigationManager` is unsupported and not registered. Use `PageInfo.Url` and
-`SiteInfo.ResolveUrl` for links; configure redirects in the hosting platform.
+See [NavigationManager limitations](#navigationmanager) when adapting Blazor components.
 
 #### StaticHeadContent
 
@@ -178,9 +165,7 @@ inside the generated document `<head>`:
 All instances append to the head in registration order, with no markup at their position
 in the body. Updating or removing one affects only its contribution. Tags are not deduplicated.
 
-Blazor's `Microsoft.AspNetCore.Components.Web.PageTitle`, `HeadContent`, and `HeadOutlet`
-are unsupported and throw an actionable error during rendering (publish and development).
-Use `StaticHeadContent` with a plain `<title>` element.
+See [unsupported Blazor head components](#pagetitle-headcontent-and-headoutlet).
 
 ### Static assets
 
@@ -421,3 +406,29 @@ Kiji constructs this type for artifact writers; it has no public constructor.
 path validation rules. `OutputRelativePath` is the file-facing path below the output
 directory and cannot be blank. Both values are exposed as read-only properties with the
 same names.
+
+## Unsupported Blazor features
+
+Kiji generates static HTML without a Blazor runtime. Event handlers such as
+`@onclick` do not run in the browser.
+
+### JavaScript interop
+
+Components and page services can inject `IJSRuntime`, but interop calls throw
+`InvalidOperationException`. Do not replace it through `AddPageService`.
+
+`OnAfterRender` and `OnAfterRenderAsync` do not run. Components that defer interop
+to these methods can render static HTML. Use a `<script>` element or JavaScript
+module for browser behavior.
+
+### NavigationManager
+
+Blazor's `NavigationManager` is unavailable. Use [PageInfo](#pageinfo) for the current
+page's URL and [SiteInfo.ResolveUrl](#siteinfo) to build links. Configure redirects in
+your hosting platform.
+
+### PageTitle, HeadContent, and HeadOutlet
+
+Kiji rejects Blazor's `PageTitle`, `HeadContent`, and `HeadOutlet` during rendering.
+Use [StaticHeadContent](#staticheadcontent) for head tags, including a plain `<title>`
+element.

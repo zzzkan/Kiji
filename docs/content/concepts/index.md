@@ -112,3 +112,5 @@ and `AddArtifact` writes other files. See the [API reference](../api-reference/#
 
 The site needs no Blazor runtime. `@onclick` does not remain interactive and
 `OnAfterRenderAsync` does not run. Add browser behavior with JavaScript in `wwwroot/`.
+See [Unsupported Blazor features](../api-reference/#unsupported-blazor-features)
+for component limitations and alternatives.

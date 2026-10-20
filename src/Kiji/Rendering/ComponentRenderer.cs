@@ -3,6 +3,7 @@ using System.Text.Unicode;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.JSInterop;
 
 namespace Kiji.Rendering;
 
@@ -22,6 +23,7 @@ internal sealed class ComponentRenderer(IServiceProvider services)
         });
         services.AddScoped<HeadContentRegistry>();
         services.AddScoped<IComponentActivator, StaticComponentActivator>();
+        services.AddScoped<IJSRuntime, UnsupportedJavaScriptRuntime>();
     }
 
     internal async Task<string> RenderComponentAsync<TComponent>(

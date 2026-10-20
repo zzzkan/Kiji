@@ -130,6 +130,19 @@ instance. Kiji disposes it when that render finishes.
 Page services are unavailable to content loaders, route/feed factories, and artifact
 writers.
 
+### JavaScript interop
+
+`Microsoft.JSInterop.IJSRuntime` is registered for each page render, matching Blazor's
+static SSR behavior. Components can inject it through `[Inject]` or a constructor,
+and page services can depend on it without a custom registration.
+`IJSRuntime` is managed by Kiji and cannot be replaced with `AddPageService`.
+
+Injection succeeds, but every interop operation throws `InvalidOperationException`
+with static-rendering guidance, including function calls, constructor calls, and
+property reads and writes. Kiji does not call `OnAfterRender` or `OnAfterRenderAsync`,
+so components that defer JS interop to those lifecycle methods can render their static
+HTML. For behavior in the browser, include a `<script>` element or JavaScript module.
+
 ### Page metadata
 
 #### PageInfo

@@ -148,18 +148,17 @@ URL, including the deployment base path.
 <a href="@Site.ResolveUrl("about/").AbsolutePath">About</a>
 ```
 
-#### NavigationManager
+#### NavigationManager and NavLink
 
-Components and page services can inject Blazor's `NavigationManager`. Each render gets
-its own instance: `BaseUri` is `SiteInfo.BaseUrl`, and `Uri` is `PageInfo.Url`, both as
-absolute URI strings. Development uses the same public URLs as publish, without the
-local request's query string. The 404 page uses its own route.
+Reuse Blazor navigation components and active-link matching in generated HTML.
+This is limited support for static generation, not full static SSR.
+For URL access alone, use `PageInfo` and `SiteInfo`.
 
-`ToAbsoluteUri` resolves relative links against `BaseUri`; a leading `/` refers to the
-host root. Use `SiteInfo.ResolveUrl` to preserve a deployment subpath.
+Components and page services can inject `NavigationManager`: each render maps
+`BaseUri` to `SiteInfo.BaseUrl` and `Uri` to `PageInfo.Url`. Development uses these
+public URLs, excluding request queries; 404 pages use their own route.
 
-Blazor's `NavLink` renders an ordinary anchor with its active class determined by the
-current page and `Match` (`Prefix` or `All`):
+`NavLink` renders an anchor with its active class determined by `Match` (`Prefix` or `All`):
 
 ```razor
 @using Microsoft.AspNetCore.Components.Routing
@@ -168,11 +167,13 @@ current page and `Match` (`Prefix` or `All`):
 <NavLink href="@Site.ResolveUrl("about/").AbsolutePath" Match="NavLinkMatch.All">About</NavLink>
 ```
 
-Use root-relative URLs as above, or supply a matching HTML `<base>` element when using
-base-relative links. Kiji does not add a `<base>` element or rewrite `href` values.
-`NavigateTo` and `Refresh` throw `NotSupportedException` during rendering; configure
-redirects in your hosting platform. Client-side routing and navigation interception
-are unavailable, and `NotFound()` does not select Kiji's 404 page.
+`ToAbsoluteUri` resolves against `BaseUri`; a leading `/` means the host root.
+`SiteInfo.ResolveUrl` preserves deployment subpaths. Use root-relative links as above,
+or provide a matching HTML `<base>`; Kiji adds no `<base>` or `href` rewriting.
+
+Unlike static SSR, `NavigateTo`/`Refresh` throw `NotSupportedException`, and `NotFound()`
+neither sets HTTP status nor selects Kiji's 404 page. Configure redirects in your host.
+Client-side routing and navigation interception are unavailable.
 
 #### StaticHeadContent
 

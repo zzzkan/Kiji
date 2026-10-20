@@ -148,7 +148,31 @@ URL, including the deployment base path.
 <a href="@Site.ResolveUrl("about/").AbsolutePath">About</a>
 ```
 
-See [NavigationManager limitations](#navigationmanager) when adapting Blazor components.
+#### NavigationManager
+
+Components and page services can inject Blazor's `NavigationManager`. Each render gets
+its own instance: `BaseUri` is `SiteInfo.BaseUrl`, and `Uri` is `PageInfo.Url`, both as
+absolute URI strings. Development uses the same public URLs as publish, without the
+local request's query string. The 404 page uses its own route.
+
+`ToAbsoluteUri` resolves relative links against `BaseUri`; a leading `/` refers to the
+host root. Use `SiteInfo.ResolveUrl` to preserve a deployment subpath.
+
+Blazor's `NavLink` renders an ordinary anchor with its active class determined by the
+current page and `Match` (`Prefix` or `All`):
+
+```razor
+@using Microsoft.AspNetCore.Components.Routing
+@inject SiteInfo Site
+
+<NavLink href="@Site.ResolveUrl("about/").AbsolutePath" Match="NavLinkMatch.All">About</NavLink>
+```
+
+Use root-relative URLs as above, or supply a matching HTML `<base>` element when using
+base-relative links. Kiji does not add a `<base>` element or rewrite `href` values.
+`NavigateTo` and `Refresh` throw `NotSupportedException` during rendering; configure
+redirects in your hosting platform. Client-side routing and navigation interception
+are unavailable, and `NotFound()` does not select Kiji's 404 page.
 
 #### StaticHeadContent
 
@@ -420,12 +444,6 @@ Components and page services can inject `IJSRuntime`, but interop calls throw
 `OnAfterRender` and `OnAfterRenderAsync` do not run. Components that defer interop
 to these methods can render static HTML. Use a `<script>` element or JavaScript
 module for browser behavior.
-
-### NavigationManager
-
-Blazor's `NavigationManager` is unavailable. Use [PageInfo](#pageinfo) for the current
-page's URL and [SiteInfo.ResolveUrl](#siteinfo) to build links. Configure redirects in
-your hosting platform.
 
 ### PageTitle, HeadContent, and HeadOutlet
 

@@ -1,4 +1,3 @@
-using Kiji.Components;
 using Kiji.Rendering;
 using Kiji.Tests.TestSite;
 using Kiji.Tests.TestSite.Pages;
@@ -9,49 +8,35 @@ namespace Kiji.Tests;
 public sealed class ComponentRendererTests
 {
     [Theory]
-    [InlineData(typeof(UnsupportedNavigationPage))]
-    [InlineData(typeof(ConstructorNavigationPage))]
-    public async Task RenderComponentAsync_MissingNavigationManagerAddsGuidance(Type pageType)
+    [InlineData("https://example.com/")]
+    [InlineData("https://example.com/kiji/")]
+    [InlineData("https://example.com/日本/")]
+    public async Task RenderPageAsync_IsolatesNavigationAndNavLinksAcrossRenders(string baseUrl)
     {
         await using var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
-        app.Info = TestArticleContents.CreateSiteInfo();
-        var renderer = new ComponentRenderer(app.ServiceProvider);
-        using var output = new StringWriter();
+        app.Info = new SiteInfo { Name = "Navigation", BaseUrl = new Uri(baseUrl) };
+        app.AddPages<NavigationTestPage>(_ => [new { Id = "first" }, new { Id = "日本 語" }]);
+        var pages = app.CreateSnapshot().Pages;
 
-        var exception = await Assert.ThrowsAsync<NotSupportedException>(() =>
-            renderer.RenderComponentToAsync<KijiRoot>(output, new Dictionary<string, object?>
-            {
-                [nameof(KijiRoot.PageType)] = pageType,
-            }));
+        var html = await Task.WhenAll(pages.Select(page => app.RenderPageAsync(page, CancellationToken.None)));
+        for (var i = 0; i < pages.Count; i++)
+        {
+            var page = pages[i];
+            var url = app.Info.ResolveUrl(page.RoutePath);
+            Assert.Contains(
+                $"{app.Info.BaseUrl.AbsoluteUri}|{url.AbsoluteUri}|{url.AbsoluteUri[app.Info.BaseUrl.AbsoluteUri.Length..]}|"
+                + app.Info.ResolveUrl("about/").AbsoluteUri + "|about/",
+                html[i], StringComparison.Ordinal);
+            var active = page.RoutePath == "/navigation/first/" ? " class=\"selected\" aria-current=\"page\"" : "";
+            Assert.Contains($"href=\"{app.Info.ResolveUrl("navigation/first/").AbsolutePath}\"{active}>first</a>",
+                html[i], StringComparison.Ordinal);
+            Assert.Contains($"href=\"{app.Info.ResolveUrl("navigation/").AbsolutePath}\" class=\"selected\" aria-current=\"page\">parent</a>",
+                html[i], StringComparison.Ordinal);
+            Assert.Contains($"href=\"{app.Info.ResolveUrl("navigation/").AbsolutePath}\">exact</a>",
+                html[i], StringComparison.Ordinal);
 
-        Assert.Contains("NavigationManager", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("PageInfo", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("SiteInfo", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("System.Uri", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("ResolveUrl", exception.Message, StringComparison.Ordinal);
-        var original = Assert.IsType<InvalidOperationException>(exception.InnerException);
-        Assert.Contains("Microsoft.AspNetCore.Components.NavigationManager", original.Message, StringComparison.Ordinal);
-        Assert.Contains(pageType.FullName!, original.Message, StringComparison.Ordinal);
-        Assert.Equal("", output.ToString());
-    }
-
-    [Theory]
-    [InlineData("Application error mentioning 'Microsoft.AspNetCore.Components.NavigationManager'.")]
-    [InlineData("Cannot provide a value for property 'Clock' on type 'Example'. There is no registered service of type 'System.TimeProvider'.")]
-    public async Task RenderComponentAsync_UnrelatedFailuresPreserveOriginalException(string message)
-    {
-        await using var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
-        app.Info = TestArticleContents.CreateSiteInfo();
-        var renderer = new ComponentRenderer(app.ServiceProvider);
-        var original = new InvalidOperationException(message);
-
-        var actual = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            renderer.RenderComponentAsync<FailingRenderComponent>(new Dictionary<string, object?>
-            {
-                [nameof(FailingRenderComponent.Error)] = original,
-            }));
-
-        Assert.Same(original, actual);
+            Assert.Equal(html[i], await app.RenderPageAsync(page, CancellationToken.None));
+        }
     }
 
     [Fact]

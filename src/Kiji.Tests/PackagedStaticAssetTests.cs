@@ -62,6 +62,53 @@ public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : ICla
     }
 
     [Fact]
+    public async Task Navigation_PublishesAndServesLinksUsingPublicUrls()
+    {
+        var site = fixture.CreateSite(nameof(Navigation_PublishesAndServesLinksUsingPublicUrls));
+        PackagedSiteFixture.Write(site, "Home.razor", """
+            @page "/"
+            @page "/nested/"
+            @using Microsoft.AspNetCore.Components.Routing
+            @inject Microsoft.AspNetCore.Components.NavigationManager Navigation
+            @inject Kiji.SiteInfo Site
+            <p>@Navigation.BaseUri|@Navigation.Uri</p>
+            <NavLink href="@Site.ResolveUrl("/").AbsolutePath" Match="NavLinkMatch.All">Home</NavLink>
+            <NavLink href="@Site.ResolveUrl("nested/").AbsolutePath" Match="NavLinkMatch.All">Nested</NavLink>
+            """);
+        PackagedSiteFixture.Write(site, "Missing.razor", """
+            @page "/404.html"
+            @namespace NavigationFixture
+            @inject Microsoft.AspNetCore.Components.NavigationManager Navigation
+            <p>@Navigation.Uri</p>
+            """);
+        var program = Path.Combine(site, "Program.cs");
+        File.WriteAllText(program, File.ReadAllText(program).Replace("site.AddPages();",
+            "site.AddPages();\nsite.AddNotFoundPage<NavigationFixture.Missing>();", StringComparison.Ordinal));
+
+        await fixture.PublishAsync(site);
+        var home = File.ReadAllText(Path.Combine(site, "dist/index.html"));
+        var nested = File.ReadAllText(Path.Combine(site, "dist/nested/index.html"));
+        Assert.Contains("<p>https://example.test/kiji/|https://example.test/kiji/</p>", home, StringComparison.Ordinal);
+        Assert.Contains("<a href=\"/kiji/\" class=\"active\" aria-current=\"page\">Home</a>", home, StringComparison.Ordinal);
+        Assert.Contains("<a href=\"/kiji/nested/\">Nested</a>", home, StringComparison.Ordinal);
+        Assert.Contains("<p>https://example.test/kiji/|https://example.test/kiji/nested/</p>", nested, StringComparison.Ordinal);
+        Assert.Contains("<a href=\"/kiji/\">Home</a>", nested, StringComparison.Ordinal);
+        Assert.Contains("<a href=\"/kiji/nested/\" class=\"active\" aria-current=\"page\">Nested</a>", nested, StringComparison.Ordinal);
+
+        await PackagedSiteFixture.WithServerAsync(site, async client =>
+        {
+            foreach (var (path, published) in new[] { ("/kiji/", home), ("/kiji/nested/?q=local", nested) })
+            {
+                var served = await client.GetStringAsync(path);
+                Assert.Equal(published, served.Replace("<script src=\"/kiji/_kiji/livereload.js\" defer></script>", "", StringComparison.Ordinal));
+            }
+            using var missing = await client.GetAsync("/kiji/missing/?q=local");
+            Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+            Assert.Contains("<p>https://example.test/kiji/404.html</p>", await missing.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public async Task JavaScriptRuntimeInjection_PublishesAndServesStaticHtml()
     {
         var site = fixture.CreateSite(nameof(JavaScriptRuntimeInjection_PublishesAndServesStaticHtml));

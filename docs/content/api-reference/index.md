@@ -148,8 +148,6 @@ URL, including the deployment base path.
 <a href="@Site.ResolveUrl("about/").AbsolutePath">About</a>
 ```
 
-See [NavigationManager limitations](#navigationmanager) when adapting Blazor components.
-
 #### StaticHeadContent
 
 `Kiji.Components.StaticHeadContent` is a component that places its `RenderFragment? ChildContent`
@@ -412,6 +410,21 @@ same names.
 Kiji generates static HTML without a Blazor runtime. Event handlers such as
 `@onclick` do not run in the browser.
 
+### NavigationManager and NavLink
+
+Kiji provides `NavigationManager` injection and static `NavLink` rendering for Razor
+class library (RCL) compatibility. Prefer `PageInfo`, `SiteInfo`, and ordinary `<a>`
+links in components written for Kiji.
+
+Each render uses `SiteInfo.BaseUrl` for `BaseUri` and `PageInfo.Url` for `Uri`,
+including in development. Request queries are excluded; 404 pages use their own route.
+`NavLink` can render its active class, but Kiji does not rewrite `href` or add `<base>`.
+
+This is not full static SSR: `NavigateTo`/`Refresh` throw `NotSupportedException`,
+and `NotFound()` does not set HTTP status or select Kiji's 404 page.
+Client-side routing and navigation interception are unavailable. Configure redirects
+in your hosting platform.
+
 ### JavaScript interop
 
 Components and page services can inject `IJSRuntime`, but interop calls throw
@@ -420,12 +433,6 @@ Components and page services can inject `IJSRuntime`, but interop calls throw
 `OnAfterRender` and `OnAfterRenderAsync` do not run. Components that defer interop
 to these methods can render static HTML. Use a `<script>` element or JavaScript
 module for browser behavior.
-
-### NavigationManager
-
-Blazor's `NavigationManager` is unavailable. Use [PageInfo](#pageinfo) for the current
-page's URL and [SiteInfo.ResolveUrl](#siteinfo) to build links. Configure redirects in
-your hosting platform.
 
 ### PageTitle, HeadContent, and HeadOutlet
 

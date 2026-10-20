@@ -2,6 +2,7 @@ using Kiji.Feeds;
 using Kiji.Markdown;
 using Kiji.Sitemaps;
 using Kiji.Tests.TestSite;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using SkiaSharp;
 using Xunit;
@@ -32,17 +33,30 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         }
     }
 
-    [Fact]
-    public async Task PublishAsync_NavigationManagerInjectionFailsWithoutPublishingPage()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PublishAsync_NavigationFailsWithoutPublishingPage(bool refresh)
     {
         await using var app = StaticSite.Create([], new SiteExecutionPaths(_testDir));
         app.Info = TestArticleContents.CreateSiteInfoWithBasePath();
-        app.AddPages<UnsupportedNavigationPage>(_ => [new { Id = "original" }]);
+        void Navigate(NavigationManager navigation)
+        {
+            if (refresh)
+            {
+                navigation.Refresh();
+            }
+            else
+            {
+                navigation.NavigateTo("target/");
+            }
+        }
+        app.AddPages<NavigationTestPage>(_ => [new { Id = "original", Navigate = (Action<NavigationManager>)Navigate }]);
 
         var exception = await Assert.ThrowsAsync<NotSupportedException>(() => app.PublishAsync(_outputDir));
 
         Assert.Contains("NavigationManager", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("PageInfo", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("static rendering", exception.Message, StringComparison.Ordinal);
         Assert.False(File.Exists(Path.Combine(_outputDir, "navigation", "original", "index.html")));
     }
 

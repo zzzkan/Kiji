@@ -22,6 +22,7 @@ internal sealed class ComponentRenderer(IServiceProvider services)
             return new PageInfo(site.ResolveUrl(context.RoutePath));
         });
         services.AddScoped<HeadContentRegistry>();
+        services.AddScoped<NavigationManager, StaticNavigationManager>();
         services.AddScoped<IComponentActivator, StaticComponentActivator>();
         services.AddScoped<IJSRuntime, UnsupportedJavaScriptRuntime>();
     }
@@ -45,34 +46,12 @@ internal sealed class ComponentRenderer(IServiceProvider services)
         await using var renderer = new AssetHtmlRenderer(
             scope.ServiceProvider, scope.ServiceProvider.GetRequiredService<ILoggerFactory>(),
             PageRenderContext.Current?.Assets ?? Assets.AssetResources.Empty);
-        try
+        await renderer.Dispatcher.InvokeAsync(async () =>
         {
-            await renderer.Dispatcher.InvokeAsync(async () =>
-            {
-                var document = renderer.BeginRenderingComponent(typeof(TComponent), CreateParameterView(parameters));
-                await document.QuiescenceTask;
-                document.WriteHtmlTo(output);
-            });
-        }
-        catch (InvalidOperationException exception) when (IsMissingNavigationManager(exception))
-        {
-            throw new NotSupportedException(
-                "NavigationManager is not supported by Kiji. Inject PageInfo for the page's public URL "
-                + "and SiteInfo for BaseUrl and ResolveUrl; use System.Uri for page-relative URI conversion. "
-                + "Render links or configure redirects in your hosting platform. "
-                + exception.Message,
-                exception);
-        }
-    }
-
-    private static bool IsMissingNavigationManager(InvalidOperationException exception)
-    {
-        // Blazor/DI expose no structured missing-service identifier. Match only their
-        // known diagnostics on failure; unknown formats retain the original exception.
-        // Nothing is scanned or inspected on successful renders, including first use.
-        return (exception.Message.StartsWith("Cannot provide a value for property '", StringComparison.Ordinal)
-                && exception.Message.EndsWith("There is no registered service of type 'Microsoft.AspNetCore.Components.NavigationManager'.", StringComparison.Ordinal))
-            || exception.Message.StartsWith("Unable to resolve service for type 'Microsoft.AspNetCore.Components.NavigationManager' while attempting to activate '", StringComparison.Ordinal);
+            var document = renderer.BeginRenderingComponent(typeof(TComponent), CreateParameterView(parameters));
+            await document.QuiescenceTask;
+            document.WriteHtmlTo(output);
+        });
     }
 
     private static ParameterView CreateParameterView(IReadOnlyDictionary<string, object?>? parameters)

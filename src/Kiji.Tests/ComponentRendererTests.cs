@@ -1,6 +1,6 @@
 using Kiji.Rendering;
 using Kiji.Tests.TestSite;
-using Kiji.Tests.TestSite.Pages;
+using Kiji.Tests.TestSite.Head;
 using Xunit;
 
 namespace Kiji.Tests;
@@ -40,20 +40,29 @@ public sealed class ComponentRendererTests
     }
 
     [Fact]
-    public async Task RenderPageAsync_KeepsHeadContentIsolatedAcrossSequentialRenders()
+    public async Task RenderPageAsync_IsolatesHeadAcrossParallelAndSequentialRenders()
     {
         await using var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = TestArticleContents.CreateSiteInfo();
-        app.UseDefaultLayout<MainLayout>();
+        string[] names = ["first", "second"];
 
-        var indexHtml = await app.RenderPageAsync(new PageRenderRequest(
-            "/", typeof(HomePage), new Dictionary<string, object?>(), "/", "index.html"), CancellationToken.None);
-        var aboutHtml = await app.RenderPageAsync(new PageRenderRequest(
-            "/about/", typeof(AboutPage), new Dictionary<string, object?>(), "/about/", "about/index.html"), CancellationToken.None);
+        var html = await Task.WhenAll(names.Select(RenderAsync));
+        for (var index = 0; index < names.Length; index++)
+        {
+            Assert.Contains(
+                $"<head><title>{names[index]}</title><meta name=\"description\" content=\"{names[index]}\" /></head>",
+                html[index], StringComparison.Ordinal);
+            Assert.Equal(html[index], await RenderAsync(names[index]));
+        }
+        Assert.Contains("<head></head>", await RenderAsync(null), StringComparison.Ordinal);
 
-        Assert.Contains("<title>Home - zzzkan.me</title>", indexHtml, StringComparison.Ordinal);
-        Assert.Contains("<title>About - zzzkan.me</title>", aboutHtml, StringComparison.Ordinal);
-        Assert.DoesNotContain("<title>Home - zzzkan.me</title>", aboutHtml, StringComparison.Ordinal);
-        Assert.Contains("href=\"https://example.com/about/\"", aboutHtml, StringComparison.Ordinal);
+        Task<string> RenderAsync(string? name)
+        {
+            var route = $"/head/{name ?? "empty"}/";
+            return app.RenderPageAsync(new PageRenderRequest(
+                route, typeof(HeadTestPage),
+                new Dictionary<string, object?> { [nameof(HeadTestPage.Name)] = name },
+                route, $"head/{name ?? "empty"}/index.html"), CancellationToken.None);
+        }
     }
 }

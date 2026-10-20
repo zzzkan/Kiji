@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Suppressions>
-  <!-- Intentional rename to StaticHeadContent: retaining HeadContent keeps Razor imports ambiguous. -->
+  <!-- The custom head API was removed in favor of Microsoft.AspNetCore.Components.Web. -->
   <Suppression>
     <DiagnosticId>CP0001</DiagnosticId>
     <Target>T:Kiji.Components.HeadContent</Target>

@@ -47,12 +47,16 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
 - AddPageService instances belong to one render and are disposed with its scope.
   Loaders, route/feed factories and artifacts cannot resolve them. Derived indexes
   use UseContentSource. There is no public service collection.
+- Use Blazor's PageTitle and HeadContent; KijiRoot supplies the single HeadOutlet.
+  Each page gets a fresh renderer/dispatcher, isolating the framework's section state.
+  HeadContent replaces earlier providers rather than appending; compose shared tags
+  inside the page's HeadContent. Await quiescence before serializing the document.
 - UseImageProcessor creates one lazy, site-owned processor, disposed with the site.
   It must support concurrency and retain no page/content state. Reload does not recreate
   it. Declare external configuration with AddBuildInput and version cache identities.
 
 Do not reintroduce evaluated alternatives: pooled HtmlRenderer (root/scope state cannot
-reset), Blazor SectionOutlet/RouteView (renderer-owned state), AOT/trimming (reflection),
+reset), RouteView (PageView owns Kiji's layout resolution), AOT/trimming (reflection),
 source-generated page discovery (cached scanning suffices), IBufferWriter rendering
 (HtmlRootComponent exposes TextWriter), content-addressed image URLs (break page bundles),
 or incremental RSS/sitemap (depend on all metadata and are cheap to regenerate).

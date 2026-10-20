@@ -41,11 +41,11 @@ Configure the site and register pages, content, and generated files before `RunA
 
 ## Develop and publish
 
-| Command | Result |
-| --- | --- |
-| `dotnet watch` | Preview at <http://localhost:8080>, with browser reloads when components, content, or assets change. |
-| `dotnet publish` | Write the complete static site to `dist/`, reusing unchanged pages where possible. |
-| `dotnet clean` | Remove build output and the `.kiji/` cache so the next publish rebuilds everything. |
+| Command          | Result                                                                                               |
+| ---------------- | ---------------------------------------------------------------------------------------------------- |
+| `dotnet watch`   | Preview at <http://localhost:8080>, with browser reloads when components, content, or assets change. |
+| `dotnet publish` | Write the complete static site to `dist/`, reusing unchanged pages where possible.                   |
+| `dotnet clean`   | Remove build output and the `.kiji/` cache so the next publish rebuilds everything.                  |
 
 Preview and publishing use the same rendering pipeline. Upload `dist/` to a static
 host; see [Deployment](../deployment/) for hosting and sub-paths, and
@@ -63,9 +63,9 @@ See [Routing](../routing/) for parameter mapping and 404 pages.
 `UseDefaultLayout<TLayout>()` supplies a shared layout unless a page chooses its own
 with `@layout`. Layouts render inside the generated `<body>`.
 
-Put shared CSS and metadata in `StaticHeadContent` in your layout, and page-specific
-tags in the page. All instances append to `<head>`; supply the title only once.
-See the [head API](../api-reference/#staticheadcontent).
+Use Blazor's `PageTitle` and `HeadContent` for the document head. Keep shared and
+page-specific tags in one `HeadContent`, since separate instances replace each other.
+See the [head API](../api-reference/#pagetitle-headcontent-and-headoutlet).
 
 ## Content and static assets
 
@@ -92,7 +92,7 @@ See the [static asset API](../api-reference/#static-assets) for import maps.
 ### Component styles
 
 Place `Pages/Home.razor.css` beside `Pages/Home.razor` to scope styles to that
-component. Include the generated bundle in your shared `StaticHeadContent`:
+component. Include the generated bundle among the shared tags inside `HeadContent`:
 
 ```razor
 <link rel="stylesheet" href="@Assets["MySite.styles.css"]" />

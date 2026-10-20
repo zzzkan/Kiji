@@ -1,11 +1,10 @@
 using System.Collections.Concurrent;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Kiji.Rendering;
 
-/// <summary>Creates components and rejects unsupported Blazor features.</summary>
+/// <summary>Creates components and supplies the site's default import map.</summary>
 internal sealed class StaticComponentActivator(IServiceProvider services) : IComponentActivator
 {
     private static readonly ConcurrentDictionary<Type, ObjectFactory> Factories = new();
@@ -19,16 +18,6 @@ internal sealed class StaticComponentActivator(IServiceProvider services) : ICom
 #pragma warning disable BL0005
             return new ImportMap { ImportMapDefinition = (PageRenderContext.Current?.Assets ?? Assets.AssetResources.Empty).ReadImportMap() };
 #pragma warning restore BL0005
-        }
-
-        if (typeof(PageTitle).IsAssignableFrom(componentType)
-            || typeof(HeadContent).IsAssignableFrom(componentType)
-            || typeof(HeadOutlet).IsAssignableFrom(componentType))
-        {
-            throw new InvalidOperationException(
-                $"{componentType.FullName} is not supported by Kiji. Use Kiji.Components.StaticHeadContent "
-                + "to contribute to the generated head. For a title, use <StaticHeadContent><title>...</title></StaticHeadContent>. "
-                + "Kiji supplies the head outlet automatically.");
         }
 
         var factory = Factories.GetOrAdd(componentType,

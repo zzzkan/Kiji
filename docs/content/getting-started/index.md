@@ -145,35 +145,32 @@ body {
 }
 ```
 
-Create `Components/PageHead.razor` for the page title:
+Create `Components/PageHead.razor` for the page title and shared head tags:
 
 ```razor
 @using Kiji
-@using Kiji.Components
+@using Microsoft.AspNetCore.Components.Web
 @inject SiteInfo Site
 
-<StaticHeadContent>
-    <title>@Title - @Site.Name</title>
-</StaticHeadContent>
+<PageTitle>@Title - @Site.Name</PageTitle>
+
+<HeadContent>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="@Assets["css/app.css"]" />
+</HeadContent>
 
 @code {
     [Parameter] public string Title { get; set; } = string.Empty;
 }
 ```
 
-Create `Layout/MainLayout.razor` for the shared head tags and page structure:
+Create `Layout/MainLayout.razor` for the shared page structure:
 
 ```razor
 @using Kiji
-@using Kiji.Components
 @inherits LayoutComponentBase
 @inject SiteInfo Site
-
-<StaticHeadContent>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="stylesheet" href="@Assets["css/app.css"]" />
-</StaticHeadContent>
 
 <header>
     <a href="@Site.BaseUrl.AbsolutePath">@Site.Name</a>
@@ -219,8 +216,7 @@ Add `PageHead` to `Pages/Home.razor`:
 <p>This page is a Razor component rendered to static HTML.</p>
 ```
 
-Use `PageHead` once in each page for its title. `MainLayout` supplies
-the shared head tags. Kiji combines both `StaticHeadContent` contributions in `<head>`.
+Use `PageHead` once in each page. Add page-specific metadata to its `HeadContent`.
 
 Stop and restart `dotnet watch`.
 

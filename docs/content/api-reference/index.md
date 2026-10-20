@@ -142,28 +142,28 @@ URL, including the deployment base path.
 @inject PageInfo Page
 @inject SiteInfo Site
 
-<StaticHeadContent>
+<HeadContent>
     <link rel="canonical" href="@Page.Url.AbsoluteUri" />
-</StaticHeadContent>
+</HeadContent>
 <a href="@Site.ResolveUrl("about/").AbsolutePath">About</a>
 ```
 
-#### StaticHeadContent
+#### PageTitle, HeadContent, and HeadOutlet
 
-`Kiji.Components.StaticHeadContent` is a component that places its `RenderFragment? ChildContent`
-inside the generated document `<head>`:
+Use Blazor's `PageTitle` for the page title and `HeadContent` for metadata, stylesheets,
+and scripts. Kiji's built-in `HeadOutlet` places this content in the document's `<head>`.
 
 ```razor
-<StaticHeadContent>
+<PageTitle>@Title</PageTitle>
+
+<HeadContent>
     <meta charset="utf-8" />
-    <title>@Title</title>
-</StaticHeadContent>
+    <meta name="description" content="@Description" />
+    <link rel="stylesheet" href="@Assets["css/app.css"]" />
+</HeadContent>
 ```
 
-All instances append to the head in registration order, with no markup at their position
-in the body. Updating or removing one affects only its contribution. Tags are not deduplicated.
-
-See [unsupported Blazor head components](#pagetitle-headcontent-and-headoutlet).
+Kiji waits for asynchronous rendering to finish, so the generated HTML includes the updated title and metadata.
 
 ### Static assets
 
@@ -173,7 +173,7 @@ An unknown path is returned unchanged. Literal URLs in CSS, JavaScript, or HTML 
 automatically rewritten. Use `SiteInfo.ResolveUrl` for links to pages and generated files.
 
 Blazor's `ImportMap` component supplies an import map for the site's static assets.
-Place `<ImportMap />` inside `StaticHeadContent` before scripts that use JavaScript imports.
+Place `<ImportMap />` inside `HeadContent` before scripts that use JavaScript imports.
 Its `ImportMapDefinition` parameter accepts a custom map. See the
 [Blazor import map reference](https://learn.microsoft.com/aspnet/core/blazor/fundamentals/static-files?view=aspnetcore-10.0#importmap-component).
 
@@ -239,7 +239,7 @@ The configure callback receives a new options instance for that registration.
 
 | Member                                               | Default/behavior                                                                                                                |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `string Directory`                                  | `"content"`; absolute or relative to the site project directory. Registered directories are watched during development.                         |
+| `string Directory`                                   | `"content"`; absolute or relative to the site project directory. Registered directories are watched during development.         |
 | `Func<FileInfo,bool>? FileFilter`                    | `null`; include every discovered Markdown file. The predicate runs before loading.                                              |
 | `ConfigureMarkdown(Action<MarkdownPipelineBuilder>)` | Adds a non-null Markdig configuration after Kiji's default advanced pipeline. Calls run in registration order.                  |
 | `ConfigureYaml(Action<DeserializerBuilder>)`         | Adds a non-null YamlDotNet configuration after the camel-case and ignore-unmatched defaults. Calls run in registration order.   |
@@ -433,9 +433,3 @@ Components and page services can inject `IJSRuntime`, but interop calls throw
 `OnAfterRender` and `OnAfterRenderAsync` do not run. Components that defer interop
 to these methods can render static HTML. Use a `<script>` element or JavaScript
 module for browser behavior.
-
-### PageTitle, HeadContent, and HeadOutlet
-
-Kiji rejects Blazor's `PageTitle`, `HeadContent`, and `HeadOutlet` during rendering.
-Use [StaticHeadContent](#staticheadcontent) for head tags, including a plain `<title>`
-element.

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Rendering;
+using Microsoft.AspNetCore.Components.Web;
 
 namespace Kiji.Tests.TestSite;
 
@@ -20,12 +21,16 @@ public sealed class PageHead : ComponentBase
     [Parameter]
     public string? Robots { get; set; }
 
-    private string PageTitle => string.IsNullOrWhiteSpace(Title) ? Site.Name : $"{Title} - {Site.Name}";
+    private string DisplayTitle => string.IsNullOrWhiteSpace(Title) ? Site.Name : $"{Title} - {Site.Name}";
 
     protected override void BuildRenderTree(RenderTreeBuilder builder)
     {
-        builder.OpenComponent<Kiji.Components.StaticHeadContent>(0);
-        builder.AddAttribute(1, nameof(Kiji.Components.StaticHeadContent.ChildContent), (RenderFragment)BuildHeadContent);
+        builder.OpenComponent<PageTitle>(0);
+        builder.AddComponentParameter(1, nameof(PageTitle.ChildContent),
+            (RenderFragment)(title => title.AddContent(0, DisplayTitle)));
+        builder.CloseComponent();
+        builder.OpenComponent<HeadContent>(2);
+        builder.AddComponentParameter(3, nameof(HeadContent.ChildContent), (RenderFragment)BuildHeadContent);
         builder.CloseComponent();
     }
 
@@ -38,10 +43,6 @@ public sealed class PageHead : ComponentBase
         builder.OpenElement(2, "meta");
         builder.AddAttribute(3, "name", "viewport");
         builder.AddAttribute(4, "content", "width=device-width, initial-scale=1.0");
-        builder.CloseElement();
-
-        builder.OpenElement(5, "title");
-        builder.AddContent(6, PageTitle);
         builder.CloseElement();
 
         builder.OpenElement(7, "meta");

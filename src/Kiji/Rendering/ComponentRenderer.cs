@@ -21,7 +21,6 @@ internal sealed class ComponentRenderer(IServiceProvider services)
             var site = provider.GetRequiredService<SiteInfo>();
             return new PageInfo(site.ResolveUrl(context.RoutePath));
         });
-        services.AddScoped<HeadContentRegistry>();
         services.AddScoped<NavigationManager, StaticNavigationManager>();
         services.AddScoped<IComponentActivator, StaticComponentActivator>();
         services.AddScoped<IJSRuntime, UnsupportedJavaScriptRuntime>();
@@ -42,7 +41,7 @@ internal sealed class ComponentRenderer(IServiceProvider services)
         where TComponent : IComponent
     {
         await using var scope = services.CreateAsyncScope();
-        // HtmlRenderer captures its scope and cannot reset root component state.
+        // Each page needs its own scope and renderer to isolate components and head content.
         await using var renderer = new AssetHtmlRenderer(
             scope.ServiceProvider, scope.ServiceProvider.GetRequiredService<ILoggerFactory>(),
             PageRenderContext.Current?.Assets ?? Assets.AssetResources.Empty);

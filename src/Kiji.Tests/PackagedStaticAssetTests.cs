@@ -62,6 +62,45 @@ public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : ICla
     }
 
     [Fact]
+    public async Task StandardHeadComponents_PublishAndServeAsyncHead()
+    {
+        var site = fixture.CreateSite(nameof(StandardHeadComponents_PublishAndServeAsyncHead));
+        PackagedSiteFixture.Write(site, "Home.razor", """
+            @page "/"
+            @using Microsoft.AspNetCore.Components.Web
+            <PageTitle>@title</PageTitle>
+            <HeadContent>
+                <meta name="description" content="@title" />
+            </HeadContent>
+            <h1>Page body</h1>
+            @code {
+                private string title = "Loading";
+                protected override async Task OnInitializedAsync()
+                {
+                    await Task.Yield();
+                    title = "Page title";
+                }
+            }
+            """);
+
+        await fixture.PublishAsync(site);
+        AssertHead(File.ReadAllText(Path.Combine(site, "dist/index.html")));
+        await PackagedSiteFixture.WithServerAsync(site, async client =>
+            AssertHead(await client.GetStringAsync("/kiji/")));
+
+        static void AssertHead(string html)
+        {
+            var headEnd = html.IndexOf("</head>", StringComparison.Ordinal);
+            Assert.True(headEnd >= 0);
+            var head = html[..headEnd];
+            Assert.Contains("<title>Page title</title>", head, StringComparison.Ordinal);
+            Assert.Contains("<meta name=\"description\" content=\"Page title\"", head, StringComparison.Ordinal);
+            Assert.DoesNotContain("Loading", html, StringComparison.Ordinal);
+            Assert.Contains("<h1>Page body</h1>", html[headEnd..], StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public async Task Navigation_PublishesAndServesLinksUsingPublicUrls()
     {
         var site = fixture.CreateSite(nameof(Navigation_PublishesAndServesLinksUsingPublicUrls));

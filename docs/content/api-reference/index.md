@@ -148,33 +148,6 @@ URL, including the deployment base path.
 <a href="@Site.ResolveUrl("about/").AbsolutePath">About</a>
 ```
 
-#### NavigationManager and NavLink
-
-Reuse Blazor navigation components and active-link matching in generated HTML.
-This is limited support for static generation, not full static SSR.
-For URL access alone, use `PageInfo` and `SiteInfo`.
-
-Components and page services can inject `NavigationManager`: each render maps
-`BaseUri` to `SiteInfo.BaseUrl` and `Uri` to `PageInfo.Url`. Development uses these
-public URLs, excluding request queries; 404 pages use their own route.
-
-`NavLink` renders an anchor with its active class determined by `Match` (`Prefix` or `All`):
-
-```razor
-@using Microsoft.AspNetCore.Components.Routing
-@inject SiteInfo Site
-
-<NavLink href="@Site.ResolveUrl("about/").AbsolutePath" Match="NavLinkMatch.All">About</NavLink>
-```
-
-`ToAbsoluteUri` resolves against `BaseUri`; a leading `/` means the host root.
-`SiteInfo.ResolveUrl` preserves deployment subpaths. Use root-relative links as above,
-or provide a matching HTML `<base>`; Kiji adds no `<base>` or `href` rewriting.
-
-Unlike static SSR, `NavigateTo`/`Refresh` throw `NotSupportedException`, and `NotFound()`
-neither sets HTTP status nor selects Kiji's 404 page. Configure redirects in your host.
-Client-side routing and navigation interception are unavailable.
-
 #### StaticHeadContent
 
 `Kiji.Components.StaticHeadContent` is a component that places its `RenderFragment? ChildContent`
@@ -436,6 +409,21 @@ same names.
 
 Kiji generates static HTML without a Blazor runtime. Event handlers such as
 `@onclick` do not run in the browser.
+
+### NavigationManager and NavLink
+
+Kiji provides `NavigationManager` injection and static `NavLink` rendering for Razor
+class library (RCL) compatibility. Prefer `PageInfo`, `SiteInfo`, and ordinary `<a>`
+links in components written for Kiji.
+
+Each render uses `SiteInfo.BaseUrl` for `BaseUri` and `PageInfo.Url` for `Uri`,
+including in development. Request queries are excluded; 404 pages use their own route.
+`NavLink` can render its active class, but Kiji does not rewrite `href` or add `<base>`.
+
+This is not full static SSR: `NavigateTo`/`Refresh` throw `NotSupportedException`,
+and `NotFound()` does not set HTTP status or select Kiji's 404 page.
+Client-side routing and navigation interception are unavailable. Configure redirects
+in your hosting platform.
 
 ### JavaScript interop
 

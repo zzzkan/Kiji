@@ -62,6 +62,27 @@ public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : ICla
     }
 
     [Fact]
+    public async Task JavaScriptRuntimeInjection_PublishesAndServesStaticHtml()
+    {
+        var site = fixture.CreateSite(nameof(JavaScriptRuntimeInjection_PublishesAndServesStaticHtml));
+        PackagedSiteFixture.Write(site, "Home.razor", """
+            @page "/"
+            @using Microsoft.JSInterop
+            @inject IJSRuntime JavaScript
+            <h1>Rendered without JavaScript</h1>
+            @code {
+                protected override Task OnAfterRenderAsync(bool firstRender)
+                    => JavaScript.InvokeVoidAsync("initialize").AsTask();
+            }
+            """);
+
+        await fixture.PublishAsync(site);
+        Assert.Contains("Rendered without JavaScript", File.ReadAllText(Path.Combine(site, "dist/index.html")), StringComparison.Ordinal);
+        await PackagedSiteFixture.WithServerAsync(site, async client =>
+            Assert.Contains("Rendered without JavaScript", await client.GetStringAsync("/kiji/"), StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Publish_ResolvesScopedAndRclAssetsAndReplacesEditedFingerprint()
     {
         var site = fixture.CreateSite(nameof(Publish_ResolvesScopedAndRclAssetsAndReplacesEditedFingerprint), assets: true);

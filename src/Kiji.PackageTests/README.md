@@ -48,7 +48,7 @@ located through `dotnet nuget locals global-packages --list`. This respects
 A restore-only Web SDK project reads dependency versions from the selected Kiji
 nuspec and fills any missing dependencies, including implicit SDK packages, in
 that global cache. It does not compile a second site or copy native binaries.
-CI and release set `NUGET_PACKAGES` to a shared directory under `runner.temp`
+CI and release set `NUGET_PACKAGES` to `artifacts/nuget-packages` in the checkout
 for the whole job. This keeps the cache on the checkout volume, including Windows
 runners whose user profile and checkout are on different drives. It is the same
 cache for the solution build and every package scenario, not a per-test restore.

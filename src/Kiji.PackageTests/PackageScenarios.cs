@@ -14,7 +14,31 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
     [Fact]
     public Task Publish_Edit_AndClean() => fixture.ScenarioAsync(async () =>
     {
-        await fixture.PublishAsync();
+        fixture.Write("Site/BoundaryPage.razor", """
+            @page "/boundary/"
+            <ErrorBoundary>
+                <ChildContent><FailingChild /></ChildContent>
+                <ErrorContent><p>Boundary fallback</p></ErrorContent>
+            </ErrorBoundary>
+            """);
+        fixture.Write("Site/FailingChild.razor", """
+            @using Microsoft.Extensions.Logging
+            @inject ILogger<FailingChild> Logger
+            @code {
+                protected override void OnInitialized()
+                {
+                    Logger.LogInformation("boundary-publish-information");
+                    throw new InvalidOperationException("boundary-publish-warning");
+                }
+            }
+            """);
+
+        var output = await fixture.PublishAsync();
+
+        Assert.Contains("boundary-publish-warning", output, StringComparison.Ordinal);
+        Assert.DoesNotContain("boundary-publish-information", output, StringComparison.Ordinal);
+        Assert.Contains("Boundary fallback", Read("boundary/index.html"), StringComparison.Ordinal);
+
         var html = Read("index.html");
         Assert.Contains("<title>First article</title>", html, StringComparison.Ordinal);
         Assert.Contains("Original body.", html, StringComparison.Ordinal);
@@ -78,6 +102,29 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
             Assert.Contains("magenta", await client.GetStringAsync(AssetUrl(html, "scoped")), StringComparison.Ordinal);
         });
     }, sdk);
+
+    [Fact]
+    public async Task Cleanup_WaitsForFileLockRelease()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows prevents deletion while a file is open without delete sharing.");
+        FileStream? heldFile = null;
+        var cleanup = fixture.ScenarioAsync(() =>
+        {
+            heldFile = File.Open(Path.Combine(fixture.Site, "Home.razor"), FileMode.Open, FileAccess.Read, FileShare.Read);
+            return Task.CompletedTask;
+        });
+        try
+        {
+            Assert.NotNull(heldFile);
+            Assert.False(cleanup.IsCompleted, "Cleanup must wait for the file lock to be released.");
+        }
+        finally
+        {
+            heldFile?.Dispose();
+            await cleanup;
+        }
+        Assert.False(Directory.Exists(fixture.Site));
+    }
 
     private string Read(string relative) => File.ReadAllText(Path.Combine(fixture.Site, "dist", relative));
     private string PublicFile(string url) => Path.Combine(fixture.Site, "dist", Uri.UnescapeDataString(url["/kiji/".Length..]));

@@ -148,6 +148,30 @@ External service data and captured values are not tracked automatically. Use
 singletons; use [content sources](#content-sources-and-contentdictionary) for shared
 indexes that must be rebuilt when content changes.
 
+#### Logging and error boundaries
+
+Components and services can inject `ILogger<T>`. Kiji writes `Warning` and higher
+logs to standard error during publish and development. Configure levels and providers
+with `services.AddLogging(...)` inside `UseServices`. Call `logging.ClearProviders()`
+to disable or replace the default console output.
+
+Blazor's [`ErrorBoundary`](https://learn.microsoft.com/aspnet/core/blazor/fundamentals/handle-errors?view=aspnetcore-10.0#error-boundaries)
+can render fallback content when a child component fails. For example, in a layout:
+
+```razor
+@using Microsoft.AspNetCore.Components.Web
+
+<ErrorBoundary>
+    <ChildContent>@Body</ChildContent>
+    <ErrorContent>
+        <p>This content is temporarily unavailable.</p>
+    </ErrorContent>
+</ErrorBoundary>
+```
+
+Caught exceptions are logged as warnings. Publish succeeds with the fallback HTML,
+which incremental builds may reuse. Leave errors unhandled when they should fail the build.
+
 ### Page metadata
 
 #### PageInfo

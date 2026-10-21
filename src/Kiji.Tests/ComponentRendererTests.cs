@@ -1,12 +1,29 @@
 using Kiji.Rendering;
 using Kiji.Tests.TestSite;
+using Kiji.Tests.TestSite.ErrorHandling;
 using Kiji.Tests.TestSite.Head;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace Kiji.Tests;
 
 public sealed class ComponentRendererTests
 {
+    [Fact]
+    public async Task RenderComponentAsync_ErrorBoundaryRendersAsyncFallbackWithoutLoggingProviders()
+    {
+        await using var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
+        app.Info = TestArticleContents.CreateSiteInfo();
+        app.UseServices(services => services.AddLogging(logging => logging.ClearProviders()));
+        app.UsePlanningOptions();
+        var renderer = new ComponentRenderer(app.ServiceProvider);
+
+        var html = await renderer.RenderComponentAsync<ErrorBoundaryComponent>();
+
+        Assert.Equal("Boundary fallback", html);
+    }
+
     [Theory]
     [InlineData("https://example.com/")]
     [InlineData("https://example.com/kiji/")]

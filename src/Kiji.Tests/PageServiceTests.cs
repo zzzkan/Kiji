@@ -1,8 +1,9 @@
-using Kiji.Assets;
+using System.Reflection;
+using System.Reflection.Emit;
 using Kiji.Feeds;
 using Kiji.Tests.TestSite.PageServices;
-using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
 
 namespace Kiji.Tests;
@@ -67,46 +68,117 @@ public sealed class PageServiceTests : IDisposable
         Assert.Equal(1, service.Dependency.DisposeCount);
     }
 
-    [Fact]
-    public async Task Registration_RejectsInvalidAndDuplicateTypes_AndManagedServices()
+    [Theory]
+    [InlineData("duplicate")]
+    [InlineData("remove")]
+    [InlineData("replace")]
+    [InlineData("keyed")]
+    [InlineData("open-generic")]
+    [InlineData("provider")]
+    public async Task Registration_ValidatesTheFinalManagedRegistrations(string operation)
     {
         await using var app = CreateApp();
-        Assert.Throws<ArgumentException>(() => app.AddPageService<IDisposable>());
-        Assert.Throws<ArgumentException>(() => app.AddPageService<LayoutComponentBase>());
-        Assert.Throws<ArgumentException>(() => app.AddPageService<StaticSite>());
-        Assert.Throws<ArgumentException>(() => app.AddPageService<ContentDictionary<ServiceProbe>>());
-        Assert.Throws<ArgumentException>(() => app.AddPageService<IRenderService, IRenderService>());
-        Assert.Throws<ArgumentException>(() => app.AddPageService<object, LayoutComponentBase>());
-        Assert.Throws<ArgumentException>(() => app.AddPageService<object, StaticSite>());
-        app.AddPageService<RenderDependency>();
-        Assert.Throws<InvalidOperationException>(() => app.AddPageService<RenderDependency>());
-        Assert.Throws<InvalidOperationException>(() => app.AddPageService<RenderDependency, RenderDependency>());
-        app.AddPageService<object, RenderDependency>();
-        Assert.Throws<InvalidOperationException>(() => app.AddPageService<object>());
-        Assert.Throws<InvalidOperationException>(() => app.AddPageService<object, MissingDependencyService>());
-        app.AddPageService<SiteInfo>();
+        app.UseServices(services =>
+        {
+            switch (operation)
+            {
+                case "duplicate": services.Add(services.Single(descriptor => descriptor.ServiceType == typeof(PageInfo))); break;
+                case "remove": services.RemoveAll<PageInfo>(); break;
+                case "replace": services.Replace(ServiceDescriptor.Singleton(app.Info)); break;
+                case "keyed": services.AddKeyedSingleton("alternate", app.Info); break;
+                case "open-generic": services.AddSingleton(typeof(ContentDictionary<>), typeof(ContentDictionary<>)); break;
+                case "provider": services.AddSingleton<IServiceProvider>(_ => throw new NotSupportedException()); break;
+            }
+        });
         var exception = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());
-        Assert.Contains(nameof(SiteInfo), exception.Message, StringComparison.Ordinal);
         Assert.Contains("managed by Kiji", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task InterfaceRegistration_CannotReplaceManagedService()
+    public async Task Configuration_IsDeferredOrderedAndFrozen_AndFactoriesResolveSettledPaths()
     {
         await using var app = CreateApp();
-        app.AddPageService<IImageProcessor, TrackingImageProcessor>();
-        var exception = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());
-        Assert.Contains(nameof(IImageProcessor), exception.Message, StringComparison.Ordinal);
-        Assert.Contains("managed by Kiji", exception.Message, StringComparison.Ordinal);
+        IServiceCollection? captured = null;
+        var calls = new List<int>();
+        app.UseServices(services =>
+        {
+            calls.Add(1);
+            captured = services;
+            services.AddSingleton(provider => provider.GetRequiredService<ResolvedSitePaths>().OutputDirectory);
+        });
+        app.UseServices(services =>
+        {
+            calls.Add(2);
+            // Existing managed registrations are visible to ordinary extension methods.
+            services.TryAddSingleton(app.Info);
+        });
+        Assert.Empty(calls);
+        app.CreateSnapshot();
+        app.CreateSnapshot();
+        Assert.Equal([1, 2], calls);
+        Assert.EndsWith(Path.Combine(".kiji", "dev-site"), app.ServiceProvider.GetRequiredService<string>(), StringComparison.Ordinal);
+        Assert.Throws<InvalidOperationException>(() => captured!.AddSingleton("late"));
     }
 
     [Fact]
     public async Task MissingDependency_FailsBeforeRendering()
     {
         await using var app = CreateApp();
-        app.AddPageService<object, MissingDependencyService>();
+        app.UseServices(services => services.AddScoped<object, MissingDependencyService>());
         var exception = Assert.Throws<AggregateException>(() => app.CreateSnapshot());
         Assert.Contains(nameof(MissingDependencyService), exception.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DynamicFactory_WithAStableHostModule_IsRejected()
+    {
+        await using var app = CreateApp();
+        var method = new DynamicMethod("Create", typeof(object), [typeof(IServiceProvider)], typeof(PageServiceTests).Module);
+        var il = method.GetILGenerator();
+        il.Emit(OpCodes.Newobj, typeof(object).GetConstructor(Type.EmptyTypes)!);
+        il.Emit(OpCodes.Ret);
+        app.UseServices(services => services.AddSingleton(method.CreateDelegate<Func<IServiceProvider, object>>()));
+
+        var exception = Assert.Throws<NotSupportedException>(() => app.CreateSnapshot());
+        Assert.Contains("regular C# lambda or method", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("type")]
+    [InlineData("instance")]
+    [InlineData("factory")]
+    [InlineData("stable")]
+    public async Task ServiceCode_OnlyReusesPagesWhenItsIdentityIsAvailable(string registration)
+    {
+        // Plugin code need not be referenced by a page assembly. If its identity cannot
+        // be recorded, a registration must make the build conservative even before resolution.
+        var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName($"Plugin{Guid.NewGuid():N}"), AssemblyBuilderAccess.RunAndCollect);
+        var builder = assembly.DefineDynamicModule("Plugin").DefineType("PluginService", TypeAttributes.Public);
+        var constructor = builder.DefineDefaultConstructor(MethodAttributes.Public);
+        var create = builder.DefineMethod("Create", MethodAttributes.Public | MethodAttributes.Static, typeof(object), [typeof(IServiceProvider)]);
+        var il = create.GetILGenerator();
+        il.Emit(OpCodes.Newobj, constructor);
+        il.Emit(OpCodes.Ret);
+        var type = builder.CreateType()!;
+        var probe = new ServiceProbe();
+        await using var app = CreateApp(probe);
+        app.AddPages<ServicePage>(_ => [new { Key = "test" }]);
+        app.UseServices(services =>
+        {
+            switch (registration)
+            {
+                case "type": services.Add(new ServiceDescriptor(typeof(object), type, ServiceLifetime.Singleton)); break;
+                case "instance": services.AddSingleton(Activator.CreateInstance(type)!); break;
+                case "factory": services.AddSingleton(type.GetMethod("Create")!.CreateDelegate<Func<IServiceProvider, object>>()); break;
+            }
+        });
+        var output = Path.Combine(_root, "dist");
+        await app.PublishAsync(output);
+        Assert.Single(probe.Created);
+        var original = await File.ReadAllTextAsync(Path.Combine(output, "services/test/index.html"));
+        await app.PublishAsync(output);
+        Assert.Equal(registration == "stable" ? 1 : 2, probe.Created.Count);
+        Assert.Equal(original, await File.ReadAllTextAsync(Path.Combine(output, "services/test/index.html")));
     }
 
     [Theory]
@@ -117,7 +189,7 @@ public sealed class PageServiceTests : IDisposable
     public async Task PageServices_CannotBeResolvedOutsidePage(string consumer)
     {
         await using var app = CreateApp();
-        app.AddPageService<IDisposable, RenderDependency>();
+        app.UseServices(services => services.AddScoped<IDisposable, RenderDependency>());
         switch (consumer)
         {
             case "route":
@@ -165,8 +237,14 @@ public sealed class PageServiceTests : IDisposable
         app.Info = new SiteInfo { Name = "Services", BaseUrl = new Uri("https://example.test/") };
         if (probe is not null)
         {
-            app.UseContentSource<ServiceProbe>(_ => [probe]);
-            app.AddPageService<RenderDependency>().AddPageService<IRenderService, RenderService>();
+            app.UseContentSource<ServiceProbe>("probes", _ => [new ContentEntry<ServiceProbe>("0", probe, "stable")]);
+            app.UseServices(services =>
+            {
+                services.AddScoped<RenderDependency>();
+                services.AddScoped<IRenderService>(provider => new RenderService(
+                    provider.GetRequiredService<ContentDictionary<ServiceProbe>>(),
+                    provider.GetRequiredService<RenderDependency>(), provider.GetRequiredService<PageInfo>()));
+            });
             app.UseDefaultLayout<ServiceLayout>();
         }
         return app;

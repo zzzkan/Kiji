@@ -32,7 +32,7 @@ public sealed class AppConfigurationTests : IDisposable
         Assert.False(Directory.Exists(_root));
         Assert.Throws<InvalidOperationException>(() => app.Info);
         app.Info = TestArticleContents.CreateSiteInfo();
-        app.AddPageService<object>();
+        app.UseServices(services => services.AddScoped<object>());
         app.AddBuildInput("version", "1");
     }
 
@@ -43,7 +43,7 @@ public sealed class AppConfigurationTests : IDisposable
     {
         await using var app = StaticSite.Create([], new SiteExecutionPaths(_root));
         app.Info = TestArticleContents.CreateSiteInfo();
-        app.AddPageService<object>();
+        app.UseServices(services => services.AddScoped<object>());
         var loads = 0;
         var routeCalls = 0;
         string? observedOutput = null;
@@ -96,10 +96,7 @@ public sealed class AppConfigurationTests : IDisposable
 
         void AssertFrozen()
         {
-            Assert.Throws<InvalidOperationException>(() => app.AddPageService<object>());
-            Assert.Throws<InvalidOperationException>(() => app.AddPageService<object, object>());
-            Assert.Throws<InvalidOperationException>(() => app.UseImageProcessor(
-                () => throw new Xunit.Sdk.XunitException("Factory must not run after execution starts.")));
+            Assert.Throws<InvalidOperationException>(() => app.UseServices(services => services.AddScoped<object>()));
             Assert.Throws<InvalidOperationException>(() => app.Info = TestArticleContents.CreateSiteInfo());
             Assert.Throws<InvalidOperationException>(() => app.AddBuildInput("input.json"));
             Assert.Throws<InvalidOperationException>(() => app.AddBuildInput("version", "2"));

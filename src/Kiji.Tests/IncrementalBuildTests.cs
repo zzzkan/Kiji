@@ -1,3 +1,4 @@
+using Kiji.Assets;
 using Kiji.Markdown;
 using Kiji.Tests.TestSite.Pages;
 using Kiji.Tests.TestSite;
@@ -663,7 +664,7 @@ public sealed class IncrementalBuildTests : IDisposable
         async Task Build()
         {
             await using var app = CreateBuildApp(root, () => Interlocked.Increment(ref renders), Path.Combine(external, "content"));
-            app.UseImageProcessor(() => new TestSite.PageServices.TrackingImageProcessor());
+            app.UseServices(services => services.AddSingleton<IImageProcessor, TestSite.PageServices.TrackingImageProcessor>());
             await app.PublishAsync("dist");
         }
         await Build();
@@ -689,13 +690,13 @@ public sealed class IncrementalBuildTests : IDisposable
         await File.WriteAllBytesAsync(Path.Combine(root, "content", "source.png"), [1, 2, 3]);
         await using (var publishing = CreateBuildApp(root))
         {
-            publishing.UseImageProcessor(() => new TestSite.PageServices.TrackingImageProcessor());
+            publishing.UseServices(services => services.AddSingleton<IImageProcessor, TestSite.PageServices.TrackingImageProcessor>());
             await publishing.PublishAsync("dist");
         }
         var cache = Path.Combine(root, ".kiji", "cache");
         var before = SnapshotDirectory(cache);
         await using var app = CreateBuildApp(root);
-        app.UseImageProcessor(() => new TestSite.PageServices.TrackingImageProcessor());
+        app.UseServices(services => services.AddSingleton<IImageProcessor, TestSite.PageServices.TrackingImageProcessor>());
         var (server, web) = await app.StartDevServerAsync(TestUrls.EphemeralPort, CancellationToken.None);
         await using (server)
         {
@@ -719,13 +720,13 @@ public sealed class IncrementalBuildTests : IDisposable
         var root = CreateSiteRoot("images");
         await WritePostAsync(root, "stable", "Image", "![image](source.png)");
         await File.WriteAllBytesAsync(Path.Combine(root, "content", "source.png"), [1, 2, 3]);
-        var processor = new TestSite.PageServices.TrackingImageProcessor();
+        await using var processor = new TestSite.PageServices.TrackingImageProcessor();
         var renders = 0;
         void Record() { Interlocked.Increment(ref renders); }
         async Task Build()
         {
             await using var app = CreateBuildApp(root, Record);
-            app.UseImageProcessor(() => processor);
+            app.UseServices(services => services.AddSingleton<IImageProcessor>(processor));
             await app.PublishAsync("dist");
         }
         await Build();
@@ -748,11 +749,11 @@ public sealed class IncrementalBuildTests : IDisposable
         var root = CreateSiteRoot("image-stamps");
         await WritePostAsync(root, "stable", "Image", "![image](source.png)");
         await File.WriteAllBytesAsync(Path.Combine(root, "content", "source.png"), [1, 2, 3]);
-        var processor = new TestSite.PageServices.TrackingImageProcessor();
+        await using var processor = new TestSite.PageServices.TrackingImageProcessor();
         async Task Build()
         {
             await using var app = CreateBuildApp(root);
-            app.UseImageProcessor(() => processor);
+            app.UseServices(services => services.AddSingleton<IImageProcessor>(processor));
             await app.PublishAsync("dist");
         }
         await Build();

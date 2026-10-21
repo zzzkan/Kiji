@@ -181,7 +181,7 @@ responsive WebP variants beside the page's `index.html` and emits an `<img>` wit
 `srcset`. The default processor uses SkiaSharp and outputs static images; animated GIF
 and WebP inputs use only their first frame. Source EXIF, IPTC, and XMP metadata is removed,
 and colors are converted to sRGB. To preserve animation, place the original image in
-`wwwroot/` and reference it as a static asset, or provide a custom image processor.
+`wwwroot/` and reference it as a static asset.
 
 The source image must exist inside the Markdown file's directory tree. A missing image or
 a path that escapes that tree fails the page render.
@@ -190,6 +190,4 @@ External image URLs and site-root references such as `![](/img/logo.png)` are le
 ordinary Markdown images. Put shared images in `wwwroot/`; remember that a leading `/` is
 not safe for a deployment sub-path.
 
-To replace responsive image generation, register an `IImageProcessor`. The complete
-ownership, concurrency, and return-value contract is in the
-[API reference](../api-reference/#image-processing).
+For custom image processing, see the [API reference](../api-reference/#image-processing).

@@ -120,16 +120,32 @@ Sets the `LayoutComponentBase` used by pages without their own `@layout`. A page
 takes precedence, and layouts may nest through their own `@layout`. Without a default,
 the page renders directly inside the generated document body.
 
-### Page service
+### Services
 
-#### `AddPageService<T>()` / `AddPageService<TService, TImplementation>()`
+#### `UseServices(Action<IServiceCollection> configure)`
 
-Registers one instance of a concrete class for each page render. Its public constructor
-dependencies are resolved automatically; the page, layout, and child components share the
-instance. Kiji disposes it when that render finishes.
+Registers services using standard [.NET dependency injection](https://learn.microsoft.com/dotnet/core/extensions/dependency-injection/overview).
 
-Page services are unavailable to content loaders, route/feed factories, and artifact
-writers.
+```csharp
+app.UseServices(services =>
+{
+    services.AddScoped<RelatedPosts>();
+    services.AddLocalization();
+});
+```
+
+Import `Microsoft.Extensions.DependencyInjection`. Callbacks run once in registration order
+before rendering; the collection is then read-only. Use ordinary C# lambdas or named methods
+for callbacks and factories; standalone runtime-generated methods are unsupported.
+
+Each page render owns a DI scope: scoped services are shared by its page, layout and child
+components and disposed when rendering finishes. Loaders, route/feed factories and artifact
+writers cannot resolve scoped services. Kiji-managed services such as `SiteInfo`, `PageInfo`
+and `ContentDictionary<>` cannot be replaced.
+
+Declare external service data and configuration with `AddBuildInput` or `PageBuildInputs`;
+captured values are not tracked automatically. Content reload does not recreate singletons;
+use `UseContentSource` for derived content indexes.
 
 ### Page metadata
 
@@ -265,48 +281,20 @@ images, because their output directory comes from the current page.
 
 ### Image processing
 
-The public image contracts are in `Kiji.Assets`.
-
 The default processor uses SkiaSharp to generate static WebP variants from JPEG, PNG,
 GIF, and WebP inputs. Animated inputs use only the first frame. It converts colors to
 sRGB and drops source EXIF, IPTC, and XMP metadata.
 
-#### `UseImageProcessor(Func<IImageProcessor> factory)`
-
-Replaces the default responsive-image processor. The last registration wins. The factory
-is required, runs lazily, and must return a new non-null instance. Kiji owns that instance
-and disposes it with the site, using asynchronous disposal when supported.
-
-One instance is shared by concurrent page renders and survives content reloads, so an
-implementation must support concurrent calls and retain no page or content state. Declare
-external configuration with `AddBuildInput` and include configuration and encoder versions
-in `IImageProcessor.CacheIdentity`. This identity covers all transformation settings and
-the encoder implementation. Its default value is `null`, disabling persistent reuse.
-
-#### `IImageProcessor.ProcessAsync`
+To replace it, register `IImageProcessor` from `Kiji.Assets` as a singleton:
 
 ```csharp
-Task<ProcessedImageInfo> ProcessAsync(
-    string sourceFilePath,
-    string outputDirectory,
-    CancellationToken cancellationToken = default);
+app.UseServices(services =>
+    services.AddSingleton<IImageProcessor, MyImageProcessor>());
 ```
 
-The processor should observe the token, write every returned variant into
-`outputDirectory` using file names relative to that directory, and return only after the
-files are ready.
-
-#### `ProcessedImageInfo`
-
-Construct this record with an object initializer. `OriginalWidth` and `OriginalHeight` are
-required source dimensions in pixels. `Variants` is a required `IReadOnlyList<ImageVariant>`
-ordered by ascending width; the largest variant is used as the default image source.
-
-#### `ImageVariant`
-
-`ImageVariant(string FileName, int Width)` describes one generated file. `FileName` is
-relative to the output directory and `Width` is its pixel width. Both positional
-properties are read-only.
+Custom processors must support concurrent calls and retain no page or content state.
+Set `CacheIdentity` to identify the implementation and settings for persistent reuse;
+its default `null` disables reuse. Declare external configuration with `AddBuildInput`.
 
 ## Build inputs and controls
 
@@ -428,7 +416,7 @@ in your hosting platform.
 ### JavaScript interop
 
 Components and page services can inject `IJSRuntime`, but interop calls throw
-`InvalidOperationException`. Do not replace it through `AddPageService`.
+`InvalidOperationException`. Its registration is managed by Kiji.
 
 `OnAfterRender` and `OnAfterRenderAsync` do not run. Components that defer interop
 to these methods can render static HTML. Use a `<script>` element or JavaScript

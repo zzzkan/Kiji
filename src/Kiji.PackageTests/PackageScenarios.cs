@@ -111,6 +111,13 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
     public Task Develop_Edit_AndReload(string sdk, bool compressed) => fixture.ScenarioAsync($"{nameof(Develop_Edit_AndReload)}: {sdk}", async () =>
     {
         fixture.Replace("Site/PackageSite.csproj", "<OutputType>Exe</OutputType>", $"<OutputType>Exe</OutputType><DisableBuildCompression>{(!compressed).ToString().ToLowerInvariant()}</DisableBuildCompression>");
+        if (sdk == "Microsoft.NET.Sdk.Web")
+        {
+            // Razor uses the SDK default. Web also exercises a custom MSBuild
+            // path with backslashes: watch must find the same manifest on Unix.
+            fixture.Replace("Site/PackageSite.csproj", "<OutputType>Exe</OutputType>",
+                "<OutputType>Exe</OutputType><IntermediateOutputPath>obj\\watch\\</IntermediateOutputPath>");
+        }
         foreach (var path in new[] { "wwwroot/app.js", "Home.razor.js" })
         { File.SetLastWriteTimeUtc(Path.Combine(fixture.Site, path), DateTime.UtcNow.AddMinutes(-1)); }
         var log = await fixture.WithServerAsync(true, async client =>

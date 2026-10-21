@@ -27,6 +27,9 @@ built or edited in place. Three workflows replace independent per-feature sites:
 - Develop and reload: run once with the Razor SDK and once with the Web SDK,
   covering both build-compression settings without multiplying every scenario.
   Check live HTTP validators/ranges, Razor/CSS updates and reload ownership.
+  Razor uses the SDK's default intermediate output path; Web uses a custom path
+  containing backslashes. CSS updates must reach HTTP clients and trigger a single
+  reload on Windows and Linux through the packaged Kiji watch targets.
 
 Each scenario starts from source and disposes its own servers. Tests do not
 depend on execution order. The original fixture files remain unchanged.
@@ -74,11 +77,6 @@ Linux device/inode IDs for every emitted SkiaSharp native file; a silent fallbac
 to independent copies fails verification. The filesystem must support hard links
 (NTFS on Windows; normal Linux CI filesystems). Summing file lengths double-counts
 hard links and is not a physical disk-usage measurement.
-
-The consumer props explicitly use `BaseIntermediateOutputPath="obj/"` for all
-fixture projects. SDK 10.0.402's watch tooling reads the static-asset manifest path
-without normalizing the default `obj\` separator on Unix; using a forward slash
-keeps scoped CSS hot reload working on both platforms without changing the layout.
 
 Success, assertion failure and command timeout all delete the workspace, feed
 and private Kiji cache. A forced termination can leave at most this one

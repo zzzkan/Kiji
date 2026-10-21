@@ -114,8 +114,6 @@ public sealed class PackageFixture : IAsyncLifetime
             Write("Directory.Build.props", $"""
                 <Project><PropertyGroup>
                   <TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
-                  <!-- SDK 10.0.402 watch reads manifest paths without normalizing the default obj\ separator on Unix. -->
-                  <BaseIntermediateOutputPath>obj/</BaseIntermediateOutputPath>
                   <RestorePackagesPath>{SecurityElement.Escape(Packages)}</RestorePackagesPath>
                   <RestoreFallbackFolders>{SecurityElement.Escape(_globalPackages)}</RestoreFallbackFolders>
                   <CreateHardLinksForCopyLocalIfPossible>true</CreateHardLinksForCopyLocalIfPossible>

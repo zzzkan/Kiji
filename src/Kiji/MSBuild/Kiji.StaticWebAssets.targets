@@ -25,6 +25,18 @@
     </PropertyGroup>
   </Target>
 
+  <!-- dotnet watch reads IntermediateOutputPath directly after the design-time
+       build to locate staticwebassets.development.json. SDK 10.0.402 leaves the
+       default obj\ separator in that property on Unix, although MSBuild writes
+       the manifest under obj/. Normalize the final path for watch without
+       changing the user's output directory or ordinary build properties. -->
+  <Target Name="KijiNormalizeWatchOutputPath" AfterTargets="GenerateComputedBuildStaticWebAssets"
+          Condition="'$(DesignTimeBuild)' == 'true' and '$(IntermediateOutputPath)' != ''">
+    <PropertyGroup>
+      <IntermediateOutputPath>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)'))</IntermediateOutputPath>
+    </PropertyGroup>
+  </Target>
+
   <Target Name="KijiValidateStaticWebAssets" BeforeTargets="PrepareForBuild;KijiGenerateSite">
     <Error Condition="'$(_KijiConfiguredStaticWebAssetBasePath)' != '' and '$(_KijiConfiguredStaticWebAssetBasePath)' != '/'"
            Code="KIJI1004" Text="Set SiteInfo.BaseUrl to host a Kiji site under a path prefix. StaticWebAssetBasePath is supported on libraries, not on the site project." />

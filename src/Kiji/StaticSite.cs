@@ -67,29 +67,13 @@ public sealed class StaticSite
         }
     } = null!;
 
-    /// <summary>Whether publish may reuse previously generated pages. Defaults to true.</summary>
-    /// <remarks>
-    /// Set to false before execution to render all pages. Successful renders still refresh
-    /// the cache for later publishes. AlwaysRender and KijiForce override reuse.
-    /// This controls HTML reuse, not image processing caches or development file watchers.
-    /// </remarks>
-    public bool ReusePages
-    {
-        get;
-        set
-        {
-            EnsureConfigurable();
-            field = value;
-        }
-    } = true;
-
     internal SiteExecutionPaths Paths { get; }
 
     /// <summary>Configures the services available to components and site factories.</summary>
     /// <remarks>
     /// Callbacks run once in registration order before rendering. Each page render owns a scope.
     /// Content loaders, route/feed factories and artifacts cannot resolve scoped services.
-    /// Kiji's managed services cannot be changed. Use AlwaysRender or ReusePages for untracked external state.
+    /// Kiji's managed services cannot be changed. Use AlwaysRender on components reading untracked external state.
     /// </remarks>
     public StaticSite UseServices(Action<IServiceCollection> configure)
     {
@@ -377,7 +361,7 @@ public sealed class StaticSite
                 .. _serviceAssemblies,
                 .. _notFoundComponentType is { } notFound ? new[] { notFound.Assembly } : [],
                 typeof(StaticSite).Assembly],
-            _forceFullBuild || !ReusePages,
+            _forceFullBuild,
             cancellationToken);
         phases.Mark(BuildPhaseTimer.Plan);
 

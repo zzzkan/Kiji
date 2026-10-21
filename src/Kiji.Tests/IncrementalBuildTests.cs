@@ -327,8 +327,12 @@ public sealed class IncrementalBuildTests : IDisposable
                 File.SetLastWriteTimeUtc(input, stamp);
             }
         });
-        app.ReusePages = false;
-        await Assert.ThrowsAnyAsync<Exception>(() => app.PublishAsync("dist"));
+        await Assert.ThrowsAnyAsync<Exception>(() => app.RunAsync(name => name switch
+        {
+            "KIJI_OUTPUT" => "dist",
+            "KIJI_FORCE" => "true",
+            _ => null,
+        }, CancellationToken.None));
         Assert.Equal(manifest, await File.ReadAllBytesAsync(manifestPath));
         await BuildAsync(root);
         Assert.Contains("Edited body.", await File.ReadAllTextAsync(Path.Combine(root, "dist", "md", "stable", "index.html")), StringComparison.Ordinal);

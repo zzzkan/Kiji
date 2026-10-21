@@ -20,7 +20,7 @@ Every successful publish produces a complete static site.
 | A static asset changes | Update the asset and pages using `Assets` or the default `ImportMap`. |
 | Code, referenced assemblies (including the framework), or site settings change | Render all pages. |
 | A page renders an `AlwaysRender` component or layout | Render that page on every publish. |
-| `ReusePages = false` or `KijiForce=true` | Render all pages. |
+| `KijiForce=true` | Render all pages. |
 
 Static assets are checked and feeds, sitemaps, and custom artifacts run on every publish.
 
@@ -62,20 +62,9 @@ the output. For example, if an external flag determines whether to show a child,
 the component reading that flag; a child that was absent from the last render cannot
 disable reuse. Independent reads of another page's generated HTML are not tracked.
 
-To refresh every page, set `ReusePages` before `RunAsync`. Conditions are ordinary C#:
-
-```csharp
-if (Environment.GetEnvironmentVariable("REFRESH_EXTERNAL_DATA") == "1")
-{
-    app.ReusePages = false;
-}
-
-await app.RunAsync();
-```
-
-`ReusePages` defaults to `true`. Setting it to `false` renders every page in that run
-and saves successful results for later publishes. `AlwaysRender` pages remain ineligible
-for reuse. You can also force a full render with `dotnet publish -p:KijiForce=true`.
+To refresh every page for one publish, use `dotnet publish -p:KijiForce=true`.
+Successful renders refresh the cache for later publishes. `AlwaysRender` pages
+remain ineligible for reuse.
 Without one of these controls, an untracked external change can leave cached HTML stale.
 
 These controls govern published HTML reuse. Image processors still need correct cache

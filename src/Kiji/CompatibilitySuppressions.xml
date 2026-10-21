@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Suppressions>
-  <!-- External input registration is replaced by AlwaysRender and ReusePages. -->
+  <!-- External input registration is replaced by AlwaysRender. -->
   <Suppression>
     <DiagnosticId>CP0001</DiagnosticId>
     <Target>T:Kiji.PageBuildInputs</Target>

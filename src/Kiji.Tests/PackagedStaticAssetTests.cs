@@ -14,12 +14,9 @@ namespace Kiji.Tests;
 public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : IClassFixture<PackagedSiteFixture>
 {
     [Fact]
-    public async Task PageReuse_RazorAttributesAndConditionalRefreshWorkAcrossPublishes()
+    public async Task AlwaysRender_RazorAttributesAndKijiForceWorkAcrossPublishes()
     {
-        var site = fixture.CreateSite(nameof(PageReuse_RazorAttributesAndConditionalRefreshWorkAcrossPublishes));
-        var program = Path.Combine(site, "Program.cs");
-        File.WriteAllText(program, File.ReadAllText(program).Replace("site.AddPages();",
-            "site.ReusePages = !File.Exists(\"refresh.txt\");\nsite.AddPages();", StringComparison.Ordinal));
+        var site = fixture.CreateSite(nameof(AlwaysRender_RazorAttributesAndKijiForceWorkAcrossPublishes));
         PackagedSiteFixture.Write(site, "_Imports.razor", "@using Kiji\n@using Microsoft.AspNetCore.Components");
         PackagedSiteFixture.Write(site, "Home.razor", """
             @page "/"
@@ -56,10 +53,7 @@ public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : ICla
         {
             var value = $"external-value-{round}";
             PackagedSiteFixture.Write(site, "value.txt", value);
-            var refresh = Path.Combine(site, "refresh.txt");
-            if (round == 3) { File.WriteAllText(refresh, "refresh"); }
-            else { File.Delete(refresh); }
-            await fixture.PublishAsync(site);
+            await fixture.PublishAsync(site, round == 3 ? ["-p:KijiForce=true"] : []);
             Assert.Contains(round < 3 ? "external-value-1" : "external-value-3",
                 File.ReadAllText(Path.Combine(site, "dist/index.html")), StringComparison.Ordinal);
             foreach (var page in new[] { "always", "nested", "layout" })

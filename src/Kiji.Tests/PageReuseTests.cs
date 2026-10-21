@@ -64,10 +64,8 @@ public sealed class PageReuseTests : IDisposable
         }
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task ForcedRendering_RefreshesTheCacheForTheNextNormalPublish(bool forceFromMsBuild)
+    [Fact]
+    public async Task KijiForce_RefreshesTheCacheForTheNextNormalPublish()
     {
         var probe = new RenderPolicyProbe();
         for (var round = 1; round <= 4; round++)
@@ -76,11 +74,10 @@ public sealed class PageReuseTests : IDisposable
             await using var site = CreateSite(probe);
             site.AddPages<RenderPolicyPage>(_ => [new { Id = "one" }]);
             var force = round == 3;
-            site.ReusePages = forceFromMsBuild || !force;
             var exitCode = await site.RunAsync(name => name switch
             {
                 "KIJI_OUTPUT" => "dist",
-                "KIJI_FORCE" when forceFromMsBuild && force => "true",
+                "KIJI_FORCE" when force => "true",
                 _ => null,
             }, CancellationToken.None);
             Assert.Equal(0, exitCode);

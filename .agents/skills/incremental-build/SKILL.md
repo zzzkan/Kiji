@@ -36,8 +36,8 @@ not built with conflicting global properties.
   Keep public image URLs in the page bundle and recipes sufficient for cache-only repair.
 - AlwaysRender marks pages, layouts or child components that read untracked external
   state. Any output page rendering one is uncacheable, including nested/dynamic children.
-  ReusePages = false and KijiForce bypass HTML reuse for the entire publish while still
-  saving successful renders for later reuse. Neither adds external watchers or clears
+  KijiForce bypasses HTML reuse for the entire publish while still saving successful
+  renders for later reuse. Neither adds external watchers or clears
   image processing caches. Do not reintroduce per-input registration APIs.
 - Invalidate content, file hashes and value resolutions before each publish/dev reload.
   Verify inputs before manifest publication, including joining verification on failure.

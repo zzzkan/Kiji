@@ -144,9 +144,8 @@ writers cannot resolve scoped services. Kiji-managed services such as `SiteInfo`
 and `ContentDictionary<>` cannot be replaced.
 
 External service data and captured values are not tracked automatically. Use
-`[AlwaysRender]` on components that read them, or set `app.ReusePages = false` before
-execution. Content reload does not recreate singletons; use `UseContentSource` for
-derived content indexes.
+`[AlwaysRender]` on components that read them. Content reload does not recreate
+singletons; use `UseContentSource` for derived content indexes.
 
 ### Page metadata
 
@@ -312,15 +311,11 @@ Mark the component that reads external state, including a condition that decides
 whether a child is rendered. A child absent from the last render cannot prevent reuse.
 Reading another page's HTML through arbitrary application code is not tracked.
 
-### `StaticSite.ReusePages`
+To refresh every page for one publish, use `dotnet publish -p:KijiForce=true`.
+Successful renders refresh the cache for later publishes; pages rendering an
+`AlwaysRender` component remain ineligible for reuse.
 
-A Boolean property defaulting to `true`. Set it before execution, using ordinary C#
-conditions when needed. `false` renders all pages for that run; successful renders still
-refresh the cache for later publishes. `true` permits reuse only when tracked dependencies
-match and the page did not render an `AlwaysRender` component. `-p:KijiForce=true`
-forces every page to render regardless of this setting.
-
-These controls affect published HTML reuse, not image processing caches. They do not
+`AlwaysRender` affects published HTML reuse, not image processing caches. It does not
 register external file watchers or poll services. Restart development when untracked
 external data changes. See [external data](../incremental-builds/#render-pages-that-use-external-data).
 

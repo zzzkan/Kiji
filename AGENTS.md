@@ -48,15 +48,16 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   collection is read-only. Each render owns a scope. Loaders, route/feed factories
   and artifacts use the root provider and cannot resolve scoped services. Validate
   Kiji-owned registrations after callbacks. Derived indexes use UseContentSource;
-  content reload does not recreate singletons. Declare external service state as build inputs.
+  content reload does not recreate singletons. Use AlwaysRender on components reading
+  untracked external state, or ReusePages = false for a whole publish.
 - Use Blazor's PageTitle and HeadContent; KijiRoot supplies the single HeadOutlet.
   Each page gets a fresh renderer/dispatcher, isolating the framework's section state.
   HeadContent replaces earlier providers rather than appending; compose shared tags
   inside the page's HeadContent. Await quiescence before serializing the document.
 - Customize IImageProcessor through UseServices. The last unkeyed registration must
   be a singleton; standard DI ownership applies. It must support concurrency and retain
-  no page/content state. Reload does not recreate it. Declare external configuration
-  with AddBuildInput and version cache identities.
+  no page/content state. Reload does not recreate it. Include external configuration
+  and encoder versions in cache identities; HTML reuse controls do not clear image caches.
 
 Do not reintroduce evaluated alternatives: pooled HtmlRenderer (root/scope state cannot
 reset), RouteView (PageView owns Kiji's layout resolution), AOT/trimming (reflection),

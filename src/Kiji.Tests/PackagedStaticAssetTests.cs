@@ -14,6 +14,62 @@ namespace Kiji.Tests;
 public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : IClassFixture<PackagedSiteFixture>
 {
     [Fact]
+    public async Task PageReuse_RazorAttributesAndConditionalRefreshWorkAcrossPublishes()
+    {
+        var site = fixture.CreateSite(nameof(PageReuse_RazorAttributesAndConditionalRefreshWorkAcrossPublishes));
+        var program = Path.Combine(site, "Program.cs");
+        File.WriteAllText(program, File.ReadAllText(program).Replace("site.AddPages();",
+            "site.ReusePages = !File.Exists(\"refresh.txt\");\nsite.AddPages();", StringComparison.Ordinal));
+        PackagedSiteFixture.Write(site, "_Imports.razor", "@using Kiji\n@using Microsoft.AspNetCore.Components");
+        PackagedSiteFixture.Write(site, "Home.razor", """
+            @page "/"
+            <p>@File.ReadAllText("value.txt")</p>
+            """);
+        PackagedSiteFixture.Write(site, "Always.razor", """
+            @page "/always/"
+            @attribute [AlwaysRender]
+            <p>@File.ReadAllText("value.txt")</p>
+            """);
+        PackagedSiteFixture.Write(site, "Nested.razor", "@page \"/nested/\"\n<Wrapper />");
+        PackagedSiteFixture.Write(site, "Wrapper.razor", "<Volatile />");
+        PackagedSiteFixture.Write(site, "Volatile.razor", """
+            @attribute [AlwaysRender]
+            <p>@value</p>
+            @code {
+                private string value = "";
+                protected override async Task OnInitializedAsync()
+                {
+                    await Task.Yield();
+                    value = File.ReadAllText("value.txt");
+                }
+            }
+            """);
+        PackagedSiteFixture.Write(site, "WithLayout.razor", "@page \"/layout/\"\n@layout VolatileLayout\n<p>Layout page</p>");
+        PackagedSiteFixture.Write(site, "VolatileLayout.razor", """
+            @inherits LayoutComponentBase
+            @attribute [AlwaysRender]
+            <p>@File.ReadAllText("value.txt")</p>
+            @Body
+            """);
+
+        for (var round = 1; round <= 4; round++)
+        {
+            var value = $"external-value-{round}";
+            PackagedSiteFixture.Write(site, "value.txt", value);
+            var refresh = Path.Combine(site, "refresh.txt");
+            if (round == 3) { File.WriteAllText(refresh, "refresh"); }
+            else { File.Delete(refresh); }
+            await fixture.PublishAsync(site);
+            Assert.Contains(round < 3 ? "external-value-1" : "external-value-3",
+                File.ReadAllText(Path.Combine(site, "dist/index.html")), StringComparison.Ordinal);
+            foreach (var page in new[] { "always", "nested", "layout" })
+            {
+                Assert.Contains(value, File.ReadAllText(Path.Combine(site, "dist", page, "index.html")), StringComparison.Ordinal);
+            }
+        }
+    }
+
+    [Fact]
     public async Task ProjectDirectory_IsSharedByPublishServeWatchAndCleanOutsideTheProject()
     {
         var site = fixture.CreateSite(Path.Combine(nameof(ProjectDirectory_IsSharedByPublishServeWatchAndCleanOutsideTheProject), "site"));

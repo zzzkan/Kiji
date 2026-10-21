@@ -10,7 +10,7 @@ the site and may be chained.
 - [Site setup](#site-setup)
 - [Pages and rendering](#pages-and-rendering)
 - [Content and images](#content-and-images)
-- [Build inputs and controls](#build-inputs-and-controls)
+- [Page reuse controls](#page-reuse-controls)
 - [Generated files](#generated-files)
 - [Unsupported Blazor features](#unsupported-blazor-features)
 
@@ -143,9 +143,10 @@ components and disposed when rendering finishes. Loaders, route/feed factories a
 writers cannot resolve scoped services. Kiji-managed services such as `SiteInfo`, `PageInfo`
 and `ContentDictionary<>` cannot be replaced.
 
-Declare external service data and configuration with `AddBuildInput` or `PageBuildInputs`;
-captured values are not tracked automatically. Content reload does not recreate singletons;
-use `UseContentSource` for derived content indexes.
+External service data and captured values are not tracked automatically. Use
+`[AlwaysRender]` on components that read them, or set `app.ReusePages = false` before
+execution. Content reload does not recreate singletons; use `UseContentSource` for
+derived content indexes.
 
 ### Page metadata
 
@@ -219,8 +220,8 @@ lose HTML reuse.
 Values are immutable for one build snapshot. Collection enumeration tracks item order,
 membership, and all item digests. A missing lookup tracks the collection too.
 
-For either overload, declare file or directory inputs with `AddBuildInput(path)` so
-changes refresh the content during development.
+These loaders do not register file watchers. Restart the development server when their
+external data changes; Markdown sources register their own content watchers.
 
 #### `ContentDictionary<T>`
 
@@ -294,38 +295,34 @@ app.UseServices(services =>
 
 Custom processors must support concurrent calls and retain no page or content state.
 Set `CacheIdentity` to identify the implementation and settings for persistent reuse;
-its default `null` disables reuse. Declare external configuration with `AddBuildInput`.
+its default `null` disables reuse. Include external configuration and encoder versions
+in that identity; page rendering controls do not invalidate image processing caches.
 
-## Build inputs and controls
+## Page reuse controls
 
-### `AddBuildInput(string path)`
+### `AlwaysRenderAttribute`
 
-Declares a file or directory outside Kiji's known inputs. A relative path uses
-the site project directory. Changes require a full rebuild; the development server also
-watches declared paths. The path cannot be null, empty, or whitespace.
+Add `@attribute [AlwaysRender]` to a Razor component, or `[AlwaysRender]` to a component
+class, using the `Kiji` namespace. Every output page that renders the marked component
+is regenerated on each publish. This includes layouts, nested and dynamic children,
+and derived component types. A marked page type applies to all its registered routes
+and parameter sets. Links alone do not propagate the policy.
 
-### `AddBuildInput(string key, string value)`
+Mark the component that reads external state, including a condition that decides
+whether a child is rendered. A child absent from the last render cannot prevent reuse.
+Reading another page's HTML through arbitrary application code is not tracked.
 
-Declares a named value such as a remote-data version or encoder setting. Changing either
-the key/value input set or a value requires a full rebuild. The key cannot be blank and
-the value cannot be null.
+### `StaticSite.ReusePages`
 
-### `AddPageInput(string key, Func<string> read)` and `PageBuildInputs`
+A Boolean property defaulting to `true`. Set it before execution, using ordinary C#
+conditions when needed. `false` renders all pages for that run; successful renders still
+refresh the cache for later publishes. `true` permits reuse only when tracked dependencies
+match and the page did not render an `AlwaysRender` component. `-p:KijiForce=true`
+forces every page to render regardless of this setting.
 
-Registers an external value evaluated once per build snapshot when needed.
-Inject `PageBuildInputs` and call `Read(key)` during rendering; only readers depend on it.
-
-| Method                                | Behavior                                                                                                                                                                    |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `string Read(string key)`             | Instance method; reads a registered value and records it for the current page. An unknown key throws.                                                                       |
-| `static byte[] ReadFile(string path)` | Reads and records the exact file bytes consumed during rendering. Pass an absolute path resolved against the site root; a relative path uses the process working directory. |
-| `static void DisableCache()`          | Disables persistent HTML reuse for the current page render, for untracked or nondeterministic inputs.                                                                       |
-
-Call these methods during rendering to record dependencies for that page. File paths
-outside the site root disable persistent HTML reuse for that page. These APIs do not
-register file watchers or poll external systems. `AddBuildInput` continues to declare
-dependencies shared by all pages and watches declared paths in development. See the
-[input selection guide](../incremental-builds/#declare-inputs-outside-the-built-in-content-pipeline).
+These controls affect published HTML reuse, not image processing caches. They do not
+register external file watchers or poll services. Restart development when untracked
+external data changes. See [external data](../incremental-builds/#render-pages-that-use-external-data).
 
 ## Generated files
 

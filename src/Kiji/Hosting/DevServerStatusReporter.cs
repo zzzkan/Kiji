@@ -41,12 +41,10 @@ internal sealed class DevServerStatusReporter
     internal void DevServerStarted(
         Uri address,
         IReadOnlyList<string> contentPaths,
-        bool watchesStaticAssets,
-        IReadOnlyList<string> buildInputPaths)
+        bool watchesStaticAssets)
     {
         ArgumentNullException.ThrowIfNull(address);
         ArgumentNullException.ThrowIfNull(contentPaths);
-        ArgumentNullException.ThrowIfNull(buildInputPaths);
 
         var displayAddress = _useAnsiColor ? $"{EmphasizedUrl}{address}{Reset}" : address.ToString();
         WriteLine(StatusKind.Started, $"Dev server started at {displayAddress}");
@@ -58,11 +56,6 @@ internal sealed class DevServerStatusReporter
         if (watchesStaticAssets)
         {
             WriteLine(StatusKind.Change, "Watching static assets.");
-        }
-
-        foreach (var buildInputPath in buildInputPaths)
-        {
-            WriteLine(StatusKind.Change, $"Watching build input: '{buildInputPath}'.");
         }
     }
 
@@ -105,7 +98,6 @@ internal sealed class DevServerStatusReporter
         {
             WatchedPathSource.Content => "content",
             WatchedPathSource.Static => "static",
-            WatchedPathSource.BuildInput => "build input",
             _ => throw new InvalidOperationException($"Unknown watched path source '{source}'."),
         };
         WriteLine(

@@ -114,7 +114,9 @@ public sealed class PackagedSiteFixture : IAsyncLifetime
         process.BeginOutputReadLine();
         try
         {
-            var address = await ready.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            // Watch may restore and compile a fresh consumer before opening its port.
+            // Give that build the same budget as DotnetAsync, including on slower disks.
+            var address = await ready.Task.WaitAsync(watch ? TimeSpan.FromMinutes(2) : TimeSpan.FromSeconds(30));
             using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None })
             {
                 BaseAddress = address,

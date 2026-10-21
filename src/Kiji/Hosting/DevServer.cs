@@ -152,14 +152,9 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
             }
         });
 
-        var buildInputs = app.WatchedBuildInputs;
         foreach (var root in app.ContentRoots)
         {
             WatchDirectory(root, WatchedPathSource.Content);
-        }
-        foreach (var input in buildInputs)
-        {
-            WatchDirectory(input, WatchedPathSource.BuildInput);
         }
         StartWatchers();
 
@@ -168,8 +163,7 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
         _reporter.DevServerStarted(
             new Uri(new Uri(web.Urls.First()), app.Info.BaseUrl.AbsolutePath),
             app.ContentRoots,
-            assets?.ContentRoots.Length > 0,
-            buildInputs);
+            assets?.ContentRoots.Length > 0);
 
         // Warm the snapshot (page discovery + content materialization) in the
         // background so the first request doesn't pay for it. Failures are ignored
@@ -488,8 +482,7 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
         return source switch
         {
             WatchedPathSource.Content => 0,
-            WatchedPathSource.BuildInput => 1,
-            WatchedPathSource.Static => 2,
+            WatchedPathSource.Static => 1,
             _ => throw new InvalidOperationException($"Unknown watched path source '{source}'."),
         };
     }

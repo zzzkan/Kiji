@@ -64,22 +64,6 @@ internal static class BuildFingerprint
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { return false; }
     }
 
-    /// <summary>
-    /// Digest over a set of (relative path, per-file content hash) pairs, ordered by
-    /// path so the result is independent of enumeration order.
-    /// </summary>
-    internal static string HashFileSet(IEnumerable<(string RelativePath, string ContentHash)> files)
-    {
-        var builder = new StringBuilder();
-        foreach (var (relativePath, contentHash) in files.OrderBy(static file => file.RelativePath, StringComparer.OrdinalIgnoreCase))
-        {
-            AppendPart(builder, relativePath.Replace('\\', '/'));
-            AppendPart(builder, contentHash);
-        }
-
-        return HashText(builder.ToString());
-    }
-
     internal static string? HashParameters(IReadOnlyDictionary<string, object?> parameters)
     {
         if (parameters.Count == 0)

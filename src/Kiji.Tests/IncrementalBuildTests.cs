@@ -48,7 +48,7 @@ public sealed class IncrementalBuildTests : IDisposable
             AssetManifestPath = catalogPath,
         };
         var planner = new Generation.IncrementalBuildPlanner(options, _testDir, Path.Combine(_testDir, "cache"),
-            TestArticleContents.CreateSiteInfo(), [], []);
+            TestArticleContents.CreateSiteInfo());
         async Task Sync()
         {
             var files = await planner.SyncStaticFilesAsync(Assets.StaticAssetManifest.Load(catalogPath).Assets);
@@ -327,7 +327,7 @@ public sealed class IncrementalBuildTests : IDisposable
                 File.SetLastWriteTimeUtc(input, stamp);
             }
         });
-        app.AddBuildInput("test-revision", "changed");
+        app.ReusePages = false;
         await Assert.ThrowsAnyAsync<Exception>(() => app.PublishAsync("dist"));
         Assert.Equal(manifest, await File.ReadAllBytesAsync(manifestPath));
         await BuildAsync(root);

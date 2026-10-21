@@ -1,6 +1,6 @@
 ---
 title: Incremental builds
-description: Reuse unchanged pages, declare external inputs, and cache builds in CI.
+description: Reuse unchanged pages, control page rendering, and cache builds in CI.
 order: 60
 ---
 
@@ -15,10 +15,12 @@ Every successful publish produces a complete static site.
 | No relevant change | Reuse eligible pages. |
 | Markdown changes | Render pages reading that item or its collection. |
 | Content is added, removed, or reordered | Reevaluate collection readers and routes; remove obsolete outputs. |
-| Page parameters or a declared page input change | Render affected pages. |
+| Page parameters change | Render affected pages. |
 | A local image changes | Render its readers and update image variants. |
 | A static asset changes | Update the asset and pages using `Assets` or the default `ImportMap`. |
-| Code, framework, site settings, or a site-wide input change | Render all pages. |
+| Code, referenced assemblies (including the framework), or site settings change | Render all pages. |
+| A page renders an `AlwaysRender` component or layout | Render that page on every publish. |
+| `ReusePages = false` or `KijiForce=true` | Render all pages. |
 
 Static assets are checked and feeds, sitemaps, and custom artifacts run on every publish.
 
@@ -39,43 +41,48 @@ the content during rendering. Entire models and arrays can be valid component
 parameters while preventing HTML reuse. See [Routing](../routing/#passing-values-that-are-not-in-the-url)
 and the [supported parameter types](../api-reference/#pages).
 
-## Declare inputs outside the built-in content pipeline
+## Render pages that use external data
 
-Kiji cannot observe arbitrary file, HTTP, environment, or clock access in your code.
-Declare data that affects output:
-
-| Input | API |
-| --- | --- |
-| File or directory used across the site | `AddBuildInput(path)`; also watches it during development. |
-| Site-wide setting or external version | `AddBuildInput(key, value)`. |
-| Value read by some pages | `AddPageInput(key, read)` and injected `PageBuildInputs.Read(key)`. |
-| File read during rendering | `PageBuildInputs.ReadFile(absolutePath)`. |
-| Custom content | `UseContentSource` with stable `ContentEntry<T>` IDs and digests. |
-| Nondeterministic output | `PageBuildInputs.DisableCache()` during rendering. |
-
-For example, register a setting before `RunAsync`:
-
-```csharp
-app.AddPageInput("announcement", () =>
-    Environment.GetEnvironmentVariable("SITE_ANNOUNCEMENT") ?? "");
-```
-
-Read it in the component that displays it:
+Kiji cannot observe arbitrary file, HTTP, environment, clock, or service-state reads.
+When those values affect HTML, mark the component that uses them:
 
 ```razor
-@inject PageBuildInputs Inputs
+@attribute [AlwaysRender]
 
-<p>@Inputs.Read("announcement")</p>
+<p>@Environment.GetEnvironmentVariable("SITE_ANNOUNCEMENT")</p>
 ```
 
-Only readers depend on this value. It is evaluated once per snapshot when needed;
-registration does not poll external systems or refresh the process environment.
-Page-level inputs do not add file watchers. For local files that should trigger
-development reloads, also use `AddBuildInput(path)`.
+Import `Kiji` in `_Imports.razor`. `AlwaysRender` works on pages, layouts, and child
+components, and is inherited by derived components. Any page that renders the marked
+component is regenerated on every publish, including through nested or dynamic children.
+A link to that page does not make the linking page regenerate.
 
-Markdown projections already track their source file. Declare any additional external
-data they read, and build cross-item indexes through `UseContentSource`.
-See the [input API](../api-reference/#build-inputs-and-controls) for path and digest rules.
+Place the attribute on a component that is always reached when external state can affect
+the output. For example, if an external flag determines whether to show a child, mark
+the component reading that flag; a child that was absent from the last render cannot
+disable reuse. Independent reads of another page's generated HTML are not tracked.
+
+To refresh every page, set `ReusePages` before `RunAsync`. Conditions are ordinary C#:
+
+```csharp
+if (Environment.GetEnvironmentVariable("REFRESH_EXTERNAL_DATA") == "1")
+{
+    app.ReusePages = false;
+}
+
+await app.RunAsync();
+```
+
+`ReusePages` defaults to `true`. Setting it to `false` renders every page in that run
+and saves successful results for later publishes. `AlwaysRender` pages remain ineligible
+for reuse. You can also force a full render with `dotnet publish -p:KijiForce=true`.
+Without one of these controls, an untracked external change can leave cached HTML stale.
+
+These controls govern published HTML reuse. Image processors still need correct cache
+identities. They do not watch external files or poll services; restart the development
+server when untracked external data changes. Markdown sources retain their built-in
+tracking and development watchers. Custom content can continue to use stable
+`ContentEntry<T>` IDs and digests; build cross-item indexes through `UseContentSource`.
 
 ## Cache locations
 

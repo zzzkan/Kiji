@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Kiji.Markdown;
 using Kiji.Tests.TestSite;
 using Xunit;
 
@@ -40,7 +41,7 @@ public sealed class RunAsyncTests : IDisposable
         foreach (var output in new[] { _testDir, "content", "content/generated", "static", "static/generated", ".kiji", ".kiji/cache/site" })
         {
             await using var app = CreateApp();
-            app.AddBuildInput("content");
+            app.UseMarkdownContent<FrontMatter>();
             await Assert.ThrowsAsync<InvalidOperationException>(() => app.PublishAsync(output));
             Assert.Equal("source data", await File.ReadAllTextAsync(source));
         }

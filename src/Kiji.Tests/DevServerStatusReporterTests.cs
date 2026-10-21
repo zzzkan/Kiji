@@ -13,14 +13,12 @@ public sealed class DevServerStatusReporterTests
         reporter.DevServerStarted(
             new Uri("http://127.0.0.1:8080/"),
             [@"C:\site\content"],
-            watchesStaticAssets: false,
-            [@"C:\site\data\authors.json"]);
+            watchesStaticAssets: false);
         reporter.WatcherError(WatchedPathSource.Content, @"C:\site\content", new IOException("access denied"));
 
         var log = output.ToString();
         Assert.Contains("http://127.0.0.1:8080/", log, StringComparison.Ordinal);
         Assert.Contains(@"C:\site\content", log, StringComparison.Ordinal);
-        Assert.Contains(@"Watching build input: 'C:\site\data\authors.json'.", log, StringComparison.Ordinal);
         Assert.Contains("access denied", log, StringComparison.Ordinal);
         Assert.DoesNotContain(((char)0x1b).ToString(), log, StringComparison.Ordinal);
     }
@@ -70,8 +68,7 @@ public sealed class DevServerStatusReporterTests
         reporter.DevServerStarted(
             new Uri("http://127.0.0.1:8080/kiji/"),
             [@"C:\site\content"],
-            watchesStaticAssets: true,
-            []);
+            watchesStaticAssets: true);
 
         Assert.Contains(
             "\u001b[1;4:4;36mhttp://127.0.0.1:8080/kiji/\u001b[0m",

@@ -74,7 +74,7 @@ public sealed class DevServerTests : IAsyncDisposable
             var output = logs.ToString();
             Assert.Contains("Dev server started at", output, StringComparison.Ordinal);
             Assert.Contains("Watching static assets.", output, StringComparison.Ordinal);
-            Assert.Contains("Watching build input:", output, StringComparison.Ordinal);
+            Assert.Contains("Watching content:", output, StringComparison.Ordinal);
         }
     }
 
@@ -141,7 +141,7 @@ public sealed class DevServerTests : IAsyncDisposable
             var wsUri = new UriBuilder(baseAddress) { Scheme = "ws", Path = "/_kiji/reload" }.Uri;
             await socket.ConnectAsync(wsUri, CancellationToken.None);
 
-            await File.WriteAllTextAsync(Path.Combine(_contentsDir, "hello-world.txt"), "Hello Updated");
+            await File.WriteAllTextAsync(Path.Combine(_contentsDir, "hello-world.md"), "---\ntitle: Hello Updated\n---\n");
 
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             var buffer = new byte[64];
@@ -153,35 +153,12 @@ public sealed class DevServerTests : IAsyncDisposable
 
             var output = logs.ToString();
             Assert.Contains(
-                $"Build input changed: {Path.Combine(_contentsDir, "hello-world.txt")}",
+                $"Content changed: {Path.Combine(_contentsDir, "hello-world.md")}",
                 output,
                 StringComparison.Ordinal);
             Assert.Contains("Reloaded 1 browser client(s).", output, StringComparison.Ordinal);
             await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
             Assert.Equal(WebSocketState.Closed, socket.State);
-        }
-    }
-
-    [Fact]
-    public async Task Serve_DeclaredBuildInputChangeReloadsContent()
-    {
-        using var logs = new StringWriter();
-        var (baseAddress, devServer) = await StartServerAsync(logs);
-        await using (devServer)
-        {
-            using var client = CreateClient();
-            var page = new Uri(baseAddress, "/blog/hello-world/");
-            Assert.Contains("<h1>Hello World</h1>", await client.GetStringAsync(page), StringComparison.Ordinal);
-            using var socket = new ClientWebSocket();
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-            await socket.ConnectAsync(new UriBuilder(baseAddress) { Scheme = "ws", Path = "/_kiji/reload" }.Uri, timeout.Token);
-            await File.WriteAllTextAsync(Path.Combine(_testDir, "title.txt"), "External setting updated", timeout.Token);
-            await socket.ReceiveAsync(new byte[64], timeout.Token);
-            Assert.Contains("<h1>External setting updated</h1>", await client.GetStringAsync(page), StringComparison.Ordinal);
-            Assert.Contains(
-                $"Build input changed: {Path.Combine(_testDir, "title.txt")}",
-                logs.ToString(),
-                StringComparison.Ordinal);
         }
     }
 
@@ -245,7 +222,7 @@ public sealed class DevServerTests : IAsyncDisposable
             await socket.ConnectAsync(new UriBuilder(baseAddress) { Scheme = "ws", Path = "/_kiji/reload" }.Uri, timeout.Token);
             Directory.Move(_contentsDir, Path.Combine(_testDir, "old-content"));
             Directory.CreateDirectory(_contentsDir);
-            await File.WriteAllTextAsync(Path.Combine(_contentsDir, "hello-world.txt"), "Replacement content", timeout.Token);
+            await File.WriteAllTextAsync(Path.Combine(_contentsDir, "hello-world.md"), "---\ntitle: Replacement content\n---\n", timeout.Token);
             await socket.ReceiveAsync(new byte[64], timeout.Token);
             Assert.Contains("<h1>Replacement content</h1>", await client.GetStringAsync(page), StringComparison.Ordinal);
         }
@@ -353,7 +330,7 @@ public sealed class DevServerTests : IAsyncDisposable
         List<Kiji.Hosting.WatchedChange> events =
         [
             new(Kiji.Hosting.WatchedPathSource.Content, WatcherChangeTypes.Created, contentPath, Path.Combine("content", "2026", "post", "index.md")),
-            new(Kiji.Hosting.WatchedPathSource.BuildInput, WatcherChangeTypes.Changed, contentPath, Path.Combine("content", "2026", "post", "index.md")),
+            new(Kiji.Hosting.WatchedPathSource.Static, WatcherChangeTypes.Changed, contentPath, Path.Combine("content", "2026", "post", "index.md")),
             new(Kiji.Hosting.WatchedPathSource.Content, WatcherChangeTypes.Changed, contentPath, Path.Combine("content", "2026", "post", "index.md")),
             new(Kiji.Hosting.WatchedPathSource.Static, WatcherChangeTypes.Changed, staticPath, Path.Combine("wwwroot", "site.css")),
         ];
@@ -468,7 +445,7 @@ public sealed class DevServerTests : IAsyncDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Serve_MultipleMarkdownRoots_ReloadsAfterEditsAndAncestorReplacement(bool absolute)
+    public async Task Serve_MultipleMarkdownRoots_ReloadsAfterEditsAndRootReplacement(bool absolute)
     {
         var inputs = Path.Combine(_testDir, "inputs");
         var posts = Path.Combine(inputs, "posts");
@@ -479,7 +456,6 @@ public sealed class DevServerTests : IAsyncDisposable
         await File.WriteAllTextAsync(Path.Combine(notes, "note.md"), "---\ntitle: Original note\n---\n");
         _app = StaticSite.Create([], new SiteExecutionPaths(Path.Combine(_testDir, "site")));
         _app.Info = TestArticleContents.CreateSiteInfoWithBasePath();
-        _app.AddBuildInput(Path.Combine(_testDir, "title.txt"));
         string SourcePath(string path)
         {
             return absolute ? path : Path.GetRelativePath(_app.Paths.ProjectDirectory, path);
@@ -519,7 +495,10 @@ public sealed class DevServerTests : IAsyncDisposable
             await socket.ReceiveAsync(new byte[64], timeout.Token);
             Assert.Contains("Edited note", await client.GetStringAsync(notePage), StringComparison.Ordinal);
 
-            Directory.Move(inputs, Path.Combine(_testDir, "old-inputs"));
+            // Each registered root is watched from its parent. No unrelated external
+            // input is registered just to install a broader ancestor watcher.
+            Directory.Move(posts, Path.Combine(inputs, "old-posts"));
+            Directory.Move(notes, Path.Combine(inputs, "old-notes"));
             Directory.CreateDirectory(posts);
             Directory.CreateDirectory(notes);
             await File.WriteAllTextAsync(Path.Combine(posts, "post.md"), "---\ntitle: Post\n---\n\nReplacement body", timeout.Token);
@@ -545,7 +524,7 @@ public sealed class DevServerTests : IAsyncDisposable
         string? additionalSlug = null,
         Action<StaticSite>? configureAssets = null)
     {
-        await File.WriteAllTextAsync(Path.Combine(_contentsDir, "hello-world.txt"), "Hello World");
+        await File.WriteAllTextAsync(Path.Combine(_contentsDir, "hello-world.md"), "---\ntitle: Hello World\n---\n");
 
         var app = StaticSite.Create([], new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
         app.Info = site ?? TestArticleContents.CreateSiteInfo();
@@ -553,28 +532,23 @@ public sealed class DevServerTests : IAsyncDisposable
         configureAssets?.Invoke(app);
 
         var contentsDir = _contentsDir;
-        var settingsPath = Path.Combine(_testDir, "title.txt");
-        app.AddBuildInput(settingsPath);
-        app.AddBuildInput(contentsDir);
-        app.UseContentSource<Post>(_ =>
+        app.UseMarkdownContent<FrontMatter, Post>(content =>
             {
                 Interlocked.Increment(ref _contentLoads);
-                return [.. Directory.EnumerateFiles(contentsDir, "*.txt")
-                    .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
-                    .Select(file => TestArticleContents.CreatePost(
-                        Path.GetFileNameWithoutExtension(file),
-                        File.Exists(settingsPath) ? File.ReadAllText(settingsPath) : File.ReadAllText(file).Trim(),
+                return TestArticleContents.CreatePost(
+                        Path.GetFileNameWithoutExtension(content.FileInfo.Name),
+                        content.FrontMatter.Title!,
                         "desc",
                         new DateOnly(2026, 1, 1),
                         null,
-                        "Testing"))];
-            });
+                        "Testing");
+            }, options => options.Directory = contentsDir);
 
         _app = app;
         TestArticleContents.MapSite(_app);
         if (additionalSlug is not null)
         {
-            _app.AddPages<Kiji.Tests.TestSite.Pages.PostPage>(_ => [new { Slug = additionalSlug, ContentKey = "0" }]);
+            _app.AddPages<Kiji.Tests.TestSite.Pages.PostPage>(_ => [new { Slug = additionalSlug, ContentKey = "hello-world.md" }]);
         }
 
         var reporter = new Kiji.Hosting.DevServerStatusReporter(logs, prefix: "kiji", useEmoji: true);

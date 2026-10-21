@@ -12,8 +12,12 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   package to verify package integration.
 - `src/Kiji` is the single package, including Markdown, images, feeds and hosting.
   `MSBuild/Kiji.targets` integrates publish, watch and clean.
-- `src/Kiji.Tests` contains xUnit v3 tests and TestSite integration fixtures.
-  Classes run in parallel; never mutate process-wide state.
+- `src/Kiji.Tests` contains library unit/component tests and TestSite fixtures.
+  Classes run in parallel; never mutate process-wide state. It does not pack or build consumers.
+- `src/Kiji.PackageTests` contains serial, black-box package scenarios with one fixed
+  consumer workspace. External dependencies use NuGet's global cache; only Kiji
+  is isolated. See its README for cache ownership, hard links and cleanup.
+  Run `dotnet test -c Release` from either test project to select that level.
 - `src/Kiji.SyntheticSite` is the frozen end-to-end workload; `src/Kiji.Benchmarks`
   contains BenchmarkDotNet measurements. Do not change the workload to improve results.
 - Stop any verification server/watch process before completion. Stop only processes
@@ -26,8 +30,8 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   ASP.NET Core configuration owns the dev server address. Prefer conventions to flags.
 - Dev and publish share StaticSite.RenderPageAsync. Never emit stale output;
   ambiguous incremental state requires rendering.
-- One type per file. Components in src are hand-written ComponentBase classes;
-  only docs uses .razor files and the Razor SDK.
+- One type per file. Library components and library test components are hand-written ComponentBase classes;
+  docs and the package consumer fixture use .razor files and the Razor SDK.
 - Update `docs/content/api-reference/index.md` for author-facing API changes.
   Keep pack's baseline validation enabled; intentional breaks get only their specific
   entries in `src/Kiji/CompatibilitySuppressions.xml`.

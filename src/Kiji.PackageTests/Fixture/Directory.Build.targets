@@ -1,0 +1,5 @@
+<Project>
+  <Target Name="RecordCompileVisit" BeforeTargets="CoreCompile">
+    <WriteLinesToFile File="$(IntermediateOutputPath)compile-visits.txt" Lines="compiled" />
+  </Target>
+</Project>

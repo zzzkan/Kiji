@@ -30,11 +30,22 @@ jobs:
       - name: Build
         run: dotnet build -c Release
 
-      - name: Test
+      - name: Library tests
+        working-directory: src/Kiji.Tests
         run: dotnet test -c Release
 
       - name: Pack
-        run: dotnet pack src/Kiji/Kiji.csproj -c Release --no-build -o artifacts
+        shell: pwsh
+        run: |
+          dotnet pack src/Kiji -c Release --no-build -o artifacts/packages
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $packages = @(Get-ChildItem artifacts/packages -Filter '*.nupkg')
+          if ($packages.Count -ne 1) { throw 'Expected exactly one Kiji package.' }
+          "KIJI_TEST_PACKAGE=$($packages[0].FullName)" >> $env:GITHUB_ENV
+
+      - name: Package scenarios
+        working-directory: src/Kiji.PackageTests
+        run: dotnet test -c Release
 
       - name: Build docs
         run: dotnet publish docs -c Release --no-build -o docs/dist
@@ -55,7 +66,7 @@ jobs:
 
       - name: Push to NuGet.org
         run: >-
-          dotnet nuget push "artifacts/Kiji.*.nupkg"
+          dotnet nuget push "artifacts/packages/Kiji.*.nupkg"
           --api-key "${{ steps.login.outputs.NUGET_API_KEY }}"
           --source https://api.nuget.org/v3/index.json
           --skip-duplicate

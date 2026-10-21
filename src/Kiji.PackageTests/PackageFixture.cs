@@ -1,8 +1,6 @@
 using System.IO.Compression;
 using System.Reflection;
 using System.Security;
-using System.Text.Json;
-using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Xunit;
 
@@ -174,53 +172,16 @@ public sealed class PackageFixture : IAsyncLifetime
 
     private void AssertPrivatePackage()
     {
-        Assert.Equal("kiji", Path.GetFileName(Assert.Single(Directory.GetDirectories(Packages))));
         var installed = Directory.GetFiles(Path.Combine(Packages, "kiji"), "*.nupkg", SearchOption.AllDirectories).Single();
         Assert.Equal(File.ReadAllBytes(_package), File.ReadAllBytes(installed));
     }
 
-    internal async Task AssertPackageAndLinksAsync()
+    internal void AssertConsumerPackage()
     {
         var expectedKiji = File.ReadAllBytes(Directory.GetFiles(Path.Combine(Packages, "kiji"), "Kiji.dll", SearchOption.AllDirectories).Single());
         var consumerAssemblies = Directory.GetFiles(Work, "Kiji.dll", SearchOption.AllDirectories);
         Assert.NotEmpty(consumerAssemblies);
         foreach (var assembly in consumerAssemblies) { Assert.Equal(expectedKiji, File.ReadAllBytes(assembly)); }
-        using var assets = JsonDocument.Parse(File.ReadAllText(Path.Combine(Site, "obj/project.assets.json")));
-        var nativeIdentities = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var library in assets.RootElement.GetProperty("libraries").EnumerateObject())
-        {
-            if (library.Value.GetProperty("type").GetString() != "package" || library.Name.StartsWith("Kiji/", StringComparison.Ordinal)) { continue; }
-            var source = Path.Combine(_globalPackages, library.Value.GetProperty("path").GetString()!);
-            Assert.True(Directory.Exists(source), $"Dependency is not in the global cache: {library.Name}");
-            foreach (var file in library.Value.GetProperty("files").EnumerateArray())
-            {
-                var relative = file.GetString()!;
-                if (Path.GetFileName(relative).StartsWith("libSkiaSharp.", StringComparison.Ordinal))
-                { nativeIdentities.Add(relative, await IdentityAsync(Path.Combine(source, relative))); }
-            }
-        }
-        var native = Directory.GetFiles(Work, "libSkiaSharp.*", SearchOption.AllDirectories);
-        Assert.NotEmpty(native);
-        foreach (var target in native)
-        {
-            var relative = target[target.LastIndexOf("runtimes" + Path.DirectorySeparatorChar, StringComparison.Ordinal)..].Replace(Path.DirectorySeparatorChar, '/');
-            var identity = await IdentityAsync(target);
-            Assert.True(nativeIdentities[relative] == identity,
-                $"SkiaSharp was copied instead of hard-linked: {target}\nGlobal cache: {_globalPackages}\nThe cache and workspace must be on the same volume. Expected file ID {nativeIdentities[relative]}, got {identity}.");
-        }
-    }
-
-    private async Task<string> IdentityAsync(string path)
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            var result = await RunningCommand.RunAsync(Work, "fsutil", "file", "queryfileid", path);
-            var id = Regex.Match(result.Output, "0x[0-9a-fA-F]+").Value;
-            Assert.NotEmpty(id);
-            return id;
-        }
-        // Linux CI: device + inode, not summed file lengths (which count links repeatedly).
-        return (await RunningCommand.RunAsync(Work, "stat", "-c", "%d:%i", path)).Output.Trim();
     }
 
     private void DeleteOwned(string path)

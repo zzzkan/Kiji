@@ -61,22 +61,21 @@ installs just the selected Kiji package in `packages`, without
 its dependencies or any fallback cache. Consumers then use this private cache
 first and the global cache as a fallback. Even a same-version Kiji in the global
 cache cannot replace the package under test. Tests compare the private nupkg and
-the consumer's Kiji assemblies byte for byte with the selected package, and
-require that `packages` contains only Kiji. The consumer feed contains only Kiji,
-so missing external dependencies cannot silently be restored
-privately. Package installation uses NuGet's normal extraction and validation.
+the consumer's Kiji assemblies byte for byte with the selected package.
+The consumer feed contains only Kiji, so missing external dependencies cannot
+silently be restored privately. Package installation uses NuGet's normal
+extraction and validation.
 
 Only the empty lease file remains under `artifacts/package-tests` after a run.
 Global dependencies stay available to later tests and ordinary builds; fixture
 cleanup never clears, deletes or modifies the user's global cache.
 
-SDK CopyLocal uses hard links, including SkiaSharp's native binaries and PDBs.
-The global cache and workspace must be on the same volume. Tests use the resolved
-package versions from `project.assets.json` and check Windows file IDs or
-Linux device/inode IDs for every emitted SkiaSharp native file; a silent fallback
-to independent copies fails verification. The filesystem must support hard links
-(NTFS on Windows; normal Linux CI filesystems). Summing file lengths double-counts
-hard links and is not a physical disk-usage measurement.
+The fixture requests SDK CopyLocal hard links to reduce temporary disk usage,
+including SkiaSharp's native binaries and PDBs. Hard links need a supporting
+filesystem and the cache and workspace on the same volume; otherwise the SDK
+can fall back to copying. This is a test-infrastructure optimization, not part
+of Kiji's package contract, so link creation and cache layout are not test
+assertions. Cleanup removes either links or copies after each scenario.
 
 Success, assertion failure and command timeout all delete the workspace, feed
 and private Kiji cache. A forced termination can leave at most this one

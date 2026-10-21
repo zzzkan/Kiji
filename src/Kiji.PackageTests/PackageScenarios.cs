@@ -28,7 +28,7 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         Assert.Equal(File.ReadAllText(Path.Combine(fixture.Work, "Library/wwwroot/library.js")), File.ReadAllText(PublicFile(AssetUrl(html, "library"))));
         Assert.NotEmpty(Directory.GetFiles(Path.Combine(fixture.Site, "dist"), "*.webp", SearchOption.AllDirectories));
         Assert.Empty(Directory.GetFiles(Path.Combine(fixture.Site, "dist"), "*.dll", SearchOption.AllDirectories));
-        await fixture.AssertPackageAndLinksAsync();
+        fixture.AssertConsumerPackage();
         var unchanged = await fixture.PublishAsync("-v:diag");
         Assert.False(unchanged.Compiled, unchanged.Output);
         Assert.Equal(html, Read("index.html"));
@@ -80,7 +80,7 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         Assert.Empty(Directory.GetFiles(Path.Combine(fixture.Site, "obj"), "*.gz", SearchOption.AllDirectories));
         await fixture.PublishAsync("--no-build");
         Assert.True(File.Exists(Path.Combine(fixture.Site, "dist/index.html.gz")));
-        await fixture.AssertPackageAndLinksAsync();
+        fixture.AssertConsumerPackage();
         var expected = Read("index.html");
         await fixture.DotnetAsync("publish", "Site/PackageSite.csproj", "-c", "Release", "--no-build", "-o", "other-output");
         Assert.Equal(expected, File.ReadAllText(Path.Combine(fixture.Work, "other-output/index.html")));
@@ -188,7 +188,7 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         Assert.Contains("Page cache refreshed after a code update", log, StringComparison.Ordinal);
         Assert.DoesNotContain(log.Split('\n'), line => line.Contains("Static asset", StringComparison.Ordinal)
             && (line.TrimEnd().EndsWith("Home.razor", StringComparison.Ordinal) || line.TrimEnd().EndsWith("Home.razor.css", StringComparison.Ordinal)));
-        await fixture.AssertPackageAndLinksAsync();
+        fixture.AssertConsumerPackage();
     }, sdk);
 
     private string Read(string relative) => File.ReadAllText(Path.Combine(fixture.Site, "dist", relative));

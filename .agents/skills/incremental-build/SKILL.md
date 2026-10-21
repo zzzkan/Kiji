@@ -83,8 +83,9 @@ site under `artifacts/package-tests/work`; a cross-process lease protects it.
 See `src/Kiji.PackageTests/README.md` for scope and lifecycle. Work, the isolated
 Kiji package and feed are removed even after failure; external dependencies stay
 in the normal global NuGet cache. Bounded command output is included in test failures.
-Only the empty lease file survives in the test workspace. Native SkiaSharp files
-must share their global cache file identity through hardlinks. No test flags,
+Only the empty lease file survives in the test workspace. The fixture requests
+hardlinks to reduce temporary disk usage, but permits the SDK's copy fallback;
+test-infrastructure storage choices are not package assertions. No test flags,
 GUID directories or retained consumer builds are required.
 
 Static asset pipeline changes use these same package scenarios. Keep detailed

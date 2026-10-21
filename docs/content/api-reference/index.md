@@ -140,9 +140,8 @@ for callbacks and factories; standalone runtime-generated methods are unsupporte
 
 Each page render owns a DI scope: scoped services are shared by its page, layout and child
 components and disposed when rendering finishes. Loaders, route/feed factories and artifact
-writers cannot resolve scoped services. Kiji-provided services such as `SiteInfo`, `PageInfo`
-and `ContentDictionary<>` cannot be replaced. See [Image processing](#image-processing) to
-customize `IImageProcessor`.
+writers cannot resolve scoped services. Kiji-managed services such as `SiteInfo`, `PageInfo`
+and `ContentDictionary<>` cannot be replaced.
 
 Declare external service data and configuration with `AddBuildInput` or `PageBuildInputs`;
 captured values are not tracked automatically. Content reload does not recreate singletons;
@@ -282,55 +281,20 @@ images, because their output directory comes from the current page.
 
 ### Image processing
 
-The public image contracts are in `Kiji.Assets`.
-
 The default processor uses SkiaSharp to generate static WebP variants from JPEG, PNG,
 GIF, and WebP inputs. Animated inputs use only the first frame. It converts colors to
 sRGB and drops source EXIF, IPTC, and XMP metadata.
 
-#### Registering `IImageProcessor`
-
-Replace the default responsive-image processor through `UseServices`:
+To replace it, register `IImageProcessor` from `Kiji.Assets` as a singleton:
 
 ```csharp
 app.UseServices(services =>
     services.AddSingleton<IImageProcessor, MyImageProcessor>());
 ```
 
-Import `Kiji.Assets` and `Microsoft.Extensions.DependencyInjection`. Register an unkeyed
-singleton; the last registration wins. Standard DI ownership applies: Kiji disposes
-processors created by DI, while directly supplied instances remain the caller's responsibility.
-
-One instance is shared by concurrent page renders and survives content reloads, so an
-implementation must support concurrent calls and retain no page or content state. Declare
-external configuration with `AddBuildInput` and include configuration and encoder versions
-in `IImageProcessor.CacheIdentity`. This identity covers all transformation settings and
-the encoder implementation. Its default value is `null`, disabling persistent reuse.
-
-#### `IImageProcessor.ProcessAsync`
-
-```csharp
-Task<ProcessedImageInfo> ProcessAsync(
-    string sourceFilePath,
-    string outputDirectory,
-    CancellationToken cancellationToken = default);
-```
-
-The processor should observe the token, write every returned variant into
-`outputDirectory` using file names relative to that directory, and return only after the
-files are ready.
-
-#### `ProcessedImageInfo`
-
-Construct this record with an object initializer. `OriginalWidth` and `OriginalHeight` are
-required source dimensions in pixels. `Variants` is a required `IReadOnlyList<ImageVariant>`
-ordered by ascending width; the largest variant is used as the default image source.
-
-#### `ImageVariant`
-
-`ImageVariant(string FileName, int Width)` describes one generated file. `FileName` is
-relative to the output directory and `Width` is its pixel width. Both positional
-properties are read-only.
+Custom processors must support concurrent calls and retain no page or content state.
+Set `CacheIdentity` to identify the implementation and settings for persistent reuse;
+its default `null` disables reuse. Declare external configuration with `AddBuildInput`.
 
 ## Build inputs and controls
 

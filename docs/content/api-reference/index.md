@@ -138,6 +138,10 @@ Import `Microsoft.Extensions.DependencyInjection`. Callbacks run once in registr
 before rendering; the collection is then read-only. Use ordinary C# lambdas or named methods
 for callbacks and factories; standalone runtime-generated methods are unsupported.
 
+Components and services can inject `ILogger<T>`. Kiji writes `Warning` and higher
+logs to standard error during publish and development, including exceptions caught by
+[`ErrorBoundary`](https://learn.microsoft.com/aspnet/core/blazor/fundamentals/handle-errors?view=aspnetcore-10.0#error-boundaries).
+
 Each page render owns a DI scope: scoped services are shared by its page, layout and child
 components and disposed when rendering finishes. Loaders, route/feed factories and artifact
 writers cannot resolve scoped services. Kiji-managed services such as `SiteInfo`, `PageInfo`
@@ -147,30 +151,6 @@ External service data and captured values are not tracked automatically. Use
 `[AlwaysRender]` on components that read them. Content reload does not recreate
 singletons; use [content sources](#content-sources-and-contentdictionary) for shared
 indexes that must be rebuilt when content changes.
-
-#### Logging and error boundaries
-
-Components and services can inject `ILogger<T>`. Kiji writes `Warning` and higher
-logs to standard error during publish and development. Configure levels and providers
-with `services.AddLogging(...)` inside `UseServices`. Call `logging.ClearProviders()`
-to disable or replace the default console output.
-
-Blazor's [`ErrorBoundary`](https://learn.microsoft.com/aspnet/core/blazor/fundamentals/handle-errors?view=aspnetcore-10.0#error-boundaries)
-can render fallback content when a child component fails. For example, in a layout:
-
-```razor
-@using Microsoft.AspNetCore.Components.Web
-
-<ErrorBoundary>
-    <ChildContent>@Body</ChildContent>
-    <ErrorContent>
-        <p>This content is temporarily unavailable.</p>
-    </ErrorContent>
-</ErrorBoundary>
-```
-
-Caught exceptions are logged as warnings. Publish succeeds with the fallback HTML,
-which incremental builds may reuse. Leave errors unhandled when they should fail the build.
 
 ### Page metadata
 

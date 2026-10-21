@@ -120,16 +120,48 @@ Sets the `LayoutComponentBase` used by pages without their own `@layout`. A page
 takes precedence, and layouts may nest through their own `@layout`. Without a default,
 the page renders directly inside the generated document body.
 
-### Page service
+### Services
 
-#### `AddPageService<T>()` / `AddPageService<TService, TImplementation>()`
+#### `UseServices(Action<IServiceCollection> configure)`
 
-Registers one instance of a concrete class for each page render. Its public constructor
-dependencies are resolved automatically; the page, layout, and child components share the
-instance. Kiji disposes it when that render finishes.
+Registers services using standard .NET dependency injection, including library extension
+methods, factories, options, multiple implementations and keyed services.
 
-Page services are unavailable to content loaders, route/feed factories, and artifact
-writers.
+```csharp
+app.UseServices(services =>
+{
+    services.AddScoped<RelatedPosts>();
+    services.AddLocalization();
+    services.AddLogging(logging => logging.SetMinimumLevel(LogLevel.Warning));
+});
+```
+
+Import `Microsoft.Extensions.DependencyInjection` and, for logging configuration,
+`Microsoft.Extensions.Logging`. Callbacks run in order when Kiji first builds its services,
+after execution paths settle. The collection becomes read-only before provider construction.
+Do not build a separate provider inside a callback.
+
+Each page render owns a DI scope: scoped services are shared by its page, layout and child
+components and disposed when rendering finishes. Singletons belong to the site; transients
+are created on resolution. Standard DI ownership applies, so caller-supplied singleton
+instances remain the caller's responsibility. Loaders, route/feed factories and artifact
+writers use the root provider and cannot resolve scoped services. Scope and build validation
+are enabled. Kiji does not start hosted services or an ASP.NET Core request pipeline for this
+provider.
+
+Kiji validates its managed registrations after all callbacks. `SiteInfo`, `PageInfo`,
+execution paths, `ContentDictionary<>`, `PageBuildInputs`, internal content tracking,
+`IImageProcessor`, `NavigationManager`, `IJSRuntime`, `IComponentActivator` and DI provider/scope
+infrastructure cannot be added, removed or replaced, including keyed registrations. Use
+`UseImageProcessor` to customize image processing. Logging and HTML encoding can be configured
+through standard DI registrations.
+
+Service registration code is tracked for incremental builds. Declare external data and
+configuration through `AddBuildInput` or `AddPageInput`/`PageBuildInputs`; nondeterministic reads
+can call `PageBuildInputs.DisableCache()`. Service instances and captured values are not
+automatically fingerprinted. Content reload does not recreate singletons; use `UseContentSource`
+for derived content indexes. `AddLocalization` registers localizers but does not select a
+rendering culture or declare translation resources as build inputs.
 
 ### Page metadata
 
@@ -428,7 +460,7 @@ in your hosting platform.
 ### JavaScript interop
 
 Components and page services can inject `IJSRuntime`, but interop calls throw
-`InvalidOperationException`. Do not replace it through `AddPageService`.
+`InvalidOperationException`. Its registration is managed by Kiji.
 
 `OnAfterRender` and `OnAfterRenderAsync` do not run. Components that defer interop
 to these methods can render static HTML. Use a `<script>` element or JavaScript

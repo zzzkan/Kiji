@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Suppressions>
+  <!-- Service registration is unified under UseServices and standard IServiceCollection. -->
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Kiji.StaticSite.AddPageService``1</Target>
+    <Left>lib/net10.0/Kiji.dll</Left>
+    <Right>lib/net10.0/Kiji.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
   <!-- The custom head API was removed in favor of Microsoft.AspNetCore.Components.Web. -->
   <Suppression>
     <DiagnosticId>CP0001</DiagnosticId>

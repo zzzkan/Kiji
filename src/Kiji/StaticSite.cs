@@ -26,7 +26,8 @@ public sealed class StaticSite
     private readonly List<string> _buildInputPaths = [];
     private readonly List<string> _contentPaths = [];
     private readonly List<KeyValuePair<string, string>> _buildInputValues = [];
-    private readonly Dictionary<Type, Type> _pageServices = [];
+    private readonly List<Action<IServiceCollection>> _configureServices = [];
+    private IReadOnlyCollection<Assembly> _serviceAssemblies = [];
     private Func<IImageProcessor> _imageProcessorFactory = static () => new ImageProcessor();
     private bool _configurationFrozen;
     private readonly List<RouteRegistration> _routeRegistrations = [];
@@ -71,39 +72,18 @@ public sealed class StaticSite
 
     internal SiteExecutionPaths Paths { get; }
 
-    /// <summary>Registers a concrete service shared by components within one page render.</summary>
+    /// <summary>Configures the services available to components and site factories.</summary>
     /// <remarks>
-    /// Constructor dependencies are resolved automatically. Each render gets a fresh instance,
-    /// disposed when that render finishes. Content loaders, route/feed factories and artifacts
-    /// cannot resolve page services. Registration does not cache method results.
+    /// Callbacks run in registration order when the site's services are first built, after
+    /// execution paths settle. Standard DI lifetimes apply; each page render owns a scope.
+    /// Content loaders, route/feed factories and artifacts cannot resolve scoped services.
+    /// Kiji's managed services cannot be changed. Declare external state with build inputs.
     /// </remarks>
-    public StaticSite AddPageService<T>() where T : class
-        => AddPageService<T, T>();
-
-    /// <summary>Registers an implementation of a service shared by components within one page render.</summary>
-    /// <remarks>
-    /// Only TService is registered. Constructor dependencies are resolved automatically.
-    /// Each render gets a fresh instance, disposed when that render finishes. Content loaders,
-    /// route/feed factories and artifacts cannot resolve page services. Each service type
-    /// may be registered only once, including registrations through AddPageService&lt;T&gt;().
-    /// </remarks>
-    public StaticSite AddPageService<TService, TImplementation>()
-        where TService : class
-        where TImplementation : class, TService
+    public StaticSite UseServices(Action<IServiceCollection> configure)
     {
         EnsureConfigurable();
-        var serviceType = typeof(TService);
-        var implementationType = typeof(TImplementation);
-        if (implementationType.IsAbstract || implementationType.IsInterface || implementationType.GetConstructors().Length == 0)
-        {
-            throw new ArgumentException($"Page service '{implementationType.FullName}' must be a concrete type with a public constructor.");
-        }
-
-        if (!_pageServices.TryAdd(serviceType, implementationType))
-        {
-            throw new InvalidOperationException($"Page service '{serviceType.FullName}' is already registered.");
-        }
-
+        ArgumentNullException.ThrowIfNull(configure);
+        _configureServices.Add(configure);
         return this;
     }
 
@@ -433,8 +413,7 @@ public sealed class StaticSite
             snapshot.Pages,
             [.. _pageAssemblies,
                 .. _routeRegistrations.Select(static registration => registration.ComponentType.Assembly),
-                .. _pageServices.Keys.Select(static type => type.Assembly),
-                .. _pageServices.Values.Select(static type => type.Assembly),
+                .. _serviceAssemblies,
                 _imageProcessorFactory.Method.Module.Assembly,
                 .. _notFoundComponentType is { } notFound ? new[] { notFound.Assembly } : [],
                 typeof(StaticSite).Assembly],
@@ -919,20 +898,21 @@ public sealed class StaticSite
         services.AddSingleton<ContentFileRegistry>();
         services.AddSingleton(new PageBuildInputs(_runtime.Dependencies));
 
-        foreach (var type in _pageServices.Keys)
+        var managed = services.Where(static descriptor => SiteServiceRegistration.IsManaged(descriptor.ServiceType)).ToArray();
+        try
         {
-            if (services.Any(descriptor => descriptor.ServiceType == type
-                || (type.IsGenericType && descriptor.ServiceType == type.GetGenericTypeDefinition())))
+            foreach (var configure in _configureServices)
             {
-                throw new InvalidOperationException($"Page service '{type.FullName}' conflicts with a service managed by Kiji.");
+                configure(services);
             }
         }
-
-        foreach (var (serviceType, implementationType) in _pageServices)
+        finally
         {
-            services.AddScoped(serviceType, implementationType);
+            services.MakeReadOnly();
         }
 
+        SiteServiceRegistration.Validate(services, managed);
+        _serviceAssemblies = SiteServiceRegistration.CollectAssemblies(services, _configureServices);
         _services = services.BuildServiceProvider(new ServiceProviderOptions
         {
             ValidateScopes = true,

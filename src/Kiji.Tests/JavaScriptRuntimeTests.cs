@@ -1,5 +1,6 @@
 using Kiji.Rendering;
 using Kiji.Tests.TestSite;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
 using Xunit;
 
@@ -95,7 +96,7 @@ public sealed class JavaScriptRuntimeTests
     {
         var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = TestArticleContents.CreateSiteInfo();
-        return app.AddPageService<JavaScriptRuntimeService>();
+        return app.UseServices(services => services.AddScoped<JavaScriptRuntimeService>());
     }
 
     private static void AssertGuidance(InvalidOperationException exception)

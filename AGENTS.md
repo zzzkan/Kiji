@@ -44,9 +44,11 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   paths settle. Do not expose a provider or content dictionary on StaticSite.
 - The dev server enforces BaseUrl's path prefix and uses `.kiji/dev-site`.
   Only `.kiji/cache` is portable; planning creates no output directories.
-- AddPageService instances belong to one render and are disposed with its scope.
-  Loaders, route/feed factories and artifacts cannot resolve them. Derived indexes
-  use UseContentSource. There is no public service collection.
+- UseServices configures standard DI once before provider construction; then the
+  collection is read-only. Each render owns a scope. Loaders, route/feed factories
+  and artifacts use the root provider and cannot resolve scoped services. Validate
+  Kiji-owned registrations after callbacks. Derived indexes use UseContentSource;
+  content reload does not recreate singletons. Declare external service state as build inputs.
 - Use Blazor's PageTitle and HeadContent; KijiRoot supplies the single HeadOutlet.
   Each page gets a fresh renderer/dispatcher, isolating the framework's section state.
   HeadContent replaces earlier providers rather than appending; compose shared tags

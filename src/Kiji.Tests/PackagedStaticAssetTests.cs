@@ -169,6 +169,66 @@ public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : ICla
     }
 
     [Fact]
+    public async Task RclServices_LocalizationOptionsAndFactories_PublishAndServe()
+    {
+        var site = fixture.CreateSite(Path.Combine(nameof(RclServices_LocalizationOptionsAndFactories_PublishAndServe), "site"));
+        var library = Path.Combine(site, "..", "library");
+        PackagedSiteFixture.Write(library, "Library.csproj", "<Project Sdk=\"Microsoft.NET.Sdk.Razor\"><ItemGroup><FrameworkReference Include=\"Microsoft.AspNetCore.App\" /></ItemGroup></Project>");
+        PackagedSiteFixture.Write(library, "CardOptions.cs", "namespace Library; public sealed class CardOptions { public string Label { get; set; } = string.Empty; }");
+        PackagedSiteFixture.Write(library, "CardText.cs", """
+            using Microsoft.Extensions.DependencyInjection;
+            using Microsoft.Extensions.Localization;
+            using Microsoft.Extensions.Options;
+            namespace Library;
+            public sealed class CardText(IStringLocalizer<Card> localizer, IOptionsSnapshot<CardOptions> options,
+                [FromKeyedServices("suffix")] string suffix)
+            {
+                public string Value => $"{localizer["Greeting"]} {options.Value.Label}{suffix}";
+            }
+            """);
+        PackagedSiteFixture.Write(library, "CardServices.cs", """
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Library;
+            public static class CardServices
+            {
+                public static IServiceCollection AddCards(this IServiceCollection services)
+                {
+                    services.AddLocalization();
+                    services.Configure<CardOptions>(options => options.Label = "RCL");
+                    services.AddKeyedSingleton("suffix", "!");
+                    services.AddScoped(provider => ActivatorUtilities.CreateInstance<CardText>(provider));
+                    return services;
+                }
+            }
+            """);
+        PackagedSiteFixture.Write(library, "Card.razor", "@inject Library.CardText Text\n<p>@Text.Value</p>");
+        PackagedSiteFixture.Write(library, "Card.resx", """
+            <root>
+              <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+              <resheader name="version"><value>2.0</value></resheader>
+              <data name="Greeting" xml:space="preserve"><value>Hello</value></data>
+            </root>
+            """);
+        var project = Path.Combine(site, "Site.csproj");
+        File.WriteAllText(project, File.ReadAllText(project).Replace("</Project>",
+            "<ItemGroup><ProjectReference Include=\"../library/Library.csproj\" /></ItemGroup></Project>", StringComparison.Ordinal));
+        var program = Path.Combine(site, "Program.cs");
+        File.WriteAllText(program, "using Library;\n" + File.ReadAllText(program).Replace("site.AddPages();",
+            "site.UseServices(services => services.AddCards());\nsite.AddPages();", StringComparison.Ordinal));
+        PackagedSiteFixture.Write(site, "Home.razor", "@page \"/\"\n<Library.Card />");
+
+        await fixture.PublishAsync(site);
+        Assert.Contains("<p>Hello RCL!</p>", File.ReadAllText(Path.Combine(site, "dist/index.html")), StringComparison.Ordinal);
+        await PackagedSiteFixture.WithServerAsync(site, async client =>
+            Assert.Contains("<p>Hello RCL!</p>", await client.GetStringAsync("/kiji/"), StringComparison.Ordinal));
+
+        var resource = Path.Combine(library, "Card.resx");
+        File.WriteAllText(resource, File.ReadAllText(resource).Replace("Hello", "Welcome", StringComparison.Ordinal));
+        await fixture.PublishAsync(site);
+        Assert.Contains("<p>Welcome RCL!</p>", File.ReadAllText(Path.Combine(site, "dist/index.html")), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Publish_ResolvesScopedAndRclAssetsAndReplacesEditedFingerprint()
     {
         var site = fixture.CreateSite(nameof(Publish_ResolvesScopedAndRclAssetsAndReplacesEditedFingerprint), assets: true);

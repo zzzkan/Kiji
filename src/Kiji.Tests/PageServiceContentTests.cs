@@ -118,7 +118,7 @@ public sealed class PageServiceContentTests : IDisposable
         app.UseContentSource<RelatedTag>("tags", provider => includeTags?.Invoke() == false ? []
             : [.. RelatedTag.Collect(provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>(), probe)
                 .Select(tag => new ContentEntry<RelatedTag>(tag.Name, tag, string.Join("|", tag.Keys)))]);
-        app.AddPageService<RelatedPosts>();
+        app.UseServices(services => services.AddScoped<RelatedPosts>());
         app.AddPages<RelatedPage>(provider => provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
             .Select(post => new
             {

@@ -53,9 +53,10 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   Each page gets a fresh renderer/dispatcher, isolating the framework's section state.
   HeadContent replaces earlier providers rather than appending; compose shared tags
   inside the page's HeadContent. Await quiescence before serializing the document.
-- UseImageProcessor creates one lazy, site-owned processor, disposed with the site.
-  It must support concurrency and retain no page/content state. Reload does not recreate
-  it. Declare external configuration with AddBuildInput and version cache identities.
+- Customize IImageProcessor through UseServices. The last unkeyed registration must
+  be a singleton; standard DI ownership applies. It must support concurrency and retain
+  no page/content state. Reload does not recreate it. Declare external configuration
+  with AddBuildInput and version cache identities.
 
 Do not reintroduce evaluated alternatives: pooled HtmlRenderer (root/scope state cannot
 reset), RouteView (PageView owns Kiji's layout resolution), AOT/trimming (reflection),

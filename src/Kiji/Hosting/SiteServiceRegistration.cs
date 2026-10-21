@@ -13,7 +13,7 @@ internal static class SiteServiceRegistration
     internal static bool IsManaged(Type type) =>
         type == typeof(SiteInfo) || type == typeof(PageInfo) || type == typeof(ResolvedSitePaths)
         || type == typeof(PageBuildInputs) || type == typeof(ContentFileRegistry)
-        || type == typeof(IImageProcessor) || type == typeof(NavigationManager)
+        || type == typeof(NavigationManager)
         || type == typeof(IJSRuntime) || type == typeof(IComponentActivator)
         || type == typeof(IServiceProvider) || type == typeof(IServiceScopeFactory)
         || type == typeof(IKeyedServiceProvider)
@@ -30,10 +30,19 @@ internal static class SiteServiceRegistration
             // Include keyed and open generic registrations rather than silently accepting alternatives.
             if (!expected[type].SequenceEqual(actual[type]))
             {
-                var guidance = type == typeof(IImageProcessor) ? " Use UseImageProcessor to configure image processing." : string.Empty;
                 throw new InvalidOperationException(
-                    $"Service '{type.FullName}' is managed by Kiji and cannot be added, removed or replaced through UseServices.{guidance}");
+                    $"Service '{type.FullName}' is managed by Kiji and cannot be added, removed or replaced through UseServices.");
             }
+        }
+
+        // Kiji resolves the last unkeyed processor from the root provider, including
+        // outside page rendering. Other registrations retain ordinary DI semantics.
+        var imageProcessor = services.LastOrDefault(static descriptor =>
+            descriptor.ServiceType == typeof(IImageProcessor) && !descriptor.IsKeyedService);
+        if (imageProcessor?.Lifetime != ServiceLifetime.Singleton)
+        {
+            throw new InvalidOperationException(
+                "IImageProcessor requires an unkeyed Singleton registration. Register it with AddSingleton in UseServices.");
         }
     }
 

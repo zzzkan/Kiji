@@ -1,3 +1,4 @@
+using Kiji.Assets;
 using Kiji.Markdown;
 using Kiji.Tests.TestSite.PageServices;
 using Microsoft.Extensions.DependencyInjection;
@@ -125,7 +126,7 @@ public sealed class SiteCancellationTests : IDisposable
         var app = StaticSite.Create([], new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")));
         app.Info = new SiteInfo { Name = "Cancellation", BaseUrl = new Uri("https://example.test/") };
         TestSite.TestSiteAssets.Bind(app, Path.Combine(_root, "wwwroot"));
-        app.UseImageProcessor(() => processor).UseMarkdownContent<FrontMatter>();
+        app.UseServices(services => services.AddSingleton<IImageProcessor>(_ => processor)).UseMarkdownContent<FrontMatter>();
         app.AddPages<MarkdownPostTestPage>(provider => provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
             .Select(post => new { Slug = "post", ContentKey = post.Key }));
         return app;

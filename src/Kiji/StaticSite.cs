@@ -28,7 +28,6 @@ public sealed class StaticSite
     private readonly List<KeyValuePair<string, string>> _buildInputValues = [];
     private readonly List<Action<IServiceCollection>> _configureServices = [];
     private IReadOnlyCollection<Assembly> _serviceAssemblies = [];
-    private Func<IImageProcessor> _imageProcessorFactory = static () => new ImageProcessor();
     private bool _configurationFrozen;
     private readonly List<RouteRegistration> _routeRegistrations = [];
     private readonly List<SiteArtifactRegistration> _artifacts = [];
@@ -84,22 +83,6 @@ public sealed class StaticSite
         EnsureConfigurable();
         ArgumentNullException.ThrowIfNull(configure);
         _configureServices.Add(configure);
-        return this;
-    }
-
-    /// <summary>Replaces the image processor with a lazily created, site-owned instance.</summary>
-    /// <remarks>
-    /// The last registration wins. The factory must return a new, non-null instance; Kiji
-    /// disposes it with the site. The processor must support concurrent calls and must not
-    /// retain page or content state. Content changes and hot reload do not recreate it.
-    /// Declare external configuration with AddBuildInput and include encoder settings in
-    /// any custom persistent cache identity.
-    /// </remarks>
-    public StaticSite UseImageProcessor(Func<IImageProcessor> factory)
-    {
-        EnsureConfigurable();
-        ArgumentNullException.ThrowIfNull(factory);
-        _imageProcessorFactory = factory;
         return this;
     }
 
@@ -414,7 +397,6 @@ public sealed class StaticSite
             [.. _pageAssemblies,
                 .. _routeRegistrations.Select(static registration => registration.ComponentType.Assembly),
                 .. _serviceAssemblies,
-                _imageProcessorFactory.Method.Module.Assembly,
                 .. _notFoundComponentType is { } notFound ? new[] { notFound.Assembly } : [],
                 typeof(StaticSite).Assembly],
             _forceFullBuild,
@@ -893,8 +875,7 @@ public sealed class StaticSite
             "ResolvedSitePaths was resolved before a command settled the site's paths."));
         _runtime.ApplyRegistrations(services);
 
-        services.AddSingleton<IImageProcessor>(_ => _imageProcessorFactory()
-            ?? throw new InvalidOperationException("The image processor factory returned null."));
+        services.AddSingleton<IImageProcessor>(static _ => new ImageProcessor());
         services.AddSingleton<ContentFileRegistry>();
         services.AddSingleton(new PageBuildInputs(_runtime.Dependencies));
 

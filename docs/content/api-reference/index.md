@@ -151,10 +151,10 @@ provider.
 
 Kiji validates its managed registrations after all callbacks. `SiteInfo`, `PageInfo`,
 execution paths, `ContentDictionary<>`, `PageBuildInputs`, internal content tracking,
-`IImageProcessor`, `NavigationManager`, `IJSRuntime`, `IComponentActivator` and DI provider/scope
-infrastructure cannot be added, removed or replaced, including keyed registrations. Use
-`UseImageProcessor` to customize image processing. Logging and HTML encoding can be configured
-through standard DI registrations.
+`NavigationManager`, `IJSRuntime`, `IComponentActivator` and DI provider/scope infrastructure
+cannot be added, removed or replaced, including keyed registrations. Logging, HTML encoding
+and image processing can be configured through standard DI registrations. The effective
+unkeyed `IImageProcessor` registration must be a singleton; see [Image processing](#image-processing).
 
 Service registration code is tracked for incremental builds. Declare external data and
 configuration through `AddBuildInput` or `AddPageInput`/`PageBuildInputs`; nondeterministic reads
@@ -303,11 +303,24 @@ The default processor uses SkiaSharp to generate static WebP variants from JPEG,
 GIF, and WebP inputs. Animated inputs use only the first frame. It converts colors to
 sRGB and drops source EXIF, IPTC, and XMP metadata.
 
-#### `UseImageProcessor(Func<IImageProcessor> factory)`
+#### Registering `IImageProcessor`
 
-Replaces the default responsive-image processor. The last registration wins. The factory
-is required, runs lazily, and must return a new non-null instance. Kiji owns that instance
-and disposes it with the site, using asynchronous disposal when supported.
+Replace the default responsive-image processor through `UseServices`:
+
+```csharp
+app.UseServices(services =>
+    services.AddSingleton<IImageProcessor, MyImageProcessor>());
+```
+
+Import `Kiji.Assets` and `Microsoft.Extensions.DependencyInjection`. The last unkeyed
+registration is the one Kiji uses. It must exist and have singleton lifetime; Kiji validates
+this before constructing its provider. Keyed registrations do not replace it.
+
+Types and factories registered as singletons are created on first resolution and disposed
+with the site's provider, using asynchronous disposal when supported. A factory receives
+the provider and must return a non-null instance. A directly registered instance
+(`services.AddSingleton<IImageProcessor>(processor)`) remains the caller's responsibility
+to dispose. These are standard .NET DI ownership rules.
 
 One instance is shared by concurrent page renders and survives content reloads, so an
 implementation must support concurrent calls and retain no page or content state. Declare

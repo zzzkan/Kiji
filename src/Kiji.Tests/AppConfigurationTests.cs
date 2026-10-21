@@ -97,8 +97,6 @@ public sealed class AppConfigurationTests : IDisposable
         void AssertFrozen()
         {
             Assert.Throws<InvalidOperationException>(() => app.UseServices(services => services.AddScoped<object>()));
-            Assert.Throws<InvalidOperationException>(() => app.UseImageProcessor(
-                () => throw new Xunit.Sdk.XunitException("Factory must not run after execution starts.")));
             Assert.Throws<InvalidOperationException>(() => app.Info = TestArticleContents.CreateSiteInfo());
             Assert.Throws<InvalidOperationException>(() => app.AddBuildInput("input.json"));
             Assert.Throws<InvalidOperationException>(() => app.AddBuildInput("version", "2"));

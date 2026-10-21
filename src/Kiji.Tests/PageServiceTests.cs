@@ -1,6 +1,5 @@
 using System.Reflection;
 using System.Reflection.Emit;
-using Kiji.Assets;
 using Kiji.Feeds;
 using Kiji.Tests.TestSite.PageServices;
 using Microsoft.AspNetCore.Components;
@@ -160,17 +159,6 @@ public sealed class PageServiceTests : IDisposable
         Assert.Throws<InvalidOperationException>(() => app.UseServices(_ => { }));
         await app.DisposeAsync();
         Assert.Equal(1, owned.DisposeCount);
-    }
-
-    [Fact]
-    public async Task InterfaceRegistration_CannotReplaceManagedService()
-    {
-        await using var app = CreateApp();
-        app.UseServices(services => services.AddSingleton<IImageProcessor, TrackingImageProcessor>());
-        var exception = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());
-        Assert.Contains(nameof(IImageProcessor), exception.Message, StringComparison.Ordinal);
-        Assert.Contains("managed by Kiji", exception.Message, StringComparison.Ordinal);
-        Assert.Contains(nameof(StaticSite.UseImageProcessor), exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

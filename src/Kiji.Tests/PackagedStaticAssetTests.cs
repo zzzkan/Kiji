@@ -229,6 +229,54 @@ public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : ICla
     }
 
     [Fact]
+    public async Task ImageProcessor_FromServices_PublishesAndServesMarkdownImages()
+    {
+        var site = fixture.CreateSite(nameof(ImageProcessor_FromServices_PublishesAndServesMarkdownImages));
+        var program = Path.Combine(site, "Program.cs");
+        File.WriteAllText(program, "using Kiji.Assets;\nusing Kiji.Markdown;\nusing Microsoft.Extensions.DependencyInjection;\n"
+            + File.ReadAllText(program).Replace("site.AddPages();",
+                "site.UseServices(services => services.AddSingleton<IImageProcessor, CustomImageProcessor>());\nsite.UseMarkdownContent<FrontMatter>();\nsite.AddPages();", StringComparison.Ordinal));
+        PackagedSiteFixture.Write(site, "FrontMatter.cs", "public sealed class FrontMatter { public string Title { get; set; } = string.Empty; }");
+        PackagedSiteFixture.Write(site, "CustomImageProcessor.cs", """
+            using Kiji;
+            using Kiji.Assets;
+            public sealed class CustomImageProcessor(SiteInfo site) : IImageProcessor
+            {
+                public string CacheIdentity => $"custom-svg-v1:{site.Name}";
+                public async Task<ProcessedImageInfo> ProcessAsync(string sourceFilePath, string outputDirectory,
+                    CancellationToken cancellationToken = default)
+                {
+                    Directory.CreateDirectory(outputDirectory);
+                    await File.WriteAllTextAsync(Path.Combine(outputDirectory, "custom.svg"),
+                        $"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"2\" height=\"2\"><title>{site.Name}</title></svg>", cancellationToken);
+                    return new ProcessedImageInfo { OriginalWidth = 2, OriginalHeight = 2, Variants = [new("custom.svg", 2)] };
+                }
+            }
+            """);
+        PackagedSiteFixture.Write(site, "Home.razor", """
+            @page "/"
+            @inject Kiji.ContentDictionary<Kiji.Markdown.MarkdownContent<FrontMatter>> Posts
+            <div>@((Microsoft.AspNetCore.Components.MarkupString)body)</div>
+            @code {
+                private string body = "";
+                protected override async Task OnInitializedAsync() => body = await Posts["post.md"].RenderAsync();
+            }
+            """);
+        PackagedSiteFixture.Write(site, "content/post.md", "---\ntitle: Image\n---\n![custom](source.png)");
+        PackagedSiteFixture.Write(site, "content/source.png", "custom processor input");
+
+        await fixture.PublishAsync(site);
+        Assert.Contains("custom.svg", File.ReadAllText(Path.Combine(site, "dist/index.html")), StringComparison.Ordinal);
+        var expected = File.ReadAllText(Path.Combine(site, "dist/custom.svg"));
+        Assert.Contains("<title>SDK regression</title>", expected, StringComparison.Ordinal);
+        await PackagedSiteFixture.WithServerAsync(site, async client =>
+        {
+            Assert.Contains("custom.svg", await client.GetStringAsync("/kiji/"), StringComparison.Ordinal);
+            Assert.Equal(expected, await client.GetStringAsync("/kiji/custom.svg"));
+        });
+    }
+
+    [Fact]
     public async Task Publish_ResolvesScopedAndRclAssetsAndReplacesEditedFingerprint()
     {
         var site = fixture.CreateSite(nameof(Publish_ResolvesScopedAndRclAssetsAndReplacesEditedFingerprint), assets: true);

@@ -103,6 +103,29 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         });
     }, sdk);
 
+    [Fact]
+    public async Task Cleanup_WaitsForFileLockRelease()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows prevents deletion while a file is open without delete sharing.");
+        FileStream? heldFile = null;
+        var cleanup = fixture.ScenarioAsync(() =>
+        {
+            heldFile = File.Open(Path.Combine(fixture.Site, "Home.razor"), FileMode.Open, FileAccess.Read, FileShare.Read);
+            return Task.CompletedTask;
+        });
+        try
+        {
+            Assert.NotNull(heldFile);
+            Assert.False(cleanup.IsCompleted, "Cleanup must wait for the file lock to be released.");
+        }
+        finally
+        {
+            heldFile?.Dispose();
+            await cleanup;
+        }
+        Assert.False(Directory.Exists(fixture.Site));
+    }
+
     private string Read(string relative) => File.ReadAllText(Path.Combine(fixture.Site, "dist", relative));
     private string PublicFile(string url) => Path.Combine(fixture.Site, "dist", Uri.UnescapeDataString(url["/kiji/".Length..]));
     private static string AssetUrl(string html, string id = "asset") => WebUtility.HtmlDecode(Regex.Match(html, $"id=\"{id}\" href=\"([^\"]+)\"").Groups[1].Value);

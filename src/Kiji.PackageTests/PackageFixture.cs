@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO.Compression;
 using System.Reflection;
 using System.Security;
@@ -40,7 +41,7 @@ public sealed class PackageFixture : IAsyncLifetime
         }
         try
         {
-            DeleteGeneratedFiles(); // Also recover an interrupted previous run.
+            await DeleteGeneratedFilesAsync(); // Also recover an interrupted previous run.
             var feed = Path.Combine(_root, "feed");
             Directory.CreateDirectory(feed);
             string package;
@@ -99,7 +100,7 @@ public sealed class PackageFixture : IAsyncLifetime
     {
         try
         {
-            DeleteOwned(Work);
+            await DeleteOwnedAsync(Work);
             foreach (var source in Directory.GetFiles(Template, "*", SearchOption.AllDirectories))
             {
                 var relative = Path.GetRelativePath(Template, source);
@@ -127,7 +128,7 @@ public sealed class PackageFixture : IAsyncLifetime
             File.WriteAllBytes(Path.Combine(Site, "content", "source.png"), Convert.FromBase64String(File.ReadAllText(Path.Combine(Site, "content", "source.png.base64"))));
             await action();
         }
-        finally { DeleteOwned(Work); }
+        finally { await DeleteOwnedAsync(Work); }
     }
 
     internal void Write(string relative, string text)
@@ -162,24 +163,37 @@ public sealed class PackageFixture : IAsyncLifetime
         }
     }
 
-    private void DeleteOwned(string path)
+    private async Task DeleteOwnedAsync(string path)
     {
         var full = Path.GetFullPath(path);
         if (!full.StartsWith(_root + Path.DirectorySeparatorChar, StringComparison.Ordinal)) { throw new InvalidOperationException("Cleanup escaped package workspace."); }
-        if (Directory.Exists(full)) { Directory.Delete(full, recursive: true); }
+        var elapsed = Stopwatch.StartNew();
+        while (Directory.Exists(full))
+        {
+            try { Directory.Delete(full, recursive: true); return; }
+            // Kill(entireProcessTree: true) requests child termination, but WaitForExitAsync
+            // waits only for the parent. Windows can still have the child's executable mapped.
+            catch (Exception exception) when (OperatingSystem.IsWindows()
+                && exception is IOException or UnauthorizedAccessException
+                && (exception.HResult & 0xffff) is 5 or 32 or 33 or 145
+                && elapsed.Elapsed < TimeSpan.FromSeconds(10))
+            {
+                await Task.Delay(100);
+            }
+        }
     }
 
-    private void DeleteGeneratedFiles()
+    private async Task DeleteGeneratedFilesAsync()
     {
-        DeleteOwned(Work);
-        DeleteOwned(Path.Combine(_root, "feed"));
-        DeleteOwned(Packages);
+        await DeleteOwnedAsync(Work);
+        await DeleteOwnedAsync(Path.Combine(_root, "feed"));
+        await DeleteOwnedAsync(Packages);
     }
 
     public async ValueTask DisposeAsync()
     {
         if (_lease is null) { return; }
-        try { DeleteGeneratedFiles(); }
+        try { await DeleteGeneratedFilesAsync(); }
         finally { await _lease.DisposeAsync(); _lease = null; }
     }
 }

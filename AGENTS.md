@@ -16,7 +16,7 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   Classes run in parallel; never mutate process-wide state. It does not pack or build consumers.
 - `src/Kiji.PackageTests` contains serial, black-box package scenarios with one fixed
   consumer workspace. External dependencies use NuGet's global cache; only Kiji
-  is isolated. See its README for cache ownership, hard links and cleanup.
+  is isolated. See its README for execution and cleanup.
   Run `dotnet test -c Release` from either test project to select that level.
 - `src/Kiji.SyntheticSite` is the frozen end-to-end workload; `src/Kiji.Benchmarks`
   contains BenchmarkDotNet measurements. Do not change the workload to improve results.

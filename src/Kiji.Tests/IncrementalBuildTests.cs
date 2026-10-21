@@ -90,6 +90,27 @@ public sealed class IncrementalBuildTests : IDisposable
         AssertDirectoriesIdentical(Path.Combine(scratch, "dist"), Path.Combine(root, "dist"));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AlwaysRender_ChildOrLayout_RefreshesUntrackedState(bool useLayout)
+    {
+        var output = Path.Combine(_testDir, "dist");
+        foreach (var value in new[] { "first", "second" })
+        {
+            await using var app = StaticSite.Create([], new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
+            app.Info = TestArticleContents.CreateSiteInfo();
+            TestSiteAssets.Bind(app, Path.Combine(_testDir, "static"));
+            app.UseServices(services => services.AddSingleton<Func<string>>(() => value));
+            app.AddPages<RenderPolicyPage>(_ => [new { Kind = "cached" }, new { Kind = "child" }]);
+            if (useLayout) { app.UseDefaultLayout<AlwaysRenderLayout>(); }
+            await app.PublishAsync(output);
+        }
+
+        Assert.Contains("second", await File.ReadAllTextAsync(Path.Combine(output, "policy/child/index.html")), StringComparison.Ordinal);
+        Assert.Contains(useLayout ? "second" : "first", await File.ReadAllTextAsync(Path.Combine(output, "policy/cached/index.html")), StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task PageInfo_BaseUrlChangeInvalidatesCachedCanonicalUrls()
     {

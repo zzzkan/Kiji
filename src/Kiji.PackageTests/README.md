@@ -1,91 +1,31 @@
-# Package scenarios
+# Package tests
 
-`Kiji.Tests` exercises the library directly, including component rendering and
-in-process hosting. This project exercises a real NuGet consumer through `dotnet`
-commands, generated files and HTTP. The runner has a build-only dependency on
-Kiji; it does not reference its API or carry its runtime dependencies.
+Run `dotnet test -c Release` here for package tests, or at the repository root
+for both test projects. `Kiji.Tests` checks library behavior without building
+consumer projects. `Kiji.PackageTests` checks the NuGet package through `dotnet`
+and HTTP on Windows and Linux.
 
-Run `dotnet test -c Release` in this directory, or run the same command at the
-repository root to run both test projects. No extra test-runner flags are needed.
-The build-only dependency builds Kiji before the fixture packs it once, with
-normal package/baseline validation enabled. CI instead sets `KIJI_TEST_PACKAGE`
-to the absolute path of the exact nupkg from its preceding pack step. Release
-publishes that same artifact after these tests pass.
+| Scenario | What it checks | Why a package test? |
+| --- | --- | --- |
+| Publish, edit, clean | Razor/Markdown/images, library assets, updated output, `KijiForce`, service-worker hashes, compressed HTML and cleanup | Exercises the shipped MSBuild targets and native dependencies in a real consumer. |
+| Watch and reload (Razor/Web SDKs) | JS, Razor and scoped CSS edits reach the browser with one reload | Requires the SDK's `dotnet watch` integration and generated asset manifests. |
 
-## Scope
+`PackageFixture` packs Kiji once (or uses `KIJI_TEST_PACKAGE` from CI), prepares
+the consumer and cleans up. `Fixture/` holds its source template.
+`RunningCommand` runs `dotnet`, includes a bounded log tail in failures and
+stops the processes it started.
 
-The checked-in `Fixture` is source material for **one** consumer site, plus its
-small Razor and C# libraries. It is not part of the main solution and is never
-built or edited in place. Three workflows replace independent per-feature sites:
+All scenarios run serially in `artifacts/package-tests/work`. A file lock also
+prevents separate test runs from using it at the same time. Work, the local feed
+and the private Kiji package are removed after success or failure; the next run
+cleans up an interrupted run. Only the empty lock file remains.
 
-- Publish, reuse, edit and republish: Razor/Markdown, real SkiaSharp image output,
-  RCL resources/scoped CSS, fingerprints, AlwaysRender/KijiForce, service workers
-  and compression transitions. Head content, navigation, JS interop, sitemap and
-  routing semantics stay in the library tests rather than expanding this consumer.
-- Build from outside the project, use an alternate output directory, publish,
-  serve, watch and clean; finally exercise a consumer with no static assets.
-- Develop and reload: run once with the Razor SDK and once with the Web SDK,
-  covering both build-compression settings without multiplying every scenario.
-  Check live HTTP validators/ranges, Razor/CSS updates and reload ownership.
-  Razor uses the SDK's default intermediate output path; Web uses a custom path
-  containing backslashes. CSS updates must reach HTTP clients and trigger a single
-  reload on Windows and Linux through the packaged Kiji watch targets.
+SkiaSharp and other dependencies use the shared NuGet global cache. Only Kiji is
+installed privately so the selected package is tested even if another copy of
+the same version is cached. CopyLocal requests hard links where available;
+ordinary copies are allowed and are removed with the workspace. CI puts the
+shared cache on the checkout volume to allow hard links. Cleanup never clears
+the shared cache.
 
-Each scenario starts from source and disposes its own servers. Tests do not
-depend on execution order. The original fixture files remain unchanged.
-
-## Disk and lifetime rules
-
-`artifacts/package-tests` has a fixed layout:
-
-| Path | Lifetime |
-| --- | --- |
-| `.lock` | A file lease serializes separate test processes in this checkout. |
-| `work` | One active site; removed before and after every scenario. |
-| `feed` | One selected package; removed after the suite. |
-| `packages` | Only the tested Kiji package; removed after the suite. |
-
-SkiaSharp and other external dependencies use the normal NuGet global cache,
-located through `dotnet nuget locals global-packages --list`. This respects
-`NUGET_PACKAGES` and NuGet configuration instead of assuming a user-profile path.
-A restore-only Web SDK project reads dependency versions from the selected Kiji
-nuspec and fills any missing dependencies, including implicit SDK packages, in
-that global cache. It does not compile a second site or copy native binaries.
-CI and release set `NUGET_PACKAGES` to `artifacts/nuget-packages` in the checkout
-for the whole job. This keeps the cache on the checkout volume, including Windows
-runners whose user profile and checkout are on different drives. It is the same
-cache for the solution build and every package scenario, not a per-test restore.
-
-[PackageDownload](https://learn.microsoft.com/nuget/consume-packages/packagedownload-functionality)
-installs just the selected Kiji package in `packages`, without
-its dependencies or any fallback cache. Consumers then use this private cache
-first and the global cache as a fallback. Even a same-version Kiji in the global
-cache cannot replace the package under test. Tests compare the private nupkg and
-the consumer's Kiji assemblies byte for byte with the selected package.
-The consumer feed contains only Kiji, so missing external dependencies cannot
-silently be restored privately. Package installation uses NuGet's normal
-extraction and validation.
-
-Only the empty lease file remains under `artifacts/package-tests` after a run.
-Global dependencies stay available to later tests and ordinary builds; fixture
-cleanup never clears, deletes or modifies the user's global cache.
-
-The fixture requests SDK CopyLocal hard links to reduce temporary disk usage,
-including SkiaSharp's native binaries and PDBs. Hard links need a supporting
-filesystem and the cache and workspace on the same volume; otherwise the SDK
-can fall back to copying. This is a test-infrastructure optimization, not part
-of Kiji's package contract, so link creation and cache layout are not test
-assertions. Cleanup removes either links or copies after each scenario.
-
-Success, assertion failure and command timeout all delete the workspace, feed
-and private Kiji cache. A forced termination can leave at most this one
-set of files; the next lease owner removes it before starting. The lease file
-itself is intentionally not deleted, avoiding lock-file replacement races.
-Command/server output is a bounded in-memory tail
-included in failures, not a growing collection of log files. No browser is launched.
-
-Share external dependencies through the normal global NuGet cache across runs.
-Do not add per-test sites, GUID run directories, retained build trees or caches,
-source `ProjectReference`s to the consumer, or per-feature pack operations.
-Add detailed cases to `Kiji.Tests` first and
-extend a package workflow only when the SDK/package boundary matters.
+Add detailed behavior tests to `Kiji.Tests`; extend these scenarios only for
+regressions that require the package or SDK boundary.

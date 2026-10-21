@@ -1,5 +1,0 @@
-<Solution>
-  <Project Path="Site/PackageSite.csproj" />
-  <Project Path="Library/Library.csproj" />
-  <Project Path="Helper/Helper.csproj" />
-</Solution>

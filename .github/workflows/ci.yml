@@ -22,8 +22,7 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     env:
-      # Windows runners keep the user profile on C: and the checkout on D:.
-      # Share one cache across this job on the checkout volume for native hard links.
+      # Share dependencies on the checkout volume so CopyLocal can use hard links.
       NUGET_PACKAGES: ${{ github.workspace }}/artifacts/nuget-packages
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

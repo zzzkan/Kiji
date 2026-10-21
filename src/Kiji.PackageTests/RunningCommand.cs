@@ -14,12 +14,11 @@ internal sealed class RunningCommand : IAsyncDisposable
     private readonly Lock _gate = new();
     private readonly Task _drain;
     private readonly TaskCompletionSource<Uri> _address = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private bool _compiled;
 
-    private RunningCommand(string directory, string executable, string[] arguments)
+    private RunningCommand(string directory, string[] arguments)
     {
-        _description = $"{executable} {string.Join(' ', arguments)} (in {directory})";
-        var start = new ProcessStartInfo(executable)
+        _description = $"dotnet {string.Join(' ', arguments)} (in {directory})";
+        var start = new ProcessStartInfo("dotnet")
         {
             WorkingDirectory = directory,
             UseShellExecute = false,
@@ -38,22 +37,22 @@ internal sealed class RunningCommand : IAsyncDisposable
 
     internal string Output { get { lock (_gate) { return _tail.ToString(); } } }
 
-    internal static RunningCommand Start(string directory, params string[] arguments) => new(directory, "dotnet", arguments);
+    internal static RunningCommand Start(string directory, params string[] arguments) => new(directory, arguments);
 
-    internal static async Task<CommandResult> RunAsync(string directory, string executable, params string[] arguments)
+    internal static async Task<string> RunAsync(string directory, params string[] arguments)
     {
-        await using var command = new RunningCommand(directory, executable, arguments);
+        await using var command = new RunningCommand(directory, arguments);
         return await command.CompleteAsync();
     }
 
-    internal async Task<CommandResult> CompleteAsync()
+    private async Task<string> CompleteAsync()
     {
         try
         {
             await _process.WaitForExitAsync().WaitAsync(TimeSpan.FromMinutes(2));
             await _drain;
             if (_process.ExitCode != 0) { throw new InvalidOperationException($"Exit code {_process.ExitCode}."); }
-            return new(Output, _compiled);
+            return Output;
         }
         catch (Exception exception)
         {
@@ -93,7 +92,6 @@ internal sealed class RunningCommand : IAsyncDisposable
         {
             lock (_gate)
             {
-                _compiled |= line.Contains("Task \"Csc\"", StringComparison.Ordinal);
                 _tail.AppendLine(line);
                 if (_tail.Length > 64 * 1024) { _tail.Remove(0, _tail.Length - 64 * 1024); }
             }

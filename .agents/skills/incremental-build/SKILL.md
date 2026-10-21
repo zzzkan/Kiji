@@ -74,19 +74,11 @@ For cache identity, MSBuild or package changes, run:
 ./.agents/skills/incremental-build/scripts/Verify-PortableCache.ps1
 ```
 
-`dotnet test -c Release` runs library tests in `Kiji.Tests` and package scenarios
-in `Kiji.PackageTests`. The latter exercises publish/edit/republish,
-build/relocated output/clean, and watch/edit/reload (Razor and Web SDKs).
-It packs the local library once, or consumes the exact `KIJI_TEST_PACKAGE`
-provided by CI. Scenarios run serially on Windows and Linux using one fixed
-site under `artifacts/package-tests/work`; a cross-process lease protects it.
-See `src/Kiji.PackageTests/README.md` for scope and lifecycle. Work, the isolated
-Kiji package and feed are removed even after failure; external dependencies stay
-in the normal global NuGet cache. Bounded command output is included in test failures.
-Only the empty lease file survives in the test workspace. The fixture requests
-hardlinks to reduce temporary disk usage, but permits the SDK's copy fallback;
-test-infrastructure storage choices are not package assertions. No test flags,
-GUID directories or retained consumer builds are required.
+`dotnet test -c Release` runs library tests in `Kiji.Tests` and serial package
+scenarios in `Kiji.PackageTests`: publish/edit/clean and watch/reload with the
+Razor and Web SDKs. See `src/Kiji.PackageTests/README.md` for running them and
+workspace cleanup. Keep dependencies in the shared NuGet cache and reuse one
+fixed consumer workspace; do not assert storage optimizations as Kiji behavior.
 
 Static asset pipeline changes use these same package scenarios. Keep detailed
 byte/URL/path and stale-source cases in `StaticAssetTests`; do not recreate a

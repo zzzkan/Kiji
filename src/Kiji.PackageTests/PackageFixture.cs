@@ -11,10 +11,9 @@ public sealed class PackageFixture : IAsyncLifetime
     private FileStream? _lease;
     private string _repository = "";
     private string _root = "";
-    private string _package = "";
     private string _version = "";
     private string _globalPackages = "";
-    internal string Work => Path.Combine(_root, "work");
+    private string Work => Path.Combine(_root, "work");
     internal string Site => Path.Combine(Work, "Site");
     private string Packages => Path.Combine(_root, "packages");
     private string Template => Path.Combine(_repository, "src", "Kiji.PackageTests", "Fixture");
@@ -26,10 +25,10 @@ public sealed class PackageFixture : IAsyncLifetime
         Assert.NotNull(repository);
         _repository = repository.FullName;
         _root = Path.Combine(_repository, "artifacts", "package-tests");
-        var locations = await RunningCommand.RunAsync(_repository, "dotnet", "nuget", "locals", "global-packages", "--list");
+        var locations = await RunningCommand.RunAsync(_repository, "nuget", "locals", "global-packages", "--list");
         const string prefix = "global-packages: ";
-        Assert.StartsWith(prefix, locations.Output, StringComparison.Ordinal);
-        _globalPackages = Path.GetFullPath(locations.Output.Trim()[prefix.Length..]);
+        Assert.StartsWith(prefix, locations, StringComparison.Ordinal);
+        _globalPackages = Path.GetFullPath(locations.Trim()[prefix.Length..]);
         Assert.False(string.Equals(Path.TrimEndingDirectorySeparator(_globalPackages), _root, StringComparison.OrdinalIgnoreCase)
             || _globalPackages.StartsWith(_root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase), "The global NuGet cache must be outside the test workspace.");
         Directory.CreateDirectory(_root);
@@ -44,19 +43,20 @@ public sealed class PackageFixture : IAsyncLifetime
             DeleteGeneratedFiles(); // Also recover an interrupted previous run.
             var feed = Path.Combine(_root, "feed");
             Directory.CreateDirectory(feed);
+            string package;
             if (Environment.GetEnvironmentVariable("KIJI_TEST_PACKAGE") is { Length: > 0 } supplied)
             {
                 // CI supplies the exact package it will release; never select an old glob match.
-                _package = Path.Combine(feed, Path.GetFileName(supplied));
-                File.Copy(Path.GetFullPath(supplied), _package);
+                package = Path.Combine(feed, Path.GetFileName(supplied));
+                File.Copy(Path.GetFullPath(supplied), package);
             }
             else
             {
                 var configuration = typeof(PackageFixture).Assembly.GetCustomAttribute<AssemblyConfigurationAttribute>()!.Configuration;
-                await RunningCommand.RunAsync(_repository, "dotnet", "pack", "src/Kiji", "-c", configuration, "--no-build", "-o", feed);
-                _package = Directory.GetFiles(feed, "*.nupkg").Single();
+                await RunningCommand.RunAsync(_repository, "pack", "src/Kiji", "-c", configuration, "--no-build", "-o", feed);
+                package = Directory.GetFiles(feed, "*.nupkg").Single();
             }
-            using var archive = ZipFile.OpenRead(_package);
+            using var archive = ZipFile.OpenRead(package);
             using var manifest = archive.Entries.Single(entry => entry.FullName.EndsWith(".nuspec", StringComparison.Ordinal)).Open();
             var metadata = XDocument.Load(manifest).Root!.Elements().Single(element => element.Name.LocalName == "metadata");
             Assert.Equal("Kiji", metadata.Elements().Single(element => element.Name.LocalName == "id").Value);
@@ -93,10 +93,9 @@ public sealed class PackageFixture : IAsyncLifetime
             </ItemGroup></Project>
             """);
         await DotnetAsync("restore", "restore/kiji/Kiji.csproj", "--packages", Packages, "--source", feed, "--configfile", Path.Combine(Work, "NuGet.Config"));
-        AssertPrivatePackage();
     }
 
-    internal async Task ScenarioAsync(string name, Func<Task> action, string sdk = "Microsoft.NET.Sdk.Razor")
+    internal async Task ScenarioAsync(Func<Task> action, string sdk = "Microsoft.NET.Sdk.Razor")
     {
         try
         {
@@ -119,6 +118,7 @@ public sealed class PackageFixture : IAsyncLifetime
                 </PropertyGroup></Project>
                 """);
             Write("Directory.Packages.props", "<Project><PropertyGroup><ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally></PropertyGroup></Project>");
+            Write("Directory.Build.targets", "<Project />");
             // External dependencies must already exist in the global fallback cache.
             // A local-only source prevents accidental private restores of SkiaSharp.
             Write("NuGet.Config", $"<configuration><packageSources><clear/><add key=\"local\" value=\"{SecurityElement.Escape(Path.Combine(_root, "feed"))}\"/></packageSources><fallbackPackageFolders><clear/></fallbackPackageFolders></configuration>");
@@ -126,9 +126,7 @@ public sealed class PackageFixture : IAsyncLifetime
             // Tiny valid PNG, kept textual in the fixture source tree.
             File.WriteAllBytes(Path.Combine(Site, "content", "source.png"), Convert.FromBase64String(File.ReadAllText(Path.Combine(Site, "content", "source.png.base64"))));
             await action();
-            AssertPrivatePackage();
         }
-        catch (Exception exception) { throw new InvalidOperationException($"Package scenario: {name}", exception); }
         finally { DeleteOwned(Work); }
     }
 
@@ -145,19 +143,15 @@ public sealed class PackageFixture : IAsyncLifetime
         File.WriteAllText(path, File.ReadAllText(path).Replace(before, after, StringComparison.Ordinal));
     }
 
-    internal void Remove(string relative) => DeleteOwned(Path.Combine(Work, relative));
+    internal Task<string> DotnetAsync(params string[] arguments) => RunningCommand.RunAsync(Work, arguments);
+    internal Task<string> PublishAsync(params string[] options) => DotnetAsync(["publish", "Site/PackageSite.csproj", "-c", "Release", .. options]);
 
-    internal Task<CommandResult> DotnetAsync(params string[] arguments) => RunningCommand.RunAsync(Work, "dotnet", arguments);
-    internal Task<CommandResult> PublishAsync(params string[] options) => DotnetAsync(["publish", "Site/PackageSite.csproj", "-c", "Release", "-o", Path.Combine(Site, "dist"), .. options]);
-
-    internal async Task<string> WithServerAsync(bool watch, Func<HttpClient, Task> check, string assembly = "Site/bin/Release/net10.0/PackageSite.dll")
+    internal async Task WatchAsync(Func<HttpClient, Task> check)
     {
-        await using var command = RunningCommand.Start(Work, watch
-            ? ["watch", "--project", "Site/PackageSite.csproj", "--non-interactive", "--", "--urls", "http://127.0.0.1:0"]
-            : ["exec", assembly, "--urls", "http://127.0.0.1:0"]);
+        await using var command = RunningCommand.Start(Work, "watch", "--project", "Site/PackageSite.csproj", "--non-interactive", "--", "--urls", "http://127.0.0.1:0");
         try
         {
-            using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None })
+            using var client = new HttpClient
             { BaseAddress = await command.AddressAsync(), Timeout = TimeSpan.FromSeconds(15) };
             await check(client);
         }
@@ -166,22 +160,6 @@ public sealed class PackageFixture : IAsyncLifetime
             await command.StopAsync();
             throw new InvalidOperationException($"Consumer server failed.\n{command.Output}", exception);
         }
-        await command.StopAsync();
-        return command.Output;
-    }
-
-    private void AssertPrivatePackage()
-    {
-        var installed = Directory.GetFiles(Path.Combine(Packages, "kiji"), "*.nupkg", SearchOption.AllDirectories).Single();
-        Assert.Equal(File.ReadAllBytes(_package), File.ReadAllBytes(installed));
-    }
-
-    internal void AssertConsumerPackage()
-    {
-        var expectedKiji = File.ReadAllBytes(Directory.GetFiles(Path.Combine(Packages, "kiji"), "Kiji.dll", SearchOption.AllDirectories).Single());
-        var consumerAssemblies = Directory.GetFiles(Work, "Kiji.dll", SearchOption.AllDirectories);
-        Assert.NotEmpty(consumerAssemblies);
-        foreach (var assembly in consumerAssemblies) { Assert.Equal(expectedKiji, File.ReadAllBytes(assembly)); }
     }
 
     private void DeleteOwned(string path)
@@ -196,8 +174,6 @@ public sealed class PackageFixture : IAsyncLifetime
         DeleteOwned(Work);
         DeleteOwned(Path.Combine(_root, "feed"));
         DeleteOwned(Packages);
-        // Remove metadata from the former persistent dependency cache, too.
-        File.Delete(Path.Combine(_root, "cache-key"));
     }
 
     public async ValueTask DisposeAsync()

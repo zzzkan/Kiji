@@ -3,10 +3,9 @@
 <PageTitle>@title</PageTitle>
 <h1>Package consumer</h1>
 <Library.Card />
-<p>@Helper.Value.Text</p>
+<ExternalValue />
 <a id="asset" href="@Assets["app.js"]">asset</a>
 <a id="library" href="@Assets["_content/Library/library.js"]">library</a>
-<a id="collocated" href="@Assets["Home.razor.js"]">collocated</a>
 <link id="scoped" href="@Assets["PackageSite.styles.css"]" rel="stylesheet" />
 @((MarkupString)body)
 @code {

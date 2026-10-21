@@ -73,8 +73,7 @@ public sealed class StaticSite
 
     /// <summary>Configures the services available to components and site factories.</summary>
     /// <remarks>
-    /// Callbacks run in registration order when the site's services are first built, after
-    /// execution paths settle. Standard DI lifetimes apply; each page render owns a scope.
+    /// Callbacks run once in registration order before rendering. Each page render owns a scope.
     /// Content loaders, route/feed factories and artifacts cannot resolve scoped services.
     /// Kiji's managed services cannot be changed. Declare external state with build inputs.
     /// </remarks>
@@ -880,17 +879,11 @@ public sealed class StaticSite
         services.AddSingleton(new PageBuildInputs(_runtime.Dependencies));
 
         var managed = services.Where(static descriptor => SiteServiceRegistration.IsManaged(descriptor.ServiceType)).ToArray();
-        try
+        foreach (var configure in _configureServices)
         {
-            foreach (var configure in _configureServices)
-            {
-                configure(services);
-            }
+            configure(services);
         }
-        finally
-        {
-            services.MakeReadOnly();
-        }
+        services.MakeReadOnly();
 
         SiteServiceRegistration.Validate(services, managed);
         _serviceAssemblies = SiteServiceRegistration.CollectAssemblies(services, _configureServices);

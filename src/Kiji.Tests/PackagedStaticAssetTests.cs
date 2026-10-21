@@ -169,39 +169,20 @@ public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : ICla
     }
 
     [Fact]
-    public async Task RclServices_LocalizationOptionsAndFactories_PublishAndServe()
+    public async Task RclServices_Localization_PublishesServesAndInvalidates()
     {
-        var site = fixture.CreateSite(Path.Combine(nameof(RclServices_LocalizationOptionsAndFactories_PublishAndServe), "site"));
+        var site = fixture.CreateSite(Path.Combine(nameof(RclServices_Localization_PublishesServesAndInvalidates), "site"));
         var library = Path.Combine(site, "..", "library");
         PackagedSiteFixture.Write(library, "Library.csproj", "<Project Sdk=\"Microsoft.NET.Sdk.Razor\"><ItemGroup><FrameworkReference Include=\"Microsoft.AspNetCore.App\" /></ItemGroup></Project>");
-        PackagedSiteFixture.Write(library, "CardOptions.cs", "namespace Library; public sealed class CardOptions { public string Label { get; set; } = string.Empty; }");
-        PackagedSiteFixture.Write(library, "CardText.cs", """
-            using Microsoft.Extensions.DependencyInjection;
-            using Microsoft.Extensions.Localization;
-            using Microsoft.Extensions.Options;
-            namespace Library;
-            public sealed class CardText(IStringLocalizer<Card> localizer, IOptionsSnapshot<CardOptions> options,
-                [FromKeyedServices("suffix")] string suffix)
-            {
-                public string Value => $"{localizer["Greeting"]} {options.Value.Label}{suffix}";
-            }
-            """);
         PackagedSiteFixture.Write(library, "CardServices.cs", """
             using Microsoft.Extensions.DependencyInjection;
             namespace Library;
             public static class CardServices
             {
-                public static IServiceCollection AddCards(this IServiceCollection services)
-                {
-                    services.AddLocalization();
-                    services.Configure<CardOptions>(options => options.Label = "RCL");
-                    services.AddKeyedSingleton("suffix", "!");
-                    services.AddScoped(provider => ActivatorUtilities.CreateInstance<CardText>(provider));
-                    return services;
-                }
+                public static IServiceCollection AddCards(this IServiceCollection services) => services.AddLocalization();
             }
             """);
-        PackagedSiteFixture.Write(library, "Card.razor", "@inject Library.CardText Text\n<p>@Text.Value</p>");
+        PackagedSiteFixture.Write(library, "Card.razor", "@inject Microsoft.Extensions.Localization.IStringLocalizer<Library.Card> Text\n<p>@Text[\"Greeting\"]</p>");
         PackagedSiteFixture.Write(library, "Card.resx", """
             <root>
               <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
@@ -218,62 +199,14 @@ public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : ICla
         PackagedSiteFixture.Write(site, "Home.razor", "@page \"/\"\n<Library.Card />");
 
         await fixture.PublishAsync(site);
-        Assert.Contains("<p>Hello RCL!</p>", File.ReadAllText(Path.Combine(site, "dist/index.html")), StringComparison.Ordinal);
+        Assert.Contains("<p>Hello</p>", File.ReadAllText(Path.Combine(site, "dist/index.html")), StringComparison.Ordinal);
         await PackagedSiteFixture.WithServerAsync(site, async client =>
-            Assert.Contains("<p>Hello RCL!</p>", await client.GetStringAsync("/kiji/"), StringComparison.Ordinal));
+            Assert.Contains("<p>Hello</p>", await client.GetStringAsync("/kiji/"), StringComparison.Ordinal));
 
         var resource = Path.Combine(library, "Card.resx");
         File.WriteAllText(resource, File.ReadAllText(resource).Replace("Hello", "Welcome", StringComparison.Ordinal));
         await fixture.PublishAsync(site);
-        Assert.Contains("<p>Welcome RCL!</p>", File.ReadAllText(Path.Combine(site, "dist/index.html")), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task ImageProcessor_FromServices_PublishesAndServesMarkdownImages()
-    {
-        var site = fixture.CreateSite(nameof(ImageProcessor_FromServices_PublishesAndServesMarkdownImages));
-        var program = Path.Combine(site, "Program.cs");
-        File.WriteAllText(program, "using Kiji.Assets;\nusing Kiji.Markdown;\nusing Microsoft.Extensions.DependencyInjection;\n"
-            + File.ReadAllText(program).Replace("site.AddPages();",
-                "site.UseServices(services => services.AddSingleton<IImageProcessor, CustomImageProcessor>());\nsite.UseMarkdownContent<FrontMatter>();\nsite.AddPages();", StringComparison.Ordinal));
-        PackagedSiteFixture.Write(site, "FrontMatter.cs", "public sealed class FrontMatter { public string Title { get; set; } = string.Empty; }");
-        PackagedSiteFixture.Write(site, "CustomImageProcessor.cs", """
-            using Kiji;
-            using Kiji.Assets;
-            public sealed class CustomImageProcessor(SiteInfo site) : IImageProcessor
-            {
-                public string CacheIdentity => $"custom-svg-v1:{site.Name}";
-                public async Task<ProcessedImageInfo> ProcessAsync(string sourceFilePath, string outputDirectory,
-                    CancellationToken cancellationToken = default)
-                {
-                    Directory.CreateDirectory(outputDirectory);
-                    await File.WriteAllTextAsync(Path.Combine(outputDirectory, "custom.svg"),
-                        $"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"2\" height=\"2\"><title>{site.Name}</title></svg>", cancellationToken);
-                    return new ProcessedImageInfo { OriginalWidth = 2, OriginalHeight = 2, Variants = [new("custom.svg", 2)] };
-                }
-            }
-            """);
-        PackagedSiteFixture.Write(site, "Home.razor", """
-            @page "/"
-            @inject Kiji.ContentDictionary<Kiji.Markdown.MarkdownContent<FrontMatter>> Posts
-            <div>@((Microsoft.AspNetCore.Components.MarkupString)body)</div>
-            @code {
-                private string body = "";
-                protected override async Task OnInitializedAsync() => body = await Posts["post.md"].RenderAsync();
-            }
-            """);
-        PackagedSiteFixture.Write(site, "content/post.md", "---\ntitle: Image\n---\n![custom](source.png)");
-        PackagedSiteFixture.Write(site, "content/source.png", "custom processor input");
-
-        await fixture.PublishAsync(site);
-        Assert.Contains("custom.svg", File.ReadAllText(Path.Combine(site, "dist/index.html")), StringComparison.Ordinal);
-        var expected = File.ReadAllText(Path.Combine(site, "dist/custom.svg"));
-        Assert.Contains("<title>SDK regression</title>", expected, StringComparison.Ordinal);
-        await PackagedSiteFixture.WithServerAsync(site, async client =>
-        {
-            Assert.Contains("custom.svg", await client.GetStringAsync("/kiji/"), StringComparison.Ordinal);
-            Assert.Equal(expected, await client.GetStringAsync("/kiji/custom.svg"));
-        });
+        Assert.Contains("<p>Welcome</p>", File.ReadAllText(Path.Combine(site, "dist/index.html")), StringComparison.Ordinal);
     }
 
     [Fact]

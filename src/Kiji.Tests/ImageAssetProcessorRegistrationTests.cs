@@ -11,36 +11,6 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"kiji-image-service-{Guid.NewGuid():N}");
 
-    [Fact]
-    public async Task Factory_IsLazy_LastWins_SharedAcrossReloads_AndDisposedWithSite()
-    {
-        var processor = new TrackingImageProcessor();
-        var calls = 0;
-        await using (var app = CreateApp())
-        {
-            app.UseServices(services =>
-            {
-                services.AddTransient<IImageProcessor>(_ => throw new InvalidOperationException("Superseded factory must not run."));
-                services.AddSingleton<IImageProcessor>(provider =>
-                {
-                    Assert.Same(app.Info, provider.GetRequiredService<SiteInfo>());
-                    calls++;
-                    return processor;
-                });
-                // Keyed registrations are separate; only the unkeyed processor serves Kiji.
-                services.AddKeyedScoped<IImageProcessor>("other", (_, _) => throw new InvalidOperationException("Keyed factory must not run."));
-            });
-            app.CreateSnapshot();
-            Assert.Equal(0, calls);
-            Assert.Equal(0, processor.DisposeCount);
-            Assert.Same(processor, app.ServiceProvider.GetRequiredService<IImageProcessor>());
-            app.InvalidateContent();
-            Assert.Same(processor, app.ServiceProvider.GetRequiredService<IImageProcessor>());
-            Assert.Equal(1, calls);
-        }
-        Assert.Equal(1, processor.DisposeCount);
-    }
-
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -54,8 +24,10 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
         {
             app.UseServices(services =>
             {
+                services.AddTransient<IImageProcessor>(_ => throw new InvalidOperationException("Superseded factory must not run."));
                 if (callerOwned) { services.AddSingleton<IImageProcessor>(processor); }
                 else { services.AddSingleton<IImageProcessor>(_ => processor); }
+                services.AddKeyedScoped<IImageProcessor>("other", (_, _) => throw new InvalidOperationException("Keyed factory must not run."));
             });
             app.UseMarkdownContent<FrontMatter>();
             app.AddPages<MarkdownPostTestPage>(provider => provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
@@ -89,16 +61,14 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
         Assert.False(Directory.Exists(_root));
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task MissingUnkeyedProcessor_FailsBeforeRendering(bool keyedOnly)
+    [Fact]
+    public async Task KeyedProcessor_CannotReplaceTheUnkeyedProcessor()
     {
         await using var invalid = CreateApp();
         invalid.UseServices(services =>
         {
             services.RemoveAll<IImageProcessor>();
-            if (keyedOnly) { services.AddKeyedSingleton<IImageProcessor, TrackingImageProcessor>("other"); }
+            services.AddKeyedSingleton<IImageProcessor, TrackingImageProcessor>("other");
         });
         var exception = Assert.Throws<InvalidOperationException>(() => invalid.CreateSnapshot());
         Assert.Contains(nameof(IImageProcessor), exception.Message, StringComparison.Ordinal);

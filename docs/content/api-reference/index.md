@@ -124,44 +124,29 @@ the page renders directly inside the generated document body.
 
 #### `UseServices(Action<IServiceCollection> configure)`
 
-Registers services using standard .NET dependency injection, including library extension
-methods, factories, options, multiple implementations and keyed services.
+Registers services using standard [.NET dependency injection](https://learn.microsoft.com/dotnet/core/extensions/dependency-injection/overview).
 
 ```csharp
 app.UseServices(services =>
 {
     services.AddScoped<RelatedPosts>();
     services.AddLocalization();
-    services.AddLogging(logging => logging.SetMinimumLevel(LogLevel.Warning));
 });
 ```
 
-Import `Microsoft.Extensions.DependencyInjection` and, for logging configuration,
-`Microsoft.Extensions.Logging`. Callbacks run in order when Kiji first builds its services,
-after execution paths settle. The collection becomes read-only before provider construction.
-Do not build a separate provider inside a callback.
+Import `Microsoft.Extensions.DependencyInjection`. Callbacks run once in registration order
+before rendering; the collection is then read-only. Use ordinary C# lambdas or named methods
+for callbacks and factories; standalone runtime-generated methods are unsupported.
 
 Each page render owns a DI scope: scoped services are shared by its page, layout and child
-components and disposed when rendering finishes. Singletons belong to the site; transients
-are created on resolution. Standard DI ownership applies, so caller-supplied singleton
-instances remain the caller's responsibility. Loaders, route/feed factories and artifact
-writers use the root provider and cannot resolve scoped services. Scope and build validation
-are enabled. Kiji does not start hosted services or an ASP.NET Core request pipeline for this
-provider.
+components and disposed when rendering finishes. Loaders, route/feed factories and artifact
+writers cannot resolve scoped services. Kiji-provided services such as `SiteInfo`, `PageInfo`
+and `ContentDictionary<>` cannot be replaced. See [Image processing](#image-processing) to
+customize `IImageProcessor`.
 
-Kiji validates its managed registrations after all callbacks. `SiteInfo`, `PageInfo`,
-execution paths, `ContentDictionary<>`, `PageBuildInputs`, internal content tracking,
-`NavigationManager`, `IJSRuntime`, `IComponentActivator` and DI provider/scope infrastructure
-cannot be added, removed or replaced, including keyed registrations. Logging, HTML encoding
-and image processing can be configured through standard DI registrations. The effective
-unkeyed `IImageProcessor` registration must be a singleton; see [Image processing](#image-processing).
-
-Service registration code is tracked for incremental builds. Declare external data and
-configuration through `AddBuildInput` or `AddPageInput`/`PageBuildInputs`; nondeterministic reads
-can call `PageBuildInputs.DisableCache()`. Service instances and captured values are not
-automatically fingerprinted. Content reload does not recreate singletons; use `UseContentSource`
-for derived content indexes. `AddLocalization` registers localizers but does not select a
-rendering culture or declare translation resources as build inputs.
+Declare external service data and configuration with `AddBuildInput` or `PageBuildInputs`;
+captured values are not tracked automatically. Content reload does not recreate singletons;
+use `UseContentSource` for derived content indexes.
 
 ### Page metadata
 
@@ -312,15 +297,9 @@ app.UseServices(services =>
     services.AddSingleton<IImageProcessor, MyImageProcessor>());
 ```
 
-Import `Kiji.Assets` and `Microsoft.Extensions.DependencyInjection`. The last unkeyed
-registration is the one Kiji uses. It must exist and have singleton lifetime; Kiji validates
-this before constructing its provider. Keyed registrations do not replace it.
-
-Types and factories registered as singletons are created on first resolution and disposed
-with the site's provider, using asynchronous disposal when supported. A factory receives
-the provider and must return a non-null instance. A directly registered instance
-(`services.AddSingleton<IImageProcessor>(processor)`) remains the caller's responsibility
-to dispose. These are standard .NET DI ownership rules.
+Import `Kiji.Assets` and `Microsoft.Extensions.DependencyInjection`. Register an unkeyed
+singleton; the last registration wins. Standard DI ownership applies: Kiji disposes
+processors created by DI, while directly supplied instances remain the caller's responsibility.
 
 One instance is shared by concurrent page renders and survives content reloads, so an
 implementation must support concurrent calls and retain no page or content state. Declare

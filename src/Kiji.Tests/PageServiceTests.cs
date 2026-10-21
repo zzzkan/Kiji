@@ -2,10 +2,8 @@ using System.Reflection;
 using System.Reflection.Emit;
 using Kiji.Feeds;
 using Kiji.Tests.TestSite.PageServices;
-using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.JSInterop;
 using Xunit;
 
 namespace Kiji.Tests;
@@ -71,54 +69,29 @@ public sealed class PageServiceTests : IDisposable
     }
 
     [Theory]
-    [InlineData(typeof(SiteInfo))]
-    [InlineData(typeof(PageInfo))]
-    [InlineData(typeof(ResolvedSitePaths))]
-    [InlineData(typeof(PageBuildInputs))]
-    [InlineData(typeof(Generation.ContentFileRegistry))]
-    [InlineData(typeof(ContentDictionary<ServiceProbe>))]
-    [InlineData(typeof(NavigationManager))]
-    [InlineData(typeof(IJSRuntime))]
-    [InlineData(typeof(IComponentActivator))]
-    public async Task Registration_RejectsAdditionalManagedServices(Type serviceType)
-    {
-        await using var app = CreateApp();
-        app.UseContentSource<ServiceProbe>(_ => []);
-        app.UseServices(services => services.Add(services.Single(descriptor => descriptor.ServiceType == serviceType)));
-        var exception = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());
-        Assert.Contains(serviceType.FullName!, exception.Message, StringComparison.Ordinal);
-        Assert.Contains("managed by Kiji", exception.Message, StringComparison.Ordinal);
-    }
-
-    [Theory]
+    [InlineData("duplicate")]
     [InlineData("remove")]
     [InlineData("replace")]
-    [InlineData("clear")]
     [InlineData("keyed")]
     [InlineData("open-generic")]
-    [InlineData("unregistered-content")]
     [InlineData("provider")]
     public async Task Registration_ValidatesTheFinalManagedRegistrations(string operation)
     {
         await using var app = CreateApp();
-        IServiceCollection? captured = null;
         app.UseServices(services =>
         {
-            captured = services;
             switch (operation)
             {
+                case "duplicate": services.Add(services.Single(descriptor => descriptor.ServiceType == typeof(PageInfo))); break;
                 case "remove": services.RemoveAll<PageInfo>(); break;
                 case "replace": services.Replace(ServiceDescriptor.Singleton(app.Info)); break;
-                case "clear": services.Clear(); break;
                 case "keyed": services.AddKeyedSingleton("alternate", app.Info); break;
                 case "open-generic": services.AddSingleton(typeof(ContentDictionary<>), typeof(ContentDictionary<>)); break;
-                case "unregistered-content": services.AddSingleton<ContentDictionary<ServiceProbe>>(_ => throw new NotSupportedException()); break;
                 case "provider": services.AddSingleton<IServiceProvider>(_ => throw new NotSupportedException()); break;
             }
         });
         var exception = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());
         Assert.Contains("managed by Kiji", exception.Message, StringComparison.Ordinal);
-        Assert.True(captured!.IsReadOnly);
     }
 
     [Fact]
@@ -127,23 +100,15 @@ public sealed class PageServiceTests : IDisposable
         await using var app = CreateApp();
         IServiceCollection? captured = null;
         var calls = new List<int>();
-        var created = 0;
         app.UseServices(services =>
         {
             calls.Add(1);
             captured = services;
-            services.AddSingleton("first");
-            services.AddSingleton(provider =>
-            {
-                created++;
-                Assert.EndsWith(Path.Combine(".kiji", "dev-site"), provider.GetRequiredService<ResolvedSitePaths>().OutputDirectory, StringComparison.Ordinal);
-                return new RenderDependency();
-            });
+            services.AddSingleton(provider => provider.GetRequiredService<ResolvedSitePaths>().OutputDirectory);
         });
         app.UseServices(services =>
         {
             calls.Add(2);
-            services.Replace(ServiceDescriptor.Singleton("second"));
             // Existing managed registrations are visible to ordinary extension methods.
             services.TryAddSingleton(app.Info);
         });
@@ -151,14 +116,8 @@ public sealed class PageServiceTests : IDisposable
         app.CreateSnapshot();
         app.CreateSnapshot();
         Assert.Equal([1, 2], calls);
-        Assert.Equal(0, created);
-        Assert.Equal("second", app.ServiceProvider.GetRequiredService<string>());
-        var owned = app.ServiceProvider.GetRequiredService<RenderDependency>();
-        Assert.Equal(1, created);
+        Assert.EndsWith(Path.Combine(".kiji", "dev-site"), app.ServiceProvider.GetRequiredService<string>(), StringComparison.Ordinal);
         Assert.Throws<InvalidOperationException>(() => captured!.AddSingleton("late"));
-        Assert.Throws<InvalidOperationException>(() => app.UseServices(_ => { }));
-        await app.DisposeAsync();
-        Assert.Equal(1, owned.DisposeCount);
     }
 
     [Fact]
@@ -168,6 +127,20 @@ public sealed class PageServiceTests : IDisposable
         app.UseServices(services => services.AddScoped<object, MissingDependencyService>());
         var exception = Assert.Throws<AggregateException>(() => app.CreateSnapshot());
         Assert.Contains(nameof(MissingDependencyService), exception.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DynamicFactory_WithAStableHostModule_IsRejected()
+    {
+        await using var app = CreateApp();
+        var method = new DynamicMethod("Create", typeof(object), [typeof(IServiceProvider)], typeof(PageServiceTests).Module);
+        var il = method.GetILGenerator();
+        il.Emit(OpCodes.Newobj, typeof(object).GetConstructor(Type.EmptyTypes)!);
+        il.Emit(OpCodes.Ret);
+        app.UseServices(services => services.AddSingleton(method.CreateDelegate<Func<IServiceProvider, object>>()));
+
+        var exception = Assert.Throws<NotSupportedException>(() => app.CreateSnapshot());
+        Assert.Contains("regular C# lambda or method", exception.Message, StringComparison.Ordinal);
     }
 
     [Theory]

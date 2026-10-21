@@ -27,7 +27,6 @@ internal static class SiteServiceRegistration
         foreach (var type in expected.Select(static group => group.Key).Concat(actual.Select(static group => group.Key)).Distinct())
         {
             // Descriptor identity preserves the lifetime, factory and instance owned by Kiji.
-            // Include keyed and open generic registrations rather than silently accepting alternatives.
             if (!expected[type].SequenceEqual(actual[type]))
             {
                 throw new InvalidOperationException(
@@ -35,8 +34,6 @@ internal static class SiteServiceRegistration
             }
         }
 
-        // Kiji resolves the last unkeyed processor from the root provider, including
-        // outside page rendering. Other registrations retain ordinary DI semantics.
         var imageProcessor = services.LastOrDefault(static descriptor =>
             descriptor.ServiceType == typeof(IImageProcessor) && !descriptor.IsKeyedService);
         if (imageProcessor?.Lifetime != ServiceLifetime.Singleton)
@@ -73,8 +70,9 @@ internal static class SiteServiceRegistration
             if (callback is null) { return; }
             foreach (var entry in callback.GetInvocationList())
             {
-                assemblies.Add(entry.Method.Module.Assembly);
-                AddType(entry.Method.DeclaringType);
+                // A DynamicMethod's host module does not identify its generated code.
+                AddType(entry.Method.DeclaringType ?? throw new NotSupportedException(
+                    "UseServices callbacks and factories must use a regular C# lambda or method, not a standalone runtime-generated method."));
                 AddType(entry.Target?.GetType());
                 foreach (var argument in entry.Method.GetGenericArguments()) { AddType(argument); }
             }

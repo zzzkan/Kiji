@@ -33,7 +33,6 @@ public sealed class AppConfigurationTests : IDisposable
         Assert.Throws<InvalidOperationException>(() => app.Info);
         app.Info = TestArticleContents.CreateSiteInfo();
         app.UseServices(services => services.AddScoped<object>());
-        app.AddBuildInput("version", "1");
     }
 
     [Theory]
@@ -98,8 +97,6 @@ public sealed class AppConfigurationTests : IDisposable
         {
             Assert.Throws<InvalidOperationException>(() => app.UseServices(services => services.AddScoped<object>()));
             Assert.Throws<InvalidOperationException>(() => app.Info = TestArticleContents.CreateSiteInfo());
-            Assert.Throws<InvalidOperationException>(() => app.AddBuildInput("input.json"));
-            Assert.Throws<InvalidOperationException>(() => app.AddBuildInput("version", "2"));
             Assert.Throws<InvalidOperationException>(() => app.UseContentSource<object>(static _ => []));
             Assert.Throws<InvalidOperationException>(() => app.UseMarkdownContent<FrontMatter>(
                 _ => throw new Xunit.Sdk.XunitException("Configuration callback must not run after execution starts.")));

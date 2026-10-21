@@ -23,9 +23,7 @@ public sealed class StaticSite
 {
     private readonly string[] _args;
     private readonly ContentRuntime _runtime = new();
-    private readonly List<string> _buildInputPaths = [];
     private readonly List<string> _contentPaths = [];
-    private readonly List<KeyValuePair<string, string>> _buildInputValues = [];
     private readonly List<Action<IServiceCollection>> _configureServices = [];
     private IReadOnlyCollection<Assembly> _serviceAssemblies = [];
     private bool _configurationFrozen;
@@ -75,7 +73,7 @@ public sealed class StaticSite
     /// <remarks>
     /// Callbacks run once in registration order before rendering. Each page render owns a scope.
     /// Content loaders, route/feed factories and artifacts cannot resolve scoped services.
-    /// Kiji's managed services cannot be changed. Declare external state with build inputs.
+    /// Kiji's managed services cannot be changed. Use AlwaysRender on components reading untracked external state.
     /// </remarks>
     public StaticSite UseServices(Action<IServiceCollection> configure)
     {
@@ -85,7 +83,6 @@ public sealed class StaticSite
         return this;
     }
 
-    internal string[] WatchedBuildInputs { get; private set; } = [];
     internal string[] ContentRoots { get; private set; } = [];
 
     // Content must not resolve execution paths before publish/serve has settled them.
@@ -110,28 +107,6 @@ public sealed class StaticSite
     }
 
     internal static StaticSite Create(string[] args, SiteExecutionPaths paths) => new(args, paths);
-
-    /// <summary>Registers a file or directory whose changes require a full rebuild.</summary>
-    /// <param name="path">An absolute path or a path relative to the site project directory.</param>
-    public StaticSite AddBuildInput(string path)
-    {
-        EnsureConfigurable();
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
-
-        _buildInputPaths.Add(path);
-        return this;
-    }
-
-    /// <summary>Registers a named value whose changes require a full rebuild.</summary>
-    public StaticSite AddBuildInput(string key, string value)
-    {
-        EnsureConfigurable();
-        ArgumentException.ThrowIfNullOrWhiteSpace(key);
-        ArgumentNullException.ThrowIfNull(value);
-
-        _buildInputValues.Add(new KeyValuePair<string, string>(key, value));
-        return this;
-    }
 
     /// <summary>Uses a content source resolved as <see cref="ContentDictionary{T}"/>.</summary>
     /// <param name="loader">Loads items lazily once per snapshot, after execution paths are settled.</param>
@@ -168,16 +143,6 @@ public sealed class StaticSite
             ? contentSetScope
             : Path.GetRelativePath(Path.GetFullPath(Paths.ProjectDirectory), Paths.ResolveAgainstRoot(directory)).Replace('\\', '/')));
         if (directory is not null) { _contentPaths.Add(directory); }
-        return this;
-    }
-
-    /// <summary>Registers an external value; only pages reading it through PageBuildInputs depend on it.</summary>
-    public StaticSite AddPageInput(string key, Func<string> read)
-    {
-        EnsureConfigurable();
-        ArgumentException.ThrowIfNullOrWhiteSpace(key);
-        ArgumentNullException.ThrowIfNull(read);
-        _runtime.Dependencies.Register("external:" + key, read);
         return this;
     }
 
@@ -367,7 +332,7 @@ public sealed class StaticSite
             : StaticAssetManifest.Load(options.AssetManifestPath, options.AssetEndpointsPath, Info.BaseUrl);
         UseAssetResources(assetManifest.Resources);
         var assets = assetManifest.Assets;
-        OutputPathValidator.Validate(options, assetManifest, Paths.ProjectDirectory, Paths.ResolveKijiPath(), ContentRoots.Concat(WatchedBuildInputs));
+        OutputPathValidator.Validate(options, assetManifest, Paths.ProjectDirectory, Paths.ResolveKijiPath(), ContentRoots);
         UseRunOptions(options);
         InvalidateContent();
 
@@ -384,8 +349,6 @@ public sealed class StaticSite
             Paths.ProjectDirectory,
             Paths.ResolveCachePath(),
             Info,
-            _buildInputPaths,
-            _buildInputValues,
             _services!.GetService<ContentFileRegistry>(), _runtime.Dependencies,
             _services!.GetRequiredService<IImageProcessor>(), assetManifest.Resources);
 
@@ -527,7 +490,7 @@ public sealed class StaticSite
     {
         FreezeConfiguration();
         var options = UseRunOptions(Paths.ResolveForDevelopment());
-        OutputPathValidator.ValidateInputs(options.OutputDirectory, ContentRoots.Concat(WatchedBuildInputs));
+        OutputPathValidator.ValidateInputs(options.OutputDirectory, ContentRoots);
         EnsureServices();
 
         var devServer = new DevServer(this, reporter);
@@ -876,7 +839,6 @@ public sealed class StaticSite
 
         services.AddSingleton<IImageProcessor>(static _ => new ImageProcessor());
         services.AddSingleton<ContentFileRegistry>();
-        services.AddSingleton(new PageBuildInputs(_runtime.Dependencies));
 
         var managed = services.Where(static descriptor => SiteServiceRegistration.IsManaged(descriptor.ServiceType)).ToArray();
         foreach (var configure in _configureServices)
@@ -913,7 +875,6 @@ public sealed class StaticSite
         _ = Info;
         var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         ContentRoots = [.. _contentPaths.Select(Paths.ResolveAgainstRoot).Distinct(comparer)];
-        WatchedBuildInputs = [.. _buildInputPaths.Select(Paths.ResolveAgainstRoot).Distinct(comparer)];
         _configurationFrozen = true;
     }
 

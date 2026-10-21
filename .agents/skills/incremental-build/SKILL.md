@@ -7,7 +7,7 @@ description: Keep incremental builds correct when adding a content source, an ar
 
 Ambiguity always falls back to rendering. A page may be reused only when:
 
-1. Global options/declared inputs and code identities match. Code identity uses
+1. Global options and code identities match. Code identity uses
    compiler MVIDs, including framework assemblies; unavailable code invalidates.
 2. Route and deterministic parameter fingerprints match. Unsupported values disable reuse.
 3. Recorded dependencies match the current snapshot.
@@ -34,8 +34,11 @@ not built with conflicting global properties.
   Stable IDs identify custom entries; a missing digest disables reuse for readers.
 - Images record source bytes, processor identity, repair requests and variants.
   Keep public image URLs in the page bundle and recipes sufficient for cache-only repair.
-- Declare external data through AddBuildInput, AddPageInput or PageBuildInputs.
-  DisableCache handles nondeterministic reads.
+- AlwaysRender marks pages, layouts or child components that read untracked external
+  state. Any output page rendering one is uncacheable, including nested/dynamic children.
+  KijiForce bypasses HTML reuse for the entire publish while still saving successful
+  renders for later reuse. Neither adds external watchers or clears
+  image processing caches. Do not reintroduce per-input registration APIs.
 - Invalidate content, file hashes and value resolutions before each publish/dev reload.
   Verify inputs before manifest publication, including joining verification on failure.
   Conflicting reads within one build must fail.

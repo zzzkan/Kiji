@@ -19,8 +19,6 @@ internal sealed class IncrementalBuildPlanner(
     string rootPath,
     string cacheDirectory,
     SiteInfo site,
-    IReadOnlyList<string> buildInputPaths,
-    IReadOnlyList<KeyValuePair<string, string>> buildInputValues,
     ContentFileRegistry? hashRegistry = null,
     DependencyCatalog? catalog = null,
     IImageProcessor? imageProcessor = null,
@@ -534,32 +532,7 @@ internal sealed class IncrementalBuildPlanner(
             BuildFingerprint.AppendPart(builder, value);
         }
 
-        foreach (var path in buildInputPaths)
-        {
-            BuildFingerprint.AppendPart(builder, "file-input");
-            BuildFingerprint.AppendPart(builder, HashBuildInputPath(path));
-        }
-
-        foreach (var (key, value) in buildInputValues)
-        {
-            BuildFingerprint.AppendPart(builder, key);
-            BuildFingerprint.AppendPart(builder, value);
-        }
-
         return BuildFingerprint.HashText(builder.ToString());
-    }
-
-    private string HashBuildInputPath(string path)
-    {
-        var fullPath = Path.IsPathFullyQualified(path) ? path : Path.Combine(_rootPath, path);
-        if (Directory.Exists(fullPath))
-        {
-            var files = Directory.EnumerateFiles(fullPath, "*", SearchOption.AllDirectories)
-                .Select(file => (Path.GetRelativePath(fullPath, file), BuildFingerprint.HashFile(file)));
-            return BuildFingerprint.HashFileSet(files);
-        }
-
-        return BuildFingerprint.HashFile(fullPath);
     }
 
     internal static IReadOnlyList<string> CollectCodeDependencies(IEnumerable<Assembly> roots)

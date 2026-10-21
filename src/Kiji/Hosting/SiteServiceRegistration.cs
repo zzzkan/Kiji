@@ -12,7 +12,7 @@ internal static class SiteServiceRegistration
 {
     internal static bool IsManaged(Type type) =>
         type == typeof(SiteInfo) || type == typeof(PageInfo) || type == typeof(ResolvedSitePaths)
-        || type == typeof(PageBuildInputs) || type == typeof(ContentFileRegistry)
+        || type == typeof(ContentFileRegistry)
         || type == typeof(NavigationManager)
         || type == typeof(IJSRuntime) || type == typeof(IComponentActivator)
         || type == typeof(IServiceProvider) || type == typeof(IServiceScopeFactory)

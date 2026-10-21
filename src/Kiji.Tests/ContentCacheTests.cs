@@ -10,18 +10,17 @@ public sealed class ContentCacheTests : IDisposable
     private readonly string _root = Path.Combine(Path.GetTempPath(), "kiji-content-cache-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public async Task CustomDataDigests_InvalidateOnlyReaders_AndExternalValuesAreTracked()
+    public async Task CustomDataDigests_InvalidateOnlyReaders()
     {
         var first = "first";
         var second = "second";
-        var prefix = "prefix:";
         var firstRenders = 0;
         var secondRenders = 0;
         await using var site = CreateSite(() =>
         [
             new("one", new(first, () => Interlocked.Increment(ref firstRenders)), first),
             new("two", new(second, () => Interlocked.Increment(ref secondRenders)), second),
-        ], () => prefix);
+        ]);
         await site.PublishAsync("dist");
         await site.PublishAsync("dist");
         Assert.Equal(1, firstRenders);
@@ -30,11 +29,7 @@ public sealed class ContentCacheTests : IDisposable
         await site.PublishAsync("dist");
         Assert.Equal(2, firstRenders);
         Assert.Equal(1, secondRenders);
-        prefix = "new:";
-        await site.PublishAsync("dist");
-        Assert.Equal(3, firstRenders);
-        Assert.Equal(2, secondRenders);
-        Assert.Contains("new:changed", await File.ReadAllTextAsync(Path.Combine(_root, "dist", "cache", "one", "index.html")), StringComparison.Ordinal);
+        Assert.Contains("changed", await File.ReadAllTextAsync(Path.Combine(_root, "dist", "cache", "one", "index.html")), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -46,7 +41,7 @@ public sealed class ContentCacheTests : IDisposable
         [
             new("one", new("first", () => Interlocked.Increment(ref uncached)), null),
             new("two", new("second", () => Interlocked.Increment(ref cached)), "stable"),
-        ], () => "");
+        ]);
         await site.PublishAsync("dist");
         await site.PublishAsync("dist");
         Assert.Equal(2, uncached);
@@ -58,13 +53,12 @@ public sealed class ContentCacheTests : IDisposable
         Assert.True(manifest.Pages.Single(page => page.RoutePath == "/cache/two/").HtmlLength > 0);
     }
 
-    private StaticSite CreateSite(Func<IReadOnlyList<ContentEntry<CacheItem>>> load, Func<string> prefix)
+    private StaticSite CreateSite(Func<IReadOnlyList<ContentEntry<CacheItem>>> load)
     {
         Directory.CreateDirectory(_root);
         var site = StaticSite.Create([], new SiteExecutionPaths(_root));
         site.Info = TestArticleContents.CreateSiteInfo();
         site.UseContentSource<CacheItem>("data", _ => load());
-        site.AddPageInput("prefix", prefix);
         site.AddPages<CacheItemPage>(services => services.GetRequiredService<ContentDictionary<CacheItem>>()
             .Select(entry => new { Id = entry.Key }));
         return site;

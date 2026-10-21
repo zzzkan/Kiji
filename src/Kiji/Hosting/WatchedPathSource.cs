@@ -4,5 +4,4 @@ internal enum WatchedPathSource
 {
     Content,
     Static,
-    BuildInput,
 }

@@ -13,7 +13,6 @@ internal sealed record WatchedChange(
         {
             WatchedPathSource.Content => "Content",
             WatchedPathSource.Static => "Static asset",
-            WatchedPathSource.BuildInput => "Build input",
             _ => throw new InvalidOperationException($"Unknown watched path source '{Source}'."),
         };
         var action = ChangeType switch

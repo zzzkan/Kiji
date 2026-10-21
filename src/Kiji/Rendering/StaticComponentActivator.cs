@@ -4,10 +4,10 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Kiji.Rendering;
 
-/// <summary>Creates components and supplies the site's default import map.</summary>
+/// <summary>Creates components, records render policy, and supplies the site's default import map.</summary>
 internal sealed class StaticComponentActivator(IServiceProvider services) : IComponentActivator
 {
-    private static readonly ConcurrentDictionary<Type, ObjectFactory> Factories = new();
+    private static readonly ConcurrentDictionary<Type, (ObjectFactory Create, bool AlwaysRender)> Factories = new();
 
     public IComponent CreateInstance(Type componentType)
     {
@@ -20,8 +20,13 @@ internal sealed class StaticComponentActivator(IServiceProvider services) : ICom
 #pragma warning restore BL0005
         }
 
-        var factory = Factories.GetOrAdd(componentType,
-            static type => ActivatorUtilities.CreateFactory(type, Type.EmptyTypes));
-        return (IComponent)factory(services, null);
+        var (create, alwaysRender) = Factories.GetOrAdd(componentType,
+            static type => (ActivatorUtilities.CreateFactory(type, Type.EmptyTypes),
+                type.IsDefined(typeof(AlwaysRenderAttribute), inherit: true)));
+        if (alwaysRender)
+        {
+            PageRenderContext.Current?.Dependencies?.DisableCache();
+        }
+        return (IComponent)create(services, null);
     }
 }

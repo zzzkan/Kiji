@@ -92,9 +92,9 @@ app.UseMarkdownContent<FrontMatter, Post>(content => new Post(
     Content: content));
 ```
 
-The projection runs independently for each file. Keep relationships such as tag indexes
-or related posts outside the projection so they can be built from the resulting
-collection. See [Incremental builds](../incremental-builds/#declare-inputs-outside-the-built-in-content-pipeline)
+The projection runs independently for each file. Build shared tag indexes or other
+collection-wide results with [UseContentSource](../api-reference/#content-sources-and-contentdictionary).
+See [Incremental builds](../incremental-builds/#render-pages-that-use-external-data)
 when a projection reads additional external data.
 
 ## Render a Markdown body

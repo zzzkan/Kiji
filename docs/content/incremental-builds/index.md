@@ -43,8 +43,12 @@ and the [supported parameter types](../api-reference/#pages).
 
 ## Render pages that use external data
 
-Kiji cannot observe arbitrary file, HTTP, environment, clock, or service-state reads.
-When those values affect HTML, mark the component that uses them:
+Reads through `ContentDictionary<T>` are tracked automatically. For custom data or a
+shared index, [use a content source](../api-reference/#content-sources-and-contentdictionary)
+to load and share values; supply item digests to make their readers eligible for HTML reuse.
+
+Kiji cannot observe arbitrary file, HTTP, environment, clock, or service-state reads
+outside that pipeline. When those values affect HTML, mark the component that uses them:
 
 ```razor
 @attribute [AlwaysRender]
@@ -53,15 +57,19 @@ When those values affect HTML, mark the component that uses them:
 ```
 
 Import `Kiji` in `_Imports.razor`. Any page rendering the marked component is regenerated
-on every publish. This also works in layouts and child components. If external state
-controls whether a child appears, mark the parent reading that state.
+in full on every publish. This also works in layouts and child components. If external
+state controls whether a child appears, mark the parent reading that state.
+
+`AlwaysRender` controls HTML reuse. It does not reload a content dictionary or rebuild
+a singleton's cached results. Use `UseContentSource` for shared derived data that must
+be rebuilt on content reload; rendering again cannot fix an outdated value in a service.
 
 For a one-time refresh of all pages, use `dotnet publish -p:KijiForce=true`.
 Later publishes can reuse those results; `AlwaysRender` pages continue to render.
 
-These controls affect HTML reuse. They do not clear image caches or watch external
-data; restart the development server when that data changes. For tracked custom content,
-use [`UseContentSource` with item digests](../api-reference/#content-sources-and-contentdictionary).
+Neither these rendering controls nor custom content loaders watch external data;
+restart the development server when that data changes. Rendering controls also leave
+image processing caches intact.
 
 ## Cache locations
 

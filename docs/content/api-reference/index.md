@@ -145,7 +145,8 @@ and `ContentDictionary<>` cannot be replaced.
 
 External service data and captured values are not tracked automatically. Use
 `[AlwaysRender]` on components that read them. Content reload does not recreate
-singletons; use `UseContentSource` for derived content indexes.
+singletons; use [content sources](#content-sources-and-contentdictionary) for shared
+indexes that must be rebuilt when content changes.
 
 ### Page metadata
 
@@ -199,41 +200,104 @@ and [Deployment](../deployment/#compression) for compression settings.
 
 ## Content and images
 
-### Content sources and ContentDictionary
-
-#### `UseContentSource<T>(Func<IServiceProvider, IReadOnlyList<T>> loader)`
-
-Registers a content source for reference type `T`. The loader runs lazily once for each
-site snapshot, after execution paths are known. Its items receive opaque string keys based
-on their zero-based order and are exposed as `ContentDictionary<T>`. A given element type
-can identify only one registered dictionary. This form has no data digest, so pages
-reading its items are rendered on every publish.
-
-#### `UseContentSource<T>(string sourceId, Func<IServiceProvider, IReadOnlyList<ContentEntry<T>>> loader)`
-
-Registers a source with stable, source-local identities. Return
-`new ContentEntry<T>(id, value, digest)` for each item. The digest must change whenever
-any data affecting the value changes, including data obtained from HTTP or other sources.
-Use `null` when that guarantee cannot be made; readers of that item or its collection
-lose HTML reuse.
-Values are immutable for one build snapshot. Collection enumeration tracks item order,
-membership, and all item digests. A missing lookup tracks the collection too.
-
-These loaders do not register file watchers. Restart the development server when their
-external data changes; Markdown sources register their own content watchers.
+### Content
 
 #### `ContentDictionary<T>`
 
-Inject this `IReadOnlyDictionary<string, T>` to access `Count`, `Keys`, `Values`, the
-indexer, `ContainsKey`, `TryGetValue`, and enumeration. Keys are case-insensitive;
-enumeration preserves source order. Markdown keys are source-relative paths using `/`;
-explicit custom entries use their supplied IDs. Keys do not determine public URLs.
+An injectable, read-only collection of site content. `UseMarkdownContent<FrontMatter>()`
+registers `ContentDictionary<MarkdownContent<FrontMatter>>` for components and factories
+to read. For a Markdown site, this is usually all the content registration you need.
 
-A successful lookup tracks one item. Enumeration, `Count`, `Keys`, `Values`, and missing
-lookups track the collection. Layout and child-component reads count too.
-See [page dependencies](../incremental-builds/#understand-page-dependencies).
+```razor
+@inject ContentDictionary<MarkdownContent<FrontMatter>> Posts
 
-### Markdown APIs
+<ul>
+    @foreach (var post in Posts.Values)
+    {
+        <li>@post.FrontMatter.Title</li>
+    }
+</ul>
+```
+
+Import `Kiji`, `Kiji.Markdown`, and your model namespace in `_Imports.razor`.
+The dictionary implements `IReadOnlyDictionary<string, T>`. A successful keyed lookup
+tracks one item; enumeration, `Count`, `Keys`, `Values`, and missing lookups track the
+whole collection, including order and item digests. Layout and child-component reads
+count too. See [page dependencies](../incremental-builds/#understand-page-dependencies).
+
+Keys are case-insensitive and enumeration preserves source order. Markdown keys are
+source-relative paths using `/`; custom sources use ordinal keys or explicit IDs as
+described below. Keys do not determine public URLs.
+
+Use `UseContentSource` for custom data, such as JSON, or a shared index derived from
+other content, such as tag counts. Both overloads expose `ContentDictionary<T>` and
+load lazily once per site snapshot, after execution paths are known. Treat loaded values
+as immutable. Each publish or development content reload invalidates them; the next
+access loads them again.
+
+#### `UseContentSource<T>(Func<IServiceProvider, IReadOnlyList<T>> loader)`
+
+Use this form to share loaded data without supplying change detection. Items receive
+keys `"0"`, `"1"`, and so on in loader order. Pages reading these items render on every
+publish.
+
+For example, use the `FrontMatter` model from [Markdown and images](../markdown/#register-markdown-content)
+and define a model in its own `TagSummary.cs` file:
+
+```csharp
+public sealed record TagSummary(string Name, int Count);
+```
+
+In `Program.cs`, import `Kiji`, `Kiji.Markdown`, `Microsoft.Extensions.DependencyInjection`,
+and your model namespace. Register Markdown and the shared tag counts before `RunAsync`:
+
+```csharp
+app.UseMarkdownContent<FrontMatter>();
+app.UseContentSource<TagSummary>(LoadTags);
+
+static IReadOnlyList<TagSummary> LoadTags(IServiceProvider services) =>
+    services.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
+        .Values
+        .SelectMany(post => post.FrontMatter.Tags.Distinct(StringComparer.OrdinalIgnoreCase))
+        .GroupBy(tag => tag, StringComparer.OrdinalIgnoreCase)
+        .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+        .Select(group => new TagSummary(group.Key, group.Count()))
+        .ToArray();
+```
+
+Components can inject `ContentDictionary<TagSummary>` and render its `Values`. The
+counts are shared across pages and recomputed after Markdown content reloads.
+
+#### `UseContentSource<T>(string sourceId, Func<IServiceProvider, IReadOnlyList<ContentEntry<T>>> loader)`
+
+Use this form when pages should be eligible for HTML reuse if the data is unchanged.
+Replace the `UseContentSource` registration above with this one:
+
+```csharp
+app.UseContentSource<TagSummary>("tag-summary", services =>
+    LoadTags(services)
+        .Select(tag => new ContentEntry<TagSummary>(
+            Id: tag.Name,
+            Value: tag,
+            Digest: tag.ToString()))
+        .ToArray());
+```
+
+Keep `sourceId` stable between builds. Each entry's `Id` identifies the item within
+that source, independently of its position. `Digest` is a comparison string that must
+change whenever any data affecting the value changes, including external data. Here,
+the record's generated `ToString()` includes both values, for example
+`TagSummary { Name = dotnet, Count = 3 }`.
+
+An incorrect digest can reuse stale HTML. Use `null` when a reliable digest is unavailable;
+readers of that item or its collection then lose HTML reuse. Digests allow Kiji to skip
+page rendering, but the loader still runs when needed to obtain current digests.
+
+Use [`AlwaysRender`](../incremental-builds/#render-pages-that-use-external-data) when a
+component also reads untracked external state. It forces page rendering but does not
+refresh data cached in a service.
+
+### Markdown
 
 Import `Kiji.Markdown` to use these extensions.
 

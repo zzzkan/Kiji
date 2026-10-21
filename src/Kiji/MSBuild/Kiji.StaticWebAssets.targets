@@ -25,6 +25,15 @@
     </PropertyGroup>
   </Target>
 
+  <!-- dotnet watch reads this path directly; normalize the SDK's obj\ default
+       so it finds the static-assets manifest on Unix. -->
+  <Target Name="KijiNormalizeWatchOutputPath" AfterTargets="GenerateComputedBuildStaticWebAssets"
+          Condition="'$(DesignTimeBuild)' == 'true' and '$(IntermediateOutputPath)' != ''">
+    <PropertyGroup>
+      <IntermediateOutputPath>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)'))</IntermediateOutputPath>
+    </PropertyGroup>
+  </Target>
+
   <Target Name="KijiValidateStaticWebAssets" BeforeTargets="PrepareForBuild;KijiGenerateSite">
     <Error Condition="'$(_KijiConfiguredStaticWebAssetBasePath)' != '' and '$(_KijiConfiguredStaticWebAssetBasePath)' != '/'"
            Code="KIJI1004" Text="Set SiteInfo.BaseUrl to host a Kiji site under a path prefix. StaticWebAssetBasePath is supported on libraries, not on the site project." />

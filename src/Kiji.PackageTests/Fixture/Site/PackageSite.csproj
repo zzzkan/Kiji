@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <ServiceWorkerAssetsManifest>service-worker-assets.js</ServiceWorkerAssetsManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Kiji" Version="$(KijiPackageVersion)" />
+    <ProjectReference Include="../Library/Library.csproj" />
+    <ServiceWorker Include="wwwroot/service-worker.js" PublishedContent="service-worker.published.js" />
+  </ItemGroup>
+</Project>

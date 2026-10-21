@@ -1,0 +1,19 @@
+@page "/"
+@inject ContentDictionary<MarkdownContent<Article>> Articles
+<PageTitle>@title</PageTitle>
+<h1>Package consumer</h1>
+<Library.Card />
+<ExternalValue />
+<a id="asset" href="@Assets["app.js"]">asset</a>
+<a id="library" href="@Assets["_content/Library/library.js"]">library</a>
+<link id="scoped" href="@Assets["PackageSite.styles.css"]" rel="stylesheet" />
+@((MarkupString)body)
+@code {
+    private string title = "";
+    private string body = "";
+    protected override async Task OnInitializedAsync()
+    {
+        title = Articles["article.md"].FrontMatter.Title;
+        body = await Articles["article.md"].RenderAsync();
+    }
+}

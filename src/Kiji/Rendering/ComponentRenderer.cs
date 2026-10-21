@@ -3,7 +3,6 @@ using System.Text.Unicode;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 
@@ -17,7 +16,7 @@ internal sealed class ComponentRenderer(IServiceProvider services)
         services.AddLogging(logging => logging
             .AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Warning)
             .SetMinimumLevel(LogLevel.Warning));
-        services.TryAddScoped<IErrorBoundaryLogger, StaticErrorBoundaryLogger>();
+        services.AddScoped<IErrorBoundaryLogger, StaticErrorBoundaryLogger>();
         services.AddSingleton(_ => HtmlEncoder.Create(UnicodeRanges.All));
         services.AddScoped(static provider =>
         {

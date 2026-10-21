@@ -150,52 +150,27 @@ indexes that must be rebuilt when content changes.
 
 #### Logging and error boundaries
 
-Components and services can inject `ILogger<T>`. Kiji writes `Warning`, `Error`, and
-`Critical` logs to the console by default during both publish and development.
-These levels use standard error so they remain visible at `dotnet publish`'s default verbosity.
-Configure providers and filters through `UseServices`; for example, to also show
-`Information` logs:
-
-```csharp
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-
-app.UseServices(services => services.AddLogging(logging => logging
-    .SetMinimumLevel(LogLevel.Information)));
-```
-
-Use `logging.ClearProviders()` to remove the default console output before adding a
-different provider, or to disable logging output entirely.
+Components and services can inject `ILogger<T>`. Kiji writes `Warning` and higher
+logs to standard error during publish and development. Configure levels and providers
+with `services.AddLogging(...)` inside `UseServices`. Call `logging.ClearProviders()`
+to disable or replace the default console output.
 
 Blazor's [`ErrorBoundary`](https://learn.microsoft.com/aspnet/core/blazor/fundamentals/handle-errors?view=aspnetcore-10.0#error-boundaries)
-can wrap child components or a layout's `@Body`. It handles rendering and lifecycle errors,
-including asynchronous lifecycle methods, and renders its fallback in the generated HTML:
+can render fallback content when a child component fails. For example, in a layout:
 
 ```razor
+@using Microsoft.AspNetCore.Components.Web
+
 <ErrorBoundary>
-    <ChildContent>
-        @Body
-    </ChildContent>
+    <ChildContent>@Body</ChildContent>
     <ErrorContent>
         <p>This content is temporarily unavailable.</p>
     </ErrorContent>
 </ErrorBoundary>
 ```
 
-Import `Microsoft.AspNetCore.Components.Web`. Without `ErrorContent`, Blazor emits an empty
-`<div class="blazor-error-boundary"></div>` that you can style. The default logger follows
-static SSR: it records the exception at `Warning` under the
-`Microsoft.AspNetCore.Components.Web.ErrorBoundary` category (event ID 100), so caught
-exceptions appear in the console without extra configuration.
-You can replace `IErrorBoundaryLogger` through `UseServices`,
-including with a scoped implementation that injects `PageInfo`.
-
-A handled error is a successful render: publish writes the fallback, which can be reused
-by incremental builds, and development serves it with the page's normal status code.
-Leave errors unhandled when they should fail the build. Each render gets a fresh boundary;
-the generated static HTML has no interactive recovery button. Logging runs only when
-components render, so reused pages do not repeat their logs. These logging settings apply
-to site services; Kiji's build progress and the development HTTP host use separate reporting.
+Caught exceptions are logged as warnings. Publish succeeds with the fallback HTML,
+which incremental builds may reuse. Leave errors unhandled when they should fail the build.
 
 ### Page metadata
 

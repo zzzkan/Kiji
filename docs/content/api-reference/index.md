@@ -302,22 +302,12 @@ in that identity; page rendering controls do not invalidate image processing cac
 ### `AlwaysRenderAttribute`
 
 Add `@attribute [AlwaysRender]` to a Razor component, or `[AlwaysRender]` to a component
-class, using the `Kiji` namespace. Every output page that renders the marked component
-is regenerated on each publish. This includes layouts, nested and dynamic children,
-and derived component types. A marked page type applies to all its registered routes
-and parameter sets. Links alone do not propagate the policy.
+class, using the `Kiji` namespace. Every page that renders the component is regenerated
+on each publish, including uses in layouts and child components. The attribute is inherited.
 
-Mark the component that reads external state, including a condition that decides
-whether a child is rendered. A child absent from the last render cannot prevent reuse.
-Reading another page's HTML through arbitrary application code is not tracked.
-
-To refresh every page for one publish, use `dotnet publish -p:KijiForce=true`.
-Successful renders refresh the cache for later publishes; pages rendering an
-`AlwaysRender` component remain ineligible for reuse.
-
-`AlwaysRender` affects published HTML reuse, not image processing caches. It does not
-register external file watchers or poll services. Restart development when untracked
-external data changes. See [external data](../incremental-builds/#render-pages-that-use-external-data).
+Use it for untracked external state. For a one-time refresh of all pages, use
+`dotnet publish -p:KijiForce=true`. See the [external data guide](../incremental-builds/#render-pages-that-use-external-data)
+for an example and development behavior.
 
 ## Generated files
 

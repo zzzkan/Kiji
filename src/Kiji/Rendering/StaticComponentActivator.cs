@@ -9,8 +9,6 @@ internal sealed class StaticComponentActivator(IServiceProvider services) : ICom
 {
     private static readonly ConcurrentDictionary<Type, (ObjectFactory Create, bool AlwaysRender)> Factories = new();
 
-    internal static void ClearCache() => Factories.Clear();
-
     public IComponent CreateInstance(Type componentType)
     {
         if (componentType == typeof(ImportMap))
@@ -27,8 +25,6 @@ internal sealed class StaticComponentActivator(IServiceProvider services) : ICom
                 type.IsDefined(typeof(AlwaysRenderAttribute), inherit: true)));
         if (alwaysRender)
         {
-            // Layouts and nested/dynamic children share the output page's recorder.
-            // Persisting it as uncacheable makes the next publish render this tree again.
             PageRenderContext.Current?.Dependencies?.DisableCache();
         }
         return (IComponent)create(services, null);

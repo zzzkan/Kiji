@@ -27,19 +27,10 @@ public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : ICla
             @attribute [AlwaysRender]
             <p>@File.ReadAllText("value.txt")</p>
             """);
-        PackagedSiteFixture.Write(site, "Nested.razor", "@page \"/nested/\"\n<Wrapper />");
-        PackagedSiteFixture.Write(site, "Wrapper.razor", "<Volatile />");
+        PackagedSiteFixture.Write(site, "Nested.razor", "@page \"/nested/\"\n<DynamicComponent Type=\"typeof(Volatile)\" />");
         PackagedSiteFixture.Write(site, "Volatile.razor", """
             @attribute [AlwaysRender]
-            <p>@value</p>
-            @code {
-                private string value = "";
-                protected override async Task OnInitializedAsync()
-                {
-                    await Task.Yield();
-                    value = File.ReadAllText("value.txt");
-                }
-            }
+            <p>@File.ReadAllText("value.txt")</p>
             """);
         PackagedSiteFixture.Write(site, "WithLayout.razor", "@page \"/layout/\"\n@layout VolatileLayout\n<p>Layout page</p>");
         PackagedSiteFixture.Write(site, "VolatileLayout.razor", """
@@ -51,6 +42,12 @@ public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : ICla
 
         for (var round = 1; round <= 4; round++)
         {
+            if (round == 2)
+            {
+                // Restore from the publish cache without either generated output directory.
+                Directory.Delete(Path.Combine(site, "dist"), recursive: true);
+                Directory.Delete(Path.Combine(site, "obj/Release/net10.0/kiji/site"), recursive: true);
+            }
             var value = $"external-value-{round}";
             PackagedSiteFixture.Write(site, "value.txt", value);
             await fixture.PublishAsync(site, round == 3 ? ["-p:KijiForce=true"] : []);
@@ -66,7 +63,7 @@ public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : ICla
     [Fact]
     public async Task ProjectDirectory_IsSharedByPublishServeWatchAndCleanOutsideTheProject()
     {
-        var site = fixture.CreateSite(Path.Combine(nameof(ProjectDirectory_IsSharedByPublishServeWatchAndCleanOutsideTheProject), "site"));
+        var site = fixture.CreateSite(Path.Combine("project-directory", "site"));
         var parent = Path.GetDirectoryName(site)!;
         var project = Path.Combine(site, "Site.csproj");
         File.WriteAllText(project, File.ReadAllText(project).Replace("</Project>",
@@ -362,7 +359,7 @@ public sealed class PackagedStaticAssetTests(PackagedSiteFixture fixture) : ICla
     [Fact]
     public async Task Publish_WorkerCompressionAndManifestStayCorrectAcrossOptionChanges()
     {
-        var site = fixture.CreateSite(nameof(Publish_WorkerCompressionAndManifestStayCorrectAcrossOptionChanges), assets: true, worker: true);
+        var site = fixture.CreateSite("worker-options", assets: true, worker: true);
         foreach (var compressed in new[] { true, false, true })
         {
             await fixture.PublishAsync(site, compressed ? [] : ["-p:CompressionEnabled=false"]);

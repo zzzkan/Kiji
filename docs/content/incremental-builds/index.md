@@ -52,26 +52,16 @@ When those values affect HTML, mark the component that uses them:
 <p>@Environment.GetEnvironmentVariable("SITE_ANNOUNCEMENT")</p>
 ```
 
-Import `Kiji` in `_Imports.razor`. `AlwaysRender` works on pages, layouts, and child
-components, and is inherited by derived components. Any page that renders the marked
-component is regenerated on every publish, including through nested or dynamic children.
-A link to that page does not make the linking page regenerate.
+Import `Kiji` in `_Imports.razor`. Any page rendering the marked component is regenerated
+on every publish. This also works in layouts and child components. If external state
+controls whether a child appears, mark the parent reading that state.
 
-Place the attribute on a component that is always reached when external state can affect
-the output. For example, if an external flag determines whether to show a child, mark
-the component reading that flag; a child that was absent from the last render cannot
-disable reuse. Independent reads of another page's generated HTML are not tracked.
+For a one-time refresh of all pages, use `dotnet publish -p:KijiForce=true`.
+Later publishes can reuse those results; `AlwaysRender` pages continue to render.
 
-To refresh every page for one publish, use `dotnet publish -p:KijiForce=true`.
-Successful renders refresh the cache for later publishes. `AlwaysRender` pages
-remain ineligible for reuse.
-Without one of these controls, an untracked external change can leave cached HTML stale.
-
-These controls govern published HTML reuse. Image processors still need correct cache
-identities. They do not watch external files or poll services; restart the development
-server when untracked external data changes. Markdown sources retain their built-in
-tracking and development watchers. Custom content can continue to use stable
-`ContentEntry<T>` IDs and digests; build cross-item indexes through `UseContentSource`.
+These controls affect HTML reuse. They do not clear image caches or watch external
+data; restart the development server when that data changes. For tracked custom content,
+use [`UseContentSource` with item digests](../api-reference/#content-sources-and-contentdictionary).
 
 ## Cache locations
 

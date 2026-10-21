@@ -48,6 +48,10 @@ located through `dotnet nuget locals global-packages --list`. This respects
 A restore-only Web SDK project reads dependency versions from the selected Kiji
 nuspec and fills any missing dependencies, including implicit SDK packages, in
 that global cache. It does not compile a second site or copy native binaries.
+CI and release set `NUGET_PACKAGES` to a shared directory under `runner.temp`
+for the whole job. This keeps the cache on the checkout volume, including Windows
+runners whose user profile and checkout are on different drives. It is the same
+cache for the solution build and every package scenario, not a per-test restore.
 
 [PackageDownload](https://learn.microsoft.com/nuget/consume-packages/packagedownload-functionality)
 installs just the selected Kiji package in `packages`, without
@@ -70,6 +74,11 @@ Linux device/inode IDs for every emitted SkiaSharp native file; a silent fallbac
 to independent copies fails verification. The filesystem must support hard links
 (NTFS on Windows; normal Linux CI filesystems). Summing file lengths double-counts
 hard links and is not a physical disk-usage measurement.
+
+The consumer props explicitly use `BaseIntermediateOutputPath="obj/"` for all
+fixture projects. SDK 10.0.402's watch tooling reads the static-asset manifest path
+without normalizing the default `obj\` separator on Unix; using a forward slash
+keeps scoped CSS hot reload working on both platforms without changing the layout.
 
 Success, assertion failure and command timeout all delete the workspace, feed
 and private Kiji cache. A forced termination can leave at most this one

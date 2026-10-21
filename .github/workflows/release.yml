@@ -14,6 +14,9 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    env:
+      # Use the same shared-cache layout as CI, on the checkout volume.
+      NUGET_PACKAGES: ${{ runner.temp }}/nuget-packages
     permissions:
       contents: read
       id-token: write

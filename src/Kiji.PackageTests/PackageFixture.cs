@@ -114,6 +114,8 @@ public sealed class PackageFixture : IAsyncLifetime
             Write("Directory.Build.props", $"""
                 <Project><PropertyGroup>
                   <TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+                  <!-- SDK 10.0.402 watch reads manifest paths without normalizing the default obj\ separator on Unix. -->
+                  <BaseIntermediateOutputPath>obj/</BaseIntermediateOutputPath>
                   <RestorePackagesPath>{SecurityElement.Escape(Packages)}</RestorePackagesPath>
                   <RestoreFallbackFolders>{SecurityElement.Escape(_globalPackages)}</RestoreFallbackFolders>
                   <CreateHardLinksForCopyLocalIfPossible>true</CreateHardLinksForCopyLocalIfPossible>
@@ -204,7 +206,9 @@ public sealed class PackageFixture : IAsyncLifetime
         foreach (var target in native)
         {
             var relative = target[target.LastIndexOf("runtimes" + Path.DirectorySeparatorChar, StringComparison.Ordinal)..].Replace(Path.DirectorySeparatorChar, '/');
-            Assert.Equal(nativeIdentities[relative], await IdentityAsync(target));
+            var identity = await IdentityAsync(target);
+            Assert.True(nativeIdentities[relative] == identity,
+                $"SkiaSharp was copied instead of hard-linked: {target}\nGlobal cache: {_globalPackages}\nThe cache and workspace must be on the same volume. Expected file ID {nativeIdentities[relative]}, got {identity}.");
         }
     }
 

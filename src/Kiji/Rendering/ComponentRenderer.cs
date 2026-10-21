@@ -1,7 +1,9 @@
 using System.Text.Encodings.Web;
 using System.Text.Unicode;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 
@@ -11,8 +13,11 @@ internal sealed class ComponentRenderer(IServiceProvider services)
 {
     internal static void AddComponentRenderingServices(IServiceCollection services)
     {
-        // Provider-backed logging adds setup cost to every page's HtmlRenderer.
-        services.AddLogging();
+        // MSBuild suppresses ordinary stdout at publish's default verbosity.
+        services.AddLogging(logging => logging
+            .AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Warning)
+            .SetMinimumLevel(LogLevel.Warning));
+        services.TryAddScoped<IErrorBoundaryLogger, StaticErrorBoundaryLogger>();
         services.AddSingleton(_ => HtmlEncoder.Create(UnicodeRanges.All));
         services.AddScoped(static provider =>
         {

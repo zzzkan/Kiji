@@ -8,6 +8,7 @@ and HTTP on Windows and Linux.
 | Scenario | What it checks | Why a package test? |
 | --- | --- | --- |
 | Publish, edit, clean | Razor/Markdown/images, library assets, updated output, `KijiForce`, service-worker hashes, compressed HTML and cleanup | Exercises the shipped MSBuild targets and native dependencies in a real consumer. |
+| Console logging | Warning and higher logs, including handled `ErrorBoundary` exceptions, appear during ordinary publish | MSBuild's output filtering must retain diagnostics without failing a successful render. |
 | Watch and reload (Razor/Web SDKs) | JS, Razor and scoped CSS edits reach the browser with one reload | Requires the SDK's `dotnet watch` integration and generated asset manifests. |
 
 `PackageFixture` packs Kiji once (or uses `KIJI_TEST_PACKAGE` from CI), prepares

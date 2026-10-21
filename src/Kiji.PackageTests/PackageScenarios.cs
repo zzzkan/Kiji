@@ -12,6 +12,40 @@ namespace Kiji.PackageTests;
 public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<PackageFixture>
 {
     [Fact]
+    public Task Publish_ShowsHandledBoundaryWarningByDefault() => fixture.ScenarioAsync(async () =>
+    {
+        fixture.Write("Site/BoundaryPage.razor", """
+            @page "/boundary/"
+            <ErrorBoundary>
+                <ChildContent><FailingChild /></ChildContent>
+                <ErrorContent><p>Boundary fallback</p></ErrorContent>
+            </ErrorBoundary>
+            """);
+        fixture.Write("Site/FailingChild.razor", """
+            @using Microsoft.Extensions.Logging
+            @inject ILogger<FailingChild> Logger
+            @code {
+                protected override void OnInitialized()
+                {
+                    Logger.LogInformation("boundary-publish-information");
+                    Logger.LogError("boundary-publish-error");
+                    Logger.LogCritical("boundary-publish-critical");
+                    throw new InvalidOperationException("boundary-publish-warning");
+                }
+            }
+            """);
+
+        var output = await fixture.PublishAsync();
+
+        Assert.Contains("boundary-publish-warning", output, StringComparison.Ordinal);
+        Assert.Contains("boundary-publish-error", output, StringComparison.Ordinal);
+        Assert.Contains("boundary-publish-critical", output, StringComparison.Ordinal);
+        Assert.DoesNotContain("boundary-publish-information", output, StringComparison.Ordinal);
+        Assert.Contains("Microsoft.AspNetCore.Components.Web.ErrorBoundary[100]", output, StringComparison.Ordinal);
+        Assert.Contains("Boundary fallback", Read("boundary/index.html"), StringComparison.Ordinal);
+    });
+
+    [Fact]
     public Task Publish_Edit_AndClean() => fixture.ScenarioAsync(async () =>
     {
         await fixture.PublishAsync();

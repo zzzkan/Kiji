@@ -26,7 +26,7 @@ function New-Fixture([string] $name) {
     New-Item -ItemType Directory -Path (Join-Path $root 'content') -Force | Out-Null
     @"
 <Project Sdk="Microsoft.NET.Sdk.Razor">
-  <PropertyGroup><OutputType>Exe</OutputType><RootNamespace>Portable</RootNamespace></PropertyGroup>
+  <PropertyGroup><OutputType>Exe</OutputType><UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier><RootNamespace>Portable</RootNamespace></PropertyGroup>
   <ItemGroup><PackageReference Include="Kiji" Version="$version" /></ItemGroup>
   <ItemGroup><Content Update="wwwroot/excluded.txt" CopyToPublishDirectory="Never" /></ItemGroup>
 </Project>

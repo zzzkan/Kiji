@@ -79,9 +79,12 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         using (var reader = new StreamReader(gzip))
         { Assert.Equal(Read("index.html"), await reader.ReadToEndAsync()); }
 
+        var intermediatePath = await fixture.DotnetAsync("msbuild", "Site/PackageSite.csproj", "-p:Configuration=Release", "-getProperty:IntermediateOutputPath");
+        var stagingDirectory = Path.Combine(fixture.Site, intermediatePath.Trim(), "kiji", "site");
+        Assert.True(Directory.Exists(stagingDirectory));
         await fixture.DotnetAsync("clean", "Site/PackageSite.csproj", "-c", "Release");
         Assert.False(Directory.Exists(Path.Combine(fixture.Site, ".kiji")));
-        Assert.False(Directory.Exists(Path.Combine(fixture.Site, "obj/Release/net10.0/kiji/site")));
+        Assert.False(Directory.Exists(stagingDirectory));
     });
 
     [Theory]

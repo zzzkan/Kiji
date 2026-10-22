@@ -28,15 +28,10 @@ function Read-Identity([string] $dll) {
     if ($LASTEXITCODE) { throw "Cannot inspect $dll" }
     return $json | ConvertFrom-Json
 }
-function Get-SiteTargetPath([string] $configuration) {
-    $targetPath = & dotnet msbuild (Join-Path $Site 'Portable.csproj') "-p:Configuration=$configuration" "-p:RestorePackagesPath=$RunRoot/packages" -getProperty:TargetPath
-    if ($LASTEXITCODE) { throw "Cannot locate the $configuration site assembly." }
-    return $targetPath.Trim()
-}
 function Invoke-Mode([string] $label, [string] $verb, [string] $configuration, [bool] $symbols, [string[]] $extra = @()) {
     & dotnet $verb $Site -c $configuration -p:SourceRevisionId=build-modes "-p:RestorePackagesPath=$RunRoot/packages" @extra > (Join-Path $RunRoot "$label.log") 2>&1
     if ($LASTEXITCODE) { throw "Build mode failed: $label" }
-    $identity = Read-Identity (Get-SiteTargetPath $configuration)
+    $identity = Read-Identity (Join-Path $Site "bin/$configuration/net10.0/Portable.dll")
     if ($identity.Symbols -ne $symbols) { throw "Wrong symbol mode: $label" }
     $identity | ConvertTo-Json | Set-Content (Join-Path $RunRoot "$label-identity.json")
     return $identity
@@ -133,7 +128,7 @@ try {
         }
     }
     if (-not $ready) { throw 'Watch did not serve the expected article.' }
-    $identity = Read-Identity (Get-SiteTargetPath 'Debug')
+    $identity = Read-Identity (Join-Path $Site 'bin/Debug/net10.0/Portable.dll')
     if (-not $identity.Symbols -or $identity.PdbPath.StartsWith('/_/source')) { throw 'Watch did not retain Debug symbols and paths.' }
     $identity | ConvertTo-Json | Set-Content (Join-Path $RunRoot 'mode-watch-identity.json')
 

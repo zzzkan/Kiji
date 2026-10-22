@@ -12,9 +12,7 @@ and HTTP on Windows and Linux.
 | Windows cleanup | Cleanup waits for a held file lock to be released | Covers the workspace cleanup used after stopping the consumer's process tree. |
 
 `PackageFixture` packs Kiji once (or uses `KIJI_TEST_PACKAGE` from CI), prepares
-the consumer and cleans up. `Fixture/` holds its source template. The site uses
-`UseCurrentRuntimeIdentifier` so publish, image processing, watch and cleanup
-exercise the current SDK's runtime-specific build output.
+the consumer and cleans up. `Fixture/` holds its source template.
 `RunningCommand` runs `dotnet`, includes a bounded log tail in failures and
 stops the processes it started.
 

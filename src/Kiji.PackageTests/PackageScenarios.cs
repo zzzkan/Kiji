@@ -79,10 +79,7 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         using (var reader = new StreamReader(gzip))
         { Assert.Equal(Read("index.html"), await reader.ReadToEndAsync()); }
 
-        // MSBuild paths can contain backslashes on Unix; use Kiji's normalized path.
-        var stagingDirectory = (await fixture.DotnetAsync("msbuild", "Site/PackageSite.csproj", "-p:Configuration=Release",
-            "-t:KijiResolveStagingDir", "-getProperty:_KijiStagingDir")).Trim();
-        Assert.True(Directory.Exists(stagingDirectory), $"Missing staging directory: {stagingDirectory}");
+        var stagingDirectory = Assert.Single(Directory.GetDirectories(Path.Combine(fixture.Site, "obj"), "site", SearchOption.AllDirectories));
         await fixture.DotnetAsync("clean", "Site/PackageSite.csproj", "-c", "Release");
         Assert.False(Directory.Exists(Path.Combine(fixture.Site, ".kiji")));
         Assert.False(Directory.Exists(stagingDirectory));

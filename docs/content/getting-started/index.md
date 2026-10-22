@@ -84,6 +84,12 @@ Open `MySite.csproj` and change its first line to use the Razor SDK:
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 ```
 
+In its `<PropertyGroup>`, select native image libraries for the current machine:
+
+```xml
+<UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier>
+```
+
 ### Build the smallest site
 
 Replace `Program.cs` with the site definition:

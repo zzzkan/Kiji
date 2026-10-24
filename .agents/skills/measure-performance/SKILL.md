@@ -95,6 +95,9 @@ it is not a Kiji dependency, solution project or packaged build task.
   file sets/bytes must remain identical and retained sidecars must decode correctly.
   Report physical output storage separately from HTTP transfer sizes; sidecars
   increase disk usage but reduce transfer only when the host negotiates them.
+- Older packages compress by default; current packages make compression opt-in.
+  Across that change, set the same `CompressionEnabled` in both property sets.
+  The changed default is not an optimization.
 - When comparing against a version without fingerprint URL materialization, use
   `AllowNewFingerprintAliases` explicitly. Added ordinary files must correspond
   to SDK endpoints carrying both a label and fingerprint and must match that

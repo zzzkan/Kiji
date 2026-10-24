@@ -87,11 +87,17 @@ Check that the host serves `about/index.html` for `/about/` and uses `404.html`,
 
 ## Compression
 
-Publishing also writes `.gz` and `.br` copies of compressible files for servers configured
-to send precompressed files, such as nginx with `gzip_static`. GitHub Pages, Netlify,
-Vercel, and Cloudflare Pages compress responses themselves, so skip the copies there by
-adding this to the project's `<PropertyGroup>`:
+Kiji can also precompress your site. Add this to the project's `<PropertyGroup>`:
 
 ```xml
-<CompressionEnabled>false</CompressionEnabled>
+<CompressionEnabled>true</CompressionEnabled>
 ```
+
+Publishing then writes `.gz` and `.br` copies of compressible files next to the originals.
+Servers configured to send precompressed files, such as nginx with `gzip_static` or Caddy
+with `precompressed`, send these copies as is instead of compressing each response. The
+copies are made at publish time, so publish again after changing the site rather than
+editing files in `dist/`.
+
+GitHub Pages, Netlify, Vercel, and Cloudflare Pages compress responses themselves, so
+leave the setting off for them; it is off by default.

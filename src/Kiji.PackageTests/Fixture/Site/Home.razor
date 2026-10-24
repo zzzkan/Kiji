@@ -2,6 +2,12 @@
 @inject ContentDictionary<MarkdownContent<Article>> Articles
 <PageTitle>@title</PageTitle>
 <h1>Package consumer</h1>
+<ul>
+    @foreach (var article in Articles)
+    {
+        <li>@article.Value.FrontMatter.Title</li>
+    }
+</ul>
 <Library.Card />
 <ExternalValue />
 <a id="asset" href="@Assets["app.js"]">asset</a>

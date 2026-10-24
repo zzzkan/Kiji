@@ -143,10 +143,13 @@
     <!-- dist is the documented project-local publish directory. Exclude it from
          default items as well as dotnet watch: Watch=false alone still makes the
          SDK enumerate and evaluate the generated site on every startup. Keep this
-         rooted at the project so wwwroot/dist and content/dist remain inputs.
+         rooted at the project so nested dist directories such as wwwroot/dist remain inputs.
          Explicit KijiSiteFile items below still publish the complete staged site.
          Do not infer other output paths from PublishDir: a later watch invocation
-         does not retain a previous publish command's -o argument. -->
+         does not retain a previous publish command's -o argument. The SDK already
+         excludes bin/obj and hidden directories, including .kiji.
+         Kiji excludes only what it generates. Content directories are chosen in C#
+         and authored by the site, so the site excludes them in its project file. -->
     <DefaultItemExcludes>$(DefaultItemExcludes);dist/**</DefaultItemExcludes>
   </PropertyGroup>
 

@@ -94,13 +94,28 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
     [Theory]
     [InlineData("Microsoft.NET.Sdk.Razor")]
     [InlineData("Microsoft.NET.Sdk.Web")]
-    public Task Watch_RazorAndAssets_Reload(string sdk) => fixture.ScenarioAsync(async () =>
+    public Task Watch_ContentRazorAndAssets_Reload(string sdk) => fixture.ScenarioAsync(async () =>
     {
         await fixture.WatchAsync(async client =>
         {
             var html = await client.GetStringAsync("/kiji/");
             Assert.Contains("/kiji/_kiji/livereload.js", html, StringComparison.Ordinal);
             Assert.DoesNotContain("aspnetcore-browser-refresh.js", html, StringComparison.Ordinal);
+            await ReloadAsync(client, () => fixture.Replace("Site/content/article.md", "Original body.", "Edited body."));
+            Assert.Contains("Edited body.", await client.GetStringAsync("/kiji/"), StringComparison.Ordinal);
+            Assert.Contains("Edited body.", await client.GetStringAsync("/kiji/articles/article/"), StringComparison.Ordinal);
+            await ReloadAsync(client, () => fixture.Write("Site/content/posts/added.md", """
+                ---
+                title: Added article
+                ---
+                Added body.
+                """));
+            Assert.Contains("Added article", await client.GetStringAsync("/kiji/"), StringComparison.Ordinal);
+            Assert.Contains("Added body.", await client.GetStringAsync("/kiji/articles/added/"), StringComparison.Ordinal);
+            await ReloadAsync(client, () => File.Delete(Path.Combine(fixture.Site, "content", "posts", "added.md")));
+            Assert.DoesNotContain("Added article", await client.GetStringAsync("/kiji/"), StringComparison.Ordinal);
+            using var removed = await client.GetAsync("/kiji/articles/added/");
+            Assert.Equal(HttpStatusCode.NotFound, removed.StatusCode);
             await ReloadAsync(client, () => fixture.Replace("Site/wwwroot/app.js", "original", "modified"));
             Assert.Contains("modified", await client.GetStringAsync(AssetUrl(html)), StringComparison.Ordinal);
             await ReloadAsync(client, () => fixture.Replace("Site/Home.razor", "Package consumer", "Updated Razor"));

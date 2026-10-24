@@ -2,8 +2,9 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier>
     <RootNamespace>Kiji.Docs</RootNamespace>
+    <UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier>
+    <DefaultItemExcludes>$(DefaultItemExcludes);content/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
@@ -11,8 +12,6 @@
   </ItemGroup>
 
   <Import Project="../src/Kiji/MSBuild/Kiji.targets" />
-
-  <!-- This explicit import runs before the SDK computes its default PublishDir. -->
   <PropertyGroup Condition="'$(_KijiIsSiteApp)' == 'true' and '$(UseArtifactsOutput)' != 'true'">
     <PublishDir Condition="'$(PublishDir)' == ''">$(MSBuildProjectDirectory)/dist/</PublishDir>
   </PropertyGroup>

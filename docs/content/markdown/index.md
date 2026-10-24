@@ -54,6 +54,21 @@ app.UseMarkdownContent<FrontMatter>(options =>
 });
 ```
 
+When the content directory is inside the project, exclude it from the SDK's default
+items, as in [Getting started](../getting-started/#create-the-project). Otherwise
+every build and `dotnet watch` start enumerates every file in it. Kiji still loads and
+watches the files, so edits, additions and deletions reload the development server.
+The SDK then neither compiles C# or Razor files there nor shows them in Visual Studio's
+Solution Explorer unless Show All Files is on, so keep components outside the directory:
+
+```xml
+<PropertyGroup>
+  <DefaultItemExcludes>$(DefaultItemExcludes);content/**</DefaultItemExcludes>
+</PropertyGroup>
+```
+
+The pattern is relative to the project, so `content/**` does not exclude `wwwroot/content/`.
+
 ## Use a site-specific model
 
 To give pages a model with a slug or validated values, project each file:

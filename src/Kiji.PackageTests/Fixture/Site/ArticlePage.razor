@@ -1,0 +1,17 @@
+@page "/articles/{Slug}/"
+@inject ContentDictionary<MarkdownContent<Article>> Articles
+<PageTitle>@title</PageTitle>
+@((MarkupString)body)
+@code {
+    [Parameter] public string Slug { get; set; } = "";
+    [Parameter] public string ContentKey { get; set; } = "";
+    private string title = "";
+    private string body = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var article = Articles[ContentKey];
+        title = article.FrontMatter.Title;
+        body = await article.RenderAsync();
+    }
+}

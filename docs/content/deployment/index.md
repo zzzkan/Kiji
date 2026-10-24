@@ -82,15 +82,15 @@ On Netlify, Vercel, Cloudflare Pages, and similar services, use `dotnet publish`
 build command and `dist` as the output directory. The build environment needs the .NET 10
 SDK; otherwise, publish in your own CI and upload `dist/`.
 
-Check that the host serves `404.html` for unmatched paths, which `AddNotFoundPage` writes,
-and `about/index.html` for `/about/`.
+Check that the host serves `about/index.html` for `/about/` and uses `404.html`, written by
+`AddNotFoundPage`, for unmatched paths.
 
 ## Compression
 
-Publishing also writes `.gz` and `.br` copies of compressible files for servers that serve
-precompressed files, such as nginx with `gzip_static`. GitHub Pages, Netlify, Vercel, and
-Cloudflare Pages compress responses themselves, so skip the copies there by adding this to
-the project's `<PropertyGroup>`:
+Publishing also writes `.gz` and `.br` copies of compressible files for servers configured
+to send precompressed files, such as nginx with `gzip_static`. GitHub Pages, Netlify,
+Vercel, and Cloudflare Pages compress responses themselves, so skip the copies there by
+adding this to the project's `<PropertyGroup>`:
 
 ```xml
 <CompressionEnabled>false</CompressionEnabled>

@@ -125,8 +125,8 @@ See [Layouts and the document head](../concepts/#layouts-and-the-document-head).
 ### Static assets
 
 `Assets["css/app.css"]`, inherited from `ComponentBase`, returns the asset's public URL
-with the base path and, when available, a fingerprint. Unknown paths are returned unchanged. URLs
-written directly in CSS, JavaScript, or HTML are not rewritten.
+with the base path and, when available, a fingerprint. Unknown paths are returned
+unchanged. URLs written directly in CSS, JavaScript, or HTML are not rewritten.
 
 Place Blazor's `<ImportMap />` in `HeadContent` before scripts that use JavaScript imports.
 Its `ImportMapDefinition` parameter accepts a custom map. See the
@@ -257,7 +257,7 @@ app.AddRssFeed(services => services
     .Select(post => new FeedItem(post.Title, post.Description, post.Date, post.RelativePath)));
 ```
 
-Link the feed among the shared head tags so that readers can find it:
+Link the feed among the shared head tags so that feed readers can find it:
 
 ```razor
 <link rel="alternate" type="application/rss+xml" title="@Site.Name"
@@ -301,9 +301,9 @@ output such as `posts/hello/index.html`, using the operating system's directory 
 
 ## Unsupported Blazor features
 
-Kiji renders static HTML without a Blazor runtime. Event handlers such as `@onclick`,
-`OnAfterRender`, and `OnAfterRenderAsync` never run; use a `<script>` element or a
-JavaScript module for browser behavior.
+Kiji renders static HTML without a Blazor runtime. Event handlers such as `@onclick`
+never run in the browser, and `OnAfterRender` and `OnAfterRenderAsync` never run at all.
+Use a `<script>` element or a JavaScript module for browser behavior.
 
 ### NavigationManager and NavLink
 

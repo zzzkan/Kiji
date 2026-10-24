@@ -11,8 +11,8 @@ together in plain HTML, ready for any static host.
 
 ### 🧰 Your .NET workflow
 
-Razor pages, layouts, and C# models. Preview with `dotnet watch`; ship with
-`dotnet publish`.
+Write pages, layouts, and models in Razor and C#. Preview with `dotnet watch` and ship
+with `dotnet publish`.
 
 ### 📦 Publishing essentials included
 
@@ -20,7 +20,7 @@ Typed Markdown, responsive WebP images, RSS, and sitemaps in one package.
 
 ### ⚡ Work on what changed
 
-Live browser reloads while you write; unchanged pages can be reused when you publish.
+The browser reloads while you write, and publishing reuses unchanged pages.
 
 ### 🔄 Make it yours
 
@@ -29,7 +29,7 @@ Customize Markdown, transform HTML, or bring your own content source and image p
 ### 🔕 Static by design
 
 The output needs no .NET server or Blazor runtime. Use JavaScript for browser
-interactivity; Razor event handlers such as `@onclick` are not included.
+interactivity; Razor event handlers such as `@onclick` do not run in the browser.
 
 ## Getting started
 
@@ -59,7 +59,7 @@ Start the development server and open <http://localhost:8080>:
 dotnet watch
 ```
 
-The development server reflects content changes immediately and reloads your browser automatically.
+The browser reloads as you edit content and components.
 
 Stop the development server with `Ctrl+C`, then generate the static site in `dist/`:
 

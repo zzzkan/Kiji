@@ -65,7 +65,7 @@ Open `MySite.csproj` and change its first line to use the Razor SDK:
 ```
 
 In its `<PropertyGroup>`, add this setting. Without it, every build copies Kiji's native
-image library for all platforms, several hundred megabytes, into `bin/`:
+image library for every platform into `bin/`, several hundred megabytes in total:
 
 ```xml
 <UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier>
@@ -106,8 +106,8 @@ dotnet watch
 
 ![Smallest site](./smallest-site.png)
 
-The browser reloads when you change a component or content file. `Program.cs` is read
-only at startup: after changing it, press `Ctrl+R` in the `dotnet watch` terminal.
+The browser reloads when you change a component or content file. Changes to `Program.cs`
+apply only after a restart: press `Ctrl+R` in the `dotnet watch` terminal.
 
 ### Add a layout and CSS
 
@@ -265,7 +265,8 @@ public sealed record BlogPost(
 }
 ```
 
-Create `Pages/PostPage.razor`. `Slug` supplies the route value, while `ContentKey` tells the component which Markdown item to render:
+Create `Pages/PostPage.razor`. `Slug` supplies the route value, and `ContentKey` tells the
+component which Markdown item to render:
 
 ```razor
 @page "/posts/{Slug}/"

@@ -35,8 +35,8 @@ components as you prefer. Add `.kiji/` and `dist/` to `.gitignore`.
 | `dotnet publish` | Write the static site to `dist/`, reusing unchanged pages.        |
 | `dotnet clean`   | Remove build output and the `.kiji/` cache.                       |
 
-`Program.cs` is read only at startup: after changing it, press `Ctrl+R` in the
-`dotnet watch` terminal to restart. To use another address, for example when port 8080
+Changes to `Program.cs` apply only after a restart: press `Ctrl+R` in the `dotnet watch`
+terminal. To use another address, for example when port 8080
 is in use:
 
 ```pwsh
@@ -45,7 +45,7 @@ dotnet watch -- --urls http://127.0.0.1:5000
 
 ## Pages and routes
 
-Each component with an `@page` route becomes a page: `/about/` becomes `about/index.html`.
+Each component with an `@page` route becomes a page; `/about/` is written to `about/index.html`.
 Parameterized routes such as `/posts/{Slug}/` get their values from
 `AddPageParameters<TPage>`. See [Routing](../routing/).
 
@@ -62,8 +62,8 @@ page-specific tags in one, for example through a shared component as in
 ## Content
 
 Pages inject `ContentDictionary<T>` to list content or look up an item by key. Markdown
-provides typed front matter and an HTML body, and images beside it become responsive
-images. Content creates no pages by itself: page parameters choose which items get pages.
+provides typed front matter and an HTML body, and images beside a Markdown file become
+responsive images. Content creates no pages by itself: page parameters choose which items get pages.
 See [Markdown and images](../markdown/).
 
 ## Static assets
@@ -98,6 +98,6 @@ files. See [Generated files](../api-reference/#generated-files).
 
 ## Static output
 
-The output has no Blazor runtime: event handlers such as `@onclick` and
+The output has no Blazor runtime, so event handlers such as `@onclick` and methods such as
 `OnAfterRenderAsync` never run. Add browser behavior with JavaScript in `wwwroot/`. See
 [Unsupported Blazor features](../api-reference/#unsupported-blazor-features).

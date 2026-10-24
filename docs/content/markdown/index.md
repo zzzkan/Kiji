@@ -37,8 +37,9 @@ This registers `ContentDictionary<MarkdownContent<FrontMatter>>`. It creates no 
 itself; map items to pages with `AddPageParameters<TPage>` as in
 [Getting started](../getting-started/#add-a-markdown-page).
 
-YAML names are camel case, and unknown properties are ignored. A missing or malformed
-front matter block, or a value that does not fit your class, fails the build.
+Front matter keys are camel case, such as `publishedAt` for `PublishedAt`, and unknown keys
+are ignored. A missing or malformed front matter block, or a value that does not fit your
+class, fails the build.
 
 ## Choose the files
 
@@ -133,8 +134,8 @@ content/
 
 For `.jpg`, `.jpeg`, `.png`, `.gif`, and `.webp` files, Kiji writes WebP versions beside
 the page's `index.html`: 320, 640, 960, and 1280 pixels wide when the source is wider,
-plus one at the source width, up to 1920 pixels. The `<img>` gets a `srcset`, the source
-dimensions, and lazy loading after the first image.
+plus one at the source width, up to 1920 pixels. The `<img>` gets a `srcset` and the source
+dimensions, and every image after the first loads lazily.
 
 The output is static: animated images keep only their first frame, metadata such as EXIF
 is removed, and colors are converted to sRGB. To keep an image as is, put it in `wwwroot/`

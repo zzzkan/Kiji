@@ -12,7 +12,7 @@ nothing it depends on has changed, and always produce a complete site.
 | Change | Work |
 | --- | --- |
 | Markdown changes | Render pages that read that item or its collection. |
-| Content is added, removed, or reordered | Render collection readers, and add or remove pages. |
+| Content is added, removed, or reordered | Render pages that read the whole collection, and add or remove pages. |
 | Page parameters change | Render affected pages. |
 | A local image changes | Render pages that use it and update its variants. |
 | A static asset changes | Update the asset and pages that link it through `Assets` or `ImportMap`. |
@@ -25,9 +25,8 @@ Feeds, sitemaps, and custom artifacts are regenerated on every publish.
 
 `Posts[ContentKey]` depends on one item. Enumerating a dictionary, reading `Count`, `Keys`,
 or `Values`, or looking up a missing key depends on the whole collection, even if you
-filter afterward. Reads
-in layouts and child components count too: a layout that lists every post makes every
-page depend on all posts.
+filter afterward. Reads in layouts and child components count too: a layout that lists
+every post makes every page depend on all posts.
 
 Pass a content key or another simple value through `AddPageParameters` and look the item
 up while rendering. Passing whole models or arrays works but disables reuse for that page;
@@ -69,5 +68,5 @@ dotnet clean
 
 Kiji keeps its publish cache in `.kiji/cache` and development output in `.kiji/dev-site`.
 Saving the cache between CI runs often does not pay off, because transferring it takes time
-and code or package changes render every page anyway. Measure total CI time with and
-without it before relying on one.
+and code or package changes render every page anyway. Before relying on a CI cache,
+compare total CI time with and without it.

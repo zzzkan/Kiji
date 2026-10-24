@@ -30,8 +30,8 @@ Port 8080 is taken. Run `dotnet watch -- --urls http://127.0.0.1:5000` to use an
 
 ## Changes to Program.cs have no effect
 
-`Program.cs` is read only at startup, as `dotnet watch` warns with `ENC0118`. Press `Ctrl+R`
-in its terminal to restart.
+`dotnet watch` applies them only after a restart, as its `ENC0118` warning says. Press
+`Ctrl+R` in its terminal.
 
 ## A page loses its stylesheet or head tags
 

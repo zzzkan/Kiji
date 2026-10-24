@@ -73,32 +73,43 @@ path, and external URLs and parent-directory traversal are not accepted.
 
 ### Pages
 
-#### `AddPages()`
+`StaticSite.Create` automatically discovers all `@page` routes on public, non-abstract
+components in the entry assembly. Fixed routes generate one page with the component's
+default parameter values. Parameterized routes require `AddPageParameters<TPage>`;
+missing registration is an error before rendering.
 
-Finds public, non-abstract components with fixed routes in the entry assembly. Components
-with parameterized routes are ignored. If there is no entry assembly, use the assembly
-overload.
+#### `AddPageAssembly(Assembly assembly)`
 
-#### `AddPages(Assembly assembly)`
+Includes routed components from an additional, non-null assembly. Referenced assemblies
+are not scanned automatically. Repeated registration, including the entry assembly, has
+no additional effect.
 
-Finds fixed routed components in the supplied non-null assembly. Registering the same
-assembly repeatedly has no additional effect.
+#### `AddPageParameters<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)`
 
-#### `AddPages<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)`
-
-Registers parameter sets for an `IComponent` with exactly one parameterized route. The
-factory is deferred until paths and services are ready and runs once per registration per
+Adds parameter sets for the one parameterized route of an `IComponent`, or for its only
+route when that route is fixed. A component can combine fixed routes with one
+parameterized route; its fixed routes still generate one page each with default parameter
+values. Components with several parameterized routes, or with several fixed routes and no
+parameterized route, are rejected. The
+component must belong to the entry assembly or an assembly added with `AddPageAssembly`;
+supplying parameters does not implicitly include an assembly. Registration order does
+not matter. The factory is deferred until paths and services are ready and runs once per registration per
 site snapshot. Its service provider can resolve registered content dictionaries.
 
 Each returned object is the component's complete parameter set. Anonymous objects and
 string/object dictionaries are supported. Names match public writable `[Parameter]`
 properties case-insensitively; route parameter names also build the URL. Values retain
 their .NET types, although route values are formatted invariantly for their URL segment.
-Missing, empty, unknown, or incompatible values fail planning.
+Missing or empty route values, unknown parameter names, and incompatible values fail
+planning. Non-route parameters may be omitted to use the component's defaults.
+`EditorRequired` is not validated by Kiji.
 
 Multiple registrations for the same component are concatenated and an empty sequence is
-allowed. Duplicate output paths fail. Treat supplied objects as read-only for the snapshot;
-Kiji does not clone or dispose them. See [Routing](../routing/) for examples and supported
+allowed, explicitly generating no pages for the receiving route. For a component whose
+only route is fixed, explicit parameter sets replace the default rendering; they do not
+add another default page. Multiple sets for the same fixed route fail with duplicate
+output paths. Treat supplied objects as read-only
+for the snapshot; Kiji does not clone or dispose them. See [Routing](../routing/) for examples and supported
 route templates.
 
 HTML can be reused when parameter values are `null` or have one of these types:
@@ -109,8 +120,8 @@ rendering. See [Incremental builds](../incremental-builds/#pass-stable-page-para
 
 #### `AddNotFoundPage<TPage>()`
 
-Writes a routed `IComponent` as `/404.html`. The component must declare exactly one route
-and cannot also be registered through `AddPages<TPage>`.
+Writes a routed `IComponent` as `/404.html`. The component must belong to a page assembly,
+declare exactly one route, and cannot also receive `AddPageParameters<TPage>`.
 
 ### Layout
 

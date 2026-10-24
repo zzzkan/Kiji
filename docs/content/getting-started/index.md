@@ -104,8 +104,6 @@ app.Info = new SiteInfo
     Name = "My Site",
 };
 
-app.AddPages();
-
 return await app.RunAsync();
 ```
 
@@ -118,7 +116,7 @@ Create `Pages/Home.razor`:
 <p>This page is a Razor component rendered to static HTML.</p>
 ```
 
-`AddPages()` finds public components with fixed `@page` routes. Start the
+Kiji automatically finds public components with `@page` routes in the entry assembly. Start the
 development server:
 
 ```pwsh
@@ -203,7 +201,6 @@ app.Info = new SiteInfo
 };
 
 app.UseDefaultLayout<MainLayout>();
-app.AddPages();
 
 return await app.RunAsync();
 ```
@@ -346,8 +343,7 @@ app.Info = new SiteInfo
 app.UseMarkdownContent<PostFrontMatter, BlogPost>(BlogPost.Create,
     options => options.Directory = "content/posts");
 app.UseDefaultLayout<MainLayout>();
-app.AddPages();
-app.AddPages<Post>(services => services
+app.AddPageParameters<Post>(services => services
     .GetRequiredService<ContentDictionary<BlogPost>>()
     .Select(post => new { post.Value.Slug, ContentKey = post.Key }));
 

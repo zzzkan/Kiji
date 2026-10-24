@@ -113,7 +113,7 @@ public sealed class RunAsyncTests : IDisposable
         {
             var app = CreateApp();
             app.UseContentSource<AssetRenderLog>("force-render-log", _ => [new("log", renders, "stable")]);
-            app.AddPages<AssetPage>(_ => [new { Kind = "first" }, new { Kind = "second" }]);
+            app.AddPageParameters<AssetPage>(_ => [new { Kind = "first" }, new { Kind = "second" }]);
             return app;
         }
         await using (var first = CreateMeasuredApp())
@@ -199,7 +199,7 @@ public sealed class RunAsyncTests : IDisposable
 
     private StaticSite CreateApp()
     {
-        var app = StaticSite.Create([], new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
+        var app = TestSiteFactory.Create([], new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
         app.Info = TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(app, Path.Combine(app.Paths.ProjectDirectory, "static"));
 

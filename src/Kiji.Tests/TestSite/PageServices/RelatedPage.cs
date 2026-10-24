@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Components.Rendering;
 
 namespace Kiji.Tests.TestSite.PageServices;
 
-[Route("/related/{Slug}/")]
+[Route("/service-related/{Slug}/")]
 public sealed class RelatedPage : ComponentBase
 {
     [Inject] public RelatedPosts Related { get; set; } = null!;

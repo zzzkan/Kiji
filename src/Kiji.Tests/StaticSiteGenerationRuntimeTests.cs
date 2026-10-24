@@ -38,7 +38,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
     [InlineData(true)]
     public async Task PublishAsync_NavigationFailsWithoutPublishingPage(bool refresh)
     {
-        await using var app = StaticSite.Create([], new SiteExecutionPaths(_testDir));
+        await using var app = TestSiteFactory.Create([], new SiteExecutionPaths(_testDir));
         app.Info = TestArticleContents.CreateSiteInfoWithBasePath();
         void Navigate(NavigationManager navigation)
         {
@@ -51,7 +51,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
                 navigation.NavigateTo("target/");
             }
         }
-        app.AddPages<NavigationTestPage>(_ => [new { Id = "original", Navigate = (Action<NavigationManager>)Navigate }]);
+        app.AddPageParameters<NavigationTestPage>(_ => [new { Id = "original", Navigate = (Action<NavigationManager>)Navigate }]);
 
         var exception = await Assert.ThrowsAsync<NotSupportedException>(() => app.PublishAsync(_outputDir));
 
@@ -63,7 +63,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
     [Fact]
     public async Task PublishAsync_WritesDynamicBlogAndTagPagesAndFeed()
     {
-        await using var app = StaticSite.Create([], new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
+        await using var app = TestSiteFactory.Create([], new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
         app.Info = TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(app, GetStaticDirectory());
 
@@ -152,14 +152,14 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         await CreateTestImageAsync(Path.Combine(postDir, "photo.png"), 800, 600);
         await CreateTestImageAsync(Path.Combine(postDir, "images", "nested.png"), 400, 300);
 
-        await using var app = StaticSite.Create([], new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
+        await using var app = TestSiteFactory.Create([], new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
         app.Info = TestArticleContents.CreateSiteInfoWithBasePath();
         TestSiteAssets.Bind(app, GetStaticDirectory());
 
         app.UseMarkdownContent<FrontMatter>();
         app.UseContentSource<Post>(static _ => []);
         TestArticleContents.MapSite(app);
-        app.AddPages<MarkdownPostTestPage>(static services => services
+        app.AddPageParameters<MarkdownPostTestPage>(static services => services
             .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
             .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
 

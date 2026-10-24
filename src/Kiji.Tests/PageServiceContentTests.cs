@@ -22,18 +22,18 @@ public sealed class PageServiceContentTests : IDisposable
         var output = Path.Combine(_root, "dist");
         await app.PublishAsync(output);
         Assert.Equal(2, probe.Calls);
-        Assert.Contains("related:second", File.ReadAllText(Path.Combine(output, "related", "first", "index.html")), StringComparison.Ordinal);
-        var stamp = File.GetLastWriteTimeUtc(Path.Combine(output, "related", "first", "index.html"));
+        Assert.Contains("related:second", File.ReadAllText(Path.Combine(output, "service-related", "first", "index.html")), StringComparison.Ordinal);
+        var stamp = File.GetLastWriteTimeUtc(Path.Combine(output, "service-related", "first", "index.html"));
         await app.PublishAsync(output);
         Assert.Equal(2, probe.Calls);
-        Assert.Equal(stamp, File.GetLastWriteTimeUtc(Path.Combine(output, "related", "first", "index.html")));
+        Assert.Equal(stamp, File.GetLastWriteTimeUtc(Path.Combine(output, "service-related", "first", "index.html")));
 
         Change(change);
         await app.PublishAsync(output);
         var incremental = ReadHtml(output);
         Assert.True(probe.Calls > 2);
         Assert.Contains(change == "add" ? "related:second,third" : "related:</p>",
-            incremental[Path.Combine("related", "first", "index.html")], StringComparison.Ordinal);
+            incremental[Path.Combine("service-related", "first", "index.html")], StringComparison.Ordinal);
 
         // A different output can restore the portable cache. Force a clean render.
         await using var fresh = CreateApp(new RelatedProbe());
@@ -64,7 +64,7 @@ public sealed class PageServiceContentTests : IDisposable
             try
             {
                 using var client = new HttpClient { BaseAddress = new Uri(web.Urls.First()) };
-                Assert.Contains("related:second", await client.GetStringAsync("/related/first/"), StringComparison.Ordinal);
+                Assert.Contains("related:second", await client.GetStringAsync("/service-related/first/"), StringComparison.Ordinal);
                 foreach (var change in new[] { "edit", "add", "delete" })
                 {
                     if (change == "delete")
@@ -77,7 +77,7 @@ public sealed class PageServiceContentTests : IDisposable
                     }
                     using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
                     var expected = change == "add" ? "related:third" : "related:</p>";
-                    while (!(await client.GetStringAsync("/related/first/", timeout.Token)).Contains(expected, StringComparison.Ordinal))
+                    while (!(await client.GetStringAsync("/service-related/first/", timeout.Token)).Contains(expected, StringComparison.Ordinal))
                     {
                         await Task.Delay(50, timeout.Token);
                     }
@@ -100,10 +100,10 @@ public sealed class PageServiceContentTests : IDisposable
             try
             {
                 using var client = new HttpClient { BaseAddress = new Uri(web.Urls.First()) };
-                Assert.Contains("related:second", await client.GetStringAsync("/related/first/"), StringComparison.Ordinal);
+                Assert.Contains("related:second", await client.GetStringAsync("/service-related/first/"), StringComparison.Ordinal);
                 includeTags = false;
                 await server.ReloadAfterCodeUpdateAsync();
-                Assert.Contains("related:</p>", await client.GetStringAsync("/related/first/"), StringComparison.Ordinal);
+                Assert.Contains("related:</p>", await client.GetStringAsync("/service-related/first/"), StringComparison.Ordinal);
             }
             finally { await web.StopAsync(); }
         }
@@ -111,7 +111,7 @@ public sealed class PageServiceContentTests : IDisposable
 
     private StaticSite CreateApp(RelatedProbe probe, Func<bool>? includeTags = null)
     {
-        var app = StaticSite.Create([], new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")));
+        var app = TestSiteFactory.Create([], new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")));
         app.Info = new SiteInfo { Name = "Related", BaseUrl = new Uri("https://example.test/") };
         TestSite.TestSiteAssets.Bind(app, Path.Combine(_root, "wwwroot"));
         app.UseMarkdownContent<FrontMatter>();
@@ -119,7 +119,7 @@ public sealed class PageServiceContentTests : IDisposable
             : [.. RelatedTag.Collect(provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>(), probe)
                 .Select(tag => new ContentEntry<RelatedTag>(tag.Name, tag, string.Join("|", tag.Keys)))]);
         app.UseServices(services => services.AddScoped<RelatedPosts>());
-        app.AddPages<RelatedPage>(provider => provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
+        app.AddPageParameters<RelatedPage>(provider => provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
             .Select(post => new
             {
                 Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name),

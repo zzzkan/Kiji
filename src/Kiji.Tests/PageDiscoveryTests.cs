@@ -25,15 +25,14 @@ public sealed class PageDiscoveryTests
     }
 
     [Fact]
-    public void AddPages_EntryAssembly_RegistersThePages()
+    public void Create_EntryAssembly_AutomaticallyDiscoversPages()
     {
-        var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
+        var app = TestSiteFactory.Create([], new SiteExecutionPaths(AppContext.BaseDirectory), includeFixedPages: true);
         app.Info = TestArticleContents.CreateSiteInfo();
         app.UseContentSource<Post>(static _ => []);
         // Under the MTP runner the test project is its own executable, so the
         // entry assembly is Kiji.Tests itself.
-        app.AddPages();
-        app.AddPages<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
+        app.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
 
         var requests = app.CreateSnapshot().Pages;
@@ -43,12 +42,12 @@ public sealed class PageDiscoveryTests
     }
 
     [Fact]
-    public void AddPages_AssemblyWithoutRoutedComponents_ReturnsEmptySnapshot()
+    public void AddPageAssembly_WithoutRoutedComponents_DoesNotAddPages()
     {
-        var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
+        var app = TestSiteFactory.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = TestArticleContents.CreateSiteInfo();
 
-        app.AddPages(typeof(StaticSite).Assembly);
+        app.AddPageAssembly(typeof(StaticSite).Assembly);
         Assert.Empty(app.CreateSnapshot().Pages);
     }
 
@@ -85,20 +84,22 @@ public sealed class PageDiscoveryTests
     }
 
     [Fact]
-    public void CreateSnapshot_UnregisteredParameterizedRoute_IsIgnored()
+    public void CreateSnapshot_UnregisteredParameterizedRoute_FailsWithPageAndRoute()
     {
-        var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
+        var app = TestSiteFactory.Create([], new SiteExecutionPaths(AppContext.BaseDirectory), unconfiguredPage: typeof(TagsPage));
         app.Info = TestArticleContents.CreateSiteInfo();
         app.UseContentSource<Post>(static _ => []);
         app.UseDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(app);
         app.AddNotFoundPage<NotFoundPage>();
-        app.AddPages<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
+        app.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
         // No mapping for the dynamic /tags/{TagSlug}/ template.
 
-        var pages = app.CreateSnapshot().Pages;
-        Assert.DoesNotContain(pages, page => page.ComponentType == typeof(TagsPage));
+        var error = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());
+        Assert.Contains(nameof(TagsPage), error.Message, StringComparison.Ordinal);
+        Assert.Contains("/tags/{TagSlug}/", error.Message, StringComparison.Ordinal);
+        Assert.Contains("AddPageParameters", error.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -156,7 +157,7 @@ public sealed class PageDiscoveryTests
     [Fact]
     public void CreateSnapshot_AddNotFoundPageWithoutPageTemplate_ThrowsInformativeException()
     {
-        var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
+        var app = TestSiteFactory.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = TestArticleContents.CreateSiteInfo();
         app.UseDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(app);
@@ -169,15 +170,15 @@ public sealed class PageDiscoveryTests
 
     private static (StaticSite App, ContentDictionary<Post> Posts) CreateAppWithTagRoutes(Func<IEnumerable<object>> tagRoutes)
     {
-        var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
+        var app = TestSiteFactory.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = TestArticleContents.CreateSiteInfo();
         app.UseContentSource<Post>(static _ => []);
         app.UseDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(app);
         app.AddNotFoundPage<NotFoundPage>();
-        app.AddPages<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
+        app.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
-        app.AddPages<TagsPage>(_ => tagRoutes());
+        app.AddPageParameters<TagsPage>(_ => tagRoutes());
         return (app, app.ServiceProvider.GetRequiredService<ContentDictionary<Post>>());
     }
 }

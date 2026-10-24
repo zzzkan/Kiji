@@ -24,10 +24,9 @@ internal static class PageDiscovery
         StaticPageDefinition PageDefinition);
 
     /// <summary>
-    /// Finds parameterless routes on public, non-abstract
+    /// Finds all routes on public, non-abstract
     /// <see cref="IComponent"/> classes in an assembly.
-    /// Parameterized routes are omitted. Results are cached per assembly;
-    /// the cache is dropped on hot reload.
+    /// Results are cached per assembly; the cache is dropped on hot reload.
     /// </summary>
     public static IReadOnlyList<DiscoveredPage> FromAssembly(Assembly assembly)
     {
@@ -77,11 +76,7 @@ internal static class PageDiscovery
 
             foreach (var attribute in type.GetCustomAttributes<RouteAttribute>(inherit: false))
             {
-                var page = CreateDiscoveredPage(attribute.Template, type);
-                if (!page.PageDefinition.IsDynamic)
-                {
-                    pages.Add(page);
-                }
+                pages.Add(CreateDiscoveredPage(attribute.Template, type));
             }
         }
 

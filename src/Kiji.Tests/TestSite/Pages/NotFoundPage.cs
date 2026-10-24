@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Components.Rendering;
 namespace Kiji.Tests.TestSite.Pages;
 
 [Route("/not-found/")]
-public sealed class NotFoundPage : ComponentBase
+internal sealed class NotFoundPage : ComponentBase
 {
     protected override void BuildRenderTree(RenderTreeBuilder builder)
     {

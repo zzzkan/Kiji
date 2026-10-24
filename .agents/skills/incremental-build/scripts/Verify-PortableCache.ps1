@@ -39,7 +39,7 @@ using Portable;
 var site = StaticSite.Create(args);
 site.Info = new SiteInfo { Name = "Portable", BaseUrl = new Uri("https://example.test/") };
 site.UseMarkdownContent<FrontMatter>(options => options.AddHtmlPostProcessor(html => { Console.WriteLine("RENDER"); return html; }));
-site.AddPages<Article>(services => services.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>().Select(entry => new { Key = entry.Key }));
+site.AddPageParameters<Article>(services => services.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>().Select(entry => new { Key = entry.Key }));
 await site.RunAsync();
 namespace Portable { public sealed class FrontMatter { public string? Title { get; set; } } }
 '@ | Set-Content (Join-Path $root 'Program.cs')

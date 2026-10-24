@@ -16,7 +16,7 @@ public sealed class AppConfigurationTests : IDisposable
     [InlineData("dev")]
     public async Task MissingSite_FailsBeforeCreatingOutput_AndCanBeCorrected(string entry)
     {
-        await using var app = StaticSite.Create([], new SiteExecutionPaths(_root));
+        await using var app = TestSiteFactory.Create([], new SiteExecutionPaths(_root));
         var output = Path.Combine(_root, "output");
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
@@ -40,7 +40,7 @@ public sealed class AppConfigurationTests : IDisposable
     [InlineData(true)]
     public async Task Execution_FreezesConfiguration_AndLoadsContentOnlyAfterPathsSettle(bool serve)
     {
-        await using var app = StaticSite.Create([], new SiteExecutionPaths(_root));
+        await using var app = TestSiteFactory.Create([], new SiteExecutionPaths(_root));
         app.Info = TestArticleContents.CreateSiteInfo();
         app.UseServices(services => services.AddScoped<object>());
         var loads = 0;
@@ -56,7 +56,7 @@ public sealed class AppConfigurationTests : IDisposable
             return [];
         });
         TestArticleContents.MapSite(app);
-        app.AddPages<PostPage>(provider =>
+        app.AddPageParameters<PostPage>(provider =>
         {
             routeCalls++;
             _ = provider.GetRequiredService<ContentDictionary<Post>>().Count;
@@ -100,11 +100,10 @@ public sealed class AppConfigurationTests : IDisposable
             Assert.Throws<InvalidOperationException>(() => app.UseContentSource<object>(static _ => []));
             Assert.Throws<InvalidOperationException>(() => app.UseMarkdownContent<FrontMatter>(
                 _ => throw new Xunit.Sdk.XunitException("Configuration callback must not run after execution starts.")));
-            Assert.Throws<InvalidOperationException>(() => app.AddPages());
-            Assert.Throws<InvalidOperationException>(() => app.AddPages(typeof(PostPage).Assembly));
+            Assert.Throws<InvalidOperationException>(() => app.AddPageAssembly(typeof(PostPage).Assembly));
             Assert.Throws<InvalidOperationException>(() => app.UseDefaultLayout<MainLayout>());
             Assert.Throws<InvalidOperationException>(() => app.AddNotFoundPage<NotFoundPage>());
-            Assert.Throws<InvalidOperationException>(() => app.AddPages<PostPage>(static _ => []));
+            Assert.Throws<InvalidOperationException>(() => app.AddPageParameters<PostPage>(static _ => []));
             Assert.Throws<InvalidOperationException>(() => app.AddSitemap());
         }
     }

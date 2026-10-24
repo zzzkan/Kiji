@@ -56,10 +56,10 @@ public sealed class ContentCacheTests : IDisposable
     private StaticSite CreateSite(Func<IReadOnlyList<ContentEntry<CacheItem>>> load)
     {
         Directory.CreateDirectory(_root);
-        var site = StaticSite.Create([], new SiteExecutionPaths(_root));
+        var site = TestSiteFactory.Create([], new SiteExecutionPaths(_root));
         site.Info = TestArticleContents.CreateSiteInfo();
         site.UseContentSource<CacheItem>("data", _ => load());
-        site.AddPages<CacheItemPage>(services => services.GetRequiredService<ContentDictionary<CacheItem>>()
+        site.AddPageParameters<CacheItemPage>(services => services.GetRequiredService<ContentDictionary<CacheItem>>()
             .Select(entry => new { Id = entry.Key }));
         return site;
     }

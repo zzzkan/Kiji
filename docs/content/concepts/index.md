@@ -32,12 +32,10 @@ app.Info = new SiteInfo
     Name = "My site",
     BaseUrl = new Uri("https://example.com/"),
 };
-
-app.AddPages();
 return await app.RunAsync();
 ```
 
-Configure the site and register pages, content, and generated files before `RunAsync`.
+Configure the site, page parameters, content, and generated files before `RunAsync`.
 
 ## Develop and publish
 
@@ -53,9 +51,10 @@ host; see [Deployment](../deployment/) for hosting and sub-paths, and
 
 ## Pages and routes
 
-`AddPages()` discovers components with fixed `@page` routes such as `/about/`.
-For a route such as `/posts/{Slug}/`, use `AddPages<TPage>` to supply each page's
-parameters. `/about/` becomes `about/index.html`.
+Kiji automatically discovers components with `@page` routes in the entry assembly.
+For a route such as `/posts/{Slug}/`, use `AddPageParameters<TPage>` to supply each page's
+parameters; missing registration is an error. Fixed routes need no registration:
+`/about/` becomes `about/index.html`. Use `AddPageAssembly` to include another assembly.
 See [Routing](../routing/) for parameter mapping and 404 pages.
 
 ## Layouts and the document head
@@ -70,7 +69,7 @@ See the [head API](../api-reference/#pagetitle-headcontent-and-headoutlet).
 ## Content and static assets
 
 Pages inject typed `ContentDictionary<T>` collections to list content or look up an
-item by key. Markdown supplies YAML front matter and an HTML body; your `AddPages`
+item by key. Markdown supplies YAML front matter and an HTML body; your `AddPageParameters`
 mapping chooses which items become pages and their URLs.
 
 Images beside Markdown files become responsive images beside the generated page.

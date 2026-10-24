@@ -86,11 +86,10 @@ no additional effect.
 
 #### `AddPageParameters<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)`
 
-Adds parameter sets for the one parameterized route of an `IComponent`, or for its only
-route when that route is fixed. A component can combine fixed routes with one
-parameterized route; its fixed routes still generate one page each with default parameter
-values. Components with several parameterized routes, or with several fixed routes and no
-parameterized route, are rejected. The
+Adds parameter sets for an `IComponent`. Each set is rendered at every parameterized route
+of the component and must supply the route values of all of them. Fixed routes beside
+parameterized routes still generate one page each with default parameter values; when all
+routes are fixed, each set is rendered at every route instead. The
 component must belong to the entry assembly or an assembly added with `AddPageAssembly`;
 supplying parameters does not implicitly include an assembly. Registration order does
 not matter. The factory is deferred until paths and services are ready and runs once per registration per
@@ -105,10 +104,10 @@ planning. Non-route parameters may be omitted to use the component's defaults.
 `EditorRequired` is not validated by Kiji.
 
 Multiple registrations for the same component are concatenated and an empty sequence is
-allowed, explicitly generating no pages for the receiving route. For a component whose
-only route is fixed, explicit parameter sets replace the default rendering; they do not
-add another default page. Multiple sets for the same fixed route fail with duplicate
-output paths. Treat supplied objects as read-only
+allowed, explicitly generating no pages for the receiving routes. For a component with
+only fixed routes, explicit parameter sets replace the default rendering; they do not add
+another default page. Multiple sets for the same fixed route fail with duplicate output
+paths. Treat supplied objects as read-only
 for the snapshot; Kiji does not clone or dispose them. See [Routing](../routing/) for examples and supported
 route templates.
 

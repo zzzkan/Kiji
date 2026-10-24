@@ -163,15 +163,35 @@ public sealed class PageRegistrationTests
     }
 
     [Theory]
-    [InlineData(typeof(NoRoute), "does not declare")]
-    [InlineData(typeof(MultipleRoutes), "multiple parameterized")]
-    [InlineData(typeof(MultipleFixedRoutes), "multiple fixed")]
-    public async Task PageParameters_RequireOneTargetRoute(Type type, string message)
+    [InlineData(typeof(MultipleRoutes), "/one/a/", "/two/a/")]
+    [InlineData(typeof(MultipleFixedRoutes), "/one/", "/two/")]
+    public async Task MultipleRoutes_RenderEachParameterSetAtEveryReceivingRoute(Type type, string first, string second)
     {
         await using var site = CreateSite();
-        RegisterTyped(site, type);
+        RegisterTyped(site, type, new { Value = "a" });
+
+        var pages = site.CreateSnapshot().Pages;
+        Assert.Equal([first, second], pages.Select(static page => page.RoutePath).Order(StringComparer.Ordinal));
+        Assert.All(pages, static page => Assert.Equal("a", page.Parameters["Value"]));
+    }
+
+    [Fact]
+    public async Task MultipleParameterizedRoutes_RequireEveryRouteValue()
+    {
+        await using var site = CreateSite();
+        site.AddPageParameters<DistinctRouteValues>(static _ => [new { First = "x" }]);
         var exception = Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
-        Assert.Contains(message, exception.Message, StringComparison.Ordinal);
+        Assert.Contains("'/second/{Second}/'", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("'Second'", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PageParameters_RequireARoute()
+    {
+        await using var site = CreateSite();
+        RegisterTyped(site, typeof(NoRoute));
+        var exception = Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
+        Assert.Contains("does not declare", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -380,10 +400,23 @@ public sealed class PageRegistrationTests
     private sealed class Fixed : ComponentBase;
 
     [Route("/one/{Value}/"), Route("/two/{Value}/")]
-    private sealed class MultipleRoutes : ComponentBase;
+    private sealed class MultipleRoutes : ComponentBase
+    {
+        [Parameter] public string Value { get; set; } = string.Empty;
+    }
 
     [Route("/one/"), Route("/two/")]
-    private sealed class MultipleFixedRoutes : ComponentBase;
+    private sealed class MultipleFixedRoutes : ComponentBase
+    {
+        [Parameter] public string Value { get; set; } = string.Empty;
+    }
+
+    [Route("/first/{First}/"), Route("/second/{Second}/")]
+    private sealed class DistinctRouteValues : ComponentBase
+    {
+        [Parameter] public string First { get; set; } = string.Empty;
+        [Parameter] public string Second { get; set; } = string.Empty;
+    }
 
     [Route("/mixed/"), Route("/mixed/{Value}/")]
     private sealed class MixedRoutes : ComponentBase

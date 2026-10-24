@@ -33,7 +33,7 @@ effect.
 
 ## Parameterized routes
 
-Use `AddPageParameters<TPage>` with a component that declares exactly one parameterized route:
+Use `AddPageParameters<TPage>` to supply the values of a component's parameterized route:
 
 ```razor
 @page "/posts/{Slug}/"
@@ -87,7 +87,18 @@ app.AddPageParameters<BlogIndex>(_ => [new { Page = 2 }, new { Page = 3 }]);
 
 Parameter sets apply only to the parameterized route, generating `blog/page/2/index.html`
 and `blog/page/3/index.html`. The fixed route still generates `blog/index.html` with the
-default `Page` value. A component can declare at most one parameterized route.
+default `Page` value.
+
+A component can also declare several parameterized routes, such as an old and a new URL:
+
+```razor
+@page "/tags/{Tag}/"
+@page "/topics/{Tag}/"
+```
+
+Each parameter set is rendered at every parameterized route, so `new { Tag = "dotnet" }`
+generates both `tags/dotnet/index.html` and `topics/dotnet/index.html`. Every set must
+supply the route values of all parameterized routes; a missing value fails planning.
 
 ## Passing values that are not in the URL
 
@@ -123,8 +134,9 @@ Fixed routes can receive parameters too:
 app.AddPageParameters<AboutPage>(_ => [new { Title = "About this site" }]);
 ```
 
-`AboutPage` must declare exactly one `@page` and a writable `[Parameter]` named `Title`.
-This renders its fixed URL with the supplied values instead of the default values.
+`AboutPage` must declare a writable `[Parameter]` named `Title`. This renders its fixed
+URL with the supplied values instead of the default values; a component with several fixed
+routes renders each set at every route.
 An explicit empty sequence generates no page; multiple sets targeting the same URL fail.
 
 ## Route limits and validation

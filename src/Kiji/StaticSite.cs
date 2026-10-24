@@ -200,13 +200,14 @@ public sealed class StaticSite
         return this;
     }
 
-    /// <summary>Adds parameter sets for a component's one parameterized route, or for its only route when that route is fixed.</summary>
+    /// <summary>Adds parameter sets rendered at every parameterized route of a component, or at every route when all are fixed.</summary>
     /// <param name="parameters">A deferred factory evaluated per snapshot; each object supplies route values and component parameters.</param>
     /// <remarks>
     /// The component must belong to the entry assembly or an assembly added with AddPageAssembly.
-    /// Its other fixed routes still render once with default values. Multiple registrations concatenate their
-    /// results, which may be empty. For a component whose only route is fixed, explicit sets replace the default
-    /// parameterless rendering. Only route parameters are required; EditorRequired is not validated.
+    /// Each set must supply the route values of every receiving route. Fixed routes beside parameterized routes
+    /// still render once with default values. Multiple registrations concatenate their results, which may be empty.
+    /// For a component with only fixed routes, explicit sets replace the default parameterless rendering.
+    /// Only route parameters are required; EditorRequired is not validated.
     /// Values retain their types and must be assignable to public writable component parameters; no implicit conversions occur.
     /// Only URL segments are converted to invariant strings. Treat referenced values as read-only for the snapshot lifetime;
     /// Kiji neither deep-clones nor disposes them. Parameters without a supported stable fingerprint force the page to render on each build.
@@ -531,7 +532,7 @@ public sealed class StaticSite
 
         var registeredTypes = _routeRegistrations.Select(static registration => registration.ComponentType)
             .Distinct().ToArray();
-        var parameterRoutes = registeredTypes.ToDictionary(static type => type, FindParameterRoute);
+        var parameterRoutes = registeredTypes.ToDictionary(static type => type, FindParameterRoutes);
         // Explicit types can be non-public, but never implicitly include a foreign assembly.
         // Like a scanned component, a registered one keeps its other fixed routes.
         var scannedTypes = scanned.Select(static page => page.ComponentType).ToHashSet();
@@ -544,17 +545,21 @@ public sealed class StaticSite
         var pageParameters = new Dictionary<string, List<IReadOnlyDictionary<string, object?>>>(StringComparer.OrdinalIgnoreCase);
         foreach (var registration in _routeRegistrations)
         {
-            var page = parameterRoutes[registration.ComponentType];
+            var routes = parameterRoutes[registration.ComponentType];
             var entries = registration.CreateEntries();
             snapshotPhases.Mark(BuildPhaseTimer.RouteEntries);
-            ValidateRouteEntries(page, entries);
+            ValidateRouteEntries(registration.ComponentType, routes, entries);
             snapshotPhases.Mark(BuildPhaseTimer.RouteValidation);
 
-            if (!pageParameters.TryGetValue(page.SourceIdentifier, out var combined))
+            // Every entry renders at every target route; rendering only reads the shared entries.
+            foreach (var route in routes)
             {
-                pageParameters.Add(page.SourceIdentifier, combined = []);
+                if (!pageParameters.TryGetValue(route.SourceIdentifier, out var combined))
+                {
+                    pageParameters.Add(route.SourceIdentifier, combined = []);
+                }
+                combined.AddRange(entries);
             }
-            combined.AddRange(entries);
         }
 
         // Expanding a route factory is where content is first read, so this is where
@@ -575,23 +580,15 @@ public sealed class StaticSite
     }
 
     /// <summary>
-    /// Selects the route receiving AddPageParameters: the component's one parameterized route,
-    /// or its only route when that route is fixed. Other fixed routes keep their default rendering.
+    /// Selects the routes receiving AddPageParameters: all parameterized routes of the component,
+    /// or all its routes when every route is fixed. Fixed routes beside parameterized ones keep their default rendering.
     /// </summary>
-    private PageDiscovery.DiscoveredPage FindParameterRoute(Type componentType)
+    private IReadOnlyList<PageDiscovery.DiscoveredPage> FindParameterRoutes(Type componentType)
     {
         ValidatePageAssembly(componentType);
         var pages = PageDiscovery.FromType(componentType);
         var parameterized = pages.Where(static page => page.PageDefinition.IsDynamic).ToArray();
-        return parameterized switch
-        {
-            [var single] => single,
-            [] when pages.Count == 1 => pages[0],
-            [] => throw new InvalidOperationException(
-                $"Component '{componentType.FullName}' declares multiple fixed route templates and no parameterized route. AddPageParameters requires exactly one parameterized route or a single fixed route."),
-            _ => throw new InvalidOperationException(
-                $"Component '{componentType.FullName}' declares multiple parameterized route templates. AddPageParameters supports exactly one."),
-        };
+        return parameterized.Length > 0 ? parameterized : pages;
     }
 
     private void ValidatePageAssembly(Type componentType)
@@ -604,22 +601,27 @@ public sealed class StaticSite
     }
 
     private static void ValidateRouteEntries(
-        PageDiscovery.DiscoveredPage page,
+        Type componentType,
+        IReadOnlyList<PageDiscovery.DiscoveredPage> routes,
         IReadOnlyList<IReadOnlyDictionary<string, object?>> entries)
     {
-        var routeParameterNames = page.PageDefinition.ParameterNames;
-        var declaredParameters = PageDiscovery.Parameters(page.ComponentType);
+        var declaredParameters = PageDiscovery.Parameters(componentType);
+        var routeList = string.Join(", ", routes.Select(static route => $"'{route.SourceIdentifier}'"));
+        var everyRoute = routes.Count > 1 ? " Each parameter set renders at every one of the component's parameterized routes." : string.Empty;
 
         foreach (var entry in entries)
         {
-            var missing = routeParameterNames
-                .Where(name => !entry.ContainsKey(name))
-                .OrderBy(static name => name, StringComparer.Ordinal)
-                .ToArray();
-            if (missing.Length > 0)
+            foreach (var route in routes)
             {
-                throw new InvalidOperationException(
-                    $"Route mapping for '{page.ComponentType.FullName}' did not supply required route values for '{page.SourceIdentifier}': {string.Join(", ", missing.Select(static name => $"'{name}'"))}.");
+                var missing = route.PageDefinition.ParameterNames
+                    .Where(name => !entry.ContainsKey(name))
+                    .OrderBy(static name => name, StringComparer.Ordinal)
+                    .ToArray();
+                if (missing.Length > 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Route mapping for '{componentType.FullName}' did not supply required route values for '{route.SourceIdentifier}': {string.Join(", ", missing.Select(static name => $"'{name}'"))}.{everyRoute}");
+                }
             }
 
             foreach (var (name, value) in entry)
@@ -627,12 +629,12 @@ public sealed class StaticSite
                 if (!declaredParameters.TryGetValue(name, out var property))
                 {
                     throw new InvalidOperationException(
-                        $"Route mapping for '{page.ComponentType.FullName}' ('{page.SourceIdentifier}') supplied '{name}', which is not a declared '[Parameter]' property.");
+                        $"Route mapping for '{componentType.FullName}' ({routeList}) supplied '{name}', which is not a declared '[Parameter]' property.");
                 }
                 if (!property.IsWritable)
                 {
                     throw new InvalidOperationException(
-                        $"Route mapping for '{page.ComponentType.FullName}' ('{page.SourceIdentifier}') supplied parameter '{name}', which must have a public setter and cannot be an indexer.");
+                        $"Route mapping for '{componentType.FullName}' ({routeList}) supplied parameter '{name}', which must have a public setter and cannot be an indexer.");
                 }
                 var type = property.PropertyType;
                 var compatible = value is null
@@ -641,7 +643,7 @@ public sealed class StaticSite
                 if (!compatible)
                 {
                     throw new InvalidOperationException(
-                        $"Route mapping for '{page.ComponentType.FullName}' ('{page.SourceIdentifier}') supplied parameter '{name}': expected '{type.FullName}', actual '{value?.GetType().FullName ?? "null"}'. Implicit parameter conversions are not supported.");
+                        $"Route mapping for '{componentType.FullName}' ({routeList}) supplied parameter '{name}': expected '{type.FullName}', actual '{value?.GetType().FullName ?? "null"}'. Implicit parameter conversions are not supported.");
                 }
             }
         }

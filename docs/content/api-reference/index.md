@@ -35,7 +35,9 @@ return await app.RunAsync();
 
 Creates a site rooted at its project directory. `args` are forwarded to ASP.NET Core
 configuration during development, for example `--urls`. Build the project with Kiji's
-targets before running the executable.
+targets before running the executable. The site must run as an application with an entry
+assembly, whose pages are discovered automatically; otherwise `Create` throws
+`InvalidOperationException`.
 
 #### `StaticSite.Info`
 
@@ -82,7 +84,9 @@ missing registration is an error before rendering.
 
 Includes routed components from an additional, non-null assembly. Referenced assemblies
 are not scanned automatically. Repeated registration, including the entry assembly, has
-no additional effect.
+no additional effect. Every route in the assembly is included, even when the site uses
+only one of its pages; register an empty `AddPageParameters<TPage>` sequence to leave out
+a page.
 
 #### `AddPageParameters<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)`
 

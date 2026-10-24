@@ -48,10 +48,10 @@ public sealed class StaticSite
     private bool _hasRun;
     private bool _disposed;
 
-    private StaticSite(string[] args, SiteExecutionPaths paths, Assembly? entryAssembly)
+    private StaticSite(string[] args, SiteExecutionPaths paths, Assembly entryAssembly)
     {
         _args = [.. args];
-        if (entryAssembly is not null) { _pageAssemblies.Add(entryAssembly); }
+        _pageAssemblies.Add(entryAssembly);
         _runtime.Dependencies.Register("image-processor", () => ImageProcessorIdentity.Get(ServiceProvider.GetRequiredService<IImageProcessor>()));
         Paths = paths;
     }
@@ -103,13 +103,13 @@ public sealed class StaticSite
     public static StaticSite Create(string[] args)
     {
         ArgumentNullException.ThrowIfNull(args);
+        var entryAssembly = Assembly.GetEntryAssembly() ?? throw new InvalidOperationException(
+            "No entry assembly is available in this host. Run the site project as an application with dotnet run, dotnet watch or dotnet publish.");
 
-        return new StaticSite(args, SiteExecutionPaths.FromRuntimeMetadata(AppContext.GetData("Kiji.ProjectDirectory")), Assembly.GetEntryAssembly());
+        return new StaticSite(args, SiteExecutionPaths.FromRuntimeMetadata(AppContext.GetData("Kiji.ProjectDirectory"), entryAssembly), entryAssembly);
     }
 
-    internal static StaticSite Create(string[] args, SiteExecutionPaths paths) => new(args, paths, Assembly.GetEntryAssembly());
-
-    internal static StaticSite Create(string[] args, SiteExecutionPaths paths, Assembly? entryAssembly) => new(args, paths, entryAssembly);
+    internal static StaticSite Create(string[] args, SiteExecutionPaths paths, Assembly entryAssembly) => new(args, paths, entryAssembly);
 
     /// <summary>Uses a content source resolved as <see cref="ContentDictionary{T}"/>.</summary>
     /// <param name="loader">Loads items lazily once per snapshot, after execution paths are settled.</param>
@@ -347,15 +347,12 @@ public sealed class StaticSite
             _services!.GetService<ContentFileRegistry>(), _runtime.Dependencies,
             _services!.GetRequiredService<IImageProcessor>(), assetManifest.Resources);
 
+        // Snapshot planning already required every page type to come from a page assembly.
         // Helpers and custom encoder factories may live outside the page assemblies.
         // Their code is a build input even when pages only reach it through injection.
         var plan = await planner.CreatePlanAsync(
             snapshot.Pages,
-            [.. _pageAssemblies,
-                .. _routeRegistrations.Select(static registration => registration.ComponentType.Assembly),
-                .. _serviceAssemblies,
-                .. _notFoundComponentType is { } notFound ? new[] { notFound.Assembly } : [],
-                typeof(StaticSite).Assembly],
+            [.. _pageAssemblies, .. _serviceAssemblies, typeof(StaticSite).Assembly],
             _forceFullBuild,
             cancellationToken);
         phases.Mark(BuildPhaseTimer.Plan);

@@ -29,7 +29,16 @@ app.AddPageAssembly(typeof(SharedPage).Assembly);
 
 All routes in that assembly are discovered, including parameterized routes. Referencing
 an assembly alone does not include its pages. Adding the same assembly repeatedly has no
-effect.
+effect. Using a single page, or only the not-found page, from another assembly still
+includes the whole assembly. To leave out a page you do not want, register an empty
+parameter sequence for it:
+
+```csharp
+app.AddPageParameters<UnwantedPage>(_ => []);
+```
+
+This omits every route that would receive parameters: all routes of a component with only
+fixed routes, or the parameterized routes of a component that also has fixed routes.
 
 ## Parameterized routes
 
@@ -169,7 +178,8 @@ app.AddNotFoundPage<NotFoundPage>();
 
 Kiji writes it as `404.html` at the output root. The component still needs one `@page`
 route, but do not also register it with `AddPageParameters<TPage>`. If it belongs to another
-assembly, include that assembly with `AddPageAssembly`.
+assembly, include that assembly with `AddPageAssembly`; its other pages are then included
+too, as described in [Fixed routes](#fixed-routes).
 
 See the [API reference](../api-reference/#pages) for registration
 timing and the full method contracts.

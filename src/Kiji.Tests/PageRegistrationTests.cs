@@ -20,15 +20,6 @@ public sealed class PageRegistrationTests
         Assert.Equal(["/alias/", "/entry/"], site.CreateSnapshot().Pages.Select(page => page.RoutePath).Order());
     }
 
-    [Fact]
-    public async Task HostWithoutEntryAssembly_CanExplicitlyIncludePages()
-    {
-        await using var site = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory), entryAssembly: null);
-        site.Info = TestArticleContents.CreateSiteInfo();
-        site.AddPageAssembly(CreatePageType("/hosted/").Assembly);
-        Assert.Equal("/hosted/", Assert.Single(site.CreateSnapshot().Pages).RoutePath);
-    }
-
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

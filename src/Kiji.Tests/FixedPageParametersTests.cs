@@ -90,6 +90,28 @@ public sealed class FixedPageParametersTests : IDisposable
         Assert.Equal(2, log.Count);
     }
 
+    [Fact]
+    public async Task DefaultRendering_IsReusedAcrossBuilds_UntilParametersAreSupplied()
+    {
+        var log = new FixedParameterLog();
+        var output = Path.Combine(_root, "default", "dist", "fixed-parameters", "index.html");
+        async Task PublishAsync(Func<IServiceProvider, IEnumerable<object>>? parameters = null)
+        {
+            await using var site = CreateSite("default", log);
+            if (parameters is not null) { site.AddPageParameters<FixedParameterPage>(parameters); }
+            await site.PublishAsync("dist");
+        }
+
+        await PublishAsync();
+        await PublishAsync();
+        Assert.Equal(1, log.Count);
+        Assert.Contains("Default title|7|", await File.ReadAllTextAsync(output), StringComparison.Ordinal);
+
+        await PublishAsync(static _ => [new { Title = "Supplied" }]);
+        Assert.Equal(2, log.Count);
+        Assert.Contains("Supplied|7|", await File.ReadAllTextAsync(output), StringComparison.Ordinal);
+    }
+
     private StaticSite CreateSite(string directory, FixedParameterLog? log = null)
     {
         var site = TestSiteFactory.Create([], new SiteExecutionPaths(Path.Combine(_root, directory)),

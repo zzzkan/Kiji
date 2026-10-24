@@ -25,13 +25,11 @@ public sealed class PageDiscoveryTests
     }
 
     [Fact]
-    public void Create_EntryAssembly_AutomaticallyDiscoversPages()
+    public void Create_DiscoversFixedRoutesWithoutRegistration()
     {
         var app = TestSiteFactory.Create([], new SiteExecutionPaths(AppContext.BaseDirectory), includeFixedPages: true);
         app.Info = TestArticleContents.CreateSiteInfo();
         app.UseContentSource<Post>(static _ => []);
-        // Under the MTP runner the test project is its own executable, so the
-        // entry assembly is Kiji.Tests itself.
         app.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
 

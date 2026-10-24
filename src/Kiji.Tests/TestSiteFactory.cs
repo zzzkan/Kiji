@@ -7,7 +7,8 @@ internal static class TestSiteFactory
 {
     public static StaticSite Create(string[] args, SiteExecutionPaths paths, Type? unconfiguredPage = null, bool includeFixedPages = false)
     {
-        var site = StaticSite.Create(args, paths);
+        // Pass the scanned assembly explicitly so tests do not depend on the test host's entry assembly.
+        var site = StaticSite.Create(args, paths, typeof(TestSiteFactory).Assembly);
         var register = typeof(StaticSite).GetMethod(nameof(StaticSite.AddPageParameters))!;
         foreach (var type in PageDiscovery.FromAssembly(typeof(TestSiteFactory).Assembly)
             .Where(page => !includeFixedPages || page.PageDefinition.IsDynamic)

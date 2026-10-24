@@ -65,9 +65,9 @@ app.UseMarkdownContent<FrontMatter>(options =>
 ```
 
 `Directory` accepts an absolute path or a path relative to the site project directory.
-Kiji watches each registered directory during development. File selection and URL
-mapping are separate: excluding a draft decides whether it is loaded, while `AddPageParameters`
-decides the URL of every included item.
+Kiji watches each registered directory during development. File selection and page
+parameters are separate: excluding a draft decides whether it is loaded, while
+`AddPageParameters` decides the URL of every included item.
 
 ## Use a site-specific model
 

@@ -53,8 +53,8 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
 - The dev server enforces BaseUrl's path prefix and uses `.kiji/dev-site`.
   Only `.kiji/cache` is portable; planning creates no output directories.
 - UseServices configures standard DI once before provider construction; then the
-  collection is read-only. Each render owns a scope. Loaders, route/feed factories
-  and artifacts use the root provider and cannot resolve scoped services. Validate
+  collection is read-only. Each render owns a scope. Loaders, page parameter/feed
+  factories and artifacts use the root provider and cannot resolve scoped services. Validate
   Kiji-owned registrations after callbacks. Derived indexes use UseContentSource;
   content reload does not recreate singletons. Use AlwaysRender on components reading
   untracked external state. KijiForce refreshes all pages for a whole publish.

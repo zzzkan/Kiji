@@ -73,7 +73,7 @@ public sealed class StaticSite
     /// <summary>Configures the services available to components and site factories.</summary>
     /// <remarks>
     /// Callbacks run once in registration order before rendering. Each page render owns a scope.
-    /// Content loaders, route/feed factories and artifacts cannot resolve scoped services.
+    /// Content loaders, page parameter and feed factories, and artifacts cannot resolve scoped services.
     /// Kiji's managed services cannot be changed. Use AlwaysRender on components reading untracked external state.
     /// </remarks>
     public StaticSite UseServices(Action<IServiceCollection> configure)
@@ -505,7 +505,7 @@ public sealed class StaticSite
     internal SiteSnapshot CreateSnapshot()
     {
         FreezeConfiguration();
-        // Planning expands route factories, which read content. If nothing has settled
+        // Planning expands page parameter factories, which read content. If nothing has settled
         // the options yet, fall back to paths that cannot be mistaken for a deliverable.
         _activeOptions ??= Paths.ResolveForDevelopment();
         EnsureServices();
@@ -546,7 +546,7 @@ public sealed class StaticSite
             }
         }
 
-        // Expanding a route factory is where content is first read, so this is where
+        // Expanding a page parameter factory is where content is first read, so this is where
         // loading and parsing every markdown file lands.
         snapshotPhases.Mark(BuildPhaseTimer.Routes);
 
@@ -603,7 +603,7 @@ public sealed class StaticSite
                 if (missing.Length > 0)
                 {
                     throw new InvalidOperationException(
-                        $"Route mapping for '{componentType.FullName}' did not supply required route values for '{route.SourceIdentifier}': {string.Join(", ", missing.Select(static name => $"'{name}'"))}.");
+                        $"Page parameters for '{componentType.FullName}' did not supply required route values for '{route.SourceIdentifier}': {string.Join(", ", missing.Select(static name => $"'{name}'"))}.");
                 }
             }
 
@@ -612,12 +612,12 @@ public sealed class StaticSite
                 if (!declaredParameters.TryGetValue(name, out var property))
                 {
                     throw new InvalidOperationException(
-                        $"Route mapping for '{componentType.FullName}' ({routeList}) supplied '{name}', which is not a declared '[Parameter]' property.");
+                        $"Page parameters for '{componentType.FullName}' ({routeList}) supplied '{name}', which is not a declared '[Parameter]' property.");
                 }
                 if (!property.IsWritable)
                 {
                     throw new InvalidOperationException(
-                        $"Route mapping for '{componentType.FullName}' ({routeList}) supplied parameter '{name}', which must have a public setter and cannot be an indexer.");
+                        $"Page parameters for '{componentType.FullName}' ({routeList}) supplied parameter '{name}', which must have a public setter and cannot be an indexer.");
                 }
                 var type = property.PropertyType;
                 var compatible = value is null
@@ -626,7 +626,7 @@ public sealed class StaticSite
                 if (!compatible)
                 {
                     throw new InvalidOperationException(
-                        $"Route mapping for '{componentType.FullName}' ({routeList}) supplied parameter '{name}': expected '{type.FullName}', actual '{value?.GetType().FullName ?? "null"}'. Implicit parameter conversions are not supported.");
+                        $"Page parameters for '{componentType.FullName}' ({routeList}) supplied parameter '{name}': expected '{type.FullName}', actual '{value?.GetType().FullName ?? "null"}'. Implicit parameter conversions are not supported.");
                 }
             }
         }

@@ -74,12 +74,12 @@ internal static class StaticPagePlanner
                 if (value.Contains('/', StringComparison.Ordinal) || value.Contains('\\', StringComparison.Ordinal))
                 {
                     throw new InvalidOperationException(
-                        $"Route mapping for '{page.ComponentType.FullName}' supplied invalid route value '{name}' for '{page.SourceIdentifier}': '{value}'. Route values must be a single route segment and cannot contain '/' or '\\'.");
+                        $"Page parameters for '{page.ComponentType.FullName}' supplied invalid route value '{name}' for '{page.SourceIdentifier}': '{value}'. Route values must be a single route segment and cannot contain '/' or '\\'.");
                 }
                 if (value.Trim() is "." or "..")
                 {
                     throw new InvalidOperationException(
-                        $"Route mapping for '{page.ComponentType.FullName}' supplied invalid route value '{name}' for '{page.SourceIdentifier}': '{value}'. Route values cannot be '.' or '..'.");
+                        $"Page parameters for '{page.ComponentType.FullName}' supplied invalid route value '{name}' for '{page.SourceIdentifier}': '{value}'. Route values cannot be '.' or '..'.");
                 }
                 routeValues.Add(name, value);
             }
@@ -124,6 +124,6 @@ internal static class StaticPagePlanner
             duplicateOutputPath.Select(static page => $"'{page.SourceIdentifier}'").Distinct(StringComparer.OrdinalIgnoreCase));
 
         throw new InvalidOperationException(
-            $"Static generation produced duplicate output path '{duplicateOutputPath.Key}' from {sources}. Route selectors must resolve to unique output paths.");
+            $"Static generation produced duplicate output path '{duplicateOutputPath.Key}' from {sources}. Each page must resolve to a unique output path.");
     }
 }

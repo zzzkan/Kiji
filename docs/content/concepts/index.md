@@ -54,7 +54,7 @@ host; see [Deployment](../deployment/) for hosting and sub-paths, and
 Kiji discovers components with `@page` routes automatically: `/about/` becomes
 `about/index.html`. For a route such as `/posts/{Slug}/`, use `AddPageParameters<TPage>`
 to supply each page's parameters.
-See [Routing](../routing/) for parameter mapping and 404 pages.
+See [Routing](../routing/) for page parameters and 404 pages.
 
 ## Layouts and the document head
 
@@ -68,8 +68,8 @@ See the [head API](../api-reference/#pagetitle-headcontent-and-headoutlet).
 ## Content and static assets
 
 Pages inject typed `ContentDictionary<T>` collections to list content or look up an
-item by key. Markdown supplies YAML front matter and an HTML body; your `AddPageParameters`
-mapping chooses which items become pages and their URLs.
+item by key. Markdown supplies YAML front matter and an HTML body; your page parameters
+choose which items become pages and their URLs.
 
 Images beside Markdown files become responsive images beside the generated page.
 See [Markdown and images](../markdown/) for examples.

@@ -142,8 +142,8 @@ logs to standard error during publish and development, including exceptions caug
 [`ErrorBoundary`](https://learn.microsoft.com/aspnet/core/blazor/fundamentals/handle-errors?view=aspnetcore-10.0#error-boundaries).
 
 Each page render owns a DI scope: scoped services are shared by its page, layout and child
-components and disposed when rendering finishes. Loaders, route/feed factories and artifact
-writers cannot resolve scoped services. Kiji-managed services such as `SiteInfo`, `PageInfo`
+components and disposed when rendering finishes. Loaders, page parameter and feed
+factories, and artifact writers cannot resolve scoped services. Kiji-managed services such as `SiteInfo`, `PageInfo`
 and `ContentDictionary<>` cannot be replaced.
 
 External service data and captured values are not tracked automatically. Use

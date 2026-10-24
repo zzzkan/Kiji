@@ -49,12 +49,17 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         Assert.Contains("export const library = true", File.ReadAllText(PublicFile(AssetUrl(html, "library"))), StringComparison.Ordinal);
         Assert.NotEmpty(Directory.GetFiles(Path.Combine(fixture.Site, "dist"), "*.webp", SearchOption.AllDirectories));
         Assert.Empty(Directory.GetFiles(Path.Combine(fixture.Site, "dist"), "*.dll", SearchOption.AllDirectories));
+        // By default, neither the site nor a referenced library may publish compressed copies.
+        // The SDK compresses both unless Kiji's default is applied.
+        Assert.DoesNotContain(Directory.EnumerateFiles(Path.Combine(fixture.Site, "dist"), "*", SearchOption.AllDirectories),
+            path => Path.GetExtension(path) is ".gz" or ".br");
 
         var oldUrl = AssetUrl(html);
         fixture.Replace("Site/content/article.md", "Original body.", "Edited body.");
         fixture.Replace("Site/wwwroot/app.js", "original", "modified");
         fixture.Replace("Library/Card.resx", "Hello", "Welcome");
-        await fixture.PublishAsync();
+        // Opt in before the next HTML change, so the compressed copy must be refreshed.
+        await fixture.PublishAsync("-p:CompressionEnabled=true");
         html = Read("index.html");
         Assert.Contains("Edited body.", html, StringComparison.Ordinal);
         Assert.Matches("<p b-[a-z0-9]+>Welcome</p>", html);
@@ -65,7 +70,7 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         // This file is deliberately untracked: the MSBuild switch must reach Kiji.
         Assert.Contains("external-value-1", html, StringComparison.Ordinal);
         fixture.Write("Site/value.txt", "external-value-2");
-        await fixture.PublishAsync("-p:KijiForce=true");
+        await fixture.PublishAsync("-p:KijiForce=true", "-p:CompressionEnabled=true");
         Assert.Contains("external-value-2", Read("index.html"), StringComparison.Ordinal);
 
         // SDK post-processing must include Kiji's generated HTML.
@@ -78,6 +83,7 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         using (var gzip = new GZipStream(input, CompressionMode.Decompress))
         using (var reader = new StreamReader(gzip))
         { Assert.Equal(Read("index.html"), await reader.ReadToEndAsync()); }
+        Assert.True(File.Exists(PublicFile(AssetUrl(Read("index.html"), "library")) + ".gz"));
 
         var stagingDirectory = Assert.Single(Directory.GetDirectories(Path.Combine(fixture.Site, "obj"), "site", SearchOption.AllDirectories));
         await fixture.DotnetAsync("clean", "Site/PackageSite.csproj", "-c", "Release");

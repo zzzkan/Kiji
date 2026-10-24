@@ -4,8 +4,6 @@
     <OutputType>Exe</OutputType>
     <UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier>
     <RootNamespace>Kiji.Docs</RootNamespace>
-    <!-- The deployment host handles response compression; sidecars are unused. -->
-    <CompressionEnabled>false</CompressionEnabled>
   </PropertyGroup>
 
   <ItemGroup>

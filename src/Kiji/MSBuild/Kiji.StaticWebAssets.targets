@@ -68,6 +68,9 @@
     </ComputeStaticWebAssetsForCurrentProject>
     <ItemGroup>
       <_KijiPublishAsset Remove="@(_KijiPublishAsset)" Condition="'%(AssetKind)' == 'Build' or '%(CopyToPublishDirectory)' == 'Never'" />
+      <!-- Referenced libraries compress their own assets under their own setting.
+           The site's setting decides whether any compressed copy is published. -->
+      <_KijiPublishAsset Remove="@(_KijiPublishAsset)" Condition="'$(CompressionEnabled)' != 'true' and '%(AssetTraitName)' == 'Content-Encoding'" />
     </ItemGroup>
     <ComputeStaticWebAssetsTargetPaths Assets="@(_KijiPublishAsset)" PathPrefix="" UseAlternatePathDirectorySeparator="true">
       <Output TaskParameter="AssetsWithTargetPath" ItemName="_KijiInputAsset" />
@@ -224,6 +227,9 @@
     <ComputeStaticWebAssetsForCurrentProject Assets="@(StaticWebAsset)" ProjectMode="$(StaticWebAssetProjectMode)" AssetKind="Publish" Source="$(PackageId)">
       <Output TaskParameter="StaticWebAssets" ItemName="_KijiFinalAsset" />
     </ComputeStaticWebAssetsForCurrentProject>
+    <ItemGroup>
+      <_KijiFinalAsset Remove="@(_KijiFinalAsset)" Condition="'$(CompressionEnabled)' != 'true' and '%(AssetTraitName)' == 'Content-Encoding'" />
+    </ItemGroup>
     <ComputeStaticWebAssetsTargetPaths Assets="@(_KijiFinalAsset)" PathPrefix="" UseAlternatePathDirectorySeparator="true">
       <Output TaskParameter="AssetsWithTargetPath" ItemName="_KijiFinalAssetPath" />
     </ComputeStaticWebAssetsTargetPaths>

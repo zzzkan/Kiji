@@ -106,9 +106,11 @@
        ============================================================== -->
   <PropertyGroup Condition="'$(_KijiIsSiteApp)' == 'true'">
     <StaticWebAssetsEnabled Condition="'$(StaticWebAssetsEnabled)' == ''">true</StaticWebAssetsEnabled>
-    <!-- Precompress published assets, but skip compression during build/watch.
-         A project or command-line setting remains authoritative. -->
-    <CompressionEnabled Condition="'$(CompressionEnabled)' == ''">true</CompressionEnabled>
+    <!-- Static hosts compress responses themselves, so .gz/.br copies are opt-in for
+         servers that send precompressed files. Build/watch skips compression.
+         A project or command-line setting remains authoritative. Set this before the
+         SDK, which otherwise enables compression. -->
+    <CompressionEnabled Condition="'$(CompressionEnabled)' == ''">false</CompressionEnabled>
     <DisableBuildCompression Condition="'$(DisableBuildCompression)' == ''">true</DisableBuildCompression>
     <_KijiConfiguredStaticWebAssetBasePath>$(StaticWebAssetBasePath)</_KijiConfiguredStaticWebAssetBasePath>
     <!-- The site is published at its root, including SDK-generated service-worker

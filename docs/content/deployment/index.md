@@ -87,11 +87,15 @@ Check that the host serves `about/index.html` for `/about/` and uses `404.html`,
 
 ## Compression
 
-Publishing also writes `.gz` and `.br` copies of compressible files for servers configured
-to send precompressed files, such as nginx with `gzip_static`. GitHub Pages, Netlify,
-Vercel, and Cloudflare Pages compress responses themselves, so skip the copies there by
-adding this to the project's `<PropertyGroup>`:
+GitHub Pages, Netlify, Vercel, and Cloudflare Pages compress responses themselves, so
+`dist/` contains no compressed copies by default. For a server configured to send
+precompressed files, such as nginx with `gzip_static` or Caddy with `precompressed`, also
+write `.gz` and `.br` copies of compressible files by adding this to the project's
+`<PropertyGroup>`:
 
 ```xml
-<CompressionEnabled>false</CompressionEnabled>
+<CompressionEnabled>true</CompressionEnabled>
 ```
+
+The copies are made when you publish. If you edit files in `dist/` afterward, the server
+keeps sending the old copies, so make changes in the project and publish again.

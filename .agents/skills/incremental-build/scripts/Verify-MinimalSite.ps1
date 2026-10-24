@@ -19,22 +19,22 @@ return await site.RunAsync();
 $project = Join-Path $site 'Minimal.csproj'
 $original = [IO.File]::ReadAllText($project)
 try {
-foreach ($mode in @('publish', 'no-build', 'compressed', 'project-compressed', 'project-uncompressed', 'global-uncompressed', 'default-restored')) {
+# Compression is opt-in. The order adds and then retires the copies, both through a
+# command-line and a project setting; the command line wins over the project.
+foreach ($mode in @('publish', 'no-build', 'compressed', 'compressed-no-build', 'default-restored', 'project-compressed', 'global-uncompressed')) {
     $projectText = $original
     if ($mode -in @('project-compressed', 'global-uncompressed')) {
         $projectText = $projectText.Replace('</PropertyGroup>', '<CompressionEnabled>true</CompressionEnabled></PropertyGroup>')
-    }
-    if ($mode -eq 'project-uncompressed') {
-        $projectText = $projectText.Replace('</PropertyGroup>', '<CompressionEnabled>false</CompressionEnabled></PropertyGroup>')
     }
     if ([IO.File]::ReadAllText($project) -cne $projectText) { [IO.File]::WriteAllText($project, $projectText) }
     [string[]] $extra = switch ($mode) {
         'no-build' { '--no-build' }
         'compressed' { '-p:CompressionEnabled=true' }
+        'compressed-no-build' { '--no-build', '-p:CompressionEnabled=true' }
         'global-uncompressed' { '-p:CompressionEnabled=false' }
         default { @() }
     }
-    $compressed = $mode -notin @('project-uncompressed', 'global-uncompressed')
+    $compressed = $mode -in @('compressed', 'compressed-no-build', 'project-compressed')
     & dotnet publish $site -c Release "-p:RestorePackagesPath=$RunRoot/packages" @extra *> (Join-Path $RunRoot "minimal-$mode.log")
     if ($LASTEXITCODE) { throw "Minimal site failed: $mode. See $RunRoot." }
     $files = @(Get-ChildItem (Join-Path $site 'dist') -Recurse -File)
@@ -64,10 +64,9 @@ foreach ($mode in @('publish', 'no-build', 'compressed', 'project-compressed', '
 $webSite = Join-Path $RunRoot 'minimal-web-options'
 New-Item -ItemType Directory -Force $webSite | Out-Null
 Copy-Item -LiteralPath (Join-Path $site 'Program.cs'), (Join-Path $site 'Home.razor') -Destination $webSite
-foreach ($mode in @('default', 'project-compressed', 'project-uncompressed', 'global-uncompressed')) {
+foreach ($mode in @('default', 'project-compressed', 'global-uncompressed')) {
     $webProject = $original.Replace('Microsoft.NET.Sdk.Razor', 'Microsoft.NET.Sdk.Web')
     if ($mode -in @('project-compressed', 'global-uncompressed')) { $webProject = $webProject.Replace('</PropertyGroup>', '<CompressionEnabled>true</CompressionEnabled></PropertyGroup>') }
-    if ($mode -eq 'project-uncompressed') { $webProject = $webProject.Replace('</PropertyGroup>', '<CompressionEnabled>false</CompressionEnabled></PropertyGroup>') }
     [IO.File]::WriteAllText((Join-Path $webSite 'MinimalWeb.csproj'), $webProject)
     [string[]] $extra = if ($mode -eq 'global-uncompressed') { @('-p:CompressionEnabled=false') } else { @() }
     & dotnet publish $webSite -c Release "-p:RestorePackagesPath=$RunRoot/packages" @extra *> (Join-Path $RunRoot "minimal-web-$mode.log")
@@ -75,7 +74,7 @@ foreach ($mode in @('default', 'project-compressed', 'project-uncompressed', 'gl
     $webHtml = Join-Path $webSite 'dist/index.html'
     if (![IO.File]::ReadAllText($webHtml).Contains('<h1>Minimal site</h1>')) { throw "Missing Web HTML: $mode." }
     foreach ($extension in @('br', 'gz')) {
-        if ((Test-Path -LiteralPath "$webHtml.$extension") -ne ($mode -notin @('project-uncompressed', 'global-uncompressed'))) { throw "Unexpected Web HTML compression: $mode/$extension." }
+        if ((Test-Path -LiteralPath "$webHtml.$extension") -ne ($mode -eq 'project-compressed')) { throw "Unexpected Web HTML compression: $mode/$extension." }
     }
 }
 
@@ -92,7 +91,7 @@ try {
     if ($LASTEXITCODE -or !(Test-Path (Join-Path $site 'dist/Minimal.styles.css'))) { throw 'Scoped CSS failed.' }
     [IO.File]::Delete((Join-Path $site 'Home.razor.css'))
     & dotnet publish $site -c Release "-p:RestorePackagesPath=$RunRoot/packages" *> (Join-Path $RunRoot 'minimal-emptied.log')
-    if ($LASTEXITCODE -or (Compare-Object @('index.html', 'index.html.br', 'index.html.gz') @(Get-ChildItem (Join-Path $site 'dist') -File -Recurse | Select-Object -ExpandProperty Name | Sort-Object))) { throw 'Retired assets remain.' }
+    if ($LASTEXITCODE -or (Compare-Object @('index.html') @(Get-ChildItem (Join-Path $site 'dist') -File -Recurse | Select-Object -ExpandProperty Name | Sort-Object))) { throw 'Retired assets remain.' }
     foreach ($kind in @('runtime', 'publish.runtime')) {
         $manifest = Get-Content (Join-Path $site "bin/Release/net10.0/Minimal.staticwebassets.$kind.json") -Raw | ConvertFrom-Json
         if ($manifest.ContentRoots.Count) { throw "Stale asset roots remain: $kind" }

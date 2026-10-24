@@ -51,10 +51,9 @@ host; see [Deployment](../deployment/) for hosting and sub-paths, and
 
 ## Pages and routes
 
-Kiji automatically discovers components with `@page` routes in the entry assembly.
-For a route such as `/posts/{Slug}/`, use `AddPageParameters<TPage>` to supply each page's
-parameters; missing registration is an error. Fixed routes need no registration:
-`/about/` becomes `about/index.html`. Use `AddPageAssembly` to include another assembly.
+Kiji discovers components with `@page` routes automatically: `/about/` becomes
+`about/index.html`. For a route such as `/posts/{Slug}/`, use `AddPageParameters<TPage>`
+to supply each page's parameters.
 See [Routing](../routing/) for parameter mapping and 404 pages.
 
 ## Layouts and the document head

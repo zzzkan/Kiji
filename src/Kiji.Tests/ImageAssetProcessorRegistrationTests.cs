@@ -77,7 +77,7 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
 
     private StaticSite CreateApp()
     {
-        var app = TestSiteFactory.Create([], new SiteExecutionPaths(_root));
+        var app = TestSiteFactory.Create(new SiteExecutionPaths(_root));
         app.Info = new SiteInfo { Name = "Images", BaseUrl = new Uri("https://example.test/") };
         return app;
     }

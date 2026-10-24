@@ -16,7 +16,7 @@ public sealed class AppConfigurationTests : IDisposable
     [InlineData("dev")]
     public async Task MissingSite_FailsBeforeCreatingOutput_AndCanBeCorrected(string entry)
     {
-        await using var app = TestSiteFactory.Create([], new SiteExecutionPaths(_root));
+        await using var app = TestSiteFactory.Create(new SiteExecutionPaths(_root));
         var output = Path.Combine(_root, "output");
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
@@ -40,7 +40,7 @@ public sealed class AppConfigurationTests : IDisposable
     [InlineData(true)]
     public async Task Execution_FreezesConfiguration_AndLoadsContentOnlyAfterPathsSettle(bool serve)
     {
-        await using var app = TestSiteFactory.Create([], new SiteExecutionPaths(_root));
+        await using var app = TestSiteFactory.Create(new SiteExecutionPaths(_root));
         app.Info = TestArticleContents.CreateSiteInfo();
         app.UseServices(services => services.AddScoped<object>());
         var loads = 0;

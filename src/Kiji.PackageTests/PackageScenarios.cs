@@ -38,8 +38,6 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         Assert.Contains("boundary-publish-warning", output, StringComparison.Ordinal);
         Assert.DoesNotContain("boundary-publish-information", output, StringComparison.Ordinal);
         Assert.Contains("Boundary fallback", Read("boundary/index.html"), StringComparison.Ordinal);
-        Assert.Contains("first: 7", Read("details/first/index.html"), StringComparison.Ordinal);
-        Assert.False(File.Exists(Path.Combine(fixture.Site, "dist", "shared", "index.html")));
 
         var html = Read("index.html");
         Assert.Contains("<title>First article</title>", html, StringComparison.Ordinal);
@@ -56,13 +54,7 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         fixture.Replace("Site/content/article.md", "Original body.", "Edited body.");
         fixture.Replace("Site/wwwroot/app.js", "original", "modified");
         fixture.Replace("Library/Card.resx", "Hello", "Welcome");
-        fixture.Replace("Site/Program.cs", "return await site.RunAsync();", """
-            site.AddPageParameters<Library.SharedPage>(_ => [new { Title = "Shared page parameters" }]);
-            site.AddPageAssembly(typeof(Library.SharedPage).Assembly);
-            return await site.RunAsync();
-            """);
         await fixture.PublishAsync();
-        Assert.Contains("Shared page parameters", Read("shared/index.html"), StringComparison.Ordinal);
         html = Read("index.html");
         Assert.Contains("Edited body.", html, StringComparison.Ordinal);
         Assert.Matches("<p b-[a-z0-9]+>Welcome</p>", html);

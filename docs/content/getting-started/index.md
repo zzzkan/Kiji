@@ -116,7 +116,7 @@ Create `Pages/Home.razor`:
 <p>This page is a Razor component rendered to static HTML.</p>
 ```
 
-Kiji automatically finds public components with `@page` routes in the entry assembly. Start the
+Kiji finds public components with `@page` routes automatically. Start the
 development server:
 
 ```pwsh

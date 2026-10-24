@@ -98,7 +98,7 @@ public sealed class IncrementalBuildTests : IDisposable
         var output = Path.Combine(_testDir, "dist");
         foreach (var value in new[] { "first", "second" })
         {
-            await using var app = TestSiteFactory.Create([], new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
+            await using var app = TestSiteFactory.Create(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
             app.Info = TestArticleContents.CreateSiteInfo();
             TestSiteAssets.Bind(app, Path.Combine(_testDir, "static"));
             app.UseServices(services => services.AddSingleton<Func<string>>(() => value));
@@ -451,7 +451,7 @@ public sealed class IncrementalBuildTests : IDisposable
 
     private static async Task BuildRelatedAsync(string root)
     {
-        await using var app = TestSiteFactory.Create([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
+        await using var app = TestSiteFactory.Create(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
         app.Info = TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(app, Path.Combine(app.Paths.ProjectDirectory, "static"));
 
@@ -476,7 +476,7 @@ public sealed class IncrementalBuildTests : IDisposable
 
     private static async Task BuildScopedAsync(string root, string notesDirectory)
     {
-        await using var app = TestSiteFactory.Create([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
+        await using var app = TestSiteFactory.Create(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
         app.Info = TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(app, Path.Combine(app.Paths.ProjectDirectory, "static"));
 
@@ -862,7 +862,7 @@ public sealed class IncrementalBuildTests : IDisposable
 
     private static StaticSite CreateBuildApp(string root, Action? onRender = null, string directory = "content")
     {
-        var app = TestSiteFactory.Create([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
+        var app = TestSiteFactory.Create(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
         app.Info = TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(app, Path.Combine(app.Paths.ProjectDirectory, "static"));
 

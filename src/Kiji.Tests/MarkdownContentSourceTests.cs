@@ -147,7 +147,7 @@ public sealed class MarkdownContentSourceTests : IDisposable
 
     private StaticSite CreateApp(string? projectDirectory = null)
     {
-        var app = TestSiteFactory.Create([], new SiteExecutionPaths(projectDirectory ?? _testDir));
+        var app = TestSiteFactory.Create(new SiteExecutionPaths(projectDirectory ?? _testDir));
         app.Info = TestArticleContents.CreateSiteInfo();
         return app;
     }

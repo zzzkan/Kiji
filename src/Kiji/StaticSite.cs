@@ -177,12 +177,7 @@ public sealed class StaticSite
         EnsureConfigurable();
         ArgumentNullException.ThrowIfNull(assembly);
 
-        if (_pageAssemblies.Contains(assembly))
-        {
-            return this;
-        }
-
-        _pageAssemblies.Add(assembly);
+        if (!_pageAssemblies.Contains(assembly)) { _pageAssemblies.Add(assembly); }
         return this;
     }
 
@@ -200,17 +195,12 @@ public sealed class StaticSite
         return this;
     }
 
-    /// <summary>Adds parameter sets rendered at every parameterized route of a component, or at every route when all are fixed.</summary>
-    /// <param name="parameters">A deferred factory evaluated per snapshot; each object supplies route values and component parameters.</param>
+    /// <summary>Adds parameter sets rendered at every parameterized route of a page, or at every route when all are fixed.</summary>
+    /// <param name="parameters">A factory run once per build; each object is a complete set of route values and component parameters.</param>
     /// <remarks>
-    /// The component must belong to the entry assembly or an assembly added with AddPageAssembly.
-    /// Each set must supply the route values of every receiving route. Fixed routes beside parameterized routes
-    /// still render once with default values. Multiple registrations concatenate their results, which may be empty.
-    /// For a component with only fixed routes, explicit sets replace the default parameterless rendering.
-    /// Only route parameters are required; EditorRequired is not validated.
-    /// Values retain their types and must be assignable to public writable component parameters; no implicit conversions occur.
-    /// Only URL segments are converted to invariant strings. Treat referenced values as read-only for the snapshot lifetime;
-    /// Kiji neither deep-clones nor disposes them. Parameters without a supported stable fingerprint force the page to render on each build.
+    /// The page must belong to the entry assembly or an assembly added with AddPageAssembly. Fixed routes beside
+    /// parameterized routes render once with default values. Registrations concatenate; an empty result generates no pages.
+    /// Values keep their types and are treated as read-only. Values without a stable fingerprint disable HTML reuse.
     /// </remarks>
     public StaticSite AddPageParameters<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)
         where TPage : IComponent
@@ -527,13 +517,11 @@ public sealed class StaticSite
             scanned.AddRange(PageDiscovery.FromAssembly(assembly));
         }
 
-        var registeredTypes = _routeRegistrations.Select(static registration => registration.ComponentType)
-            .Distinct().ToArray();
-        var parameterRoutes = registeredTypes.ToDictionary(static type => type, FindParameterRoutes);
-        // Explicit types can be non-public, but never implicitly include a foreign assembly.
-        // Like a scanned component, a registered one keeps its other fixed routes.
+        var parameterRoutes = _routeRegistrations.Select(static registration => registration.ComponentType)
+            .Distinct().ToDictionary(static type => type, FindParameterRoutes);
+        // Registered non-public components are pages too, with all of their routes.
         var scannedTypes = scanned.Select(static page => page.ComponentType).ToHashSet();
-        scanned.AddRange(registeredTypes.Where(type => !scannedTypes.Contains(type)).SelectMany(PageDiscovery.FromType));
+        scanned.AddRange(parameterRoutes.Keys.Where(type => !scannedTypes.Contains(type)).SelectMany(PageDiscovery.FromType));
 
         var discovered = PageDiscovery.EnsureUniqueRoutes(ApplyNotFoundOverride(scanned));
 
@@ -548,7 +536,6 @@ public sealed class StaticSite
             ValidateRouteEntries(registration.ComponentType, routes, entries);
             snapshotPhases.Mark(BuildPhaseTimer.RouteValidation);
 
-            // Every entry renders at every target route; rendering only reads the shared entries.
             foreach (var route in routes)
             {
                 if (!pageParameters.TryGetValue(route.SourceIdentifier, out var combined))
@@ -604,7 +591,6 @@ public sealed class StaticSite
     {
         var declaredParameters = PageDiscovery.Parameters(componentType);
         var routeList = string.Join(", ", routes.Select(static route => $"'{route.SourceIdentifier}'"));
-        var everyRoute = routes.Count > 1 ? " Each parameter set renders at every one of the component's parameterized routes." : string.Empty;
 
         foreach (var entry in entries)
         {
@@ -617,7 +603,7 @@ public sealed class StaticSite
                 if (missing.Length > 0)
                 {
                     throw new InvalidOperationException(
-                        $"Route mapping for '{componentType.FullName}' did not supply required route values for '{route.SourceIdentifier}': {string.Join(", ", missing.Select(static name => $"'{name}'"))}.{everyRoute}");
+                        $"Route mapping for '{componentType.FullName}' did not supply required route values for '{route.SourceIdentifier}': {string.Join(", ", missing.Select(static name => $"'{name}'"))}.");
                 }
             }
 

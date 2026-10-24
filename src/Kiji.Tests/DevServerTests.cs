@@ -454,7 +454,7 @@ public sealed class DevServerTests : IAsyncDisposable
         Directory.CreateDirectory(notes);
         await File.WriteAllTextAsync(Path.Combine(posts, "post.md"), "---\ntitle: Post\n---\n\nOriginal body");
         await File.WriteAllTextAsync(Path.Combine(notes, "note.md"), "---\ntitle: Original note\n---\n");
-        _app = TestSiteFactory.Create([], new SiteExecutionPaths(Path.Combine(_testDir, "site")));
+        _app = TestSiteFactory.Create(new SiteExecutionPaths(Path.Combine(_testDir, "site")));
         _app.Info = TestArticleContents.CreateSiteInfoWithBasePath();
         string SourcePath(string path)
         {
@@ -526,7 +526,7 @@ public sealed class DevServerTests : IAsyncDisposable
     {
         await File.WriteAllTextAsync(Path.Combine(_contentsDir, "hello-world.md"), "---\ntitle: Hello World\n---\n");
 
-        var app = TestSiteFactory.Create([], new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
+        var app = TestSiteFactory.Create(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
         app.Info = site ?? TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(app, _staticDir);
         configureAssets?.Invoke(app);

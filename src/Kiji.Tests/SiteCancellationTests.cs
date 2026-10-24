@@ -123,7 +123,7 @@ public sealed class SiteCancellationTests : IDisposable
 
     private StaticSite CreateApp(TrackingImageProcessor processor)
     {
-        var app = TestSiteFactory.Create([], new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")));
+        var app = TestSiteFactory.Create(new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")));
         app.Info = new SiteInfo { Name = "Cancellation", BaseUrl = new Uri("https://example.test/") };
         TestSite.TestSiteAssets.Bind(app, Path.Combine(_root, "wwwroot"));
         app.UseServices(services => services.AddSingleton<IImageProcessor>(_ => processor)).UseMarkdownContent<FrontMatter>();

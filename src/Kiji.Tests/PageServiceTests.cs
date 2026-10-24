@@ -233,7 +233,7 @@ public sealed class PageServiceTests : IDisposable
 
     private StaticSite CreateApp(ServiceProbe? probe = null)
     {
-        var app = TestSiteFactory.Create([], new SiteExecutionPaths(_root));
+        var app = TestSiteFactory.Create(new SiteExecutionPaths(_root));
         app.Info = new SiteInfo { Name = "Services", BaseUrl = new Uri("https://example.test/") };
         if (probe is not null)
         {

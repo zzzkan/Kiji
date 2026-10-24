@@ -35,9 +35,7 @@ return await app.RunAsync();
 
 Creates a site rooted at its project directory. `args` are forwarded to ASP.NET Core
 configuration during development, for example `--urls`. Build the project with Kiji's
-targets before running the executable. The site must run as an application with an entry
-assembly, whose pages are discovered automatically; otherwise `Create` throws
-`InvalidOperationException`.
+targets before running the executable.
 
 #### `StaticSite.Info`
 
@@ -82,38 +80,25 @@ missing registration is an error before rendering.
 
 #### `AddPageAssembly(Assembly assembly)`
 
-Includes routed components from an additional, non-null assembly. Referenced assemblies
-are not scanned automatically. Repeated registration, including the entry assembly, has
-no additional effect. Every route in the assembly is included, even when the site uses
-only one of its pages; register an empty `AddPageParameters<TPage>` sequence to leave out
-a page.
+Includes every routed component of an additional, non-null assembly. Referenced
+assemblies are not scanned automatically, and repeated registration has no effect.
 
 #### `AddPageParameters<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)`
 
-Adds parameter sets for an `IComponent`. Each set is rendered at every parameterized route
-of the component and must supply the route values of all of them. Fixed routes beside
-parameterized routes still generate one page each with default parameter values; when all
-routes are fixed, each set is rendered at every route instead. The
-component must belong to the entry assembly or an assembly added with `AddPageAssembly`;
-supplying parameters does not implicitly include an assembly. Registration order does
-not matter. The factory is deferred until paths and services are ready and runs once per registration per
-site snapshot. Its service provider can resolve registered content dictionaries.
+Adds parameter sets for a component in a page assembly. Each set is rendered at every
+parameterized route of the component and must supply all of their route values; fixed
+routes beside them render once with default values. For a component with only fixed
+routes, the sets replace the default rendering. The factory runs once per build and per
+development reload, after services are ready, and can resolve content dictionaries.
 
-Each returned object is the component's complete parameter set. Anonymous objects and
-string/object dictionaries are supported. Names match public writable `[Parameter]`
-properties case-insensitively; route parameter names also build the URL. Values retain
-their .NET types, although route values are formatted invariantly for their URL segment.
-Missing or empty route values, unknown parameter names, and incompatible values fail
-planning. Non-route parameters may be omitted to use the component's defaults.
-`EditorRequired` is not validated by Kiji.
-
-Multiple registrations for the same component are concatenated and an empty sequence is
-allowed, explicitly generating no pages for the receiving routes. For a component with
-only fixed routes, explicit parameter sets replace the default rendering; they do not add
-another default page. Multiple sets for the same fixed route fail with duplicate output
-paths. Treat supplied objects as read-only
-for the snapshot; Kiji does not clone or dispose them. See [Routing](../routing/) for examples and supported
-route templates.
+Each returned object is a complete parameter set: an anonymous object or a string-keyed
+dictionary. Names match public writable `[Parameter]` properties case-insensitively, and
+values keep their .NET types; route values are formatted invariantly for the URL. Omitted
+parameters keep their defaults, and `EditorRequired` is not checked. Unknown names,
+incompatible values, missing or empty route values, and duplicate output paths fail before
+rendering. Registrations for the same component concatenate; an empty sequence generates
+no pages. Treat supplied objects as read-only; Kiji does not clone or dispose them. See
+[Routing](../routing/) for examples and supported route templates.
 
 HTML can be reused when parameter values are `null` or have one of these types:
 `string`, `bool`, `char`, `sbyte`, `byte`, `short`, `ushort`, `int`, `uint`, `long`,

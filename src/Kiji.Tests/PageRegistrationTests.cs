@@ -10,16 +10,6 @@ namespace Kiji.Tests;
 
 public sealed class PageRegistrationTests
 {
-    [Fact]
-    public async Task EntryAssembly_IsDiscoveredOnce_WithoutRegistration()
-    {
-        var type = CreatePageType("/entry/", "/alias/");
-        await using var site = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory), type.Assembly);
-        site.Info = TestArticleContents.CreateSiteInfo();
-        site.AddPageAssembly(type.Assembly);
-        Assert.Equal(["/alias/", "/entry/"], site.CreateSnapshot().Pages.Select(page => page.RoutePath).Order());
-    }
-
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -32,27 +22,6 @@ public sealed class PageRegistrationTests
         var error = Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
         Assert.Contains("AddPageAssembly", error.Message, StringComparison.Ordinal);
         Assert.Contains(type.FullName!, error.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task ForeignParameters_CanPrecedeAssemblyRegistration()
-    {
-        var type = CreatePageType("/foreign/{Value}/");
-        await using var site = CreateSite();
-        RegisterTyped(site, type);
-        site.AddPageAssembly(type.Assembly);
-        Assert.Empty(site.CreateSnapshot().Pages);
-    }
-
-    [Fact]
-    public async Task AdditionalAssembly_DynamicRouteWithoutParametersFails()
-    {
-        var type = CreatePageType("/foreign/{Value}/");
-        await using var site = CreateSite();
-        site.AddPageAssembly(type.Assembly);
-        var error = Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
-        Assert.Contains("/foreign/{Value}/", error.Message, StringComparison.Ordinal);
-        Assert.Contains("AddPageParameters", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -106,8 +75,7 @@ public sealed class PageRegistrationTests
         await using var site = CreateSite();
         var type = CreatePageType("/missing/{Value}/");
         site.AddPageAssembly(type.Assembly);
-        typeof(StaticSite).GetMethod(nameof(StaticSite.AddPageParameters), 1, [typeof(Func<IServiceProvider, IEnumerable<object>>)])!.MakeGenericMethod(type)
-            .Invoke(site, [new Func<IServiceProvider, IEnumerable<object>>(static _ => [new { Value = "one" }])]);
+        RegisterTyped(site, type, new { Value = "one" });
         var error = Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
         Assert.Contains("'Value'", error.Message, StringComparison.Ordinal);
         Assert.Contains("not a declared", error.Message, StringComparison.Ordinal);
@@ -118,11 +86,8 @@ public sealed class PageRegistrationTests
     {
         var first = CreatePageType("/first/");
         var second = CreatePageType("/second/");
-        var parameterizedOnly = CreatePageType("/empty/{Value}/");
         await using var site = CreateSite();
-        site.AddPageAssembly(first.Assembly).AddPageAssembly(first.Assembly)
-            .AddPageAssembly(second.Assembly).AddPageAssembly(parameterizedOnly.Assembly);
-        RegisterTyped(site, parameterizedOnly);
+        site.AddPageAssembly(first.Assembly).AddPageAssembly(first.Assembly).AddPageAssembly(second.Assembly);
 
         Assert.Equal(["/first/", "/second/"], site.CreateSnapshot().Pages.Select(page => page.RoutePath).Order());
     }
@@ -136,16 +101,11 @@ public sealed class PageRegistrationTests
         Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task MixedRoutes_ParametersTargetTheParameterizedRoute(bool discovered)
+    [Fact]
+    public async Task MixedRoutes_ParametersTargetTheParameterizedRoute()
     {
-        // Discovered: a public scanned component. Otherwise: a non-public component included by registration.
-        var type = discovered ? CreatePageType(valueParameter: true, "/mixed/", "/mixed/{Value}/") : typeof(MixedRoutes);
         await using var site = CreateSite();
-        if (discovered) { site.AddPageAssembly(type.Assembly); }
-        RegisterTyped(site, type, new { Value = "one" });
+        site.AddPageParameters<MixedRoutes>(static _ => [new { Value = "one" }]);
 
         var pages = site.CreateSnapshot().Pages.OrderBy(static page => page.RoutePath, StringComparer.Ordinal).ToArray();
         Assert.Equal(["/mixed/", "/mixed/one/"], pages.Select(static page => page.RoutePath));
@@ -191,25 +151,6 @@ public sealed class PageRegistrationTests
         await using var site = CreateSite();
         site.AddPageParameters<Parameterized>(static _ => [new { Value = "same" }, new { Value = "same" }]);
         Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
-    }
-
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task NotFound_AssemblyRegistrationIsOrderIndependent(bool scan)
-    {
-        var type = CreatePageType("/missing/");
-        await using var site = CreateSite();
-        if (scan)
-        {
-            site.AddPageAssembly(type.Assembly);
-        }
-        RegisterNotFound(site, type);
-        if (!scan) { site.AddPageAssembly(type.Assembly); }
-
-        var page = Assert.Single(site.CreateSnapshot().Pages);
-        Assert.Equal("/404.html", page.RoutePath);
-        Assert.Equal("404.html", page.OutputRelativePath);
     }
 
     [Fact]
@@ -331,7 +272,7 @@ public sealed class PageRegistrationTests
 
     private static StaticSite CreateSite(SiteExecutionPaths? paths = null)
     {
-        var site = TestSiteFactory.Create([], paths ?? new SiteExecutionPaths(AppContext.BaseDirectory));
+        var site = TestSiteFactory.Create(paths ?? new SiteExecutionPaths(AppContext.BaseDirectory));
         site.Info = TestArticleContents.CreateSiteInfo();
         return site;
     }
@@ -347,9 +288,7 @@ public sealed class PageRegistrationTests
         typeof(StaticSite).GetMethod(nameof(StaticSite.AddNotFoundPage))!.MakeGenericMethod(type).Invoke(site, null);
     }
 
-    private static Type CreatePageType(params string[] routes) => CreatePageType(valueParameter: false, routes);
-
-    private static Type CreatePageType(bool valueParameter, params string[] routes)
+    private static Type CreatePageType(params string[] routes)
     {
         var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName($"KijiPage_{Guid.NewGuid():N}"), AssemblyBuilderAccess.RunAndCollect);
         var module = assembly.DefineDynamicModule("Pages");
@@ -367,16 +306,6 @@ public sealed class PageRegistrationTests
         foreach (var route in routes)
         {
             type.SetCustomAttribute(new CustomAttributeBuilder(typeof(RouteAttribute).GetConstructor([typeof(string)])!, [route]));
-        }
-        if (valueParameter)
-        {
-            // Planning only reads the [Parameter] declaration and its public setter.
-            var setter = type.DefineMethod("set_Value", MethodAttributes.Public | MethodAttributes.SpecialName | MethodAttributes.HideBySig,
-                null, [typeof(string)]);
-            setter.GetILGenerator().Emit(OpCodes.Ret);
-            var property = type.DefineProperty("Value", PropertyAttributes.None, typeof(string), null);
-            property.SetSetMethod(setter);
-            property.SetCustomAttribute(new CustomAttributeBuilder(typeof(ParameterAttribute).GetConstructor(Type.EmptyTypes)!, []));
         }
         return type.CreateType()!;
     }

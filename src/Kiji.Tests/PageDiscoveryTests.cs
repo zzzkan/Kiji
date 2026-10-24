@@ -27,26 +27,10 @@ public sealed class PageDiscoveryTests
     [Fact]
     public void Create_DiscoversFixedRoutesWithoutRegistration()
     {
-        var app = TestSiteFactory.Create([], new SiteExecutionPaths(AppContext.BaseDirectory), includeFixedPages: true);
-        app.Info = TestArticleContents.CreateSiteInfo();
-        app.UseContentSource<Post>(static _ => []);
-        app.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
-            .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
-
-        var requests = app.CreateSnapshot().Pages;
-
-        Assert.Contains(requests, static request => request.SourceIdentifier == "/");
-        Assert.Contains(requests, static request => request.SourceIdentifier == "/about/");
-    }
-
-    [Fact]
-    public void AddPageAssembly_WithoutRoutedComponents_DoesNotAddPages()
-    {
-        var app = TestSiteFactory.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
+        var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory), typeof(HomePage), typeof(AboutPage));
         app.Info = TestArticleContents.CreateSiteInfo();
 
-        app.AddPageAssembly(typeof(StaticSite).Assembly);
-        Assert.Empty(app.CreateSnapshot().Pages);
+        Assert.Equal(["/", "/about/"], app.CreateSnapshot().Pages.Select(static page => page.RoutePath).Order(StringComparer.Ordinal));
     }
 
     [Fact]
@@ -84,7 +68,7 @@ public sealed class PageDiscoveryTests
     [Fact]
     public void CreateSnapshot_UnregisteredParameterizedRoute_FailsWithPageAndRoute()
     {
-        var app = TestSiteFactory.Create([], new SiteExecutionPaths(AppContext.BaseDirectory), unconfiguredPage: typeof(TagsPage));
+        var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory), typeof(TagsPage));
         app.Info = TestArticleContents.CreateSiteInfo();
         app.UseContentSource<Post>(static _ => []);
         app.UseDefaultLayout<MainLayout>();
@@ -155,7 +139,7 @@ public sealed class PageDiscoveryTests
     [Fact]
     public void CreateSnapshot_AddNotFoundPageWithoutPageTemplate_ThrowsInformativeException()
     {
-        var app = TestSiteFactory.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
+        var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = TestArticleContents.CreateSiteInfo();
         app.UseDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(app);
@@ -168,7 +152,7 @@ public sealed class PageDiscoveryTests
 
     private static (StaticSite App, ContentDictionary<Post> Posts) CreateAppWithTagRoutes(Func<IEnumerable<object>> tagRoutes)
     {
-        var app = TestSiteFactory.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
+        var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = TestArticleContents.CreateSiteInfo();
         app.UseContentSource<Post>(static _ => []);
         app.UseDefaultLayout<MainLayout>();

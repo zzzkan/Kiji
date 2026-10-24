@@ -13,7 +13,7 @@ public sealed class ComponentRendererTests
     [Fact]
     public async Task RenderComponentAsync_ErrorBoundaryRendersAsyncFallbackWithoutLoggingProviders()
     {
-        await using var app = TestSiteFactory.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
+        await using var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = TestArticleContents.CreateSiteInfo();
         app.UseServices(services => services.AddLogging(logging => logging.ClearProviders()));
         app.UsePlanningOptions();
@@ -30,7 +30,7 @@ public sealed class ComponentRendererTests
     [InlineData("https://example.com/日本/")]
     public async Task RenderPageAsync_IsolatesNavigationAndNavLinksAcrossRenders(string baseUrl)
     {
-        await using var app = TestSiteFactory.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
+        await using var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = new SiteInfo { Name = "Navigation", BaseUrl = new Uri(baseUrl) };
         app.AddPageParameters<NavigationTestPage>(_ => [new { Id = "first" }, new { Id = "日本 語" }]);
         var pages = app.CreateSnapshot().Pages;
@@ -59,7 +59,7 @@ public sealed class ComponentRendererTests
     [Fact]
     public async Task RenderPageAsync_IsolatesHeadAcrossParallelAndSequentialRenders()
     {
-        await using var app = TestSiteFactory.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
+        await using var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = TestArticleContents.CreateSiteInfo();
         string[] names = ["first", "second"];
 

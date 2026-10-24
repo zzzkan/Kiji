@@ -199,7 +199,7 @@ public sealed class RunAsyncTests : IDisposable
 
     private StaticSite CreateApp()
     {
-        var app = TestSiteFactory.Create([], new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
+        var app = TestSiteFactory.Create(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
         app.Info = TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(app, Path.Combine(app.Paths.ProjectDirectory, "static"));
 

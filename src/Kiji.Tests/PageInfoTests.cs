@@ -78,7 +78,7 @@ public sealed class PageInfoTests : IDisposable
 
     private StaticSite CreateApp(string baseUrl)
     {
-        var app = TestSiteFactory.Create([], new SiteExecutionPaths(_root));
+        var app = TestSiteFactory.Create(new SiteExecutionPaths(_root));
         app.Info = new SiteInfo { BaseUrl = new Uri(baseUrl), Name = "Page info" };
         return app;
     }

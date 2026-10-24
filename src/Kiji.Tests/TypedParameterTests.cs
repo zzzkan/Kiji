@@ -195,7 +195,7 @@ public sealed class TypedParameterTests : IDisposable
 
     private StaticSite CreateSite(string directory, ParameterRenderLog log)
     {
-        var site = TestSiteFactory.Create([], new SiteExecutionPaths(Path.Combine(_root, directory)));
+        var site = TestSiteFactory.Create(new SiteExecutionPaths(Path.Combine(_root, directory)));
         site.Info = TestArticleContents.CreateSiteInfo();
         Directory.CreateDirectory(Path.Combine(site.Paths.ProjectDirectory, "content"));
         Directory.CreateDirectory(Path.Combine(site.Paths.ProjectDirectory, "wwwroot"));

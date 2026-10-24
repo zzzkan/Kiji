@@ -2,14 +2,10 @@
 
 [![CI](https://github.com/zzzkan/kiji/actions/workflows/ci.yml/badge.svg)](https://github.com/zzzkan/kiji/actions/workflows/ci.yml)
 [![NuGet](https://img.shields.io/nuget/v/Kiji.svg)](https://www.nuget.org/packages/Kiji)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/zzzkan/kiji/blob/main/LICENSE)
+[![License: MIT](https://img.shields.io/github/license/zzzkan/Kiji)](https://github.com/zzzkan/kiji/blob/main/LICENSE)
 
 **Write Razor. Publish a purely static site.** Kiji brings your .NET components and Markdown
 together in plain HTML, ready for any static host.
-
-<p align="center">
-    <img width="720" alt="kiji demo" src="https://github.com/user-attachments/assets/85bffb06-7001-4d41-95e8-c8b92a412b2f" />
-</p>
 
 ## Why Kiji
 
@@ -43,9 +39,17 @@ dotnet new kiji-blog -o MyBlog
 cd MyBlog
 ```
 
-Edit `SiteInfo` in `Program.cs` to set your site name, author, and public `BaseUrl`,
-including any deployment subpath. The template includes dated Markdown posts, an
-article list, shared styles, and RSS.
+Edit your site settings in `Program.cs`:
+
+```csharp
+//Program.cs
+
+app.Info = new SiteInfo
+{
+    BaseUrl = new Uri("https://example.org/blog/"),
+    Name = "My Blog",
+};
+```
 
 Start the development server and open <http://localhost:8080>:
 
@@ -67,10 +71,14 @@ to use a template or build a minimal blog from scratch.
 
 ## Demo
 
-- [Kiji documentation site](https://kiji-docs.zzzkan.workers.dev/) ([source code](https://github.com/zzzkan/kiji/tree/main/docs))
-- [Blog template with Markdown posts](https://zzzkan.github.io/Kiji.Templates/kiji-blog/)
-- [Blazor WebAssembly template recreated with Kiji and JavaScript](https://zzzkan.github.io/Kiji.Templates/kiji-interactive/)
-- [Author's personal blog (zzzkan.me)](https://zzzkan.me/)
+| Demo                                                                                                                                                                                              | Image                                                                                                                  | Create a site |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | --- |
+| [Kiji Blog Template](https://zzzkan.github.io/Kiji.Templates/kiji-blog/) ([source](https://github.com/zzzkan/Kiji.Templates/tree/main/src/Kiji.Templates/content/Kiji.Blog))                      | ![Kiji Blog template](https://raw.githubusercontent.com/zzzkan/Kiji.Templates/main/images/kiji-blog.png)               | `dotnet new kiji-blog -o MyBlog` |
+| [Kiji Doc Template](https://zzzkan.github.io/Kiji.Templates/kiji-doc/) ([source](https://github.com/zzzkan/Kiji.Templates/tree/main/src/Kiji.Templates/content/Kiji.Doc))                         | ![Kiji Doc template](https://raw.githubusercontent.com/zzzkan/Kiji.Templates/main/images/kiji-doc.png)                 | `dotnet new kiji-doc -o MyDocs` |
+| [Kiji Interactive Template](https://zzzkan.github.io/Kiji.Templates/kiji-interactive/) ([source](https://github.com/zzzkan/Kiji.Templates/tree/main/src/Kiji.Templates/content/Kiji.Interactive)) | ![Kiji Interactive template](https://raw.githubusercontent.com/zzzkan/Kiji.Templates/main/images/kiji-interactive.png) | `dotnet new kiji-interactive -o MyInteractive` |
+| [Kiji Fluent Template](https://zzzkan.github.io/Kiji.Templates/kiji-fluent/) ([source](https://github.com/zzzkan/Kiji.Templates/tree/main/src/Kiji.Templates/content/Kiji.Fluent))                | ![Kiji Fluent template](https://raw.githubusercontent.com/zzzkan/Kiji.Templates/main/images/kiji-fluent.png)           | `dotnet new kiji-fluent -o MyFluent` |
+
+To use a template, first install the package with `dotnet new install Kiji.Templates`, then run its command above.
 
 ## Contributing
 

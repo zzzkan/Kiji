@@ -36,7 +36,7 @@ the whole collection.
 
 ## Pass stable page parameters
 
-Pass a content key or another simple identifier through `AddPages`, then look up
+Pass a content key or another simple identifier through `AddPageParameters`, then look up
 the content during rendering. Entire models and arrays can be valid component
 parameters while preventing HTML reuse. See [Routing](../routing/#passing-values-that-are-not-in-the-url)
 and the [supported parameter types](../api-reference/#pages).

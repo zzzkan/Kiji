@@ -53,7 +53,7 @@ public sealed class SiteArtifactTests : IDisposable
     {
         var artifact = new RecordingArtifact("meta/info.txt");
         await using var app = await CreateAppAsync(artifact);
-        app.AddPages<MirrorPostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
+        app.AddPageParameters<MirrorPostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
         app.AddSitemap("seo/sitemap.xml", ["mirror/hello-world/"]);
 
@@ -197,7 +197,7 @@ public sealed class SiteArtifactTests : IDisposable
         IReadOnlyList<RecordingArtifact> artifacts,
         string? staticPath)
     {
-        var app = StaticSite.Create([], new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
+        var app = TestSiteFactory.Create(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
         app.Info = TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(app, staticPath ?? TestSitePaths.StaticDirectory);
 

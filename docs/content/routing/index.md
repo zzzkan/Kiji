@@ -9,12 +9,8 @@ discovered from components; parameterized routes also need the set of values to 
 
 ## Fixed routes
 
-`AddPages()` finds public, non-abstract components with fixed routes in the entry
-assembly:
-
-```csharp
-app.AddPages();
-```
+Kiji automatically discovers `@page` routes on public, non-abstract components in the
+entry assembly. No page registration is needed for a fixed route:
 
 ```razor
 @page "/about/"
@@ -23,14 +19,19 @@ app.AddPages();
 ```
 
 This generates `about/index.html`, served as `/about/`. The `/` route generates the root
-`index.html`. If pages live in another assembly, pass it to `AddPages(assembly)`.
+`index.html`. Components without `@page` remain ordinary reusable components.
 
-Parameterized routes are ignored during this scan because Kiji cannot infer which values
-you want to publish.
+Pages in another assembly, such as a Razor class library, are included only when you add
+that assembly. To leave out one of its pages, register an empty parameter sequence:
+
+```csharp
+app.AddPageAssembly(typeof(SharedPage).Assembly);
+app.AddPageParameters<UnwantedPage>(_ => []);
+```
 
 ## Parameterized routes
 
-Use `AddPages<TPage>` with a component that declares exactly one parameterized route:
+Use `AddPageParameters<TPage>` to supply the values of a component's parameterized route:
 
 ```razor
 @page "/posts/{Slug}/"
@@ -45,7 +46,7 @@ Use `AddPages<TPage>` with a component that declares exactly one parameterized r
 The factory supplies one parameter object for every page:
 
 ```csharp
-app.AddPages<PostPage>(_ =>
+app.AddPageParameters<PostPage>(_ =>
 [
     new { Slug = "first-post" },
     new { Slug = "second-post" },
@@ -54,21 +55,44 @@ app.AddPages<PostPage>(_ =>
 
 These values generate `posts/first-post/index.html` and
 `posts/second-post/index.html`. You may return anonymous objects or dictionaries with
-string keys and object values.
+string keys and object values. Every parameterized route needs parameters; return an
+empty sequence to generate no pages. Multiple calls for the same component concatenate.
 
 Parameter names are matched case-insensitively to public writable `[Parameter]`
 properties. Values keep their .NET types; Kiji does not convert a string into another
 component parameter type. Route values must be nonempty and fit in one URL segment.
 
+### Several routes on one component
+
+A component can combine fixed and parameterized routes, for example a blog index with
+numbered pages:
+
+```razor
+@page "/blog/"
+@page "/blog/page/{Page}/"
+
+@code {
+    [Parameter] public int Page { get; set; } = 1;
+}
+```
+
+```csharp
+app.AddPageParameters<BlogIndex>(_ => [new { Page = 2 }, new { Page = 3 }]);
+```
+
+This generates `blog/index.html` with the default `Page` value, plus
+`blog/page/2/index.html` and `blog/page/3/index.html`. With several parameterized routes,
+each parameter set is rendered at all of them and must supply all of their values.
+
 ## Passing values that are not in the URL
 
-The object returned by `AddPages` is the component's complete parameter set. Properties
+Each object returned by `AddPageParameters` is one page's complete parameter set. Properties
 that match route placeholders build the URL; other properties are passed only to the
 component. This is useful for looking up content without putting its internal key in the
 URL:
 
 ```csharp
-app.AddPages<PostPage>(services => services
+app.AddPageParameters<PostPage>(services => services
     .GetRequiredService<ContentDictionary<Post>>()
     .Select(post => new
     {
@@ -85,7 +109,16 @@ app.AddPages<PostPage>(services => services
 ```
 
 Every supplied name must match a component parameter, even when it is not part of the
-route.
+route. Omitted parameters keep their component defaults; Kiji does not enforce
+`EditorRequired`.
+
+Fixed routes can receive parameters too:
+
+```csharp
+app.AddPageParameters<AboutPage>(_ => [new { Title = "About this site" }]);
+```
+
+This renders `/about/` with the supplied values instead of the defaults.
 
 ## Route limits and validation
 
@@ -97,7 +130,7 @@ segments and simple parameter segments, but rejects:
 - Catch-all parameters such as `{*path}` or `{**path}`
 - Composite segments such as `post-{id}`
 
-Planning also fails when a required value is missing or empty, a value has the wrong
+Planning also fails when a required route value is missing or empty, a value has the wrong
 component parameter type, a supplied property has no matching `[Parameter]`, or two pages
 resolve to the same output path. These errors are reported before pages are rendered.
 
@@ -116,7 +149,8 @@ app.AddNotFoundPage<NotFoundPage>();
 ```
 
 Kiji writes it as `404.html` at the output root. The component still needs one `@page`
-route, but do not also register it with `AddPages<TPage>`.
+route, but do not also register it with `AddPageParameters<TPage>`. A not-found page from
+another assembly also needs `AddPageAssembly`.
 
 See the [API reference](../api-reference/#pages) for registration
 timing and the full method contracts.

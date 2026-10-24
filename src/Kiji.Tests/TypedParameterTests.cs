@@ -29,7 +29,7 @@ public sealed class TypedParameterTests : IDisposable
         string[] tags = ["dotnet", "kiji"];
         await using (var site = CreateSite("render", log))
         {
-            site.AddPages<TypedParameterPage>(_ => [new { Id = 42, Featured = true, Kind = DayOfWeek.Friday, Count = count, Summary = summary, Tags = tags, Model = model, Resource = model }]);
+            site.AddPageParameters<TypedParameterPage>(_ => [new { Id = 42, Featured = true, Kind = DayOfWeek.Friday, Count = count, Summary = summary, Tags = tags, Model = model, Resource = model }]);
             var page = Assert.Single(site.CreateSnapshot().Pages);
             Assert.Equal("/typed/42/", page.RoutePath);
             Assert.Equal(42, Assert.IsType<int>(page.Parameters["Id"]));
@@ -51,7 +51,7 @@ public sealed class TypedParameterTests : IDisposable
     {
         await using var site = CreateSite("dictionaries", new ParameterRenderLog());
         var mutable = new Dictionary<string, object?> { ["Id"] = 1 };
-        site.AddPages<TypedParameterPage>(_ =>
+        site.AddPageParameters<TypedParameterPage>(_ =>
         [
             mutable,
             new Dictionary<string, object?> { ["Id"] = 2 }.ToFrozenDictionary(),
@@ -68,7 +68,7 @@ public sealed class TypedParameterTests : IDisposable
     public async Task DictionaryKeysDifferingOnlyByCase_AreRejectedDuringNormalization()
     {
         await using var site = CreateSite("duplicate-keys", new ParameterRenderLog());
-        site.AddPages<TypedParameterPage>(_ =>
+        site.AddPageParameters<TypedParameterPage>(_ =>
             [new Dictionary<string, object?>(StringComparer.Ordinal) { ["Id"] = 1, ["id"] = 2 }]);
 
         Assert.Throws<ArgumentException>(() => site.CreateSnapshot());
@@ -81,7 +81,7 @@ public sealed class TypedParameterTests : IDisposable
     {
         var log = new ParameterRenderLog();
         await using var site = CreateSite("parameter-casing", log);
-        site.AddPages<TypedParameterPage>(_ => [new { id = 42, COUNT = count, sUMMARY = "mixed case" }]);
+        site.AddPageParameters<TypedParameterPage>(_ => [new { id = 42, COUNT = count, sUMMARY = "mixed case" }]);
 
         var page = Assert.Single(site.CreateSnapshot().Pages);
         Assert.Equal("/typed/42/", page.RoutePath);
@@ -102,7 +102,7 @@ public sealed class TypedParameterTests : IDisposable
     {
         await using var site = CreateSite("invalid", new ParameterRenderLog());
         var values = new Dictionary<string, object?> { ["Id"] = 42, [name] = value };
-        site.AddPages<TypedParameterPage>(_ => [values]);
+        site.AddPageParameters<TypedParameterPage>(_ => [values]);
         var error = Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
         Assert.Contains(typeof(TypedParameterPage).FullName!, error.Message, StringComparison.Ordinal);
         Assert.Contains("/typed/{Id}/", error.Message, StringComparison.Ordinal);
@@ -116,7 +116,7 @@ public sealed class TypedParameterTests : IDisposable
     {
         await using var site = CreateSite("getter", new ParameterRenderLog());
         var input = new ParameterInput();
-        site.AddPages<TypedParameterPage>(_ => [input]);
+        site.AddPageParameters<TypedParameterPage>(_ => [input]);
         var page = Assert.Single(site.CreateSnapshot().Pages);
         await site.RenderPageAsync(page, CancellationToken.None);
         await site.RenderPageAsync(page, CancellationToken.None);
@@ -127,7 +127,7 @@ public sealed class TypedParameterTests : IDisposable
     public async Task PrivateSetter_IsRejectedAndMetadataIsClearedOnHotReload()
     {
         await using var site = CreateSite("setter", new ParameterRenderLog());
-        site.AddPages<ReadOnlyParameterPage>(_ => [new { Id = 1, Value = "text" }]);
+        site.AddPageParameters<ReadOnlyParameterPage>(_ => [new { Id = 1, Value = "text" }]);
         var error = Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
         Assert.Contains("public setter", error.Message, StringComparison.Ordinal);
         var before = PageDiscovery.Parameters(typeof(ReadOnlyParameterPage));
@@ -146,7 +146,7 @@ public sealed class TypedParameterTests : IDisposable
         async Task Build(string directory, ParameterRenderLog observer)
         {
             await using var site = CreateSite(directory, observer);
-            site.AddPages<TypedParameterPage>(_ => [new { Id = 1, Model = model }, new { Id = 2, Summary = "stable" }]);
+            site.AddPageParameters<TypedParameterPage>(_ => [new { Id = 1, Model = model }, new { Id = 2, Summary = "stable" }]);
             await site.PublishAsync("dist");
         }
         await Build("incremental", log);
@@ -179,11 +179,11 @@ public sealed class TypedParameterTests : IDisposable
     public async Task DevServer_AndPublishRenderTheSameTypedValues()
     {
         await using var published = CreateSite("publish", new ParameterRenderLog());
-        published.AddPages<TypedParameterPage>(_ => [new { Id = 42, Count = (int?)7, Featured = true }]);
+        published.AddPageParameters<TypedParameterPage>(_ => [new { Id = 42, Count = (int?)7, Featured = true }]);
         await published.PublishAsync("dist");
         var html = await File.ReadAllTextAsync(Path.Combine(_root, "publish", "dist", "typed", "42", "index.html"));
         await using var served = CreateSite("serve", new ParameterRenderLog());
-        served.AddPages<TypedParameterPage>(_ => [new { Id = 42, Count = (int?)7, Featured = true }]);
+        served.AddPageParameters<TypedParameterPage>(_ => [new { Id = 42, Count = (int?)7, Featured = true }]);
         var (server, web) = await served.StartDevServerAsync(TestUrls.EphemeralPort, CancellationToken.None);
         await using (server)
         {
@@ -195,7 +195,7 @@ public sealed class TypedParameterTests : IDisposable
 
     private StaticSite CreateSite(string directory, ParameterRenderLog log)
     {
-        var site = StaticSite.Create([], new SiteExecutionPaths(Path.Combine(_root, directory)));
+        var site = TestSiteFactory.Create(new SiteExecutionPaths(Path.Combine(_root, directory)));
         site.Info = TestArticleContents.CreateSiteInfo();
         Directory.CreateDirectory(Path.Combine(site.Paths.ProjectDirectory, "content"));
         Directory.CreateDirectory(Path.Combine(site.Paths.ProjectDirectory, "wwwroot"));

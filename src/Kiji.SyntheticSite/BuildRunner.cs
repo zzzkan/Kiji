@@ -66,7 +66,7 @@ public static class BuildRunner
     /// </summary>
     public static async Task BuildSiteAsync(string root)
     {
-        await using var app = StaticSite.Create([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "synthetic")));
+        await using var app = StaticSite.Create([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "synthetic")), typeof(BuildRunner).Assembly);
         app.Info = new SiteInfo
         {
             BaseUrl = new Uri("https://bench.example.com/"),
@@ -78,10 +78,9 @@ public static class BuildRunner
 
         app.UseMarkdownContent<PostFrontMatter>(static options => options.Directory = "contents");
         app.UseDefaultLayout<MainLayout>();
-        app.AddPages(typeof(BuildRunner).Assembly);
         app.AddNotFoundPage<NotFoundPage>();
 
-        app.AddPages<PostPage>(static services => services
+        app.AddPageParameters<PostPage>(static services => services
             .GetRequiredService<ContentDictionary<MarkdownContent<PostFrontMatter>>>()
             .Select(static post => new { Slug = PostSlug.From(post.Value.FileInfo), ContentKey = post.Key }));
         app.AddRssFeed(static services => services

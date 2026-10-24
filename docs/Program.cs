@@ -20,9 +20,7 @@ site.UseMarkdownContent<FrontMatter, Article>(
     select: static content => Article.Create(content));
 site.UseDefaultLayout<MainLayout>();
 site.AddNotFoundPage<NotFoundPage>();
-
-site.AddPages();
-site.AddPages<ArticlePage>(static services => services
+site.AddPageParameters<ArticlePage>(static services => services
     .GetRequiredService<ContentDictionary<Article>>()
     .Select(static doc => new { doc.Value.Slug, ContentKey = doc.Key }));
 site.AddSitemap();

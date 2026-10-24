@@ -8,28 +8,34 @@ namespace Kiji.Routing;
 internal static class StaticPagePlanner
 {
     /// <summary>
-    /// Plans all static pages by expanding the given page definitions using already discovered dynamic route entries.
+    /// Plans pages using explicit parameter sets, or default parameters for fixed routes.
     /// </summary>
     /// <param name="pages">The collection of static page definitions to be planned.</param>
-    /// <param name="dynamicRoutesByPage">The dynamic route entries keyed by page source identifier.</param>
+    /// <param name="parametersByPage">Explicit parameter sets keyed by page source identifier.</param>
     /// <returns>A read-only list of planned pages ordered by their output relative path.</returns>
     public static IReadOnlyList<PageRenderRequest> PlanPages(
         IReadOnlyList<PageDiscovery.DiscoveredPage> pages,
-        IReadOnlyDictionary<string, List<IReadOnlyDictionary<string, object?>>> dynamicRoutesByPage)
+        IReadOnlyDictionary<string, List<IReadOnlyDictionary<string, object?>>> parametersByPage)
     {
         ArgumentNullException.ThrowIfNull(pages);
-        ArgumentNullException.ThrowIfNull(dynamicRoutesByPage);
+        ArgumentNullException.ThrowIfNull(parametersByPage);
 
         var plannedPages = new List<PageRenderRequest>();
         foreach (var page in pages.OrderBy(static page => page.SourceIdentifier, StringComparer.OrdinalIgnoreCase))
         {
-            if (!page.PageDefinition.IsDynamic)
+            if (parametersByPage.TryGetValue(page.SourceIdentifier, out var parameters))
+            {
+                plannedPages.AddRange(CreateParameterizedPages(page, parameters));
+            }
+            else if (page.PageDefinition.IsDynamic)
+            {
+                throw new InvalidOperationException(
+                    $"Page component '{page.ComponentType.FullName}' has route '{page.SourceIdentifier}' requiring route values ({string.Join(", ", page.PageDefinition.ParameterNames)}), but no parameter sets were registered. Call AddPageParameters<{page.ComponentType.Name}>; return an empty sequence to generate no pages.");
+            }
+            else
             {
                 plannedPages.Add(CreateStaticPage(page));
-                continue;
             }
-
-            plannedPages.AddRange(CreateDynamicPages(page, dynamicRoutesByPage[page.SourceIdentifier]));
         }
 
         plannedPages.Sort(static (left, right) => StringComparer.OrdinalIgnoreCase.Compare(
@@ -50,7 +56,7 @@ internal static class StaticPagePlanner
             outputRelativePath);
     }
 
-    private static IEnumerable<PageRenderRequest> CreateDynamicPages(
+    private static IEnumerable<PageRenderRequest> CreateParameterizedPages(
         PageDiscovery.DiscoveredPage page,
         IReadOnlyList<IReadOnlyDictionary<string, object?>> matches)
     {
@@ -68,12 +74,12 @@ internal static class StaticPagePlanner
                 if (value.Contains('/', StringComparison.Ordinal) || value.Contains('\\', StringComparison.Ordinal))
                 {
                     throw new InvalidOperationException(
-                        $"Route mapping for '{page.ComponentType.FullName}' supplied invalid route value '{name}' for '{page.SourceIdentifier}': '{value}'. Route values must be a single route segment and cannot contain '/' or '\\'.");
+                        $"Page parameters for '{page.ComponentType.FullName}' supplied invalid route value '{name}' for '{page.SourceIdentifier}': '{value}'. Route values must be a single route segment and cannot contain '/' or '\\'.");
                 }
                 if (value.Trim() is "." or "..")
                 {
                     throw new InvalidOperationException(
-                        $"Route mapping for '{page.ComponentType.FullName}' supplied invalid route value '{name}' for '{page.SourceIdentifier}': '{value}'. Route values cannot be '.' or '..'.");
+                        $"Page parameters for '{page.ComponentType.FullName}' supplied invalid route value '{name}' for '{page.SourceIdentifier}': '{value}'. Route values cannot be '.' or '..'.");
                 }
                 routeValues.Add(name, value);
             }
@@ -118,6 +124,6 @@ internal static class StaticPagePlanner
             duplicateOutputPath.Select(static page => $"'{page.SourceIdentifier}'").Distinct(StringComparer.OrdinalIgnoreCase));
 
         throw new InvalidOperationException(
-            $"Static generation produced duplicate output path '{duplicateOutputPath.Key}' from {sources}. Route selectors must resolve to unique output paths.");
+            $"Static generation produced duplicate output path '{duplicateOutputPath.Key}' from {sources}. Each page must resolve to a unique output path.");
     }
 }

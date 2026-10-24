@@ -48,9 +48,10 @@ public sealed class StaticSite
     private bool _hasRun;
     private bool _disposed;
 
-    private StaticSite(string[] args, SiteExecutionPaths paths)
+    private StaticSite(string[] args, SiteExecutionPaths paths, Assembly entryAssembly)
     {
         _args = [.. args];
+        _pageAssemblies.Add(entryAssembly);
         _runtime.Dependencies.Register("image-processor", () => ImageProcessorIdentity.Get(ServiceProvider.GetRequiredService<IImageProcessor>()));
         Paths = paths;
     }
@@ -72,7 +73,7 @@ public sealed class StaticSite
     /// <summary>Configures the services available to components and site factories.</summary>
     /// <remarks>
     /// Callbacks run once in registration order before rendering. Each page render owns a scope.
-    /// Content loaders, route/feed factories and artifacts cannot resolve scoped services.
+    /// Content loaders, page parameter and feed factories, and artifacts cannot resolve scoped services.
     /// Kiji's managed services cannot be changed. Use AlwaysRender on components reading untracked external state.
     /// </remarks>
     public StaticSite UseServices(Action<IServiceCollection> configure)
@@ -96,17 +97,19 @@ public sealed class StaticSite
     }
 
     /// <summary>
-    /// Creates a site for configuration, registration, and execution.
+    /// Creates a site that automatically discovers routed components in the entry assembly.
     /// </summary>
     /// <param name="args">Arguments forwarded to ASP.NET Core configuration when serving.</param>
     public static StaticSite Create(string[] args)
     {
         ArgumentNullException.ThrowIfNull(args);
+        var entryAssembly = Assembly.GetEntryAssembly() ?? throw new InvalidOperationException(
+            "No entry assembly is available in this host. Run the site project as an application with dotnet run, dotnet watch or dotnet publish.");
 
-        return new StaticSite(args, SiteExecutionPaths.FromRuntimeMetadata(AppContext.GetData("Kiji.ProjectDirectory")));
+        return new StaticSite(args, SiteExecutionPaths.FromRuntimeMetadata(AppContext.GetData("Kiji.ProjectDirectory"), entryAssembly), entryAssembly);
     }
 
-    internal static StaticSite Create(string[] args, SiteExecutionPaths paths) => new(args, paths);
+    internal static StaticSite Create(string[] args, SiteExecutionPaths paths, Assembly entryAssembly) => new(args, paths, entryAssembly);
 
     /// <summary>Uses a content source resolved as <see cref="ContentDictionary{T}"/>.</summary>
     /// <param name="loader">Loads items lazily once per snapshot, after execution paths are settled.</param>
@@ -167,57 +170,39 @@ public sealed class StaticSite
         return this;
     }
 
-    /// <summary>Registers public, non-abstract pages with fixed routes from the entry assembly.</summary>
-    /// <remarks>Parameterized routes are ignored; register their parameter sets with <c>AddPages&lt;TPage&gt;</c>.</remarks>
-    public StaticSite AddPages()
-    {
-        EnsureConfigurable();
-        var entryAssembly = Assembly.GetEntryAssembly()
-            ?? throw new InvalidOperationException(
-                "No entry assembly is available in this host. Call AddPages(Assembly) with the assembly containing your pages.");
-
-        return AddPages(entryAssembly);
-    }
-
-    /// <summary>Registers public, non-abstract pages with fixed routes from an assembly.</summary>
-    /// <remarks>Repeated registration of the same assembly has no effect; parameterized routes are ignored.</remarks>
-    public StaticSite AddPages(Assembly assembly)
+    /// <summary>Adds an assembly whose public, non-abstract routed components are discovered as pages.</summary>
+    /// <remarks>The entry assembly is included automatically. Repeated registration has no effect.</remarks>
+    public StaticSite AddPageAssembly(Assembly assembly)
     {
         EnsureConfigurable();
         ArgumentNullException.ThrowIfNull(assembly);
 
-        if (_pageAssemblies.Contains(assembly))
-        {
-            return this;
-        }
-
-        _pageAssemblies.Add(assembly);
+        if (!_pageAssemblies.Contains(assembly)) { _pageAssemblies.Add(assembly); }
         return this;
     }
 
     /// <summary>Registers a page as <c>404.html</c>.</summary>
-    /// <remarks>The component must declare exactly one route and cannot also be registered with <c>AddPages&lt;TPage&gt;</c>.</remarks>
+    /// <remarks>The component must belong to a page assembly, declare exactly one route, and cannot also receive <c>AddPageParameters&lt;TPage&gt;</c>.</remarks>
     public StaticSite AddNotFoundPage<TPage>()
         where TPage : IComponent
     {
         EnsureConfigurable();
         if (_routeRegistrations.Any(registration => registration.ComponentType == typeof(TPage)))
         {
-            throw new InvalidOperationException("A not-found page cannot also be registered with AddPages<TPage>.");
+            throw new InvalidOperationException("A not-found page cannot also receive AddPageParameters<TPage>.");
         }
         _notFoundComponentType = typeof(TPage);
         return this;
     }
 
-    /// <summary>Registers parameter sets for a component declaring exactly one parameterized route.</summary>
-    /// <param name="parameters">A deferred factory evaluated per snapshot; each object supplies route values and component parameters.</param>
+    /// <summary>Adds parameter sets rendered at every parameterized route of a page, or at every route when all are fixed.</summary>
+    /// <param name="parameters">A factory run once per build; each object is a complete set of route values and component parameters.</param>
     /// <remarks>
-    /// No assembly registration is required; multiple registrations concatenate their results, which may be empty.
-    /// Values retain their types and must be assignable to public writable component parameters; no implicit conversions occur.
-    /// Only URL segments are converted to invariant strings. Treat referenced values as read-only for the snapshot lifetime;
-    /// Kiji neither deep-clones nor disposes them. Parameters without a supported stable fingerprint force the page to render on each build.
+    /// The page must belong to the entry assembly or an assembly added with AddPageAssembly. Fixed routes beside
+    /// parameterized routes render once with default values. Registrations concatenate; an empty result generates no pages.
+    /// Values keep their types and are treated as read-only. Values without a stable fingerprint disable HTML reuse.
     /// </remarks>
-    public StaticSite AddPages<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)
+    public StaticSite AddPageParameters<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)
         where TPage : IComponent
     {
         EnsureConfigurable();
@@ -225,7 +210,7 @@ public sealed class StaticSite
 
         if (_notFoundComponentType == typeof(TPage))
         {
-            throw new InvalidOperationException("A not-found page cannot also be registered with AddPages<TPage>.");
+            throw new InvalidOperationException("A not-found page cannot also receive AddPageParameters<TPage>.");
         }
 
         _routeRegistrations.Add(new RouteRegistration(
@@ -352,15 +337,12 @@ public sealed class StaticSite
             _services!.GetService<ContentFileRegistry>(), _runtime.Dependencies,
             _services!.GetRequiredService<IImageProcessor>(), assetManifest.Resources);
 
+        // Snapshot planning already required every page type to come from a page assembly.
         // Helpers and custom encoder factories may live outside the page assemblies.
         // Their code is a build input even when pages only reach it through injection.
         var plan = await planner.CreatePlanAsync(
             snapshot.Pages,
-            [.. _pageAssemblies,
-                .. _routeRegistrations.Select(static registration => registration.ComponentType.Assembly),
-                .. _serviceAssemblies,
-                .. _notFoundComponentType is { } notFound ? new[] { notFound.Assembly } : [],
-                typeof(StaticSite).Assembly],
+            [.. _pageAssemblies, .. _serviceAssemblies, typeof(StaticSite).Assembly],
             _forceFullBuild,
             cancellationToken);
         phases.Mark(BuildPhaseTimer.Plan);
@@ -523,7 +505,7 @@ public sealed class StaticSite
     internal SiteSnapshot CreateSnapshot()
     {
         FreezeConfiguration();
-        // Planning expands route factories, which read content. If nothing has settled
+        // Planning expands page parameter factories, which read content. If nothing has settled
         // the options yet, fall back to paths that cannot be mistaken for a deliverable.
         _activeOptions ??= Paths.ResolveForDevelopment();
         EnsureServices();
@@ -535,39 +517,42 @@ public sealed class StaticSite
             scanned.AddRange(PageDiscovery.FromAssembly(assembly));
         }
 
-        var dynamicPages = _routeRegistrations.Select(static registration => registration.ComponentType)
-            .Distinct().ToDictionary(static type => type,
-                static type => FindDynamicPage(PageDiscovery.FromType(type), type));
-        scanned.AddRange(dynamicPages.Values);
+        var parameterRoutes = _routeRegistrations.Select(static registration => registration.ComponentType)
+            .Distinct().ToDictionary(static type => type, FindParameterRoutes);
+        // Registered non-public components are pages too, with all of their routes.
+        var scannedTypes = scanned.Select(static page => page.ComponentType).ToHashSet();
+        scanned.AddRange(parameterRoutes.Keys.Where(type => !scannedTypes.Contains(type)).SelectMany(PageDiscovery.FromType));
 
         var discovered = PageDiscovery.EnsureUniqueRoutes(ApplyNotFoundOverride(scanned));
 
         snapshotPhases.Mark(BuildPhaseTimer.Discovery);
 
-        var dynamicRoutes = new Dictionary<string, List<IReadOnlyDictionary<string, object?>>>(StringComparer.OrdinalIgnoreCase);
+        var pageParameters = new Dictionary<string, List<IReadOnlyDictionary<string, object?>>>(StringComparer.OrdinalIgnoreCase);
         foreach (var registration in _routeRegistrations)
         {
-            var page = dynamicPages[registration.ComponentType];
+            var routes = parameterRoutes[registration.ComponentType];
             var entries = registration.CreateEntries();
             snapshotPhases.Mark(BuildPhaseTimer.RouteEntries);
-            ValidateRouteEntries(page, entries);
+            ValidateRouteEntries(registration.ComponentType, routes, entries);
             snapshotPhases.Mark(BuildPhaseTimer.RouteValidation);
 
-            if (!dynamicRoutes.TryGetValue(page.SourceIdentifier, out var combined))
+            foreach (var route in routes)
             {
-                dynamicRoutes.Add(page.SourceIdentifier, combined = []);
+                if (!pageParameters.TryGetValue(route.SourceIdentifier, out var combined))
+                {
+                    pageParameters.Add(route.SourceIdentifier, combined = []);
+                }
+                combined.AddRange(entries);
             }
-            combined.AddRange(entries);
         }
 
-        // Expanding a route factory is where content is first read, so this is where
+        // Expanding a page parameter factory is where content is first read, so this is where
         // loading and parsing every markdown file lands.
         snapshotPhases.Mark(BuildPhaseTimer.Routes);
 
-        // Each dynamic page and its entries come from the same registrations above.
         var plannedPages = StaticPagePlanner.PlanPages(
             discovered,
-            dynamicRoutes);
+            pageParameters);
 
         var requests = plannedPages
             .Select(request => request with { RootParameters = CreateRootParameters(request) })
@@ -578,41 +563,48 @@ public sealed class StaticSite
         return new SiteSnapshot(requests);
     }
 
-    private static PageDiscovery.DiscoveredPage FindDynamicPage(
-        IReadOnlyList<PageDiscovery.DiscoveredPage> discovered,
-        Type componentType)
+    /// <summary>
+    /// Selects the routes receiving AddPageParameters: all parameterized routes of the component,
+    /// or all its routes when every route is fixed. Fixed routes beside parameterized ones keep their default rendering.
+    /// </summary>
+    private IReadOnlyList<PageDiscovery.DiscoveredPage> FindParameterRoutes(Type componentType)
     {
-        var pages = discovered
-            .Where(page => page.ComponentType == componentType && page.PageDefinition.IsDynamic)
-            .ToArray();
+        ValidatePageAssembly(componentType);
+        var pages = PageDiscovery.FromType(componentType);
+        var parameterized = pages.Where(static page => page.PageDefinition.IsDynamic).ToArray();
+        return parameterized.Length > 0 ? parameterized : pages;
+    }
 
-        return pages switch
+    private void ValidatePageAssembly(Type componentType)
+    {
+        if (!_pageAssemblies.Contains(componentType.Assembly))
         {
-            [var single] => single,
-            [] => throw new InvalidOperationException(
-                $"Component '{componentType.FullName}' has no dynamic '@page' route template to map routes onto."),
-            _ => throw new InvalidOperationException(
-                $"Component '{componentType.FullName}' declares multiple dynamic route templates; this is not supported."),
-        };
+            throw new InvalidOperationException(
+                $"Page component '{componentType.FullName}' belongs to an unregistered assembly. Call AddPageAssembly(typeof({componentType.Name}).Assembly) before execution.");
+        }
     }
 
     private static void ValidateRouteEntries(
-        PageDiscovery.DiscoveredPage page,
+        Type componentType,
+        IReadOnlyList<PageDiscovery.DiscoveredPage> routes,
         IReadOnlyList<IReadOnlyDictionary<string, object?>> entries)
     {
-        var routeParameterNames = page.PageDefinition.ParameterNames;
-        var declaredParameters = PageDiscovery.Parameters(page.ComponentType);
+        var declaredParameters = PageDiscovery.Parameters(componentType);
+        var routeList = string.Join(", ", routes.Select(static route => $"'{route.SourceIdentifier}'"));
 
         foreach (var entry in entries)
         {
-            var missing = routeParameterNames
-                .Where(name => !entry.ContainsKey(name))
-                .OrderBy(static name => name, StringComparer.Ordinal)
-                .ToArray();
-            if (missing.Length > 0)
+            foreach (var route in routes)
             {
-                throw new InvalidOperationException(
-                    $"Route mapping for '{page.ComponentType.FullName}' did not supply required route values for '{page.SourceIdentifier}': {string.Join(", ", missing.Select(static name => $"'{name}'"))}.");
+                var missing = route.PageDefinition.ParameterNames
+                    .Where(name => !entry.ContainsKey(name))
+                    .OrderBy(static name => name, StringComparer.Ordinal)
+                    .ToArray();
+                if (missing.Length > 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Page parameters for '{componentType.FullName}' did not supply required route values for '{route.SourceIdentifier}': {string.Join(", ", missing.Select(static name => $"'{name}'"))}.");
+                }
             }
 
             foreach (var (name, value) in entry)
@@ -620,12 +612,12 @@ public sealed class StaticSite
                 if (!declaredParameters.TryGetValue(name, out var property))
                 {
                     throw new InvalidOperationException(
-                        $"Route mapping for '{page.ComponentType.FullName}' ('{page.SourceIdentifier}') supplied '{name}', which is not a declared '[Parameter]' property.");
+                        $"Page parameters for '{componentType.FullName}' ({routeList}) supplied '{name}', which is not a declared '[Parameter]' property.");
                 }
                 if (!property.IsWritable)
                 {
                     throw new InvalidOperationException(
-                        $"Route mapping for '{page.ComponentType.FullName}' ('{page.SourceIdentifier}') supplied parameter '{name}', which must have a public setter and cannot be an indexer.");
+                        $"Page parameters for '{componentType.FullName}' ({routeList}) supplied parameter '{name}', which must have a public setter and cannot be an indexer.");
                 }
                 var type = property.PropertyType;
                 var compatible = value is null
@@ -634,7 +626,7 @@ public sealed class StaticSite
                 if (!compatible)
                 {
                     throw new InvalidOperationException(
-                        $"Route mapping for '{page.ComponentType.FullName}' ('{page.SourceIdentifier}') supplied parameter '{name}': expected '{type.FullName}', actual '{value?.GetType().FullName ?? "null"}'. Implicit parameter conversions are not supported.");
+                        $"Page parameters for '{componentType.FullName}' ({routeList}) supplied parameter '{name}': expected '{type.FullName}', actual '{value?.GetType().FullName ?? "null"}'. Implicit parameter conversions are not supported.");
                 }
             }
         }
@@ -648,6 +640,7 @@ public sealed class StaticSite
             return discovered;
         }
 
+        ValidatePageAssembly(_notFoundComponentType);
         var candidates = PageDiscovery.FromType(_notFoundComponentType);
         if (candidates.Count != 1)
         {

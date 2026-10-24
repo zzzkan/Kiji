@@ -24,10 +24,9 @@ internal static class PageDiscovery
         StaticPageDefinition PageDefinition);
 
     /// <summary>
-    /// Finds parameterless routes on public, non-abstract
+    /// Finds all routes on public, non-abstract
     /// <see cref="IComponent"/> classes in an assembly.
-    /// Parameterized routes are omitted. Results are cached per assembly;
-    /// the cache is dropped on hot reload.
+    /// Results are cached per assembly; the cache is dropped on hot reload.
     /// </summary>
     public static IReadOnlyList<DiscoveredPage> FromAssembly(Assembly assembly)
     {
@@ -37,10 +36,10 @@ internal static class PageDiscovery
     }
 
     /// <summary>
-    /// The <c>[Parameter]</c> properties a component declares, including their types and setters. Route mappings may
+    /// The <c>[Parameter]</c> properties a component declares, including their types and setters. Page parameters may
     /// supply values beyond the route template's own parameters; those must name a real
     /// parameter, or the component would reject them at render time with no indication
-    /// of which mapping was at fault.
+    /// of which registration was at fault.
     /// </summary>
     internal static FrozenDictionary<string, ComponentParameter> Parameters(Type componentType)
     {
@@ -77,11 +76,7 @@ internal static class PageDiscovery
 
             foreach (var attribute in type.GetCustomAttributes<RouteAttribute>(inherit: false))
             {
-                var page = CreateDiscoveredPage(attribute.Template, type);
-                if (!page.PageDefinition.IsDynamic)
-                {
-                    pages.Add(page);
-                }
+                pages.Add(CreateDiscoveredPage(attribute.Template, type));
             }
         }
 
@@ -98,7 +93,7 @@ internal static class PageDiscovery
         if (pageType is not { IsClass: true, IsAbstract: false } || !typeof(IComponent).IsAssignableFrom(pageType))
         {
             throw new InvalidOperationException(
-                $"Type '{pageType.FullName}' is not a routable Razor component. Map only non-abstract classes implementing '{nameof(IComponent)}'.");
+                $"Type '{pageType.FullName}' is not a routable Razor component. Only non-abstract classes implementing '{nameof(IComponent)}' can be pages.");
         }
 
         var pages = TypeCache.GetOrAdd(pageType, static type => EnsureUniqueRoutes(

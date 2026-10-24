@@ -44,7 +44,7 @@ app.UseMarkdownContent<FrontMatter>();
 
 This makes a `ContentDictionary<MarkdownContent<FrontMatter>>` available through
 dependency injection. It does not automatically create routes; map the items with
-`AddPages<TPage>` as shown in [Getting started](../getting-started/#add-a-markdown-page).
+`AddPageParameters<TPage>` as shown in [Getting started](../getting-started/#add-a-markdown-page).
 
 Every Markdown file must begin with a front matter block delimited by `---` lines. Kiji
 uses camel-case YAML property names and ignores unknown properties by default. A missing
@@ -65,9 +65,9 @@ app.UseMarkdownContent<FrontMatter>(options =>
 ```
 
 `Directory` accepts an absolute path or a path relative to the site project directory.
-Kiji watches each registered directory during development. File selection and URL
-mapping are separate: excluding a draft decides whether it is loaded, while `AddPages`
-decides the URL of every included item.
+Kiji watches each registered directory during development. File selection and page
+parameters are separate: excluding a draft decides whether it is loaded, while
+`AddPageParameters` decides the URL of every included item.
 
 ## Use a site-specific model
 
@@ -100,7 +100,7 @@ when a projection reads additional external data.
 ## Render a Markdown body
 
 With the basic `UseMarkdownContent<FrontMatter>()` registration, inject the
-dictionary, look up the item by the `ContentKey` supplied through `AddPages`, and call
+dictionary, look up the item by the `ContentKey` supplied through `AddPageParameters`, and call
 `RenderAsync()`:
 
 ```razor

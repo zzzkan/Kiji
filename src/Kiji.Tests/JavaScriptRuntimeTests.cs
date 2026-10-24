@@ -94,7 +94,7 @@ public sealed class JavaScriptRuntimeTests
 
     private static StaticSite CreateApp()
     {
-        var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
+        var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = TestArticleContents.CreateSiteInfo();
         return app.UseServices(services => services.AddScoped<JavaScriptRuntimeService>());
     }

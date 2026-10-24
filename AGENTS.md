@@ -40,17 +40,21 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
 
 ## Constraints worth preserving
 
-- Routes allow literals and simple parameters only. AddNotFoundPage still requires
-  its component's own route. `AddPages<TPage>` supplies the whole parameter set; non-route
-  values must name writable [Parameter] properties.
+- Discover all routes in the entry assembly automatically; other assemblies require
+  AddPageAssembly. Routes allow literals and simple parameters only. Parameterized routes
+  require AddPageParameters; an empty sequence generates no pages. Each entry is a whole
+  parameter set rendered at every parameterized route; fixed routes beside them keep default
+  rendering, while components with only fixed routes receive the sets. Supplied values must
+  name writable [Parameter] properties; do not enforce EditorRequired. AddNotFoundPage still
+  requires its own route and a registered page assembly.
 - MSBuild supplies the project directory through runtimeconfig; missing metadata is an error.
   Content becomes accessible through factories/loaders/artifacts only after execution
   paths settle. Do not expose a provider or content dictionary on StaticSite.
 - The dev server enforces BaseUrl's path prefix and uses `.kiji/dev-site`.
   Only `.kiji/cache` is portable; planning creates no output directories.
 - UseServices configures standard DI once before provider construction; then the
-  collection is read-only. Each render owns a scope. Loaders, route/feed factories
-  and artifacts use the root provider and cannot resolve scoped services. Validate
+  collection is read-only. Each render owns a scope. Loaders, page parameter/feed
+  factories and artifacts use the root provider and cannot resolve scoped services. Validate
   Kiji-owned registrations after callbacks. Derived indexes use UseContentSource;
   content reload does not recreate singletons. Use AlwaysRender on components reading
   untracked external state. KijiForce refreshes all pages for a whole publish.

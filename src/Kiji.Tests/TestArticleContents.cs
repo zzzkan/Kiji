@@ -41,7 +41,7 @@ internal static class TestArticleContents
     /// </summary>
     private static StaticSite CreateApp(params (Post Metadata, string Html)[] entries)
     {
-        var app = StaticSite.Create([], new SiteExecutionPaths(AppContext.BaseDirectory));
+        var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory));
         app.Info = CreateSiteInfo();
 
         IReadOnlyList<Post> items = [.. entries.Select(static entry => ClonePost(entry.Metadata, entry.Html))];
@@ -51,11 +51,14 @@ internal static class TestArticleContents
     }
 
     /// <summary>
-    /// Registers the test assembly's static pages; callers map dynamic routes explicitly.
+    /// Includes the shared fixture's fixed pages; callers supply dynamic parameters explicitly.
     /// </summary>
     public static StaticSite MapTestAssemblyPages(StaticSite app)
     {
-        app.AddPages(typeof(TestArticleContents).Assembly);
+        app.AddPageParameters<HomePage>(static _ => [new { }]);
+        app.AddPageParameters<AboutPage>(static _ => [new { }]);
+        app.AddPageParameters<PrivacyPolicyPage>(static _ => [new { }]);
+        app.AddPageParameters<BlogIndexPage>(static _ => [new { }]);
         return app;
     }
 
@@ -67,9 +70,9 @@ internal static class TestArticleContents
         MapTestAssemblyPages(app);
         app.AddNotFoundPage<NotFoundPage>();
 
-        app.AddPages<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
+        app.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
-        app.AddPages<TagsPage>(static services => services.GetRequiredService<ContentDictionary<Post>>().Values
+        app.AddPageParameters<TagsPage>(static services => services.GetRequiredService<ContentDictionary<Post>>().Values
             .SelectMany(static post => post.Tags.Select(static tag => tag.UrlSlug))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Select(static slug => new { TagSlug = slug }));

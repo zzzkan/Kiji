@@ -16,7 +16,6 @@ $project = Join-Path $site 'Consumer.csproj'
 using Kiji;
 var site = StaticSite.Create(args);
 site.Info = new() { Name = "Consumer", BaseUrl = new Uri("https://example.test/sub/") };
-site.AddPages();
 await site.RunAsync();
 '@ | Set-Content (Join-Path $site 'Program.cs')
 '@page "/"' + "`n<h1>Home</h1><Library.Card />" | Set-Content (Join-Path $site 'Home.razor')

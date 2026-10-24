@@ -454,7 +454,7 @@ public sealed class DevServerTests : IAsyncDisposable
         Directory.CreateDirectory(notes);
         await File.WriteAllTextAsync(Path.Combine(posts, "post.md"), "---\ntitle: Post\n---\n\nOriginal body");
         await File.WriteAllTextAsync(Path.Combine(notes, "note.md"), "---\ntitle: Original note\n---\n");
-        _app = StaticSite.Create([], new SiteExecutionPaths(Path.Combine(_testDir, "site")));
+        _app = TestSiteFactory.Create(new SiteExecutionPaths(Path.Combine(_testDir, "site")));
         _app.Info = TestArticleContents.CreateSiteInfoWithBasePath();
         string SourcePath(string path)
         {
@@ -463,10 +463,10 @@ public sealed class DevServerTests : IAsyncDisposable
         _app.UseMarkdownContent<FrontMatter>(options => options.Directory = SourcePath(posts));
         _app.UseMarkdownContent<FrontMatter, ScopedNote>(ScopedNote.Create,
             options => options.Directory = SourcePath(notes));
-        _app.AddPages<MarkdownPostTestPage>(services => services
+        _app.AddPageParameters<MarkdownPostTestPage>(services => services
             .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
             .Select(post => new { Slug = "post", ContentKey = post.Key }));
-        _app.AddPages<ScopedNotesIndexPage>(_ => [new { Kind = "all" }]);
+        _app.AddPageParameters<ScopedNotesIndexPage>(_ => [new { Kind = "all" }]);
         using var logs = new StringWriter();
         var (server, web) = await _app.StartDevServerAsync(TestUrls.EphemeralPort, CancellationToken.None,
             new Kiji.Hosting.DevServerStatusReporter(logs, "kiji", useEmoji: false));
@@ -526,7 +526,7 @@ public sealed class DevServerTests : IAsyncDisposable
     {
         await File.WriteAllTextAsync(Path.Combine(_contentsDir, "hello-world.md"), "---\ntitle: Hello World\n---\n");
 
-        var app = StaticSite.Create([], new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
+        var app = TestSiteFactory.Create(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
         app.Info = site ?? TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(app, _staticDir);
         configureAssets?.Invoke(app);
@@ -548,7 +548,7 @@ public sealed class DevServerTests : IAsyncDisposable
         TestArticleContents.MapSite(_app);
         if (additionalSlug is not null)
         {
-            _app.AddPages<Kiji.Tests.TestSite.Pages.PostPage>(_ => [new { Slug = additionalSlug, ContentKey = "hello-world.md" }]);
+            _app.AddPageParameters<Kiji.Tests.TestSite.Pages.PostPage>(_ => [new { Slug = additionalSlug, ContentKey = "hello-world.md" }]);
         }
 
         var reporter = new Kiji.Hosting.DevServerStatusReporter(logs, prefix: "kiji", useEmoji: true);

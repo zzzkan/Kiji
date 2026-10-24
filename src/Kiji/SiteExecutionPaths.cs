@@ -14,7 +14,7 @@ internal sealed class SiteExecutionPaths
     internal string ProjectDirectory { get; }
     internal string? AssetManifestBasePath { get; }
 
-    internal static SiteExecutionPaths FromRuntimeMetadata(object? value)
+    internal static SiteExecutionPaths FromRuntimeMetadata(object? value, Assembly entryAssembly)
     {
         if (value is not string directory || string.IsNullOrWhiteSpace(directory)
             || !Path.IsPathFullyQualified(directory) || !Directory.Exists(directory))
@@ -24,7 +24,7 @@ internal sealed class SiteExecutionPaths
         }
 
         return new SiteExecutionPaths(directory, Path.Combine(AppContext.BaseDirectory,
-            Assembly.GetEntryAssembly()!.GetName().Name!));
+            entryAssembly.GetName().Name!));
     }
 
     internal string ResolveKijiPath()

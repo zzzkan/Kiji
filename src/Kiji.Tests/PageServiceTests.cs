@@ -17,7 +17,7 @@ public sealed class PageServiceTests : IDisposable
     {
         var probe = new ServiceProbe { Release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously) };
         await using var app = CreateApp(probe);
-        app.AddPages<ServicePage>(_ => [new { Key = "first" }, new { Key = "second" }]);
+        app.AddPageParameters<ServicePage>(_ => [new { Key = "first" }, new { Key = "second" }]);
         var requests = app.CreateSnapshot().Pages;
 
         var renders = requests.Select(request => app.RenderPageAsync(request, CancellationToken.None)).ToArray();
@@ -60,7 +60,7 @@ public sealed class PageServiceTests : IDisposable
     {
         var probe = new ServiceProbe();
         await using var app = CreateApp(probe);
-        app.AddPages<ServicePage>(_ => [new { Key = "failure", Fail = true }]);
+        app.AddPageParameters<ServicePage>(_ => [new { Key = "failure", Fail = true }]);
         var request = Assert.Single(app.CreateSnapshot().Pages);
         await Assert.ThrowsAsync<InvalidOperationException>(() => app.RenderPageAsync(request, CancellationToken.None));
         var service = Assert.Single(probe.Created);
@@ -162,7 +162,7 @@ public sealed class PageServiceTests : IDisposable
         var type = builder.CreateType()!;
         var probe = new ServiceProbe();
         await using var app = CreateApp(probe);
-        app.AddPages<ServicePage>(_ => [new { Key = "test" }]);
+        app.AddPageParameters<ServicePage>(_ => [new { Key = "test" }]);
         app.UseServices(services =>
         {
             switch (registration)
@@ -193,7 +193,7 @@ public sealed class PageServiceTests : IDisposable
         switch (consumer)
         {
             case "route":
-                app.AddPages<ServicePage>(provider =>
+                app.AddPageParameters<ServicePage>(provider =>
                 {
                     _ = provider.GetRequiredService<IDisposable>();
                     return [new { Key = "test" }];
@@ -219,7 +219,7 @@ public sealed class PageServiceTests : IDisposable
                     _ = provider.GetRequiredService<IDisposable>();
                     return [];
                 });
-                app.AddPages<ServicePage>(provider =>
+                app.AddPageParameters<ServicePage>(provider =>
                 {
                     _ = provider.GetRequiredService<ContentDictionary<ServiceProbe>>().Count;
                     return [];
@@ -233,7 +233,7 @@ public sealed class PageServiceTests : IDisposable
 
     private StaticSite CreateApp(ServiceProbe? probe = null)
     {
-        var app = StaticSite.Create([], new SiteExecutionPaths(_root));
+        var app = TestSiteFactory.Create(new SiteExecutionPaths(_root));
         app.Info = new SiteInfo { Name = "Services", BaseUrl = new Uri("https://example.test/") };
         if (probe is not null)
         {

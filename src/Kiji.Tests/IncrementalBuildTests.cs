@@ -98,11 +98,11 @@ public sealed class IncrementalBuildTests : IDisposable
         var output = Path.Combine(_testDir, "dist");
         foreach (var value in new[] { "first", "second" })
         {
-            await using var app = StaticSite.Create([], new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
+            await using var app = TestSiteFactory.Create(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
             app.Info = TestArticleContents.CreateSiteInfo();
             TestSiteAssets.Bind(app, Path.Combine(_testDir, "static"));
             app.UseServices(services => services.AddSingleton<Func<string>>(() => value));
-            app.AddPages<RenderPolicyPage>(_ => [new { Kind = "cached" }, new { Kind = "child" }]);
+            app.AddPageParameters<RenderPolicyPage>(_ => [new { Kind = "cached" }, new { Kind = "child" }]);
             if (useLayout) { app.UseDefaultLayout<AlwaysRenderLayout>(); }
             await app.PublishAsync(output);
         }
@@ -451,23 +451,23 @@ public sealed class IncrementalBuildTests : IDisposable
 
     private static async Task BuildRelatedAsync(string root)
     {
-        await using var app = StaticSite.Create([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
+        await using var app = TestSiteFactory.Create(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
         app.Info = TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(app, Path.Combine(app.Paths.ProjectDirectory, "static"));
 
         app.UseMarkdownContent<FrontMatter>();
         app.UseContentSource<Post>(static _ => []);
         app.UseDefaultLayout<MainLayout>();
-        app.AddPages(typeof(TestArticleContents).Assembly);
+        TestArticleContents.MapTestAssemblyPages(app);
         app.AddNotFoundPage<NotFoundPage>();
 
-        app.AddPages<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
+        app.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
 
-        app.AddPages<MarkdownPostTestPage>(static services => services
+        app.AddPageParameters<MarkdownPostTestPage>(static services => services
             .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
             .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
-        app.AddPages<RelatedPostsTestPage>(static services => services
+        app.AddPageParameters<RelatedPostsTestPage>(static services => services
             .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
             .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
 
@@ -476,7 +476,7 @@ public sealed class IncrementalBuildTests : IDisposable
 
     private static async Task BuildScopedAsync(string root, string notesDirectory)
     {
-        await using var app = StaticSite.Create([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
+        await using var app = TestSiteFactory.Create(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
         app.Info = TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(app, Path.Combine(app.Paths.ProjectDirectory, "static"));
 
@@ -486,14 +486,14 @@ public sealed class IncrementalBuildTests : IDisposable
             configure: options => options.Directory = Path.Combine("content", notesDirectory));
         app.UseContentSource<Post>(static _ => []);
         app.UseDefaultLayout<MainLayout>();
-        app.AddPages(typeof(TestArticleContents).Assembly);
+        TestArticleContents.MapTestAssemblyPages(app);
         app.AddNotFoundPage<NotFoundPage>();
-        app.AddPages<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
+        app.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
-        app.AddPages<MarkdownPostTestPage>(static services => services
+        app.AddPageParameters<MarkdownPostTestPage>(static services => services
             .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
             .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
-        app.AddPages<ScopedNotesIndexPage>(static _ => [new { Kind = "all" }]);
+        app.AddPageParameters<ScopedNotesIndexPage>(static _ => [new { Kind = "all" }]);
 
         await app.PublishAsync(Path.Combine(root, "dist"));
     }
@@ -862,7 +862,7 @@ public sealed class IncrementalBuildTests : IDisposable
 
     private static StaticSite CreateBuildApp(string root, Action? onRender = null, string directory = "content")
     {
-        var app = StaticSite.Create([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
+        var app = TestSiteFactory.Create(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
         app.Info = TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(app, Path.Combine(app.Paths.ProjectDirectory, "static"));
 
@@ -873,7 +873,7 @@ public sealed class IncrementalBuildTests : IDisposable
         });
         app.UseContentSource<Post>(static _ => []);
         TestArticleContents.MapSite(app);
-        app.AddPages<MarkdownPostTestPage>(static services => services
+        app.AddPageParameters<MarkdownPostTestPage>(static services => services
             .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
             .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
 

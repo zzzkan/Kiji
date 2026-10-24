@@ -30,7 +30,7 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
                 services.AddKeyedScoped<IImageProcessor>("other", (_, _) => throw new InvalidOperationException("Keyed factory must not run."));
             });
             app.UseMarkdownContent<FrontMatter>();
-            app.AddPages<MarkdownPostTestPage>(provider => provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
+            app.AddPageParameters<MarkdownPostTestPage>(provider => provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
                 .Select(post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
             var output = Path.Combine(_root, "dist");
             await app.PublishAsync(output);
@@ -77,7 +77,7 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
 
     private StaticSite CreateApp()
     {
-        var app = StaticSite.Create([], new SiteExecutionPaths(_root));
+        var app = TestSiteFactory.Create(new SiteExecutionPaths(_root));
         app.Info = new SiteInfo { Name = "Images", BaseUrl = new Uri("https://example.test/") };
         return app;
     }

@@ -17,7 +17,7 @@ public sealed class PageInfoTests : IDisposable
         string baseUrl, string key, string escapedBasePath, string escapedKey)
     {
         await using var app = CreateApp(baseUrl);
-        app.AddPages<PageInfoTestPage>(_ => [new { Key = key }]);
+        app.AddPageParameters<PageInfoTestPage>(_ => [new { Key = key }]);
         var request = Assert.Single(app.CreateSnapshot().Pages);
 
         var html = await app.RenderPageAsync(request, CancellationToken.None);
@@ -44,7 +44,7 @@ public sealed class PageInfoTests : IDisposable
         switch (consumer)
         {
             case "route":
-                app.AddPages<PageInfoTestPage>(provider =>
+                app.AddPageParameters<PageInfoTestPage>(provider =>
                 {
                     _ = provider.GetRequiredService<PageInfo>();
                     return [new { Key = "test" }];
@@ -52,7 +52,7 @@ public sealed class PageInfoTests : IDisposable
                 break;
             case "content":
                 app.UseContentSource<PageInfo>(provider => [provider.GetRequiredService<PageInfo>()]);
-                app.AddPages<PageInfoTestPage>(provider => provider.GetRequiredService<ContentDictionary<PageInfo>>()
+                app.AddPageParameters<PageInfoTestPage>(provider => provider.GetRequiredService<ContentDictionary<PageInfo>>()
                     .Select(entry => new { Key = entry.Key }));
                 break;
             case "feed":
@@ -78,7 +78,7 @@ public sealed class PageInfoTests : IDisposable
 
     private StaticSite CreateApp(string baseUrl)
     {
-        var app = StaticSite.Create([], new SiteExecutionPaths(_root));
+        var app = TestSiteFactory.Create(new SiteExecutionPaths(_root));
         app.Info = new SiteInfo { BaseUrl = new Uri(baseUrl), Name = "Page info" };
         return app;
     }

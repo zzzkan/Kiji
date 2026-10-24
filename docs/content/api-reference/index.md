@@ -203,7 +203,7 @@ and [Deployment](../deployment/#compression) for compression settings.
 
 ## Content and images
 
-### Content
+### Content sources and ContentDictionary
 
 #### `ContentDictionary<T>`
 
@@ -380,7 +380,25 @@ for an example and development behavior.
 
 ### Feeds
 
-Import `Kiji.Feeds`.
+Import `Kiji.Feeds` and `Microsoft.Extensions.DependencyInjection`. This example publishes
+`feed.xml` from the `BlogPost` model in [Getting started](../getting-started/#add-a-markdown-page),
+newest first:
+
+```csharp
+app.AddRssFeed(services => services
+    .GetRequiredService<ContentDictionary<BlogPost>>()
+    .Values
+    .OrderByDescending(post => post.Date)
+    .Select(post => new FeedItem(post.Title, post.Description, post.Date, post.RelativePath)));
+```
+
+So that browsers and feed readers can find the feed, add a link among the shared tags in
+`HeadContent`:
+
+```razor
+<link rel="alternate" type="application/rss+xml" title="@Site.Name"
+      href="@Site.ResolveUrl("feed.xml").AbsoluteUri" />
+```
 
 #### `AddRssFeed(Func<IServiceProvider,IEnumerable<FeedItem>> items, string path = "feed.xml")`
 
@@ -411,9 +429,10 @@ app.AddSitemap(
 
 `AddSitemap(string path = "sitemap.xml", IEnumerable<string>? excludedPaths = null)`
 registers a sitemap containing generated page URLs, sorted by site-relative path.
-`404.html` is always excluded. Additional exclusions match relative page paths
-case-insensitively and must follow the same site-relative path rules as `FeedItem`.
-`path` cannot be blank.
+`404.html` is always excluded. Each entry in `excludedPaths` removes the one page whose
+site-relative path matches it exactly, ignoring case: `preview/` removes `/preview/` but
+not `/preview/draft/`. List every page to exclude, using the same site-relative path rules
+as `FeedItem`. `path` cannot be blank.
 
 ### Custom artifacts
 

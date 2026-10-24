@@ -33,6 +33,8 @@ interactivity; Razor event handlers such as `@onclick` are not included.
 
 ## Getting started
 
+Kiji requires the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) or later.
+
 ```pwsh
 dotnet new install Kiji.Templates
 dotnet new kiji-blog -o MyBlog
@@ -46,7 +48,7 @@ Edit your site settings in `Program.cs`:
 
 app.Info = new SiteInfo
 {
-    BaseUrl = new Uri("https://example.org/blog/"),
+    BaseUrl = new Uri("https://example.org/"),
     Name = "My Blog",
 };
 ```

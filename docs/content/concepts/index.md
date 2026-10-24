@@ -45,9 +45,10 @@ Configure the site, page parameters, content, and generated files before `RunAsy
 | `dotnet publish` | Write the complete static site to `dist/`, reusing unchanged pages where possible.                   |
 | `dotnet clean`   | Remove build output and the `.kiji/` cache so the next publish rebuilds everything.                  |
 
-Preview and publishing use the same rendering pipeline. Upload `dist/` to a static
-host; see [Deployment](../deployment/) for hosting and sub-paths, and
-[Incremental builds](../incremental-builds/) for caching.
+Restart `dotnet watch` after changing `Program.cs`; its registrations are read when the
+site starts. Preview and publishing use the same rendering pipeline. Upload `dist/` to a
+static host; see [Deployment](../deployment/) for hosting and sub-paths, and
+[Incremental builds](../incremental-builds/) for page reuse.
 
 ## Pages and routes
 

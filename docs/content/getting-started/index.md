@@ -6,6 +6,9 @@ order: 10
 
 Start with the Blog template for a ready-to-customize site, or follow the walkthrough below to build a minimal blog from scratch.
 
+Both paths require the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+or later. Run `dotnet --version` to check the installed version.
+
 ## Start from a template
 
 [Kiji.Templates](https://github.com/zzzkan/Kiji.Templates) provides templates for
@@ -128,7 +131,8 @@ Open <http://localhost:8080>.
 ![Smallest site](./smallest-site.png)
 
 The server reloads the browser when you change a component
-or content file.
+or content file. Changes to `Program.cs` take effect only after a restart: stop
+`dotnet watch` with `Ctrl+C` and run it again.
 
 ### Add a layout and CSS
 
@@ -162,10 +166,12 @@ Create `Components/PageHead.razor` for the page title and shared head tags:
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="@Assets["css/app.css"]" />
+    @ChildContent
 </HeadContent>
 
 @code {
     [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
 }
 ```
 
@@ -219,9 +225,12 @@ Add `PageHead` to `Pages/Home.razor`:
 <p>This page is a Razor component rendered to static HTML.</p>
 ```
 
-Use `PageHead` once in each page. Add page-specific metadata to its `HeadContent`.
+Use `PageHead` once in each page. Put page-specific tags, such as a description, between
+`<PageHead>` and `</PageHead>`; `ChildContent` adds them after the shared tags. Do not add
+a separate `HeadContent` to a page: separate `HeadContent` blocks replace each other
+instead of combining, so the page would lose the shared tags and the stylesheet.
 
-Stop and restart `dotnet watch`.
+Because `Program.cs` changed, restart `dotnet watch`.
 
 ![Add a layout and CSS](./add-layout-css.png)
 
@@ -297,7 +306,9 @@ Create `Pages/Post.razor`. `Slug` supplies the route value, while `ContentKey` t
 
 @if (_post is not null)
 {
-    <PageHead Title="@_post.Title" />
+    <PageHead Title="@_post.Title">
+        <meta name="description" content="@_post.Description" />
+    </PageHead>
 
     <article>
         <h1>@_post.Title</h1>
@@ -353,9 +364,11 @@ return await app.RunAsync();
 `UseMarkdownContent<PostFrontMatter, BlogPost>` calls `BlogPost.Create` for each
 Markdown item and makes a `ContentDictionary<BlogPost>` available through dependency
 injection. The route registration uses each post's `Slug` and the dictionary key
-to generate its page in `/posts/<slug>/`.
+to generate its page in `/posts/<slug>/`. The post page also passes its description
+to `PageHead` for the document head.
 
-Open <http://localhost:8080/posts/hello-kiji/> to see the Markdown post.
+Restart `dotnet watch` to apply the `Program.cs` changes, then open
+<http://localhost:8080/posts/hello-kiji/> to see the Markdown post.
 
 ![Markdown post with its publication date](./markdown.png)
 
@@ -408,7 +421,7 @@ dotnet publish
 
 Subsequent publishes can reuse unchanged pages automatically. Keep `.kiji/cache` to
 preserve that work between builds.
-See [Incremental builds](../incremental-builds/) for dependencies and CI caching.
+See [Incremental builds](../incremental-builds/) for what causes pages to render again.
 
 The project now has this shape:
 

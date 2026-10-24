@@ -1,6 +1,6 @@
 ---
 title: Incremental builds
-description: Reuse unchanged pages, control page rendering, and cache builds in CI.
+description: Reuse unchanged pages and control page rendering.
 order: 60
 ---
 
@@ -75,14 +75,13 @@ image processing caches intact.
 
 | Location, relative to the project | Purpose |
 | --- | --- |
-| `.kiji/cache` | Publish cache; this is the directory to preserve across checkouts. |
+| `.kiji/cache` | Publish cache, reused by later publishes. |
 | `.kiji/dev-site` | Development output. |
 | `dist` | Deployable site. |
 
-In CI, restore the cache before publishing and save it after success. Separate caches
-by site and build environment; provide a fallback key so content-only revisions can
-reuse earlier output. Changed code, dependencies, or settings may still require a rebuild.
-Compare total CI time with and without caching, including transfer time.
+Saving `.kiji/cache` between CI runs often does not pay off: transferring it takes time,
+and changes to code, dependencies, or settings render every page anyway. Before relying
+on a CI cache, measure total CI time with and without it, including transfer time.
 
 Release site builds omit debug symbols and normalize source metadata for portable
 reuse. Use Debug for source-level debugging.

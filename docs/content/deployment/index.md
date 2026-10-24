@@ -83,23 +83,23 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
 
       - run: dotnet publish MySite
 
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: MySite/dist
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 ```
 
-The workflow works without a saved cache. To reuse output between runs, see
-[CI caching](../incremental-builds/#cache-locations).
+GitHub Pages compresses responses itself, so you can
+[skip the compressed copies](#compression).
 
 ## Other static hosts
 
@@ -110,23 +110,29 @@ directory. Use this build command and configure `dist` as the directory to publi
 dotnet publish
 ```
 
-Check two host behaviors:
+If the host runs the build, its build environment needs the .NET 10 SDK or later. Otherwise,
+publish in your own CI and upload `dist/`.
 
-- `AddNotFoundPage<NotFoundPage>()` writes `404.html` at the output root.
-  Most static hosts use that file for unmatched paths.
-- Generated pages use `route/index.html`.
+Before deploying to a new host, check that it:
+
+- Serves `404.html` from the output root for unmatched paths. `AddNotFoundPage<NotFoundPage>()`
+  writes this file, and most static hosts use it automatically.
+- Serves `about/index.html` for `/about/`. Kiji writes every page as `route/index.html`.
 
 If a host provides a local emulator, use it to verify these behaviors before deployment.
 
 ## Compression
 
-By default, publishing generates Gzip (`.gz`) and Brotli (`.br`) versions of compressible files.
-Configure your host to serve these files with the appropriate content encoding and cache
-headers. If the host compresses responses itself, you can skip generating compressed files:
+By default, publishing also writes Gzip (`.gz`) and Brotli (`.br`) copies of compressible
+files. They help only on a server configured to serve precompressed files, such as nginx
+with `gzip_static`; configure it to send them with the matching `Content-Encoding` header.
 
-```pwsh
-dotnet publish -c Release -p:CompressionEnabled=false
+Hosted services such as GitHub Pages, Netlify, Vercel, and Cloudflare Pages compress
+responses themselves, so the copies are unnecessary there. To skip them, add this to the
+project's `<PropertyGroup>`:
+
+```xml
+<CompressionEnabled>false</CompressionEnabled>
 ```
 
-This setting also applies to referenced projects. Check your host's configuration to
-ensure responses are compressed.
+To skip them for a single publish, run `dotnet publish -p:CompressionEnabled=false`.

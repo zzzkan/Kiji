@@ -1,6 +1,6 @@
 ---
 title: Deployment
-description: Publish to GitHub Pages or another static host, including under a sub-path.
+description: Publish to GitHub Pages or another static host, including under a subpath.
 order: 50
 ---
 
@@ -23,7 +23,7 @@ app.Info = new SiteInfo
 
 Set it to the final deployment URL before publishing.
 
-## Publish under a sub-path
+## Publish under a subpath
 
 A GitHub Pages project site is served from `https://your-name.github.io/repo/`, not from
 the domain root. Include the full path in `BaseUrl`:
@@ -45,14 +45,14 @@ Both URLs include `/my-site/`.
 A single leading `/` is optional: `Site.ResolveUrl("/docs/")` also preserves the deployment
 base path.
 
-Kiji already applies `BaseUrl` to feed, sitemap, and generated Markdown image
-URLs. Page-bundle image URLs include the deployment base path, while their files remain
-beside the page inside `dist/`. A base path does not add another directory inside `dist/`.
+Kiji already applies `BaseUrl` to feed, sitemap, and Markdown image URLs. The base path is
+not a directory inside `dist/`: upload the contents of `dist/` so that `dist/index.html` is
+served at `/my-site/`.
 
 The development server uses the same base path and returns 404 outside it. With the
 example above, open <http://localhost:8080/my-site/> after starting `dotnet watch`.
-This makes a missing prefix visible before deployment. See
-[Markdown and images](../markdown/#local-images-and-page-bundles) for image URL behavior.
+This makes a missing base path visible before deployment. See
+[Markdown and images](../markdown/#links-and-deployment-paths) for links written in Markdown.
 
 ## GitHub Pages with Actions
 

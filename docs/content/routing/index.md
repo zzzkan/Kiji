@@ -18,8 +18,10 @@ entry assembly. No page registration is needed for a fixed route:
 <h1>About</h1>
 ```
 
-This generates `about/index.html`, served as `/about/`. The `/` route generates the root
-`index.html`. Components without `@page` remain ordinary reusable components.
+This generates `about/index.html`, served as `/about/`. A route without a trailing slash,
+such as `@page "/about"`, generates the same file, so link to `/about/` with the slash.
+The `/` route generates the root `index.html`. Components without `@page` remain ordinary
+reusable components.
 
 Pages in another assembly, such as a Razor class library, are included only when you add
 that assembly. To leave out one of its pages, register an empty parameter sequence:
@@ -130,9 +132,9 @@ segments and simple parameter segments, but rejects:
 - Catch-all parameters such as `{*path}` or `{**path}`
 - Composite segments such as `post-{id}`
 
-Planning also fails when a required route value is missing or empty, a value has the wrong
-component parameter type, a supplied property has no matching `[Parameter]`, or two pages
-resolve to the same output path. These errors are reported before pages are rendered.
+Kiji also reports an error before rendering any page when a required route value is missing
+or empty, a value has the wrong component parameter type, a supplied property has no
+matching `[Parameter]`, or two pages resolve to the same output path.
 
 ## Not-found pages
 

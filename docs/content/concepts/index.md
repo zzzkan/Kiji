@@ -17,6 +17,8 @@ MySite/
 ├── Models/           content models
 ├── content/          Markdown and its local images
 ├── wwwroot/          shared CSS, JavaScript, fonts, and images
+├── _Imports.razor    @using directives shared by all components
+├── MySite.csproj     Razor SDK project with a Kiji package reference
 └── Program.cs        site metadata and registrations
 ```
 
@@ -45,9 +47,16 @@ Configure the site, page parameters, content, and generated files before `RunAsy
 | `dotnet publish` | Write the complete static site to `dist/`, reusing unchanged pages where possible.                   |
 | `dotnet clean`   | Remove build output and the `.kiji/` cache so the next publish rebuilds everything.                  |
 
-Restart `dotnet watch` after changing `Program.cs`; its registrations are read when the
-site starts. Preview and publishing use the same rendering pipeline. Upload `dist/` to a
-static host; see [Deployment](../deployment/) for hosting and sub-paths, and
+Restart `dotnet watch` after changing `Program.cs` by pressing `Ctrl+R` in its terminal;
+the registrations there are read when the site starts. To use another address, for example
+when port 8080 is already in use, pass `--urls` after `--`:
+
+```pwsh
+dotnet watch -- --urls http://127.0.0.1:5000
+```
+
+Preview and publishing use the same rendering pipeline. Upload `dist/` to a static host;
+see [Deployment](../deployment/) for hosting and subpaths, and
 [Incremental builds](../incremental-builds/) for page reuse.
 
 ## Pages and routes

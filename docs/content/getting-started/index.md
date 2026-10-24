@@ -45,7 +45,6 @@ pages, shared styles, syntax highlighting, and RSS.
 - Edit general pages in `content/pages/`.
 - Customize the Razor components in `Pages/`, `Layout/`, and `Components/`, and the
   stylesheet in `wwwroot/css/app.css`.
-- Update the site name, public URL, description, language, and author in `Program.cs`.
 
 The server reloads the browser as you edit files.
 
@@ -66,6 +65,11 @@ learn how the core pieces fit together.
 This walkthrough builds the core of the Blog template: a home page listing dated
 Markdown posts, individual post pages, and a shared layout and stylesheet.
 Kiji is a library, so the project uses the usual `dotnet` commands throughout.
+
+The walkthrough assumes you know the basics of Razor components, such as `@page`,
+`@inject`, and `[Parameter]`. If they are new to you, start with
+[Razor components](https://learn.microsoft.com/aspnet/core/blazor/components/) on
+Microsoft Learn.
 
 Razor and C# examples show complete files. Highlighted lines mark additions or changes.
 
@@ -92,6 +96,9 @@ In its `<PropertyGroup>`, select native image libraries for the current machine:
 ```xml
 <UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier>
 ```
+
+Kiji processes images with a native library. Without this setting, every build copies
+that library for all supported platforms, several hundred megabytes, into `bin/`.
 
 ### Build the smallest site
 
@@ -131,8 +138,8 @@ Open <http://localhost:8080>.
 ![Smallest site](./smallest-site.png)
 
 The server reloads the browser when you change a component
-or content file. Changes to `Program.cs` take effect only after a restart: stop
-`dotnet watch` with `Ctrl+C` and run it again.
+or content file. Changes to `Program.cs` take effect only after a restart: press `Ctrl+R`
+in the terminal running `dotnet watch`, or stop it with `Ctrl+C` and run it again.
 
 ### Add a layout and CSS
 
@@ -230,12 +237,16 @@ Use `PageHead` once in each page. Put page-specific tags, such as a description,
 a separate `HeadContent` to a page: separate `HeadContent` blocks replace each other
 instead of combining, so the page would lose the shared tags and the stylesheet.
 
+Each component in this walkthrough lists its own `@using` directives. To share directives
+across all components, put them in `_Imports.razor` at the project root; other pages of
+this documentation assume that file imports namespaces such as `Kiji`.
+
 Because `Program.cs` changed, restart `dotnet watch`.
 
 ![Add a layout and CSS](./add-layout-css.png)
 
 `Assets` includes the `BaseUrl` path in the stylesheet URL, so the same markup works at a
-domain root and under a deployment sub-path such as GitHub Pages.
+domain root and under a deployment subpath such as GitHub Pages.
 
 ### Add a Markdown page
 
@@ -295,7 +306,7 @@ public sealed record BlogPost(
 This walkthrough uses one directory per post, with its Markdown in `index.md`.
 `BlogPost.Create` uses that directory name as the slug and requires a title and date.
 
-Create `Pages/Post.razor`. `Slug` supplies the route value, while `ContentKey` tells the component which Markdown item to render:
+Create `Pages/PostPage.razor`. `Slug` supplies the route value, while `ContentKey` tells the component which Markdown item to render:
 
 ```razor
 @page "/posts/{Slug}/"
@@ -354,7 +365,7 @@ app.Info = new SiteInfo
 app.UseMarkdownContent<PostFrontMatter, BlogPost>(BlogPost.Create,
     options => options.Directory = "content/posts");
 app.UseDefaultLayout<MainLayout>();
-app.AddPageParameters<Post>(services => services
+app.AddPageParameters<PostPage>(services => services
     .GetRequiredService<ContentDictionary<BlogPost>>()
     .Select(post => new { post.Value.Slug, ContentKey = post.Key }));
 
@@ -433,7 +444,7 @@ MySite/
 │   └── PageHead.razor
 ├── Pages/
 │   ├── Home.razor
-│   └── Post.razor
+│   └── PostPage.razor
 ├── Models/
 │   ├── PostFrontMatter.cs
 │   └── BlogPost.cs
@@ -450,4 +461,4 @@ MySite/
 └── dist/             published output
 ```
 
-Add `dist/` and `.kiji/` to `.gitignore`. Continue with [Concepts](../concepts/) for the overall model, [Routing](../routing/) for more URL patterns, or [Deployment](../deployment/) when you are ready to host the site.
+Add `dist/` and `.kiji/` to `.gitignore`. Continue with [Concepts](../concepts/) for the overall model, [Routing](../routing/) for more URL patterns, or [Deployment](../deployment/) when you are ready to host the site. If something does not work, see [Troubleshooting](../troubleshooting/).

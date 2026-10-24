@@ -83,13 +83,11 @@ Saving `.kiji/cache` between CI runs often does not pay off: transferring it tak
 and changes to code, dependencies, or settings render every page anyway. Before relying
 on a CI cache, measure total CI time with and without it, including transfer time.
 
-Release site builds omit debug symbols and normalize source metadata for portable
-reuse. Use Debug for source-level debugging.
-
 ## Inspect or reset reuse
 
 ```pwsh
-# Show per-file details.
+# Show per-file details. --tl:off prints them as plain build output;
+# the default live terminal display hides them.
 dotnet publish -p:KijiVerbose=true --tl:off
 
 # Render every page.

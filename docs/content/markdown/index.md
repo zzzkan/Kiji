@@ -159,9 +159,9 @@ rendered as written. Kiji does not add `SiteInfo.BaseUrl` to root-relative Markd
 A link such as `/about/` therefore points at the domain root and is wrong when the site is
 published under `/my-site/`. Prefer document-relative links in Markdown. In Razor, resolve
 site links with `Site.ResolveUrl("about/").AbsolutePath`. See [Deployment](../deployment/) for the full
-sub-path setup.
+subpath setup.
 
-## Local images and page bundles
+## Local images
 
 Place an image beside a Markdown file and reference it with a relative URL:
 
@@ -176,18 +176,24 @@ content/
 ![A description](photo.jpg)
 ```
 
-For relative `.jpg`, `.jpeg`, `.png`, `.gif`, and `.webp` references, Kiji generates
-responsive WebP variants beside the page's `index.html` and emits an `<img>` with a
-`srcset`. The default processor uses SkiaSharp and outputs static images; animated GIF
-and WebP inputs use only their first frame. Source EXIF, IPTC, and XMP metadata is removed,
-and colors are converted to sRGB. To preserve animation, place the original image in
-`wwwroot/` and reference it as a static asset.
+For relative `.jpg`, `.jpeg`, `.png`, `.gif`, and `.webp` references, Kiji writes WebP
+versions of the image beside the page's `index.html` and emits an `<img>` with a `srcset`.
+The default processor creates versions 320, 640, 960, and 1280 pixels wide when the source
+is wider, plus one at the source width, up to 1920 pixels. It outputs static images:
+animated GIF and WebP inputs use only their first frame. Source EXIF, IPTC, and XMP
+metadata is removed, and colors are converted to sRGB. To preserve animation, place the
+original image in `wwwroot/` and reference it as a static asset.
+
+The `<img>` includes the source width and height to reserve layout space. The first image
+in each Markdown body loads eagerly; later images load lazily and let the browser choose
+a version from their rendered width. For finer control, write the `<img>` element in HTML
+or Razor yourself; Kiji leaves explicit markup unchanged.
 
 The source image must exist inside the Markdown file's directory tree. A missing image or
 a path that escapes that tree fails the page render.
 
 External image URLs and site-root references such as `![](/img/logo.png)` are left as
 ordinary Markdown images. Put shared images in `wwwroot/`; remember that a leading `/` is
-not safe for a deployment sub-path.
+not safe for a deployment subpath.
 
 For custom image processing, see the [API reference](../api-reference/#image-processing).

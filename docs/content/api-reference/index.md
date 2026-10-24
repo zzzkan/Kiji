@@ -33,9 +33,9 @@ return await app.RunAsync();
 
 #### `StaticSite.Create(string[] args)`
 
-Creates a site rooted at its project directory. `args` are forwarded to ASP.NET Core
-configuration during development, for example `--urls`. Build the project with Kiji's
-targets before running the executable.
+Creates a site for the current project. During development, `args` are passed to ASP.NET
+Core configuration, so `dotnet watch -- --urls http://127.0.0.1:5000` changes the
+development server address.
 
 #### `StaticSite.Info`
 
@@ -44,8 +44,8 @@ Required site metadata. Assign it before execution.
 #### `StaticSite.RunAsync(CancellationToken cancellationToken = default)`
 
 Serves during `dotnet watch` and generates the site during `dotnet publish`.
-Await it and return its exit code. A site can run once; configuration becomes read-only
-when execution starts, and Kiji disposes its resources when the run ends.
+Await it and return its exit code. A site can run only once, and its configuration cannot
+change after the run starts.
 
 ### SiteInfo
 
@@ -97,7 +97,7 @@ values keep their .NET types; route values are formatted invariantly for the URL
 parameters keep their defaults, and `EditorRequired` is not checked. Unknown names,
 incompatible values, missing or empty route values, and duplicate output paths fail before
 rendering. Registrations for the same component concatenate; an empty sequence generates
-no pages. Treat supplied objects as read-only; Kiji does not clone or dispose them. See
+no pages. Treat supplied objects as read-only. See
 [Routing](../routing/) for examples and supported route templates.
 
 HTML can be reused when parameter values are `null` or have one of these types:
@@ -134,8 +134,7 @@ app.UseServices(services =>
 ```
 
 Import `Microsoft.Extensions.DependencyInjection`. Callbacks run once in registration order
-before rendering; the collection is then read-only. Use ordinary C# lambdas or named methods
-for callbacks and factories; standalone runtime-generated methods are unsupported.
+before rendering; the collection is then read-only.
 
 Components and services can inject `ILogger<T>`. Kiji writes `Warning` and higher
 logs to standard error during publish and development, including exceptions caught by
@@ -188,7 +187,7 @@ Kiji waits for asynchronous rendering to finish, so the generated HTML includes 
 ### Static assets
 
 The inherited `ComponentBase.Assets` property resolves paths such as `Assets["css/app.css"]`
-to public URLs, including fingerprints when available and `SiteInfo.BaseUrl`'s path prefix.
+to public URLs, including fingerprints when available and the deployment base path from `SiteInfo.BaseUrl`.
 An unknown path is returned unchanged. Literal URLs in CSS, JavaScript, or HTML are not
 automatically rewritten. Use `SiteInfo.ResolveUrl` for links to pages and generated files.
 
@@ -233,10 +232,9 @@ source-relative paths using `/`; custom sources use ordinal keys or explicit IDs
 described below. Keys do not determine public URLs.
 
 Use `UseContentSource` for custom data, such as JSON, or a shared index derived from
-other content, such as tag counts. Both overloads expose `ContentDictionary<T>` and
-load lazily once per site snapshot, after execution paths are known. Treat loaded values
-as immutable. Each publish or development content reload invalidates them; the next
-access loads them again.
+other content, such as tag counts. Both overloads expose `ContentDictionary<T>`. The loader
+runs the first time the content is read, and again after content changes during
+development. Treat loaded values as immutable.
 
 #### `UseContentSource<T>(Func<IServiceProvider, IReadOnlyList<T>> loader)`
 
@@ -328,11 +326,6 @@ The configure callback receives a new options instance for that registration.
 | `ConfigureYaml(Action<DeserializerBuilder>)`         | Adds a non-null YamlDotNet configuration after the camel-case and ignore-unmatched defaults. Calls run in registration order.   |
 | `AddHtmlPostProcessor(Func<string,string>)`          | Adds a non-null synchronous HTML transformation. Transformations run in registration order, each receiving the previous result. |
 
-Local images get responsive variants and dimensions to reserve layout space. The first
-loads eagerly; later images load lazily and use automatic sizing where supported, with
-a viewport fallback. Use explicit HTML or Razor for finer control. Remote images,
-site-root images, and explicit markup are not processed.
-
 #### `MarkdownContent<TFrontMatter>`
 
 Kiji creates one instance per source file.
@@ -341,7 +334,7 @@ Kiji creates one instance per source file.
 | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `FileInfo FileInfo`                                                            | Metadata for the source Markdown file.                                                                                                                                    |
 | `TFrontMatter FrontMatter`                                                     | The parsed YAML object.                                                                                                                                                   |
-| `ValueTask<string> RenderAsync(CancellationToken cancellationToken = default)` | Renders the body to HTML and materializes referenced local-image variants beside the current page. Honors cancellation and propagates rendering, image, and I/O failures. |
+| `ValueTask<string> RenderAsync(CancellationToken cancellationToken = default)` | Renders the body to HTML and writes its local images beside the current page.                                                                                             |
 
 `RenderAsync` should be called while rendering a page when the Markdown contains local
 images, because their output directory comes from the current page.
@@ -349,20 +342,30 @@ images, because their output directory comes from the current page.
 ### Image processing
 
 The default processor uses SkiaSharp to generate static WebP variants from JPEG, PNG,
-GIF, and WebP inputs. Animated inputs use only the first frame. It converts colors to
-sRGB and drops source EXIF, IPTC, and XMP metadata.
+GIF, and WebP inputs. See [Local images](../markdown/#local-images) for the generated
+widths, metadata handling, and `<img>` markup.
 
-To replace it, register `IImageProcessor` from `Kiji.Assets` as a singleton:
+To replace it, implement `IImageProcessor` from `Kiji.Assets` and register it as a
+singleton:
 
 ```csharp
 app.UseServices(services =>
     services.AddSingleton<IImageProcessor, MyImageProcessor>());
 ```
 
+| Member                                                                                                                  | Behavior                                                                                                       |
+| ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `Task<ProcessedImageInfo> ProcessAsync(string sourceFilePath, string outputDirectory, CancellationToken cancellationToken = default)` | Writes variants of the source image into `outputDirectory` and describes them.                                 |
+| `string? CacheIdentity`                                                                                                 | Identifies the implementation and its settings for reuse across publishes. The default `null` disables reuse. |
+
+`ProcessedImageInfo` has the source image's `OriginalWidth` and `OriginalHeight`, which
+become the `<img>` dimensions, and `Variants`, a list of `ImageVariant(string FileName, int Width)`
+in ascending width order. `FileName` is relative to `outputDirectory`. Every variant
+appears in `srcset`, and the last one is also the `src`.
+
 Custom processors must support concurrent calls and retain no page or content state.
-Set `CacheIdentity` to identify the implementation and settings for persistent reuse;
-its default `null` disables reuse. Include external configuration and encoder versions
-in that identity; page rendering controls do not invalidate image processing caches.
+Include external configuration and encoder versions in `CacheIdentity`; page rendering
+controls do not invalidate image processing caches.
 
 ## Page reuse controls
 
@@ -445,7 +448,7 @@ escape the output directory fail generation.
 
 #### `SiteOutputContext`
 
-Kiji constructs this type for artifact writers; it has no public constructor.
+Kiji passes this to artifact writers.
 
 | Property                            | Behavior                                                                                                   |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------------------- |
@@ -455,11 +458,13 @@ Kiji constructs this type for artifact writers; it has no public constructor.
 
 #### `SitePageInfo`
 
-`SitePageInfo(string RelativePath, string OutputRelativePath)` describes a generated page.
-`RelativePath` is URL-facing and relative to `SiteInfo.BaseUrl`; it follows the site-relative
-path validation rules. `OutputRelativePath` is the file-facing path below the output
-directory and cannot be blank. Both values are exposed as read-only properties with the
-same names.
+`SitePageInfo(string RelativePath, string OutputRelativePath)` describes a generated page
+through two read-only properties:
+
+- `RelativePath` is the page URL relative to `SiteInfo.BaseUrl`, such as `posts/hello/`.
+  The home page uses `""`.
+- `OutputRelativePath` is the file path inside the output directory, such as
+  `posts/hello/index.html`, written with the operating system's directory separator.
 
 ## Unsupported Blazor features
 

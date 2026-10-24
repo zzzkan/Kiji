@@ -199,7 +199,7 @@
 
     <Error Condition="'@(KijiSiteFile)' == ''"
            Code="KIJI1002"
-           Text="Kiji generated no files into '$(_KijiStagingDir)'. The site exited successfully without writing anything — check that its entry point awaits KijiApp.RunAsync." />
+           Text="Kiji generated no files into '$(_KijiStagingDir)'. The site exited successfully without writing anything — check that its entry point awaits StaticSite.RunAsync." />
   </Target>
 
   <!-- ==============================================================

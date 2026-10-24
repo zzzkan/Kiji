@@ -1,54 +1,43 @@
 ---
 title: Incremental builds
-description: Reuse unchanged pages, control page rendering, and cache builds in CI.
+description: Reuse unchanged pages and control page rendering.
 order: 60
 ---
 
-Keep using `dotnet publish`. The first publish renders every page; later publishes
-reuse eligible HTML when its code, settings, parameters, and inputs are unchanged.
-Every successful publish produces a complete static site.
+The first `dotnet publish` renders every page. Later publishes reuse a page's HTML when
+nothing it depends on has changed, and always produce a complete site.
 
 ## What changes cause work?
 
 | Change | Work |
 | --- | --- |
-| No relevant change | Reuse eligible pages. |
-| Markdown changes | Render pages reading that item or its collection. |
-| Content is added, removed, or reordered | Reevaluate collection readers and routes; remove obsolete outputs. |
+| Markdown changes | Render pages that read that item or its collection. |
+| Content is added, removed, or reordered | Render pages that read the whole collection, and add or remove pages. |
 | Page parameters change | Render affected pages. |
-| A local image changes | Render its readers and update image variants. |
-| A static asset changes | Update the asset and pages using `Assets` or the default `ImportMap`. |
-| Code, referenced assemblies (including the framework), or site settings change | Render all pages. |
-| A page renders an `AlwaysRender` component or layout | Render that page on every publish. |
-| `KijiForce=true` | Render all pages. |
+| A local image changes | Render pages that use it and update its variants. |
+| A static asset changes | Update the asset and pages that link it through `Assets` or `ImportMap`. |
+| Code, packages, the .NET runtime, or site settings change | Render all pages. |
+| A page uses an `AlwaysRender` component | Render that page on every publish. |
 
-Static assets are checked and feeds, sitemaps, and custom artifacts run on every publish.
+Feeds, sitemaps, and custom artifacts are regenerated on every publish.
 
-## Understand page dependencies
+## Page dependencies
 
-`Posts[ContentKey]` depends on one item. Enumeration, `Count`, `Keys`, `Values`, and
-missing lookups depend on the entire collection, including its order and contents.
-Filtering after `Values` does not narrow that dependency.
+`Posts[ContentKey]` depends on one item. Enumerating a dictionary, reading `Count`, `Keys`,
+or `Values`, or looking up a missing key depends on the whole collection, even if you
+filter afterward. Reads in layouts and child components count too: a layout that lists
+every post makes every page depend on all posts.
 
-Reads in layouts and child components count too: a post page can reuse HTML when
-another post changes, but a layout listing every post makes that page depend on
-the whole collection.
-
-## Pass stable page parameters
-
-Pass a content key or another simple identifier through `AddPageParameters`, then look up
-the content during rendering. Entire models and arrays can be valid component
-parameters while preventing HTML reuse. See [Routing](../routing/#passing-values-that-are-not-in-the-url)
-and the [supported parameter types](../api-reference/#pages).
+Pass a content key or another simple value through `AddPageParameters` and look the item
+up while rendering. Passing whole models or arrays works but disables reuse for that page;
+see the [reusable parameter types](../api-reference/#pages).
 
 ## Render pages that use external data
 
-Reads through `ContentDictionary<T>` are tracked automatically. For custom data or a
-shared index, [use a content source](../api-reference/#content-sources-and-contentdictionary)
-to load and share values; supply item digests to make their readers eligible for HTML reuse.
-
-Kiji cannot observe arbitrary file, HTTP, environment, clock, or service-state reads
-outside that pipeline. When those values affect HTML, mark the component that uses them:
+Kiji tracks reads through `ContentDictionary<T>`. To track other data, load it with
+[UseContentSource](../api-reference/#content-sources-and-contentdictionary) and supply
+digests. Kiji cannot see other reads, such as files, HTTP, environment variables, the
+clock, or service state. Mark components that render such values:
 
 ```razor
 @attribute [AlwaysRender]
@@ -56,46 +45,28 @@ outside that pipeline. When those values affect HTML, mark the component that us
 <p>@Environment.GetEnvironmentVariable("SITE_ANNOUNCEMENT")</p>
 ```
 
-Import `Kiji` in `_Imports.razor`. Any page rendering the marked component is regenerated
-in full on every publish. This also works in layouts and child components. If external
-state controls whether a child appears, mark the parent reading that state.
+Every page that renders the component, including through a layout, is rendered on every
+publish. If external state decides whether a child component appears, mark the parent.
 
-`AlwaysRender` controls HTML reuse. It does not reload a content dictionary or rebuild
-a singleton's cached results. Use `UseContentSource` for shared derived data that must
-be rebuilt on content reload; rendering again cannot fix an outdated value in a service.
+`AlwaysRender` only re-renders HTML; it does not refresh data a service has cached, and
+content reloads do not recreate singletons. Build shared derived data with
+`UseContentSource` instead. During development, restart `dotnet watch` when external data
+changes.
 
-For a one-time refresh of all pages, use `dotnet publish -p:KijiForce=true`.
-Later publishes can reuse those results; `AlwaysRender` pages continue to render.
-
-Neither these rendering controls nor custom content loaders watch external data;
-restart the development server when that data changes. Rendering controls also leave
-image processing caches intact.
-
-## Cache locations
-
-| Location, relative to the project | Purpose |
-| --- | --- |
-| `.kiji/cache` | Publish cache; this is the directory to preserve across checkouts. |
-| `.kiji/dev-site` | Development output. |
-| `dist` | Deployable site. |
-
-In CI, restore the cache before publishing and save it after success. Separate caches
-by site and build environment; provide a fallback key so content-only revisions can
-reuse earlier output. Changed code, dependencies, or settings may still require a rebuild.
-Compare total CI time with and without caching, including transfer time.
-
-Release site builds omit debug symbols and normalize source metadata for portable
-reuse. Use Debug for source-level debugging.
-
-## Inspect or reset reuse
+## Reset and inspect
 
 ```pwsh
-# Show per-file details.
-dotnet publish -p:KijiVerbose=true --tl:off
-
-# Render every page.
+# Render every page once; later publishes reuse the results.
 dotnet publish -p:KijiForce=true
 
-# Remove build output and cache.
+# Show per-file details. --tl:off is needed because the default terminal display hides them.
+dotnet publish -p:KijiVerbose=true --tl:off
+
+# Remove build output and the cache.
 dotnet clean
 ```
+
+Kiji keeps its publish cache in `.kiji/cache` and development output in `.kiji/dev-site`.
+Saving the cache between CI runs often does not pay off, because transferring it takes time
+and code or package changes render every page anyway. Before relying on a CI cache,
+compare total CI time with and without it.

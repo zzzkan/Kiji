@@ -1,38 +1,24 @@
 ---
 title: Deployment
-description: Publish to GitHub Pages or another static host, including under a sub-path.
+description: Publish to GitHub Pages or another static host, including under a subpath.
 order: 50
 ---
 
-`dotnet publish` writes the generated site to `dist/`. The directory
-contains static files only — no assemblies or .NET runtime — and can be uploaded to any
-static host.
+`dotnet publish` writes the site to `dist/` as static files only, ready to upload to any
+static host. Before publishing, set `SiteInfo.BaseUrl` to the site's final public URL;
+Kiji uses it for page, feed, sitemap, and image URLs.
 
-## Set the published URL
+## Publish under a subpath
 
-`SiteInfo.BaseUrl` is the public URL of the site. Kiji uses it to resolve page URLs,
-RSS and sitemap links, and the development server's base path:
-
-```csharp
-app.Info = new SiteInfo
-{
-    BaseUrl = new Uri("https://example.com/"),
-    Name = "My Site",
-};
-```
-
-Set it to the final deployment URL before publishing.
-
-## Publish under a sub-path
-
-A GitHub Pages project site is served from `https://your-name.github.io/repo/`, not from
-the domain root. Include the full path in `BaseUrl`:
+When the site is not at the domain root, such as a GitHub Pages project site, include the
+path in `BaseUrl`:
 
 ```csharp
 BaseUrl = new Uri("https://your-name.github.io/my-site/"),
 ```
 
-Use `Site.ResolveUrl` for page links and `Assets` for static asset links:
+Build page links with `Site.ResolveUrl` and asset links with `Assets`; both then include
+`/my-site/`. Links written as `/docs/` do not.
 
 ```razor
 @inject SiteInfo Site
@@ -41,23 +27,15 @@ Use `Site.ResolveUrl` for page links and `Assets` for static asset links:
 <link rel="stylesheet" href="@Assets["css/app.css"]" />
 ```
 
-Both URLs include `/my-site/`.
-A single leading `/` is optional: `Site.ResolveUrl("/docs/")` also preserves the deployment
-base path.
-
-Kiji already applies `BaseUrl` to feed, sitemap, and generated Markdown image
-URLs. Page-bundle image URLs include the deployment base path, while their files remain
-beside the page inside `dist/`. A base path does not add another directory inside `dist/`.
-
-The development server uses the same base path and returns 404 outside it. With the
-example above, open <http://localhost:8080/my-site/> after starting `dotnet watch`.
-This makes a missing prefix visible before deployment. See
-[Markdown and images](../markdown/#local-images-and-page-bundles) for image URL behavior.
+The path does not become a directory in `dist/`: upload the contents of `dist/` so that
+`dist/index.html` is served at `/my-site/`. The development server uses the same path, at
+<http://localhost:8080/my-site/>, and returns 404 outside it, so a missing base path shows
+up before deployment.
 
 ## GitHub Pages with Actions
 
-In the repository settings, set the Pages source to **GitHub Actions**. Then add a workflow
-like this, replacing `MySite` if the project is elsewhere:
+In the repository settings, set the Pages source to **GitHub Actions**, then add this
+workflow, replacing `MySite` with the project directory:
 
 ```yaml
 name: Deploy site
@@ -83,50 +61,37 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
 
       - run: dotnet publish MySite
 
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: MySite/dist
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 ```
-
-The workflow works without a saved cache. To reuse output between runs, see
-[CI caching](../incremental-builds/#cache-locations).
 
 ## Other static hosts
 
-Netlify, Vercel, Cloudflare Pages, S3, and similar services can all deploy the generated
-directory. Use this build command and configure `dist` as the directory to publish:
+On Netlify, Vercel, Cloudflare Pages, and similar services, use `dotnet publish` as the
+build command and `dist` as the output directory. The build environment needs the .NET 10
+SDK; otherwise, publish in your own CI and upload `dist/`.
 
-```pwsh
-dotnet publish
-```
-
-Check two host behaviors:
-
-- `AddNotFoundPage<NotFoundPage>()` writes `404.html` at the output root.
-  Most static hosts use that file for unmatched paths.
-- Generated pages use `route/index.html`.
-
-If a host provides a local emulator, use it to verify these behaviors before deployment.
+Check that the host serves `about/index.html` for `/about/` and uses `404.html`, written by
+`AddNotFoundPage`, for unmatched paths.
 
 ## Compression
 
-By default, publishing generates Gzip (`.gz`) and Brotli (`.br`) versions of compressible files.
-Configure your host to serve these files with the appropriate content encoding and cache
-headers. If the host compresses responses itself, you can skip generating compressed files:
+Publishing also writes `.gz` and `.br` copies of compressible files for servers configured
+to send precompressed files, such as nginx with `gzip_static`. GitHub Pages, Netlify,
+Vercel, and Cloudflare Pages compress responses themselves, so skip the copies there by
+adding this to the project's `<PropertyGroup>`:
 
-```pwsh
-dotnet publish -c Release -p:CompressionEnabled=false
+```xml
+<CompressionEnabled>false</CompressionEnabled>
 ```
-
-This setting also applies to referenced projects. Check your host's configuration to
-ensure responses are compressed.

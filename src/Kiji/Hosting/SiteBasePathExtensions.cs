@@ -47,7 +47,7 @@ internal static class SiteBasePathExtensions
             context.Response.ContentType = "text/plain; charset=utf-8";
             await context.Response.WriteAsync(
                 $"404. This site is served under {prefix}/ because SiteInfo.BaseUrl has that path. "
-                + "Prefix site-root-relative URLs with Site.BaseUrl.AbsolutePath so they resolve here and once deployed.",
+                + "Build page links with Site.ResolveUrl and asset links with Assets so they resolve here and once deployed.",
                 context.RequestAborted);
         });
 

@@ -11,8 +11,8 @@ together in plain HTML, ready for any static host.
 
 ### 🧰 Your .NET workflow
 
-Razor pages, layouts, and C# models. Preview with `dotnet watch`; ship with
-`dotnet publish`.
+Write pages, layouts, and models in Razor and C#. Preview with `dotnet watch` and ship
+with `dotnet publish`.
 
 ### 📦 Publishing essentials included
 
@@ -20,7 +20,7 @@ Typed Markdown, responsive WebP images, RSS, and sitemaps in one package.
 
 ### ⚡ Work on what changed
 
-Live browser reloads while you write; unchanged pages can be reused when you publish.
+The browser reloads while you write, and publishing reuses unchanged pages.
 
 ### 🔄 Make it yours
 
@@ -29,9 +29,11 @@ Customize Markdown, transform HTML, or bring your own content source and image p
 ### 🔕 Static by design
 
 The output needs no .NET server or Blazor runtime. Use JavaScript for browser
-interactivity; Razor event handlers such as `@onclick` are not included.
+interactivity; Razor event handlers such as `@onclick` do not run in the browser.
 
 ## Getting started
+
+Kiji requires the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) or later.
 
 ```pwsh
 dotnet new install Kiji.Templates
@@ -46,7 +48,7 @@ Edit your site settings in `Program.cs`:
 
 app.Info = new SiteInfo
 {
-    BaseUrl = new Uri("https://example.org/blog/"),
+    BaseUrl = new Uri("https://example.org/"),
     Name = "My Blog",
 };
 ```
@@ -57,7 +59,7 @@ Start the development server and open <http://localhost:8080>:
 dotnet watch
 ```
 
-The development server reflects content changes immediately and reloads your browser automatically.
+The browser reloads as you edit content and components.
 
 Stop the development server with `Ctrl+C`, then generate the static site in `dist/`:
 
@@ -77,8 +79,6 @@ to use a template or build a minimal blog from scratch.
 | [Kiji Doc Template](https://zzzkan.github.io/Kiji.Templates/kiji-doc/) ([source](https://github.com/zzzkan/Kiji.Templates/tree/main/src/Kiji.Templates/content/Kiji.Doc))                         | ![Kiji Doc template](https://raw.githubusercontent.com/zzzkan/Kiji.Templates/main/images/kiji-doc.png)                 | `dotnet new kiji-doc -o MyDocs` |
 | [Kiji Interactive Template](https://zzzkan.github.io/Kiji.Templates/kiji-interactive/) ([source](https://github.com/zzzkan/Kiji.Templates/tree/main/src/Kiji.Templates/content/Kiji.Interactive)) | ![Kiji Interactive template](https://raw.githubusercontent.com/zzzkan/Kiji.Templates/main/images/kiji-interactive.png) | `dotnet new kiji-interactive -o MyInteractive` |
 | [Kiji Fluent Template](https://zzzkan.github.io/Kiji.Templates/kiji-fluent/) ([source](https://github.com/zzzkan/Kiji.Templates/tree/main/src/Kiji.Templates/content/Kiji.Fluent))                | ![Kiji Fluent template](https://raw.githubusercontent.com/zzzkan/Kiji.Templates/main/images/kiji-fluent.png)           | `dotnet new kiji-fluent -o MyFluent` |
-
-To use a template, first install the package with `dotnet new install Kiji.Templates`, then run its command above.
 
 ## Contributing
 

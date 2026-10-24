@@ -80,8 +80,6 @@ to use a template or build a minimal blog from scratch.
 | [Kiji Interactive Template](https://zzzkan.github.io/Kiji.Templates/kiji-interactive/) ([source](https://github.com/zzzkan/Kiji.Templates/tree/main/src/Kiji.Templates/content/Kiji.Interactive)) | ![Kiji Interactive template](https://raw.githubusercontent.com/zzzkan/Kiji.Templates/main/images/kiji-interactive.png) | `dotnet new kiji-interactive -o MyInteractive` |
 | [Kiji Fluent Template](https://zzzkan.github.io/Kiji.Templates/kiji-fluent/) ([source](https://github.com/zzzkan/Kiji.Templates/tree/main/src/Kiji.Templates/content/Kiji.Fluent))                | ![Kiji Fluent template](https://raw.githubusercontent.com/zzzkan/Kiji.Templates/main/images/kiji-fluent.png)           | `dotnet new kiji-fluent -o MyFluent` |
 
-To use a template, first install the package with `dotnet new install Kiji.Templates`, then run its command above.
-
 ## Contributing
 
 Contributions to Kiji and its documentation are welcome. [Open an issue](https://github.com/zzzkan/kiji/issues) to report a bug or suggest a feature.

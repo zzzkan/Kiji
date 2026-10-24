@@ -4,14 +4,9 @@ description: Load Markdown with YAML front matter and publish responsive local i
 order: 40
 ---
 
-Kiji can load Markdown files as typed content, render their bodies with Markdig, and
-process images stored beside them. Your site remains in control of the content model and
-the URLs it generates.
-
 ## Register Markdown content
 
-Each Markdown file starts with YAML front matter. The fields are defined by your own .NET
-class.
+Each Markdown file starts with YAML front matter, whose fields you define in a class:
 
 ```csharp
 public sealed class FrontMatter
@@ -31,30 +26,24 @@ publishedAt: 2026-01-01
 tags: [dotnet, kiji]
 ---
 
-# Hello, Kiji
-
 This is a Markdown-backed page.
 ```
-
-Register the source:
 
 ```csharp
 app.UseMarkdownContent<FrontMatter>();
 ```
 
-This makes a `ContentDictionary<MarkdownContent<FrontMatter>>` available through
-dependency injection. It does not automatically create routes; map the items with
-`AddPageParameters<TPage>` as shown in [Getting started](../getting-started/#add-a-markdown-page).
+This registers `ContentDictionary<MarkdownContent<FrontMatter>>`. It creates no pages by
+itself; map items to pages with `AddPageParameters<TPage>` as in
+[Getting started](../getting-started/#add-a-markdown-page).
 
-Every Markdown file must begin with a front matter block delimited by `---` lines. Kiji
-uses camel-case YAML property names and ignores unknown properties by default. A missing
-or malformed block, invalid YAML, or a value that cannot be assigned to your model fails
-the build.
+YAML names are camel case, and unknown properties are ignored. A missing or malformed
+front matter block, or a value that does not fit your class, fails the build.
 
 ## Choose the files
 
-By default, Kiji recursively loads `*.md` files from `content/`. Set `Directory` to use a
-different directory, and `FileFilter` to exclude files before they are loaded:
+By default, Kiji loads `*.md` files recursively from `content/`. Set `Directory` to use
+another directory, absolute or relative to the project, and `FileFilter` to skip files:
 
 ```csharp
 app.UseMarkdownContent<FrontMatter>(options =>
@@ -64,26 +53,13 @@ app.UseMarkdownContent<FrontMatter>(options =>
 });
 ```
 
-`Directory` accepts an absolute path or a path relative to the site project directory.
-Kiji watches each registered directory during development. File selection and page
-parameters are separate: excluding a draft decides whether it is loaded, while
-`AddPageParameters` decides the URL of every included item.
-
 ## Use a site-specific model
 
-The basic overload exposes `MarkdownContent<TFrontMatter>` directly. Use the projection
-overload instead when pages should consume a model that includes a slug or validated
-display values. Define a model in its own `Post.cs` file, using your site's model
-namespace:
+To give pages a model with a slug or validated values, project each file:
 
 ```csharp
-public sealed record Post(
-    string Slug,
-    string Title,
-    MarkdownContent<FrontMatter> Content);
+public sealed record Post(string Slug, string Title, MarkdownContent<FrontMatter> Content);
 ```
-
-Replace the basic `UseMarkdownContent<FrontMatter>()` registration with this one.
 
 ```csharp
 app.UseMarkdownContent<FrontMatter, Post>(content => new Post(
@@ -92,16 +68,13 @@ app.UseMarkdownContent<FrontMatter, Post>(content => new Post(
     Content: content));
 ```
 
-The projection runs independently for each file. Build shared tag indexes or other
-collection-wide results with [UseContentSource](../api-reference/#content-sources-and-contentdictionary).
-See [Incremental builds](../incremental-builds/#render-pages-that-use-external-data)
-when a projection reads additional external data.
+This registers `ContentDictionary<Post>` instead. The projection sees one file at a time;
+build collection-wide results, such as tag counts, with
+[UseContentSource](../api-reference/#content-sources-and-contentdictionary).
 
 ## Render a Markdown body
 
-With the basic `UseMarkdownContent<FrontMatter>()` registration, inject the
-dictionary, look up the item by the `ContentKey` supplied through `AddPageParameters`, and call
-`RenderAsync()`:
+Look up the item by the key passed through `AddPageParameters` and call `RenderAsync()`:
 
 ```razor
 @inject ContentDictionary<MarkdownContent<FrontMatter>> Posts
@@ -119,47 +92,29 @@ dictionary, look up the item by the `ContentKey` supplied through `AddPageParame
 }
 ```
 
-With the projected `Post` model above, inject `ContentDictionary<Post>` and render
-`await Posts[ContentKey].Content.RenderAsync()`.
-
-The returned string contains HTML and must be rendered as `MarkupString`. Only render
-trusted Markdown, or add your own sanitization step before displaying it.
+With the `Post` model, call `Posts[ContentKey].Content.RenderAsync()`. The result is
+raw HTML, so render only trusted Markdown or sanitize it first.
 
 ## Customize parsing and HTML
 
-Kiji enables Markdig's advanced extensions. Add another Markdig configuration with
-`ConfigureMarkdown`:
+Kiji uses Markdig with its advanced extensions. Options add Markdig configuration,
+YamlDotNet configuration, and HTML post-processing, each run in registration order:
 
 ```csharp
 app.UseMarkdownContent<FrontMatter>(options =>
-    options.ConfigureMarkdown(pipeline => pipeline.UseEmojiAndSmiley()));
+{
+    options.ConfigureMarkdown(pipeline => pipeline.UseEmojiAndSmiley());
+    options.ConfigureYaml(yaml => yaml.WithCaseInsensitivePropertyMatching());
+    options.AddHtmlPostProcessor(html => $"<div class=\"prose\">{html}</div>");
+});
 ```
-
-Use `ConfigureYaml` to change front matter deserialization:
-
-```csharp
-app.UseMarkdownContent<FrontMatter>(options =>
-    options.ConfigureYaml(yaml => yaml.WithCaseInsensitivePropertyMatching()));
-```
-
-Use `AddHtmlPostProcessor` for a synchronous transformation of the rendered HTML:
-
-```csharp
-app.UseMarkdownContent<FrontMatter>(options =>
-    options.AddHtmlPostProcessor(html => $"<div class=\"prose\">{html}</div>"));
-```
-
-Multiple configurations and post-processors run in registration order.
 
 ## Links and deployment paths
 
-External links receive `target="_blank" rel="noopener noreferrer"`. Other links are
-rendered as written. Kiji does not add `SiteInfo.BaseUrl` to root-relative Markdown links.
-
-A link such as `/about/` therefore points at the domain root and is wrong when the site is
-published under `/my-site/`. Prefer document-relative links in Markdown. In Razor, resolve
-site links with `Site.ResolveUrl("about/").AbsolutePath`. See [Deployment](../deployment/) for the full
-subpath setup.
+External links get `target="_blank" rel="noopener noreferrer"`; other links are written
+as is. Kiji does not add the base path to links starting with `/`, so prefer
+document-relative links when the site is published under a
+[subpath](../deployment/#publish-under-a-subpath).
 
 ## Local images
 
@@ -176,24 +131,15 @@ content/
 ![A description](photo.jpg)
 ```
 
-For relative `.jpg`, `.jpeg`, `.png`, `.gif`, and `.webp` references, Kiji writes WebP
-versions of the image beside the page's `index.html` and emits an `<img>` with a `srcset`.
-The default processor creates versions 320, 640, 960, and 1280 pixels wide when the source
-is wider, plus one at the source width, up to 1920 pixels. It outputs static images:
-animated GIF and WebP inputs use only their first frame. Source EXIF, IPTC, and XMP
-metadata is removed, and colors are converted to sRGB. To preserve animation, place the
-original image in `wwwroot/` and reference it as a static asset.
+For `.jpg`, `.jpeg`, `.png`, `.gif`, and `.webp` files, Kiji writes WebP versions beside
+the page's `index.html`: 320, 640, 960, and 1280 pixels wide when the source is wider,
+plus one at the source width, up to 1920 pixels. The `<img>` gets a `srcset`, the source
+dimensions, and lazy loading after the first image.
 
-The `<img>` includes the source width and height to reserve layout space. The first image
-in each Markdown body loads eagerly; later images load lazily and let the browser choose
-a version from their rendered width. For finer control, write the `<img>` element in HTML
-or Razor yourself; Kiji leaves explicit markup unchanged.
+The output is static: animated images keep only their first frame, metadata such as EXIF
+is removed, and colors are converted to sRGB. To keep an image as is, put it in `wwwroot/`
+and reference it as a static asset. Remote images, paths starting with `/`, and `<img>`
+written in HTML are left unchanged.
 
-The source image must exist inside the Markdown file's directory tree. A missing image or
-a path that escapes that tree fails the page render.
-
-External image URLs and site-root references such as `![](/img/logo.png)` are left as
-ordinary Markdown images. Put shared images in `wwwroot/`; remember that a leading `/` is
-not safe for a deployment subpath.
-
-For custom image processing, see the [API reference](../api-reference/#image-processing).
+A missing image, or a path outside the Markdown file's directory tree, fails the render.
+To replace the image processor, see [Image processing](../api-reference/#image-processing).

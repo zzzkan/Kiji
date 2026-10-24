@@ -4,35 +4,21 @@ description: Publish to GitHub Pages or another static host, including under a s
 order: 50
 ---
 
-`dotnet publish` writes the generated site to `dist/`. The directory
-contains static files only — no assemblies or .NET runtime — and can be uploaded to any
-static host.
-
-## Set the published URL
-
-`SiteInfo.BaseUrl` is the public URL of the site. Kiji uses it to resolve page URLs,
-RSS and sitemap links, and the development server's base path:
-
-```csharp
-app.Info = new SiteInfo
-{
-    BaseUrl = new Uri("https://example.com/"),
-    Name = "My Site",
-};
-```
-
-Set it to the final deployment URL before publishing.
+`dotnet publish` writes the site to `dist/` as static files only, ready to upload to any
+static host. Before publishing, set `SiteInfo.BaseUrl` to the site's final public URL;
+Kiji uses it for page, feed, sitemap, and image URLs.
 
 ## Publish under a subpath
 
-A GitHub Pages project site is served from `https://your-name.github.io/repo/`, not from
-the domain root. Include the full path in `BaseUrl`:
+When the site is not at the domain root, such as a GitHub Pages project site, include the
+path in `BaseUrl`:
 
 ```csharp
 BaseUrl = new Uri("https://your-name.github.io/my-site/"),
 ```
 
-Use `Site.ResolveUrl` for page links and `Assets` for static asset links:
+Build page links with `Site.ResolveUrl` and asset links with `Assets`; both then include
+`/my-site/`. Links written as `/docs/` do not.
 
 ```razor
 @inject SiteInfo Site
@@ -41,23 +27,15 @@ Use `Site.ResolveUrl` for page links and `Assets` for static asset links:
 <link rel="stylesheet" href="@Assets["css/app.css"]" />
 ```
 
-Both URLs include `/my-site/`.
-A single leading `/` is optional: `Site.ResolveUrl("/docs/")` also preserves the deployment
-base path.
-
-Kiji already applies `BaseUrl` to feed, sitemap, and Markdown image URLs. The base path is
-not a directory inside `dist/`: upload the contents of `dist/` so that `dist/index.html` is
-served at `/my-site/`.
-
-The development server uses the same base path and returns 404 outside it. With the
-example above, open <http://localhost:8080/my-site/> after starting `dotnet watch`.
-This makes a missing base path visible before deployment. See
-[Markdown and images](../markdown/#links-and-deployment-paths) for links written in Markdown.
+The path does not become a directory in `dist/`: upload the contents of `dist/` so that
+`dist/index.html` is served at `/my-site/`. The development server uses the same path, at
+<http://localhost:8080/my-site/>, and returns 404 outside it, so a missing base path shows
+up before deployment.
 
 ## GitHub Pages with Actions
 
-In the repository settings, set the Pages source to **GitHub Actions**. Then add a workflow
-like this, replacing `MySite` if the project is elsewhere:
+In the repository settings, set the Pages source to **GitHub Actions**, then add this
+workflow, replacing `MySite` with the project directory:
 
 ```yaml
 name: Deploy site
@@ -98,41 +76,22 @@ jobs:
         uses: actions/deploy-pages@v5
 ```
 
-GitHub Pages compresses responses itself, so you can
-[skip the compressed copies](#compression).
-
 ## Other static hosts
 
-Netlify, Vercel, Cloudflare Pages, S3, and similar services can all deploy the generated
-directory. Use this build command and configure `dist` as the directory to publish:
+On Netlify, Vercel, Cloudflare Pages, and similar services, use `dotnet publish` as the
+build command and `dist` as the output directory. The build environment needs the .NET 10
+SDK; otherwise, publish in your own CI and upload `dist/`.
 
-```pwsh
-dotnet publish
-```
-
-If the host runs the build, its build environment needs the .NET 10 SDK or later. Otherwise,
-publish in your own CI and upload `dist/`.
-
-Before deploying to a new host, check that it:
-
-- Serves `404.html` from the output root for unmatched paths. `AddNotFoundPage<NotFoundPage>()`
-  writes this file, and most static hosts use it automatically.
-- Serves `about/index.html` for `/about/`. Kiji writes every page as `route/index.html`.
-
-If a host provides a local emulator, use it to verify these behaviors before deployment.
+Check that the host serves `404.html` for unmatched paths, which `AddNotFoundPage` writes,
+and `about/index.html` for `/about/`.
 
 ## Compression
 
-By default, publishing also writes Gzip (`.gz`) and Brotli (`.br`) copies of compressible
-files. They help only on a server configured to serve precompressed files, such as nginx
-with `gzip_static`; configure it to send them with the matching `Content-Encoding` header.
-
-Hosted services such as GitHub Pages, Netlify, Vercel, and Cloudflare Pages compress
-responses themselves, so the copies are unnecessary there. To skip them, add this to the
-project's `<PropertyGroup>`:
+Publishing also writes `.gz` and `.br` copies of compressible files for servers that serve
+precompressed files, such as nginx with `gzip_static`. GitHub Pages, Netlify, Vercel, and
+Cloudflare Pages compress responses themselves, so skip the copies there by adding this to
+the project's `<PropertyGroup>`:
 
 ```xml
 <CompressionEnabled>false</CompressionEnabled>
 ```
-
-To skip them for a single publish, run `dotnet publish -p:CompressionEnabled=false`.

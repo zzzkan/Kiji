@@ -4,10 +4,10 @@ description: The building blocks of a Kiji site.
 order: 20
 ---
 
-A Kiji site is a .NET project: Razor components define pages, `Program.cs` connects
-them to content, and standard .NET commands preview and publish the result.
+A Kiji site is a .NET project. Razor components define pages, and `Program.cs` creates
+the site with `StaticSite.Create`, registers content and settings, and calls `RunAsync`.
 
-## Standard project structure
+## Project structure
 
 ```text
 MySite/
@@ -19,106 +19,85 @@ MySite/
 ├── wwwroot/          shared CSS, JavaScript, fonts, and images
 ├── _Imports.razor    @using directives shared by all components
 ├── MySite.csproj     Razor SDK project with a Kiji package reference
-└── Program.cs        site metadata and registrations
+├── Program.cs        site metadata and registrations
+├── .kiji/            build cache and development output
+└── dist/             published site
 ```
 
-Organize components as you prefer. Set `UseMarkdownContent`'s `Directory` option
-to read Markdown from another location.
-
-## The site definition
-
-```csharp
-var app = StaticSite.Create(args);
-app.Info = new SiteInfo
-{
-    Name = "My site",
-    BaseUrl = new Uri("https://example.com/"),
-};
-return await app.RunAsync();
-```
-
-Configure the site, page parameters, content, and generated files before `RunAsync`.
+`content/` is the default Markdown directory and `wwwroot/` holds static assets; organize
+components as you prefer. Add `.kiji/` and `dist/` to `.gitignore`.
 
 ## Develop and publish
 
-| Command          | Result                                                                                               |
-| ---------------- | ---------------------------------------------------------------------------------------------------- |
-| `dotnet watch`   | Preview at <http://localhost:8080>, with browser reloads when components, content, or assets change. |
-| `dotnet publish` | Write the complete static site to `dist/`, reusing unchanged pages where possible.                   |
-| `dotnet clean`   | Remove build output and the `.kiji/` cache so the next publish rebuilds everything.                  |
+| Command          | Result                                                            |
+| ---------------- | ----------------------------------------------------------------- |
+| `dotnet watch`   | Serve a preview at <http://localhost:8080> that reloads on changes. |
+| `dotnet publish` | Write the static site to `dist/`, reusing unchanged pages.        |
+| `dotnet clean`   | Remove build output and the `.kiji/` cache.                       |
 
-Restart `dotnet watch` after changing `Program.cs` by pressing `Ctrl+R` in its terminal;
-the registrations there are read when the site starts. To use another address, for example
-when port 8080 is already in use, pass `--urls` after `--`:
+`Program.cs` is read only at startup: after changing it, press `Ctrl+R` in the
+`dotnet watch` terminal to restart. To use another address, for example when port 8080
+is in use:
 
 ```pwsh
 dotnet watch -- --urls http://127.0.0.1:5000
 ```
 
-Preview and publishing use the same rendering pipeline. Upload `dist/` to a static host;
-see [Deployment](../deployment/) for hosting and subpaths, and
-[Incremental builds](../incremental-builds/) for page reuse.
-
 ## Pages and routes
 
-Kiji discovers components with `@page` routes automatically: `/about/` becomes
-`about/index.html`. For a route such as `/posts/{Slug}/`, use `AddPageParameters<TPage>`
-to supply each page's parameters.
-See [Routing](../routing/) for page parameters and 404 pages.
+Each component with an `@page` route becomes a page: `/about/` becomes `about/index.html`.
+Parameterized routes such as `/posts/{Slug}/` get their values from
+`AddPageParameters<TPage>`. See [Routing](../routing/).
 
 ## Layouts and the document head
 
-`UseDefaultLayout<TLayout>()` supplies a shared layout unless a page chooses its own
-with `@layout`. Layouts render inside the generated `<body>`.
+`UseDefaultLayout<TLayout>()` sets the layout for pages without their own `@layout`.
 
-Use Blazor's `PageTitle` and `HeadContent` for the document head. Keep shared and
-page-specific tags in one `HeadContent`, since separate instances replace each other.
-See the [head API](../api-reference/#pagetitle-headcontent-and-headoutlet).
+Kiji writes `<html>`, `<head>`, and `<body>`. Everything inside `<head>`, including
+`<meta charset>`, comes from Blazor's `PageTitle` and `HeadContent`. Separate
+`HeadContent` blocks replace each other instead of combining, so keep shared and
+page-specific tags in one, for example through a shared component as in
+[Getting started](../getting-started/#add-a-layout-and-css).
 
-## Content and static assets
+## Content
 
-Pages inject typed `ContentDictionary<T>` collections to list content or look up an
-item by key. Markdown supplies YAML front matter and an HTML body; your page parameters
-choose which items become pages and their URLs.
+Pages inject `ContentDictionary<T>` to list content or look up an item by key. Markdown
+provides typed front matter and an HTML body, and images beside it become responsive
+images. Content creates no pages by itself: page parameters choose which items get pages.
+See [Markdown and images](../markdown/).
 
-Images beside Markdown files become responsive images beside the generated page.
-See [Markdown and images](../markdown/) for examples.
+## Static assets
 
-### Static assets
-
-Keep shared files in `wwwroot/` and link to them through `Assets`:
+Keep shared files in `wwwroot/` and link to them through `Assets`, which adds the
+deployment base path and, where available, a fingerprint that changes with the file:
 
 ```razor
 <link rel="stylesheet" href="@Assets["css/app.css"]" />
 <script src="@Assets["js/app.js"]" defer></script>
 ```
 
-These URLs include the deployment base path and change when the file changes.
-Referenced Razor libraries also supply assets, usually under `_content/{PackageId}/`.
-See the [static asset API](../api-reference/#static-assets) for import maps.
+Referenced Razor class libraries supply their assets under `_content/{PackageId}/`.
 
 ### Component styles
 
-Place `Pages/Home.razor.css` beside `Pages/Home.razor` to scope styles to that
-component. Include the generated bundle among the shared tags inside `HeadContent`:
+Place `Pages/Home.razor.css` beside `Pages/Home.razor` to scope styles to that component.
+Link the generated bundle among the shared head tags, replacing `MySite` with the
+project's assembly name. The bundle also includes referenced libraries' scoped styles.
 
 ```razor
 <link rel="stylesheet" href="@Assets["MySite.styles.css"]" />
 ```
 
-Replace `MySite` with the project's `PackageId`, which defaults to its assembly name.
-The bundle includes referenced libraries' isolated CSS. For child components or
-Markdown HTML, use `::deep` from a containing HTML element, such as
-`.doc-content ::deep h2`. See [Blazor CSS isolation](https://learn.microsoft.com/aspnet/core/blazor/components/css-isolation).
+To style child components or Markdown HTML, use `::deep`, such as `.doc-content ::deep h2`.
+See [Blazor CSS isolation](https://learn.microsoft.com/aspnet/core/blazor/components/css-isolation).
 
-## Site-wide output
+## Generated files
 
-`AddRssFeed` creates a feed from your items, `AddSitemap` lists generated pages,
-and `AddArtifact` writes other files. See the [API reference](../api-reference/#generated-files).
+`AddRssFeed`, `AddSitemap`, and `AddArtifact` write feeds, sitemaps, and other site-wide
+files. See [Generated files](../api-reference/#generated-files).
 
 ## Static output
 
-The site needs no Blazor runtime. `@onclick` does not remain interactive and
-`OnAfterRenderAsync` does not run. Add browser behavior with JavaScript in `wwwroot/`.
-See [Unsupported Blazor features](../api-reference/#unsupported-blazor-features)
-for component limitations and alternatives.
+The output has no Blazor runtime: event handlers such as `@onclick` and
+`OnAfterRenderAsync` never run. Add browser behavior with JavaScript in `wwwroot/`. See
+[Unsupported Blazor features](../api-reference/#unsupported-blazor-features).

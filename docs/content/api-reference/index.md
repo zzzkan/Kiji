@@ -4,8 +4,9 @@ description: Configure pages, content, images, and generated files.
 order: 100
 ---
 
-Configure the site before `RunAsync`. All `StaticSite` registration methods return
-the site and may be chained.
+Configure the site before `RunAsync`. Registration methods return the site, so calls can
+be chained. `Program.cs` examples assume `using Kiji;` and
+`using Microsoft.Extensions.DependencyInjection;`.
 
 - [Site setup](#site-setup)
 - [Pages and rendering](#pages-and-rendering)
@@ -16,7 +17,7 @@ the site and may be chained.
 
 ## Site setup
 
-### StaticSite lifecycle
+### StaticSite
 
 ```csharp
 var app = StaticSite.Create(args);
@@ -31,226 +32,127 @@ app.Info = new SiteInfo
 return await app.RunAsync();
 ```
 
-#### `StaticSite.Create(string[] args)`
-
-Creates a site for the current project. During development, `args` are passed to ASP.NET
-Core configuration, so `dotnet watch -- --urls http://127.0.0.1:5000` changes the
-development server address.
-
-#### `StaticSite.Info`
-
-Required site metadata. Assign it before execution.
-
-#### `StaticSite.RunAsync(CancellationToken cancellationToken = default)`
-
-Serves during `dotnet watch` and generates the site during `dotnet publish`.
-Await it and return its exit code. A site can run only once, and its configuration cannot
-change after the run starts.
+| Member                                                     | Behavior                                                                                                                         |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `static StaticSite Create(string[] args)`                  | Creates the site for the current project. During development, `args` go to ASP.NET Core configuration, for example `--urls`. |
+| `SiteInfo Info`                                            | Required site metadata.                                                                                                          |
+| `Task<int> RunAsync(CancellationToken cancellationToken = default)` | Serves during `dotnet watch` and generates the site during `dotnet publish`; return its exit code. A site runs only once.       |
 
 ### SiteInfo
 
-`SiteInfo` contains site-wide metadata used by rendered pages, feeds, and sitemaps.
+| Property             | Default  | Behavior                                                                                         |
+| -------------------- | -------- | ------------------------------------------------------------------------------------------------ |
+| `Uri BaseUrl`        | Required | Absolute HTTP or HTTPS URL without a query or fragment. Its path, with `/` appended if missing, is the site's base path. |
+| `string Name`        | Required | Site name, also the RSS channel title. Must not be blank.                                        |
+| `string Description` | `""`     | Site description, also the RSS channel description.                                              |
+| `string Language`    | `"en"`   | Written to `<html lang>` and the RSS channel.                                                    |
+| `string Author`      | `""`     | For your components; Kiji does not write it.                                                     |
 
-| Property             | Required/default | Behavior                                                                                                                                        |
-| -------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Uri BaseUrl`        | Required         | Must be an absolute HTTP or HTTPS URL without a query or fragment. It is normalized to end in `/`; its path is the site's deployment base path. |
-| `string Name`        | Required         | Must not be null, empty, or whitespace. Used as site metadata and by RSS.                                                                       |
-| `string Description` | `""`             | Site description and default RSS channel description.                                                                                           |
-| `string Language`    | `"en"`           | Written to `<html lang>` and the RSS channel language.                                                                                          |
-| `string Author`      | `""`             | Author metadata available to the site.                                                                                                          |
-
-#### `SiteInfo.ResolveUrl(string path)`
-
-Combines a site-relative path with `BaseUrl` and returns an absolute `Uri`.
-A single leading `/` is ignored: both `Site.ResolveUrl("about/")` and
-`Site.ResolveUrl("/about/")` preserve a deployment base path such as `/kiji/`.
-An empty string or `"/"` returns `BaseUrl`.
-
-This differs from standard `System.Uri` resolution: `/about/` stays under the site's base
-path, and external URLs and parent-directory traversal are not accepted.
+`ResolveUrl(string path)` returns the absolute URL of a site-relative path. A leading `/`
+is ignored, so `"about/"` and `"/about/"` both stay under the base path, and `""` returns
+`BaseUrl`. External URLs and `..` are rejected.
 
 ## Pages and rendering
 
 ### Pages
 
-`StaticSite.Create` automatically discovers all `@page` routes on public, non-abstract
-components in the entry assembly. Fixed routes generate one page with the component's
-default parameter values. Parameterized routes require `AddPageParameters<TPage>`;
-missing registration is an error before rendering.
+Kiji discovers `@page` routes on public, non-abstract components in the entry assembly.
+See [Routing](../routing/) for examples.
 
-#### `AddPageAssembly(Assembly assembly)`
+| Method                                                                             | Behavior                                                                                                       |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `AddPageAssembly(Assembly assembly)`                                               | Also discovers routed components in another assembly.                                                          |
+| `AddPageParameters<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)` | Adds parameter sets for a component. The factory runs once per build or reload and can read content.          |
+| `AddNotFoundPage<TPage>()`                                                         | Writes the component as `404.html`. It needs exactly one route and cannot also receive page parameters.        |
 
-Includes every routed component of an additional, non-null assembly. Referenced
-assemblies are not scanned automatically, and repeated registration has no effect.
+Page parameter sets follow these rules:
 
-#### `AddPageParameters<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)`
+- Each set is an anonymous object or a string-keyed dictionary. Names match public
+  writable `[Parameter]` properties, ignoring case. Values keep their types; route values
+  are formatted with the invariant culture.
+- Each set is rendered at every parameterized route of the component. Fixed routes beside
+  them render once with default values; a component with only fixed routes renders once
+  per set instead.
+- Omitted parameters keep their defaults; `EditorRequired` is not checked.
+- Unknown names, wrong types, missing or empty route values, and duplicate output paths
+  fail before rendering.
+- Calls for the same component add up; an empty sequence generates no pages.
 
-Adds parameter sets for a component in a page assembly. Each set is rendered at every
-parameterized route of the component and must supply all of their route values; fixed
-routes beside them render once with default values. For a component with only fixed
-routes, the sets replace the default rendering. The factory runs once per build and per
-development reload, after services are ready, and can resolve content dictionaries.
-
-Each returned object is a complete parameter set: an anonymous object or a string-keyed
-dictionary. Names match public writable `[Parameter]` properties case-insensitively, and
-values keep their .NET types; route values are formatted invariantly for the URL. Omitted
-parameters keep their defaults, and `EditorRequired` is not checked. Unknown names,
-incompatible values, missing or empty route values, and duplicate output paths fail before
-rendering. Registrations for the same component concatenate; an empty sequence generates
-no pages. Treat supplied objects as read-only. See
-[Routing](../routing/) for examples and supported route templates.
-
-HTML can be reused when parameter values are `null` or have one of these types:
-`string`, `bool`, `char`, `sbyte`, `byte`, `short`, `ushort`, `int`, `uint`, `long`,
-`ulong`, enums, and `Guid`. Other types can be valid component parameters but disable
-HTML reuse for that page. Prefer passing a content key and looking up the item during
-rendering. See [Incremental builds](../incremental-builds/#pass-stable-page-parameters).
-
-#### `AddNotFoundPage<TPage>()`
-
-Writes a routed `IComponent` as `/404.html`. The component must belong to a page assembly,
-declare exactly one route, and cannot also receive `AddPageParameters<TPage>`.
+A page's HTML can be reused only when every parameter value is `null`, a `string`, `bool`,
+`char`, an 8- to 64-bit integer, an enum, or a `Guid`.
 
 ### Layout
 
-#### `UseDefaultLayout<TLayout>()`
-
-Sets the `LayoutComponentBase` used by pages without their own `@layout`. A page's layout
-takes precedence, and layouts may nest through their own `@layout`. Without a default,
-the page renders directly inside the generated document body.
+`UseDefaultLayout<TLayout>()` sets the layout for pages without their own `@layout`.
+Without it, pages render directly inside `<body>`.
 
 ### Services
 
-#### `UseServices(Action<IServiceCollection> configure)`
-
-Registers services using standard [.NET dependency injection](https://learn.microsoft.com/dotnet/core/extensions/dependency-injection/overview).
+`UseServices(Action<IServiceCollection> configure)` registers services with standard
+[.NET dependency injection](https://learn.microsoft.com/dotnet/core/extensions/dependency-injection/overview):
 
 ```csharp
-app.UseServices(services =>
-{
-    services.AddScoped<RelatedPosts>();
-    services.AddLocalization();
-});
+app.UseServices(services => services.AddScoped<RelatedPosts>());
 ```
 
-Import `Microsoft.Extensions.DependencyInjection`. Callbacks run once in registration order
-before rendering; the collection is then read-only.
-
-Components and services can inject `ILogger<T>`. Kiji writes `Warning` and higher
-logs to standard error during publish and development, including exceptions caught by
-[`ErrorBoundary`](https://learn.microsoft.com/aspnet/core/blazor/fundamentals/handle-errors?view=aspnetcore-10.0#error-boundaries).
-
-Each page render owns a DI scope: scoped services are shared by its page, layout and child
-components and disposed when rendering finishes. Loaders, page parameter and feed
-factories, and artifact writers cannot resolve scoped services. Kiji-managed services such as `SiteInfo`, `PageInfo`
-and `ContentDictionary<>` cannot be replaced.
-
-External service data and captured values are not tracked automatically. Use
-`[AlwaysRender]` on components that read them. Content reload does not recreate
-singletons; use [content sources](#content-sources-and-contentdictionary) for shared
-indexes that must be rebuilt when content changes.
+- Callbacks run once, in order, before rendering.
+- Each page render has its own scope, shared by its page, layout, and child components.
+- Content loaders, page parameter and feed factories, and artifact writers cannot resolve
+  scoped services.
+- `SiteInfo`, `PageInfo`, and `ContentDictionary<T>` come from Kiji and cannot be replaced.
+- Components and services can inject `ILogger<T>`. Kiji prints `Warning` and higher,
+  including exceptions caught by
+  [`ErrorBoundary`](https://learn.microsoft.com/aspnet/core/blazor/fundamentals/handle-errors?view=aspnetcore-10.0#error-boundaries).
 
 ### Page metadata
 
-#### PageInfo
-
-Inject `Kiji.PageInfo` during rendering. Its read-only `Uri Url` is the page's public
-URL, including the deployment base path.
+Inject `PageInfo` for the current page's public URL, including the base path:
 
 ```razor
 @inject PageInfo Page
-@inject SiteInfo Site
 
 <HeadContent>
     <link rel="canonical" href="@Page.Url.AbsoluteUri" />
 </HeadContent>
-<a href="@Site.ResolveUrl("about/").AbsolutePath">About</a>
 ```
 
 #### PageTitle, HeadContent, and HeadOutlet
 
-Use Blazor's `PageTitle` for the page title and `HeadContent` for metadata, stylesheets,
-and scripts. Kiji's built-in `HeadOutlet` places this content in the document's `<head>`.
-
-```razor
-<PageTitle>@Title</PageTitle>
-
-<HeadContent>
-    <meta charset="utf-8" />
-    <meta name="description" content="@Description" />
-    <link rel="stylesheet" href="@Assets["css/app.css"]" />
-</HeadContent>
-```
-
-Kiji waits for asynchronous rendering to finish, so the generated HTML includes the updated title and metadata.
+Use Blazor's `PageTitle` and `HeadContent`; Kiji's `HeadOutlet` writes them into `<head>`
+after asynchronous rendering finishes. Separate `HeadContent` blocks replace each other.
+See [Layouts and the document head](../concepts/#layouts-and-the-document-head).
 
 ### Static assets
 
-The inherited `ComponentBase.Assets` property resolves paths such as `Assets["css/app.css"]`
-to public URLs, including fingerprints when available and the deployment base path from `SiteInfo.BaseUrl`.
-An unknown path is returned unchanged. Literal URLs in CSS, JavaScript, or HTML are not
-automatically rewritten. Use `SiteInfo.ResolveUrl` for links to pages and generated files.
+`Assets["css/app.css"]`, inherited from `ComponentBase`, returns the asset's public URL
+with the base path and, when available, a fingerprint. Unknown paths are returned unchanged. URLs
+written directly in CSS, JavaScript, or HTML are not rewritten.
 
-Blazor's `ImportMap` component supplies an import map for the site's static assets.
-Place `<ImportMap />` inside `HeadContent` before scripts that use JavaScript imports.
+Place Blazor's `<ImportMap />` in `HeadContent` before scripts that use JavaScript imports.
 Its `ImportMapDefinition` parameter accepts a custom map. See the
-[Blazor import map reference](https://learn.microsoft.com/aspnet/core/blazor/fundamentals/static-files?view=aspnetcore-10.0#importmap-component).
-
-See [Concepts](../concepts/#static-assets) for asset links and component styles,
-[Incremental builds](../incremental-builds/#what-changes-cause-work) for rebuild behavior,
-and [Deployment](../deployment/#compression) for compression settings.
+[ImportMap component](https://learn.microsoft.com/aspnet/core/blazor/fundamentals/static-files?view=aspnetcore-10.0#importmap-component).
 
 ## Content and images
 
 ### Content sources and ContentDictionary
 
-#### `ContentDictionary<T>`
+`ContentDictionary<T>` is a read-only `IReadOnlyDictionary<string, T>` that components and
+factories inject. Keys ignore case and do not determine URLs; Markdown keys are paths
+relative to the content directory, using `/`. Enumeration keeps source order. Reads are
+tracked as [page dependencies](../incremental-builds/#page-dependencies).
 
-An injectable, read-only collection of site content. `UseMarkdownContent<FrontMatter>()`
-registers `ContentDictionary<MarkdownContent<FrontMatter>>` for components and factories
-to read. For a Markdown site, this is usually all the content registration you need.
-
-```razor
-@inject ContentDictionary<MarkdownContent<FrontMatter>> Posts
-
-<ul>
-    @foreach (var post in Posts.Values)
-    {
-        <li>@post.FrontMatter.Title</li>
-    }
-</ul>
-```
-
-Import `Kiji`, `Kiji.Markdown`, and your model namespace in `_Imports.razor`.
-The dictionary implements `IReadOnlyDictionary<string, T>`. A successful keyed lookup
-tracks one item; enumeration, `Count`, `Keys`, `Values`, and missing lookups track the
-whole collection, including order and item digests. Layout and child-component reads
-count too. See [page dependencies](../incremental-builds/#understand-page-dependencies).
-
-Keys are case-insensitive and enumeration preserves source order. Markdown keys are
-source-relative paths using `/`; custom sources use ordinal keys or explicit IDs as
-described below. Keys do not determine public URLs.
-
-Use `UseContentSource` for custom data, such as JSON, or a shared index derived from
-other content, such as tag counts. Both overloads expose `ContentDictionary<T>`. The loader
-runs the first time the content is read, and again after content changes during
-development. Treat loaded values as immutable.
+`UseContentSource` registers custom data, such as JSON, or an index derived from other
+content, such as tag counts. The loader runs when the content is first read, and again
+after content changes during development. Treat loaded values as immutable.
 
 #### `UseContentSource<T>(Func<IServiceProvider, IReadOnlyList<T>> loader)`
 
-Use this form to share loaded data without supplying change detection. Items receive
-keys `"0"`, `"1"`, and so on in loader order. Pages reading these items render on every
-publish.
-
-For example, use the `FrontMatter` model from [Markdown and images](../markdown/#register-markdown-content)
-and define a model in its own `TagSummary.cs` file:
+Items get the keys `"0"`, `"1"`, and so on. Pages that read them render on every publish.
+This example counts the tags of the [Markdown example](../markdown/#register-markdown-content):
 
 ```csharp
 public sealed record TagSummary(string Name, int Count);
 ```
-
-In `Program.cs`, import `Kiji`, `Kiji.Markdown`, `Microsoft.Extensions.DependencyInjection`,
-and your model namespace. Register Markdown and the shared tag counts before `RunAsync`:
 
 ```csharp
 app.UseMarkdownContent<FrontMatter>();
@@ -266,126 +168,86 @@ static IReadOnlyList<TagSummary> LoadTags(IServiceProvider services) =>
         .ToArray();
 ```
 
-Components can inject `ContentDictionary<TagSummary>` and render its `Values`. The
-counts are shared across pages and recomputed after Markdown content reloads.
-
 #### `UseContentSource<T>(string sourceId, Func<IServiceProvider, IReadOnlyList<ContentEntry<T>>> loader)`
 
-Use this form when pages should be eligible for HTML reuse if the data is unchanged.
-Replace the `UseContentSource` registration above with this one:
+Give each item an `Id` and a `Digest` so that pages reading unchanged items can be reused:
 
 ```csharp
 app.UseContentSource<TagSummary>("tag-summary", services =>
     LoadTags(services)
-        .Select(tag => new ContentEntry<TagSummary>(
-            Id: tag.Name,
-            Value: tag,
-            Digest: tag.ToString()))
+        .Select(tag => new ContentEntry<TagSummary>(Id: tag.Name, Value: tag, Digest: tag.ToString()))
         .ToArray());
 ```
 
-Keep `sourceId` stable between builds. Each entry's `Id` identifies the item within
-that source, independently of its position. `Digest` is a comparison string that must
-change whenever any data affecting the value changes, including external data. Here,
-the record's generated `ToString()` includes both values, for example
-`TagSummary { Name = dotnet, Count = 3 }`.
-
-An incorrect digest can reuse stale HTML. Use `null` when a reliable digest is unavailable;
-readers of that item or its collection then lose HTML reuse. Digests allow Kiji to skip
-page rendering, but the loader still runs when needed to obtain current digests.
-
-Use [`AlwaysRender`](../incremental-builds/#render-pages-that-use-external-data) when a
-component also reads untracked external state. It forces page rendering but does not
-refresh data cached in a service.
+Keep `sourceId` stable between builds. `Id` identifies an item regardless of its position.
+`Digest` must change whenever anything affecting the value changes; here the record's
+`ToString()` includes both fields. A wrong digest can reuse stale HTML, so use `null` when
+no reliable digest exists; pages that read the item or its collection then always render.
 
 ### Markdown
 
-Import `Kiji.Markdown` to use these extensions.
+Import `Kiji.Markdown`. See [Markdown and images](../markdown/) for examples.
 
-#### `UseMarkdownContent<TFrontMatter>(Action<MarkdownOptions>? configure = null)`
+| Method                                                                                                                         | Behavior                                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| `UseMarkdownContent<TFrontMatter>(Action<MarkdownOptions>? configure = null)`                                                  | Loads `*.md` files and registers `ContentDictionary<MarkdownContent<TFrontMatter>>`. |
+| `UseMarkdownContent<TFrontMatter,TModel>(Func<MarkdownContent<TFrontMatter>,TModel> select, Action<MarkdownOptions>? configure = null)` | Converts each file with `select` and registers `ContentDictionary<TModel>`.        |
 
-Recursively loads `*.md` files and registers
-`ContentDictionary<MarkdownContent<TFrontMatter>>`. `TFrontMatter` must be a class. Each
-file must begin with YAML front matter; the body is rendered on demand.
+| `MarkdownOptions` member                             | Behavior                                                                  |
+| ---------------------------------------------------- | ------------------------------------------------------------------------- |
+| `string Directory`                                   | Directory to load, absolute or relative to the project. Default `"content"`. |
+| `Func<FileInfo,bool>? FileFilter`                    | Returns `false` to skip a file. Default: load every `*.md` file.          |
+| `ConfigureMarkdown(Action<MarkdownPipelineBuilder>)` | Adds Markdig configuration after Kiji's defaults.                         |
+| `ConfigureYaml(Action<DeserializerBuilder>)`         | Adds YamlDotNet configuration after Kiji's defaults.                      |
+| `AddHtmlPostProcessor(Func<string,string>)`          | Transforms the rendered HTML. Processors run in registration order.       |
 
-#### `UseMarkdownContent<TFrontMatter,TModel>(Func<MarkdownContent<TFrontMatter>,TModel> select, Action<MarkdownOptions>? configure = null)`
+| `MarkdownContent<TFrontMatter>` member                                         | Behavior                                                       |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| `FileInfo FileInfo`                                                            | The source Markdown file.                                      |
+| `TFrontMatter FrontMatter`                                                     | The parsed front matter.                                       |
+| `ValueTask<string> RenderAsync(CancellationToken cancellationToken = default)` | Renders the body to HTML and writes its local images beside the current page. |
 
-Projects each parsed file independently and registers `ContentDictionary<TModel>`. Both
-generic arguments must be classes, and `select` cannot be null. The projection should not
-depend on other items in the collection.
-
-#### `MarkdownOptions`
-
-The configure callback receives a new options instance for that registration.
-
-| Member                                               | Default/behavior                                                                                                                |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `string Directory`                                   | `"content"`; absolute or relative to the site project directory. Registered directories are watched during development.         |
-| `Func<FileInfo,bool>? FileFilter`                    | `null`; include every discovered Markdown file. The predicate runs before loading.                                              |
-| `ConfigureMarkdown(Action<MarkdownPipelineBuilder>)` | Adds a non-null Markdig configuration after Kiji's default advanced pipeline. Calls run in registration order.                  |
-| `ConfigureYaml(Action<DeserializerBuilder>)`         | Adds a non-null YamlDotNet configuration after the camel-case and ignore-unmatched defaults. Calls run in registration order.   |
-| `AddHtmlPostProcessor(Func<string,string>)`          | Adds a non-null synchronous HTML transformation. Transformations run in registration order, each receiving the previous result. |
-
-#### `MarkdownContent<TFrontMatter>`
-
-Kiji creates one instance per source file.
-
-| Member                                                                         | Behavior                                                                                                                                                                  |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `FileInfo FileInfo`                                                            | Metadata for the source Markdown file.                                                                                                                                    |
-| `TFrontMatter FrontMatter`                                                     | The parsed YAML object.                                                                                                                                                   |
-| `ValueTask<string> RenderAsync(CancellationToken cancellationToken = default)` | Renders the body to HTML and writes its local images beside the current page.                                                                                             |
-
-`RenderAsync` should be called while rendering a page when the Markdown contains local
-images, because their output directory comes from the current page.
+Call `RenderAsync` while rendering a page, because local images are written beside that
+page.
 
 ### Image processing
 
-The default processor uses SkiaSharp to generate static WebP variants from JPEG, PNG,
-GIF, and WebP inputs. See [Local images](../markdown/#local-images) for the generated
-widths, metadata handling, and `<img>` markup.
-
-To replace it, implement `IImageProcessor` from `Kiji.Assets` and register it as a
-singleton:
+To replace the default image processor, implement `IImageProcessor` from `Kiji.Assets` and
+register it as a singleton:
 
 ```csharp
 app.UseServices(services =>
     services.AddSingleton<IImageProcessor, MyImageProcessor>());
 ```
 
-| Member                                                                                                                  | Behavior                                                                                                       |
-| ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `Task<ProcessedImageInfo> ProcessAsync(string sourceFilePath, string outputDirectory, CancellationToken cancellationToken = default)` | Writes variants of the source image into `outputDirectory` and describes them.                                 |
-| `string? CacheIdentity`                                                                                                 | Identifies the implementation and its settings for reuse across publishes. The default `null` disables reuse. |
+| Member                                                                                                                                | Behavior                                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `Task<ProcessedImageInfo> ProcessAsync(string sourceFilePath, string outputDirectory, CancellationToken cancellationToken = default)` | Writes variants of the source image into `outputDirectory` and describes them.               |
+| `string? CacheIdentity`                                                                                                               | Identifies the implementation and settings for reuse across publishes. `null` disables reuse. |
 
-`ProcessedImageInfo` has the source image's `OriginalWidth` and `OriginalHeight`, which
-become the `<img>` dimensions, and `Variants`, a list of `ImageVariant(string FileName, int Width)`
-in ascending width order. `FileName` is relative to `outputDirectory`. Every variant
-appears in `srcset`, and the last one is also the `src`.
+`ProcessedImageInfo` has the source's `OriginalWidth` and `OriginalHeight`, used for the
+`<img>` size, and `Variants`: `ImageVariant(string FileName, int Width)` entries in
+ascending width, with `FileName` relative to `outputDirectory`. All variants go into
+`srcset`, and the last is also the `src`.
 
-Custom processors must support concurrent calls and retain no page or content state.
-Include external configuration and encoder versions in `CacheIdentity`; page rendering
-controls do not invalidate image processing caches.
+The processor must support concurrent calls and keep no page or content state. Include
+external configuration and encoder versions in `CacheIdentity`; `AlwaysRender` and
+`KijiForce` do not clear image caches.
 
 ## Page reuse controls
 
 ### `AlwaysRenderAttribute`
 
-Add `@attribute [AlwaysRender]` to a Razor component, or `[AlwaysRender]` to a component
-class, using the `Kiji` namespace. Every page that renders the component is regenerated
-on each publish, including uses in layouts and child components. The attribute is inherited.
-
-Use it for untracked external state. For a one-time refresh of all pages, use
-`dotnet publish -p:KijiForce=true`. See the [external data guide](../incremental-builds/#render-pages-that-use-external-data)
-for an example and development behavior.
+`[AlwaysRender]` from the `Kiji` namespace makes every page that renders the component,
+including through layouts and child components, render on every publish. The attribute is
+inherited. See [external data](../incremental-builds/#render-pages-that-use-external-data).
 
 ## Generated files
 
 ### Feeds
 
-Import `Kiji.Feeds` and `Microsoft.Extensions.DependencyInjection`. This example publishes
-`feed.xml` from the `BlogPost` model in [Getting started](../getting-started/#add-a-markdown-page),
-newest first:
+Import `Kiji.Feeds`. This example publishes `feed.xml` from the `BlogPost` model in
+[Getting started](../getting-started/#add-a-markdown-page), newest first:
 
 ```csharp
 app.AddRssFeed(services => services
@@ -395,102 +257,62 @@ app.AddRssFeed(services => services
     .Select(post => new FeedItem(post.Title, post.Description, post.Date, post.RelativePath)));
 ```
 
-So that browsers and feed readers can find the feed, add a link among the shared tags in
-`HeadContent`:
+Link the feed among the shared head tags so that readers can find it:
 
 ```razor
 <link rel="alternate" type="application/rss+xml" title="@Site.Name"
       href="@Site.ResolveUrl("feed.xml").AbsoluteUri" />
 ```
 
-#### `AddRssFeed(Func<IServiceProvider,IEnumerable<FeedItem>> items, string path = "feed.xml")`
+`AddRssFeed(Func<IServiceProvider, IEnumerable<FeedItem>> items, string path = "feed.xml")`
+writes an RSS 2.0 feed with items in the given order. The channel's title, description,
+language, and URLs come from `SiteInfo`.
 
-Registers an RSS 2.0 artifact. The deferred factory runs when artifacts are written and
-can resolve content dictionaries. Entries are emitted in supplied order. `path` is the
-output-relative feed path and cannot be blank. Channel title, description, language, and
-absolute URLs come from `SiteInfo`.
-
-#### `FeedItem`
-
-Construct an item with
-`FeedItem(string Title, string Description, DateTimeOffset PublishedAt, string RelativePath)`.
-
-The four arguments become read-only properties. Title and description must be non-null;
-publication time is written in UTC. `RelativePath` supplies the link and GUID under
-`SiteInfo.BaseUrl`: use a site-relative path with no leading slash, absolute URI,
-backslash, query, or fragment. Use `""` for the home page.
+`FeedItem(string Title, string Description, DateTimeOffset PublishedAt, string RelativePath)`
+describes one item. `RelativePath` is the page path relative to `BaseUrl` without a leading
+`/`, such as `posts/hello/`, or `""` for the home page. Times are written in UTC.
 
 ### Sitemaps
 
 Import `Kiji.Sitemaps`:
 
 ```csharp
-app.AddSitemap(
-    path: "sitemap.xml",
-    excludedPaths: ["preview/", "internal/status/"]);
+app.AddSitemap(excludedPaths: ["preview/", "internal/status/"]);
 ```
 
-`AddSitemap(string path = "sitemap.xml", IEnumerable<string>? excludedPaths = null)`
-registers a sitemap containing generated page URLs, sorted by site-relative path.
-`404.html` is always excluded. Each entry in `excludedPaths` removes the one page whose
-site-relative path matches it exactly, ignoring case: `preview/` removes `/preview/` but
-not `/preview/draft/`. List every page to exclude, using the same site-relative path rules
-as `FeedItem`. `path` cannot be blank.
+`AddSitemap(string path = "sitemap.xml", IEnumerable<string>? excludedPaths = null)` lists
+every generated page except `404.html`. Each excluded path removes the one page with that
+exact path, ignoring case: `preview/` removes `/preview/` but not `/preview/draft/`.
 
 ### Custom artifacts
 
-#### `AddArtifact(string outputRelativePath, Func<Stream,SiteOutputContext,CancellationToken,Task> write)`
+`AddArtifact(string outputRelativePath, Func<Stream, SiteOutputContext, CancellationToken, Task> write)`
+writes a file after all pages. Write to the stream without disposing it.
 
-Registers a site-wide output file written after pages. The path and delegate are required.
-The delegate receives a writable stream owned by Kiji, the completed site context, and the
-run's cancellation token. Do not dispose the stream. Output-path collisions or paths that
-escape the output directory fail generation.
+| `SiteOutputContext` property        | Behavior                                                         |
+| ----------------------------------- | ---------------------------------------------------------------- |
+| `SiteInfo Site`                     | The site metadata.                                               |
+| `IReadOnlyList<SitePageInfo> Pages` | Every generated page.                                            |
+| `IServiceProvider Services`         | Site services, including content dictionaries.                   |
 
-#### `SiteOutputContext`
-
-Kiji passes this to artifact writers.
-
-| Property                            | Behavior                                                                                                   |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `SiteInfo Site`                     | Metadata for this generation.                                                                              |
-| `IReadOnlyList<SitePageInfo> Pages` | Every generated page.                                                                                      |
-| `IServiceProvider Services`         | Site services available at artifact generation time, including content dictionaries but not page services. |
-
-#### `SitePageInfo`
-
-`SitePageInfo(string RelativePath, string OutputRelativePath)` describes a generated page
-through two read-only properties:
-
-- `RelativePath` is the page URL relative to `SiteInfo.BaseUrl`, such as `posts/hello/`.
-  The home page uses `""`.
-- `OutputRelativePath` is the file path inside the output directory, such as
-  `posts/hello/index.html`, written with the operating system's directory separator.
+`SitePageInfo` has two properties: `RelativePath`, the page URL relative to `BaseUrl` such
+as `posts/hello/` (`""` for the home page), and `OutputRelativePath`, the file path in the
+output such as `posts/hello/index.html`, using the operating system's directory separator.
 
 ## Unsupported Blazor features
 
-Kiji generates static HTML without a Blazor runtime. Event handlers such as
-`@onclick` do not run in the browser.
+Kiji renders static HTML without a Blazor runtime. Event handlers such as `@onclick`,
+`OnAfterRender`, and `OnAfterRenderAsync` never run; use a `<script>` element or a
+JavaScript module for browser behavior.
 
 ### NavigationManager and NavLink
 
-Kiji provides `NavigationManager` injection and static `NavLink` rendering for Razor
-class library (RCL) compatibility. Prefer `PageInfo`, `SiteInfo`, and ordinary `<a>`
-links in components written for Kiji.
-
-Each render uses `SiteInfo.BaseUrl` for `BaseUri` and `PageInfo.Url` for `Uri`,
-including in development. Request queries are excluded; 404 pages use their own route.
-`NavLink` can render its active class, but Kiji does not rewrite `href` or add `<base>`.
-
-This is not full static SSR: `NavigateTo`/`Refresh` throw `NotSupportedException`,
-and `NotFound()` does not set HTTP status or select Kiji's 404 page.
-Client-side routing and navigation interception are unavailable. Configure redirects
-in your hosting platform.
+Both render, so Razor class libraries that use them still work. `BaseUri` is
+`SiteInfo.BaseUrl` and `Uri` is `PageInfo.Url`, without a query string. `NavLink` renders
+its active class but does not rewrite `href`. `NavigateTo` and `Refresh` throw
+`NotSupportedException`, and `NotFound()` does not select the 404 page; configure
+redirects on your host. In your own components, prefer `PageInfo`, `SiteInfo`, and `<a>`.
 
 ### JavaScript interop
 
-Components and page services can inject `IJSRuntime`, but interop calls throw
-`InvalidOperationException`. Its registration is managed by Kiji.
-
-`OnAfterRender` and `OnAfterRenderAsync` do not run. Components that defer interop
-to these methods can render static HTML. Use a `<script>` element or JavaScript
-module for browser behavior.
+`IJSRuntime` can be injected, but its calls throw `InvalidOperationException`.

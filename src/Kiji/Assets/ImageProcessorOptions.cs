@@ -3,8 +3,8 @@ namespace Kiji.Assets;
 /// <summary>Configures the default WebP image processor.</summary>
 /// <remarks>
 /// Configure it with <c>builder.Services.Configure&lt;ImageProcessorOptions&gt;(...)</c>. The values are validated
-/// when the site starts running, and the processor reads them once. They do not apply to a replaced
-/// <see cref="IImageProcessor"/>. Changing them re-encodes images on the next publish.
+/// when the site starts running, and the processor reads them once. A replaced <see cref="IImageProcessor"/>
+/// neither uses nor validates them. Changing them re-encodes images on the next publish.
 /// </remarks>
 public sealed class ImageProcessorOptions
 {

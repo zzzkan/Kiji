@@ -325,7 +325,8 @@ builder.Services.Configure<ImageProcessorOptions>(options =>
 - The settings are validated when the site starts running, before any output: `RunAsync`
   throws `OptionsValidationException` for invalid values.
 - Changing a setting re-encodes images and renders their pages again on the next publish.
-- The settings apply only to the default processor, not to a replacement `IImageProcessor`.
+- The settings apply only to the default processor. A replacement `IImageProcessor` neither
+  uses nor validates them.
 
 ### Image processing
 

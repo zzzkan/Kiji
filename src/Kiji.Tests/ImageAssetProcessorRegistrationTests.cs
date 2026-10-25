@@ -94,6 +94,17 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
     }
 
     [Fact]
+    public async Task CustomProcessor_LeavesTheDefaultProcessorSettingsUnvalidated()
+    {
+        var builder = CreateBuilder(output: "dist");
+        builder.Services.Configure<ImageProcessorOptions>(static options => options.Quality = 101);
+        builder.Services.AddSingleton<IImageProcessor, TrackingImageProcessor>();
+
+        // The settings configure only the default processor, so nothing reads them here.
+        Assert.Equal(0, await builder.Build().RunAsync(CancellationToken.None));
+    }
+
+    [Fact]
     public async Task StartupValidationFailure_DisposesAsyncServicesAndKeepsTheError()
     {
         var log = new DisposalLog();

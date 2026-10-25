@@ -22,6 +22,7 @@ public sealed class StaticSiteBuilder
 {
     private readonly ServiceCollection _services = [];
     private readonly List<ServiceDescriptor> _managedServices;
+    private readonly ServiceDescriptor _defaultImageProcessor;
     private readonly List<string> _contentPaths = [];
     private readonly List<PageParameterRegistration> _pageParameters = [];
     private readonly List<SiteArtifactRegistration> _artifacts = [];
@@ -85,12 +86,11 @@ public sealed class StaticSiteBuilder
 
         ComponentRenderer.AddComponentRenderingServices(_services);
 
-        // The default processor reads its options once. A replacement IImageProcessor ignores them.
-        _services.AddOptions<ImageProcessorOptions>().ValidateOnStart();
-        _services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<ImageProcessorOptions>, ImageProcessorOptionsValidator>());
-        _services.AddSingleton<IImageProcessor>(static provider => new ImageProcessor(
+        // The default processor reads its options once. Build validates them only while it is the processor.
+        _defaultImageProcessor = ServiceDescriptor.Singleton<IImageProcessor>(static provider => new ImageProcessor(
             provider.GetRequiredService<IOptions<ImageProcessorOptions>>().Value,
             logger: provider.GetRequiredService<ILoggerFactory>().CreateLogger(BuildLoggerExtensions.CategoryName)));
+        _services.Add(_defaultImageProcessor);
 
         _managedServices = [.. _services.Where(static descriptor => SiteServiceRegistration.IsManaged(descriptor.ServiceType))];
     }
@@ -317,6 +317,14 @@ public sealed class StaticSiteBuilder
     internal (ServiceProvider Services, IReadOnlyCollection<Assembly> Assemblies) BuildServices(Func<ResolvedSitePaths> resolvePaths)
     {
         SiteServiceRegistration.Validate(_services, _managedServices);
+        // The settings configure only Kiji's processor. A replacement does not read them, so they
+        // are validated only when Kiji's processor is the last registration, which Validate requires.
+        if (ReferenceEquals(_services.Last(static descriptor =>
+            descriptor.ServiceType == typeof(IImageProcessor) && !descriptor.IsKeyedService), _defaultImageProcessor))
+        {
+            _services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<ImageProcessorOptions>, ImageProcessorOptionsValidator>());
+            _services.AddOptions<ImageProcessorOptions>().ValidateOnStart();
+        }
         // A default here would pin the singleton to the wrong execution mode.
         _services.AddSingleton(_ => resolvePaths());
         _services.MakeReadOnly();

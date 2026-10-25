@@ -67,7 +67,7 @@ public sealed class StaticSiteBuilder
         _services.AddLogging();
         Logging = new SiteLoggingBuilder(_services);
         Logging.SetMinimumLevel(LogLevel.Warning);
-        Logging.AddFilter(BuildLog.Category, LogLevel.Information);
+        Logging.AddFilter(BuildLoggerExtensions.CategoryName, LogLevel.Information);
         Logging.AddConfiguration(Configuration.GetSection("Logging"));
         Logging.AddConsole(options =>
         {
@@ -90,7 +90,7 @@ public sealed class StaticSiteBuilder
         _services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<ImageProcessorOptions>, ImageProcessorOptionsValidator>());
         _services.AddSingleton<IImageProcessor>(static provider => new ImageProcessor(
             provider.GetRequiredService<IOptions<ImageProcessorOptions>>().Value,
-            logger: provider.GetRequiredService<ILoggerFactory>().CreateLogger(BuildLog.Category)));
+            logger: provider.GetRequiredService<ILoggerFactory>().CreateLogger(BuildLoggerExtensions.CategoryName)));
 
         _managedServices = [.. _services.Where(static descriptor => SiteServiceRegistration.IsManaged(descriptor.ServiceType))];
     }

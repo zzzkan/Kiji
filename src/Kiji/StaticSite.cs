@@ -70,7 +70,7 @@ public sealed class StaticSite : IAsyncDisposable
     internal string[] ContentRoots { get; }
 
     // Created on first use, so building the site creates no services.
-    private ILogger BuildLogger => field ??= ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(BuildLog.Category);
+    private ILogger BuildLogger => field ??= ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(BuildLoggerExtensions.CategoryName);
 
     // Content must not resolve execution paths before publish/serve has settled them.
     internal IServiceProvider ServiceProvider

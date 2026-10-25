@@ -11,5 +11,4 @@ builder.AddPageParameters<ArticlePage>(services => services
     .GetRequiredService<ContentDictionary<MarkdownContent<Article>>>()
     .Select(entry => new { Slug = Path.GetFileNameWithoutExtension(entry.Key), ContentKey = entry.Key }));
 
-var site = builder.Build();
-return await site.RunAsync();
+return await builder.Build().RunAsync();

@@ -87,9 +87,7 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
                 case "widths": options.Widths = [640, 0]; break;
             }
         });
-        var site = builder.Build();
-
-        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() => site.RunAsync(CancellationToken.None));
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() => builder.Build().RunAsync(CancellationToken.None));
 
         Assert.Contains($"ImageProcessorOptions.{property}", exception.Message, StringComparison.Ordinal);
         AssertNoSiteOutput();
@@ -103,9 +101,7 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
         builder.Services.AddSingleton(_ => new AsyncOnlyDependency(log));
         builder.Services.AddOptions<ImageProcessorOptions>()
             .Configure<AsyncOnlyDependency>(static (options, _) => options.Quality = 0);
-        var site = builder.Build();
-
-        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() => site.RunAsync(CancellationToken.None));
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() => builder.Build().RunAsync(CancellationToken.None));
 
         Assert.Contains("ImageProcessorOptions.Quality", exception.Message, StringComparison.Ordinal);
         Assert.Equal(1, log.Created);
@@ -130,12 +126,11 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
                 return posts.Count == 1;
             }, "A post is required.")
             .ValidateOnStart();
-        var site = builder.Build();
         // Publishing runs to completion; serving returns at once with a canceled token.
         using var stop = new CancellationTokenSource();
         if (output is null) { await stop.CancelAsync(); }
 
-        Assert.Equal(0, await site.RunAsync(stop.Token));
+        Assert.Equal(0, await builder.Build().RunAsync(stop.Token));
         Assert.Equal(1, validations);
     }
 

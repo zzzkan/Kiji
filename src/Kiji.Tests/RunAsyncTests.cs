@@ -86,9 +86,7 @@ public sealed class RunAsyncTests : IDisposable
     [Fact]
     public async Task RunAsync_WithRelativeOutputPath_ResolvesAgainstTheSiteRoot()
     {
-        await using var app = CreateBuilder(EnvironmentWith([("KIJI_OUTPUT", "out")])).Build();
-
-        await app.RunAsync(CancellationToken.None);
+        await CreateBuilder(EnvironmentWith([("KIJI_OUTPUT", "out")])).Build().RunAsync(CancellationToken.None);
 
         Assert.True(File.Exists(Path.Combine(_testDir, "out", "index.html")));
     }
@@ -104,15 +102,9 @@ public sealed class RunAsyncTests : IDisposable
             builder.AddPageParameters<AssetPage>(_ => [new { Kind = "first" }, new { Kind = "second" }]);
             return builder.Build();
         }
-        await using (var first = CreateMeasuredApp(EnvironmentWith([("KIJI_OUTPUT", _outputDir)])))
-        {
-            await first.RunAsync(CancellationToken.None);
-        }
+        await CreateMeasuredApp(EnvironmentWith([("KIJI_OUTPUT", _outputDir)])).RunAsync(CancellationToken.None);
 
-        await using (var unchanged = CreateMeasuredApp(EnvironmentWith([("KIJI_OUTPUT", _outputDir)])))
-        {
-            await unchanged.RunAsync(CancellationToken.None);
-        }
+        await CreateMeasuredApp(EnvironmentWith([("KIJI_OUTPUT", _outputDir)])).RunAsync(CancellationToken.None);
         Assert.Equal(1, renders.Counts["first"]);
         Assert.Equal(1, renders.Counts["second"]);
 
@@ -120,10 +112,7 @@ public sealed class RunAsyncTests : IDisposable
         File.SetLastWriteTimeUtc(indexPath, new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
         var stampBefore = File.GetLastWriteTimeUtc(indexPath);
 
-        await using (var forced = CreateMeasuredApp(EnvironmentWith([("KIJI_OUTPUT", _outputDir), ("KIJI_FORCE", "1")])))
-        {
-            await forced.RunAsync(CancellationToken.None);
-        }
+        await CreateMeasuredApp(EnvironmentWith([("KIJI_OUTPUT", _outputDir), ("KIJI_FORCE", "1")])).RunAsync(CancellationToken.None);
 
         Assert.Equal(2, renders.Counts["first"]);
         Assert.Equal(2, renders.Counts["second"]);
@@ -133,10 +122,9 @@ public sealed class RunAsyncTests : IDisposable
     [Fact]
     public async Task RunAsync_CanceledDevRun_ExitsNormallyWithoutPublishing()
     {
-        await using var app = CreateBuilder(EnvironmentWith([("KIJI_OUTPUT", "   ")])).Build();
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
-        var exitCode = await app.RunAsync(cts.Token);
+        var exitCode = await CreateBuilder(EnvironmentWith([("KIJI_OUTPUT", "   ")])).Build().RunAsync(cts.Token);
         Assert.Equal(0, exitCode);
         Assert.False(Directory.Exists(_outputDir));
     }
@@ -176,8 +164,7 @@ public sealed class RunAsyncTests : IDisposable
         const string childOutputVariable = "KIJI_TEST_VERBOSE_OUTPUT";
         if (Environment.GetEnvironmentVariable(childOutputVariable) is { } childOutput)
         {
-            await using var app = CreateBuilder(EnvironmentWith([("KIJI_OUTPUT", childOutput), ("KIJI_VERBOSE", "true")])).Build();
-            await app.RunAsync(CancellationToken.None);
+            await CreateBuilder(EnvironmentWith([("KIJI_OUTPUT", childOutput), ("KIJI_VERBOSE", "true")])).Build().RunAsync(CancellationToken.None);
             return;
         }
 

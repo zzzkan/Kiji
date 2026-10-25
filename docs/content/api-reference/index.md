@@ -30,8 +30,7 @@ builder.SiteInfo = new SiteInfo
 
 // builder.Services, Add* and Use* registrations
 
-var site = builder.Build();
-return await site.RunAsync();
+return await builder.Build().RunAsync();
 ```
 
 | Member                                                                         | Behavior                                                                                                                                            |

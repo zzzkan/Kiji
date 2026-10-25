@@ -37,13 +37,12 @@ public sealed class PageServiceContentTests : IDisposable
 
         // A different output can restore the portable cache. Force a clean render.
         var full = Path.Combine(_root, "full");
-        await using var fresh = CreateApp(new RelatedProbe(), environment: name => name switch
+        await CreateApp(new RelatedProbe(), environment: name => name switch
         {
             "KIJI_OUTPUT" => full,
             "KIJI_FORCE" => "true",
             _ => null,
-        });
-        await fresh.RunAsync(CancellationToken.None);
+        }).RunAsync(CancellationToken.None);
         var expected = ReadHtml(full);
         Assert.Equal(expected.Keys.Order(), incremental.Keys.Order());
         foreach (var (key, html) in expected)

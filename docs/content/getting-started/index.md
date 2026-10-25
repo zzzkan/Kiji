@@ -91,8 +91,7 @@ builder.SiteInfo = new SiteInfo
     Name = "My Site",
 };
 
-var site = builder.Build();
-return await site.RunAsync();
+return await builder.Build().RunAsync();
 ```
 
 Create `Pages/Home.razor`:
@@ -190,8 +189,7 @@ builder.SiteInfo = new SiteInfo
 
 builder.UseDefaultLayout<MainLayout>();
 
-var site = builder.Build();
-return await site.RunAsync();
+return await builder.Build().RunAsync();
 ```
 
 Add `PageHead` to `Pages/Home.razor`:
@@ -337,8 +335,7 @@ builder.AddPageParameters<PostPage>(services => services
     .GetRequiredService<ContentDictionary<BlogPost>>()
     .Select(post => new { post.Value.Slug, ContentKey = post.Key }));
 
-var site = builder.Build();
-return await site.RunAsync();
+return await builder.Build().RunAsync();
 ```
 
 `AddMarkdownContent` calls `BlogPost.Create` for each Markdown file and registers

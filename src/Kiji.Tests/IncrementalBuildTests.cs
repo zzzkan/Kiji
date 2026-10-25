@@ -340,7 +340,7 @@ public sealed class IncrementalBuildTests : IDisposable
         var manifestPath = Path.Combine(root, ".kiji", "cache", "manifest.json");
         var manifest = await File.ReadAllBytesAsync(manifestPath);
         var changed = 0;
-        await using var app = CreateBuilder(root, () =>
+        var builder = CreateBuilder(root, () =>
         {
             if (Interlocked.Exchange(ref changed, 1) == 0)
             {
@@ -354,8 +354,8 @@ public sealed class IncrementalBuildTests : IDisposable
             "KIJI_OUTPUT" => "dist",
             "KIJI_FORCE" => "true",
             _ => null,
-        }).Build();
-        await Assert.ThrowsAnyAsync<Exception>(() => app.RunAsync(CancellationToken.None));
+        });
+        await Assert.ThrowsAnyAsync<Exception>(() => builder.Build().RunAsync(CancellationToken.None));
         Assert.Equal(manifest, await File.ReadAllBytesAsync(manifestPath));
         await BuildAsync(root);
         Assert.Contains("Edited body.", await File.ReadAllTextAsync(Path.Combine(root, "dist", "md", "stable", "index.html")), StringComparison.Ordinal);

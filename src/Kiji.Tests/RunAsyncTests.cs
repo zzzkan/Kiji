@@ -163,7 +163,7 @@ public sealed class RunAsyncTests : IDisposable
             var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir),
                 EnvironmentWith([("KIJI_OUTPUT", _outputDir), ("DOTNET_ENVIRONMENT", environmentName)]),
                 typeof(HostEnvironmentPage));
-            builder.Info = TestArticleContents.CreateSiteInfo();
+            builder.SiteInfo = TestArticleContents.CreateSiteInfo();
             if (configuredName is not null) { builder.Environment.EnvironmentName = configuredName; }
             Assert.Equal(0, await builder.Build().RunAsync(CancellationToken.None));
             return await File.ReadAllTextAsync(Path.Combine(_outputDir, "environment", "index.html"));
@@ -219,7 +219,7 @@ public sealed class RunAsyncTests : IDisposable
     private StaticSiteBuilder CreateBuilder(Func<string, string?>? environment = null)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")), environment);
-        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(builder.Paths, Path.Combine(builder.Paths.ProjectDirectory, "static"));
 
         builder.AddContentSource<Post>(static _ => []);

@@ -7,7 +7,7 @@ using Kiji.Sitemaps;
 using Microsoft.Extensions.DependencyInjection;
 
 var builder = StaticSite.CreateBuilder(args);
-builder.Info = new()
+builder.SiteInfo = new()
 {
     BaseUrl = new Uri("https://kiji-docs.zzzkan.workers.dev/"),
     Name = "Kiji",

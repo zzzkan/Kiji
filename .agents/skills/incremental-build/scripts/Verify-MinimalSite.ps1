@@ -11,7 +11,7 @@ New-Item -ItemType Directory -Force $site | Out-Null
 @'
 using Kiji;
 var builder = StaticSite.CreateBuilder(args);
-builder.Info = new() { Name = "Minimal", BaseUrl = new Uri("https://example.test/") };
+builder.SiteInfo = new() { Name = "Minimal", BaseUrl = new Uri("https://example.test/") };
 return await builder.Build().RunAsync();
 '@ | Set-Content (Join-Path $site 'Program.cs')
 '@page "/"' + "`n<h1>Minimal site</h1>" | Set-Content (Join-Path $site 'Home.razor')

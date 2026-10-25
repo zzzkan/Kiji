@@ -46,7 +46,7 @@ Edit your site settings in `Program.cs`:
 ```csharp
 //Program.cs
 
-builder.Info = new SiteInfo
+builder.SiteInfo = new SiteInfo
 {
     BaseUrl = new Uri("https://example.org/"),
     Name = "My Blog",

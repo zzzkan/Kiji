@@ -16,7 +16,7 @@ public sealed class FixedPageParametersTests : IDisposable
         async Task PublishAsync(IEnumerable<object>? parameters = null)
         {
             var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root), typeof(FixedParameterPage));
-            builder.Info = TestArticleContents.CreateSiteInfo();
+            builder.SiteInfo = TestArticleContents.CreateSiteInfo();
             builder.Services.AddSingleton(log);
             if (parameters is not null) { builder.AddPageParameters<FixedParameterPage>(_ => parameters); }
             await using var site = builder.Build();

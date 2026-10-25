@@ -48,7 +48,7 @@ public sealed class PageServiceTests : IDisposable
             Assert.Contains("page", places);
             Assert.Contains("layout", places);
             Assert.Contains("child", places);
-            Assert.Equal(new Uri(app.Info.BaseUrl, $"services/{service.Key}/"), service.Page.Url);
+            Assert.Equal(new Uri(app.SiteInfo.BaseUrl, $"services/{service.Key}/"), service.Page.Url);
             var pageReads = probe.PageReads.Where(read => ReferenceEquals(read.Service, service)).ToArray();
             Assert.Equal(3, pageReads.Length);
             Assert.All(pageReads, read => Assert.Same(service.Page, read.Page));
@@ -89,8 +89,8 @@ public sealed class PageServiceTests : IDisposable
         {
             case "duplicate": services.Add(services.Single(descriptor => descriptor.ServiceType == typeof(PageInfo))); break;
             case "remove": services.RemoveAll<PageInfo>(); break;
-            case "replace": services.Replace(ServiceDescriptor.Singleton(builder.Info)); break;
-            case "keyed": services.AddKeyedSingleton("alternate", builder.Info); break;
+            case "replace": services.Replace(ServiceDescriptor.Singleton(builder.SiteInfo)); break;
+            case "keyed": services.AddKeyedSingleton("alternate", builder.SiteInfo); break;
             case "open-generic": services.AddSingleton(typeof(ContentDictionary<>), typeof(ContentDictionary<>)); break;
             case "provider": services.AddSingleton<IServiceProvider>(_ => throw new NotSupportedException()); break;
             case "environment": services.Replace(ServiceDescriptor.Singleton(builder.Environment)); break;
@@ -113,7 +113,7 @@ public sealed class PageServiceTests : IDisposable
         Assert.Throws<InvalidOperationException>(() => builder.Services.AddSingleton("late"));
 
         app.CreateSnapshot();
-        Assert.Same(builder.Info, app.ServiceProvider.GetRequiredService<SiteInfo>());
+        Assert.Same(builder.SiteInfo, app.ServiceProvider.GetRequiredService<SiteInfo>());
         Assert.Same(builder.Environment, app.ServiceProvider.GetRequiredService<IHostEnvironment>());
         Assert.EndsWith(Path.Combine(".kiji", "dev-site"), app.ServiceProvider.GetRequiredService<string>(), StringComparison.Ordinal);
     }
@@ -231,7 +231,7 @@ public sealed class PageServiceTests : IDisposable
     private StaticSiteBuilder CreateBuilder(ServiceProbe? probe = null)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
-        builder.Info = new SiteInfo { Name = "Services", BaseUrl = new Uri("https://example.test/") };
+        builder.SiteInfo = new SiteInfo { Name = "Services", BaseUrl = new Uri("https://example.test/") };
         if (probe is not null)
         {
             builder.AddContentSource<ServiceProbe>("probes", _ => [new ContentEntry<ServiceProbe>("0", probe, "stable")]);

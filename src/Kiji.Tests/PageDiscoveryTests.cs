@@ -28,7 +28,7 @@ public sealed class PageDiscoveryTests
     public void Create_DiscoversFixedRoutesWithoutRegistration()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory), typeof(HomePage), typeof(AboutPage));
-        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         var app = builder.Build();
 
         Assert.Equal(["/", "/about/"], app.CreateSnapshot().Pages.Select(static page => page.RoutePath).Order(StringComparer.Ordinal));
@@ -70,7 +70,7 @@ public sealed class PageDiscoveryTests
     public void CreateSnapshot_UnregisteredParameterizedRoute_FailsWithPageAndRoute()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory), typeof(TagsPage));
-        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         builder.AddContentSource<Post>(static _ => []);
         builder.UseDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(builder);
@@ -142,7 +142,7 @@ public sealed class PageDiscoveryTests
     public void CreateSnapshot_AddNotFoundPageWithoutPageTemplate_ThrowsInformativeException()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         builder.UseDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(builder);
         builder.AddNotFoundPage<PostListComponent>();
@@ -156,7 +156,7 @@ public sealed class PageDiscoveryTests
     private static (StaticSite App, ContentDictionary<Post> Posts) CreateAppWithTagRoutes(Func<IEnumerable<object>> tagRoutes)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         builder.AddContentSource<Post>(static _ => []);
         builder.UseDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(builder);

@@ -205,7 +205,7 @@ public sealed class SiteArtifactTests : IDisposable
         string? staticPath)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
-        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(builder.Paths, staticPath ?? TestSitePaths.StaticDirectory);
 
         IReadOnlyList<Post> items =

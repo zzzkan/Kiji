@@ -85,7 +85,7 @@ Replace `Program.cs` with the site definition:
 using Kiji;
 
 var builder = StaticSite.CreateBuilder(args);
-builder.Info = new SiteInfo
+builder.SiteInfo = new SiteInfo
 {
     BaseUrl = new Uri("https://example.com/"),
     Name = "My Site",
@@ -182,7 +182,7 @@ using Kiji;
 using MySite.Layout;
 
 var builder = StaticSite.CreateBuilder(args);
-builder.Info = new SiteInfo
+builder.SiteInfo = new SiteInfo
 {
     BaseUrl = new Uri("https://example.com/"),
     Name = "My Site",
@@ -324,7 +324,7 @@ using MySite.Models;
 using MySite.Pages;
 
 var builder = StaticSite.CreateBuilder(args);
-builder.Info = new SiteInfo
+builder.SiteInfo = new SiteInfo
 {
     BaseUrl = new Uri("https://example.com/"),
     Name = "My Site",

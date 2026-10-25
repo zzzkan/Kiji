@@ -97,7 +97,7 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
     private StaticSiteBuilder CreateBuilder()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
-        builder.Info = new SiteInfo { Name = "Images", BaseUrl = new Uri("https://example.test/") };
+        builder.SiteInfo = new SiteInfo { Name = "Images", BaseUrl = new Uri("https://example.test/") };
         return builder;
     }
 

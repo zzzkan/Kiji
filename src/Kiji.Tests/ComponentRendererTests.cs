@@ -14,7 +14,7 @@ public sealed class ComponentRendererTests
     public async Task RenderComponentAsync_ErrorBoundaryRendersAsyncFallbackWithoutLoggingProviders()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         builder.Services.AddLogging(logging => logging.ClearProviders());
         await using var app = builder.Build();
         app.UsePlanningOptions();
@@ -32,7 +32,7 @@ public sealed class ComponentRendererTests
     public async Task RenderPageAsync_IsolatesNavigationAndNavLinksAcrossRenders(string baseUrl)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.Info = new SiteInfo { Name = "Navigation", BaseUrl = new Uri(baseUrl) };
+        builder.SiteInfo = new SiteInfo { Name = "Navigation", BaseUrl = new Uri(baseUrl) };
         builder.AddPageParameters<NavigationTestPage>(_ => [new { Id = "first" }, new { Id = "日本 語" }]);
         await using var app = builder.Build();
         var pages = app.CreateSnapshot().Pages;
@@ -41,17 +41,17 @@ public sealed class ComponentRendererTests
         for (var i = 0; i < pages.Count; i++)
         {
             var page = pages[i];
-            var url = app.Info.ResolveUrl(page.RoutePath);
+            var url = app.SiteInfo.ResolveUrl(page.RoutePath);
             Assert.Contains(
-                $"{app.Info.BaseUrl.AbsoluteUri}|{url.AbsoluteUri}|{url.AbsoluteUri[app.Info.BaseUrl.AbsoluteUri.Length..]}|"
-                + app.Info.ResolveUrl("about/").AbsoluteUri + "|about/",
+                $"{app.SiteInfo.BaseUrl.AbsoluteUri}|{url.AbsoluteUri}|{url.AbsoluteUri[app.SiteInfo.BaseUrl.AbsoluteUri.Length..]}|"
+                + app.SiteInfo.ResolveUrl("about/").AbsoluteUri + "|about/",
                 html[i], StringComparison.Ordinal);
             var active = page.RoutePath == "/navigation/first/" ? " class=\"selected\" aria-current=\"page\"" : "";
-            Assert.Contains($"href=\"{app.Info.ResolveUrl("navigation/first/").AbsolutePath}\"{active}>first</a>",
+            Assert.Contains($"href=\"{app.SiteInfo.ResolveUrl("navigation/first/").AbsolutePath}\"{active}>first</a>",
                 html[i], StringComparison.Ordinal);
-            Assert.Contains($"href=\"{app.Info.ResolveUrl("navigation/").AbsolutePath}\" class=\"selected\" aria-current=\"page\">parent</a>",
+            Assert.Contains($"href=\"{app.SiteInfo.ResolveUrl("navigation/").AbsolutePath}\" class=\"selected\" aria-current=\"page\">parent</a>",
                 html[i], StringComparison.Ordinal);
-            Assert.Contains($"href=\"{app.Info.ResolveUrl("navigation/").AbsolutePath}\">exact</a>",
+            Assert.Contains($"href=\"{app.SiteInfo.ResolveUrl("navigation/").AbsolutePath}\">exact</a>",
                 html[i], StringComparison.Ordinal);
 
             Assert.Equal(html[i], await app.RenderPageAsync(page, CancellationToken.None));
@@ -62,7 +62,7 @@ public sealed class ComponentRendererTests
     public async Task RenderPageAsync_IsolatesHeadAcrossParallelAndSequentialRenders()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         await using var app = builder.Build();
         string[] names = ["first", "second"];
 

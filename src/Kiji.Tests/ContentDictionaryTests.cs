@@ -13,7 +13,7 @@ public sealed class ContentDictionaryTests
     public async Task ConcurrentReaders_MaterializeContentOnlyOnce()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         var calls = 0;
         using var entered = new ManualResetEventSlim();
         using var release = new ManualResetEventSlim();
@@ -99,7 +99,7 @@ public sealed class ContentDictionaryTests
     public void AddContentSource_AssignsOpaqueOrdinalKeysInLoaderOrder()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         builder.AddContentSource<Item>(static _ => [new("b", 2), new("a", 1)]);
         var app = builder.Build();
         var dictionary = app.ServiceProvider.GetRequiredService<ContentDictionary<Item>>();
@@ -113,7 +113,7 @@ public sealed class ContentDictionaryTests
     public void AddContentSource_SameElementTypeTwice_Throws()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         builder.AddContentSource<Item>(static _ => []);
 
         var exception = Assert.Throws<InvalidOperationException>(
@@ -132,7 +132,7 @@ public sealed class ContentDictionaryTests
     public void Dictionary_CanBeDerivedFromAnother()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         builder.AddContentSource<Item>(static _ => [new("a", 1), new("b", 2)]);
         builder.AddContentSource<Derived>(
             static services => [.. services.GetRequiredService<ContentDictionary<Item>>().Values.Select(static item => new Derived(item.Slug.ToUpperInvariant()))]);
@@ -147,11 +147,11 @@ public sealed class ContentDictionaryTests
     public async Task Dictionary_CanReadTheSameModelFromAnotherSite()
     {
         var sourceBuilder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        sourceBuilder.Info = TestArticleContents.CreateSiteInfo();
+        sourceBuilder.SiteInfo = TestArticleContents.CreateSiteInfo();
         sourceBuilder.AddContentSource<Item>(static _ => [new("a", 1)]);
         await using var source = sourceBuilder.Build();
         var destinationBuilder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        destinationBuilder.Info = TestArticleContents.CreateSiteInfo();
+        destinationBuilder.SiteInfo = TestArticleContents.CreateSiteInfo();
         destinationBuilder.AddContentSource<Item>(_ => [.. source.ServiceProvider.GetRequiredService<ContentDictionary<Item>>().Values]);
         await using var destination = destinationBuilder.Build();
 
@@ -163,7 +163,7 @@ public sealed class ContentDictionaryTests
     public void Dictionary_CircularDerivation_ThrowsNamingThePath()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         builder.AddContentSource<Item>(
             static services => [.. services.GetRequiredService<ContentDictionary<Derived>>().Values.Select(static d => new Item(d.Slug, 1))]);
         builder.AddContentSource<Derived>(
@@ -188,7 +188,7 @@ public sealed class ContentDictionaryTests
     {
         var loads = 0;
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         builder.AddContentSource<Item>(
             _ =>
             {

@@ -22,7 +22,7 @@ the builder, so calls can be chained. `Program.cs` examples assume `using Kiji;`
 
 ```csharp
 var builder = StaticSite.CreateBuilder(args);
-builder.Info = new SiteInfo
+builder.SiteInfo = new SiteInfo
 {
     BaseUrl = new Uri("https://example.com/"),
     Name = "My Site",
@@ -37,7 +37,7 @@ return await site.RunAsync();
 | Member                                                                  | Behavior                                                                                                                                        |
 | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `static StaticSiteBuilder StaticSite.CreateBuilder(string[] args)`      | Creates a builder for the current project. During development, `args` go to ASP.NET Core configuration, for example `--urls`.                    |
-| `SiteInfo StaticSiteBuilder.Info`                                       | Required site metadata.                                                                                                                         |
+| `SiteInfo StaticSiteBuilder.SiteInfo`                                       | Required site metadata.                                                                                                                         |
 | `IServiceCollection StaticSiteBuilder.Services`                         | Services for components and site factories. See [Services](#services).                                                                         |
 | `IHostEnvironment StaticSiteBuilder.Environment`                        | The host environment. See [Environment](#environment).                                                                                         |
 | `ConfigurationManager StaticSiteBuilder.Configuration`                  | Site configuration. See [Configuration](#configuration).                                                                                       |
@@ -124,6 +124,27 @@ verbosity. Removing the console provider with `ClearProviders()` also hides Kiji
 `ResolveUrl(string path)` returns the absolute URL of a site-relative path. A leading `/`
 is ignored, so `"about/"` and `"/about/"` both stay under the base path, and `""` returns
 `BaseUrl`. External URLs and `..` are rejected.
+
+To use a different `BaseUrl` per environment, such as a staging deployment, read
+`SiteInfo` from [configuration](#configuration). `Get<T>` needs
+`using Microsoft.Extensions.Configuration;`:
+
+```json
+// appsettings.json
+{ "Site": { "BaseUrl": "https://example.com/", "Name": "My Site" } }
+```
+
+```json
+// appsettings.Staging.json
+{ "Site": { "BaseUrl": "https://staging.example.com/" } }
+```
+
+```csharp
+builder.SiteInfo = builder.Configuration.GetRequiredSection("Site").Get<SiteInfo>()!;
+```
+
+Values are validated as in code. Assigning a `SiteInfo` whose section sets no `BaseUrl` or
+`Name` throws `ArgumentException`.
 
 ## Pages and rendering
 

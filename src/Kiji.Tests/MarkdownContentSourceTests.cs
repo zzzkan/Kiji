@@ -152,7 +152,7 @@ public sealed class MarkdownContentSourceTests : IDisposable
     private StaticSiteBuilder CreateBuilder(string? projectDirectory = null)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(projectDirectory ?? _testDir));
-        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         return builder;
     }
 

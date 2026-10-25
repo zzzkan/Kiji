@@ -206,7 +206,7 @@ public sealed class TypedParameterTests : IDisposable
     private StaticSiteBuilder CreateBuilder(string directory, ParameterRenderLog log)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(Path.Combine(_root, directory)));
-        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         Directory.CreateDirectory(Path.Combine(builder.Paths.ProjectDirectory, "content"));
         Directory.CreateDirectory(Path.Combine(builder.Paths.ProjectDirectory, "wwwroot"));
         builder.AddContentSource<ParameterRenderLog>("render-log", _ => [new("0", log, "observer")]);

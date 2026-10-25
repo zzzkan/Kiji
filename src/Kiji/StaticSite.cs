@@ -50,7 +50,7 @@ public sealed class StaticSite : IAsyncDisposable
         _defaultLayoutType = builder.DefaultLayoutType;
         _notFoundComponentType = builder.NotFoundComponentType;
         Paths = builder.Paths;
-        Info = builder.Info;
+        SiteInfo = builder.SiteInfo;
 
         var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         ContentRoots = [.. builder.ContentPaths.Select(Paths.ResolveAgainstRoot).Distinct(comparer)];
@@ -61,7 +61,7 @@ public sealed class StaticSite : IAsyncDisposable
         _runtime.Attach(_services);
     }
 
-    internal SiteInfo Info { get; }
+    internal SiteInfo SiteInfo { get; }
 
     internal SiteExecutionPaths Paths { get; }
 
@@ -181,7 +181,7 @@ public sealed class StaticSite : IAsyncDisposable
         await using var cacheLease = await CacheLease.AcquireAsync(Paths.ResolveCachePath(), cancellationToken);
         var options = Paths.ResolveForPublish(outputPath);
         var assetManifest = options.AssetManifestPath is null ? new StaticAssetManifest { Assets = [] }
-            : StaticAssetManifest.Load(options.AssetManifestPath, options.AssetEndpointsPath, Info.BaseUrl);
+            : StaticAssetManifest.Load(options.AssetManifestPath, options.AssetEndpointsPath, SiteInfo.BaseUrl);
         UseAssetResources(assetManifest.Resources);
         var assets = assetManifest.Assets;
         OutputPathValidator.Validate(options, assetManifest, Paths.ProjectDirectory, Paths.ResolveKijiPath(), ContentRoots);
@@ -200,7 +200,7 @@ public sealed class StaticSite : IAsyncDisposable
             options,
             Paths.ProjectDirectory,
             Paths.ResolveCachePath(),
-            Info,
+            SiteInfo,
             EnvironmentName,
             _configuration,
             _services.GetService<ContentFileRegistry>(), _runtime.Dependencies,
@@ -544,7 +544,7 @@ public sealed class StaticSite : IAsyncDisposable
         {
             RoutePath = request.RoutePath,
             OutputRelativeDirectory = outputRelativeDirectory,
-            OutputUrlDirectory = PageRenderContext.CreateOutputUrlDirectory(Info.BaseUrl, outputRelativeDirectory),
+            OutputUrlDirectory = PageRenderContext.CreateOutputUrlDirectory(SiteInfo.BaseUrl, outputRelativeDirectory),
             Dependencies = dependencies,
             CancellationToken = cancellationToken,
             SharedRenders = sharedRenders,
@@ -569,7 +569,7 @@ public sealed class StaticSite : IAsyncDisposable
     private SiteOutputContext CreateOutputContext(SiteSnapshot snapshot)
     {
         return new SiteOutputContext(
-            Info,
+            SiteInfo,
             [.. snapshot.Pages.Select(static page => new SitePageInfo(
                 page.RoutePath.TrimStart('/'),
                 page.OutputRelativePath))],

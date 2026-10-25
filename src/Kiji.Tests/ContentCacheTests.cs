@@ -57,7 +57,7 @@ public sealed class ContentCacheTests : IDisposable
     {
         Directory.CreateDirectory(_root);
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
-        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         builder.AddContentSource<CacheItem>("data", _ => load());
         builder.AddPageParameters<CacheItemPage>(services => services.GetRequiredService<ContentDictionary<CacheItem>>()
             .Select(entry => new { Id = entry.Key }));

@@ -71,7 +71,7 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
         // Must run before route matching, so the /_kiji/* endpoints below match a
         // prefixed request. WebApplication auto-inserts UseRouting ahead of all user
         // middleware when endpoints exist, unless the app calls UseRouting itself.
-        web.UseSiteBasePath(app.Info.BaseUrl.AbsolutePath);
+        web.UseSiteBasePath(app.SiteInfo.BaseUrl.AbsolutePath);
         web.UseRouting();
 
         web.UseWebSockets();
@@ -95,7 +95,7 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
         });
 
         var assets = options.AssetManifestPath is null ? null
-            : Assets.StaticAssetManifest.Load(options.AssetManifestPath, options.AssetEndpointsPath, app.Info.BaseUrl, includeIntegrity: false);
+            : Assets.StaticAssetManifest.Load(options.AssetManifestPath, options.AssetEndpointsPath, app.SiteInfo.BaseUrl, includeIntegrity: false);
         app.UseAssetResources(assets?.Resources ?? Assets.AssetResources.Empty);
         if (assets?.ContentRoots.Length > 0)
         {
@@ -161,7 +161,7 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
         await web.StartAsync(cancellationToken);
         ActiveServers.TryAdd(this, 0);
         _reporter.DevServerStarted(
-            new Uri(new Uri(web.Urls.First()), app.Info.BaseUrl.AbsolutePath),
+            new Uri(new Uri(web.Urls.First()), app.SiteInfo.BaseUrl.AbsolutePath),
             app.ContentRoots,
             assets?.ContentRoots.Length > 0);
 

@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using PackageSite;
 
 var builder = StaticSite.CreateBuilder(args);
-builder.Info = new() { Name = "Package consumer", BaseUrl = new Uri("https://example.test/kiji/") };
+builder.SiteInfo = new() { Name = "Package consumer", BaseUrl = new Uri("https://example.test/kiji/") };
 builder.Services.AddLocalization();
 builder.AddMarkdownContent<Article>();
 builder.AddPageParameters<ArticlePage>(services => services

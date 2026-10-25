@@ -79,6 +79,36 @@ public sealed class HostConfigurationTests : IDisposable
         Assert.Equal(70, options.Quality);
     }
 
+    [Theory]
+    [InlineData(null, "https://example.com/")]
+    [InlineData("Staging", "https://staging.example.com/preview/")]
+    public void SiteInfo_BindsFromConfigurationForTheEnvironment(string? environmentName, string expected)
+    {
+        WriteSettings("appsettings.json", """{ "Site": { "BaseUrl": "https://example.com/", "Name": "Site", "Language": "ja" } }""");
+        WriteSettings("appsettings.Staging.json", """{ "Site": { "BaseUrl": "https://staging.example.com/preview" } }""");
+        var builder = CreateBuilder(environmentName);
+
+        builder.SiteInfo = builder.Configuration.GetRequiredSection("Site").Get<SiteInfo>()!;
+
+        Assert.Equal(expected, builder.SiteInfo.BaseUrl.AbsoluteUri);
+        Assert.Equal("Site", builder.SiteInfo.Name);
+        Assert.Equal("ja", builder.SiteInfo.Language);
+    }
+
+    [Theory]
+    [InlineData("""{ "Site": { "Name": "Site" } }""", "BaseUrl")]
+    [InlineData("""{ "Site": { "BaseUrl": "https://example.com/" } }""", "Name")]
+    public void SiteInfo_MissingRequiredValueFromConfiguration_FailsWhenAssigned(string json, string property)
+    {
+        WriteSettings("appsettings.json", json);
+        var builder = CreateBuilder(environmentName: null);
+        var info = builder.Configuration.GetRequiredSection("Site").Get<SiteInfo>()!;
+
+        var exception = Assert.Throws<ArgumentException>(() => builder.SiteInfo = info);
+
+        Assert.Contains($"SiteInfo.{property} is required", exception.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Logging_AppliesTheLoggingSectionAndBuilderSettings()
     {
@@ -104,7 +134,7 @@ public sealed class HostConfigurationTests : IDisposable
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root),
             name => name == "DOTNET_ENVIRONMENT" ? environmentName : null, discoveredPages);
-        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         return builder;
     }
 

@@ -61,7 +61,7 @@ public sealed class StaticSiteBuilder
         ComponentRenderer.AddComponentRenderingServices(_services);
         Logging = new SiteLoggingBuilder(_services);
         Logging.AddConfiguration(Configuration.GetSection("Logging"));
-        _services.AddSingleton(_ => Info);
+        _services.AddSingleton(_ => SiteInfo);
         _services.AddSingleton<IHostEnvironment>(HostEnvironment);
         _services.AddSingleton<IConfiguration>(Configuration);
         _services.AddOptions<ImageProcessorOptions>();
@@ -73,13 +73,25 @@ public sealed class StaticSiteBuilder
     }
 
     /// <summary>The site metadata, required before <see cref="Build"/>.</summary>
-    public SiteInfo Info
+    /// <remarks>
+    /// It can be bound from configuration, for example
+    /// <c>builder.Configuration.GetRequiredSection("Site").Get&lt;SiteInfo&gt;()</c>.
+    /// </remarks>
+    /// <exception cref="ArgumentException">The value has no <see cref="Kiji.SiteInfo.BaseUrl"/> or <see cref="Kiji.SiteInfo.Name"/>.</exception>
+    public SiteInfo SiteInfo
     {
-        get => field ?? throw new InvalidOperationException("Set StaticSiteBuilder.Info before building the site.");
+        get => field ?? throw new InvalidOperationException("Set StaticSiteBuilder.SiteInfo before building the site.");
         set
         {
             EnsureConfigurable();
             ArgumentNullException.ThrowIfNull(value);
+            // Configuration binding sets only the keys present, bypassing required members.
+            if (value.BaseUrl is null || value.Name is null)
+            {
+                throw new ArgumentException(
+                    $"SiteInfo.{(value.BaseUrl is null ? nameof(SiteInfo.BaseUrl) : nameof(SiteInfo.Name))} is required. A SiteInfo bound from configuration lacks it when the section does not set it.",
+                    nameof(value));
+            }
             field = value;
         }
     } = null!;
@@ -270,7 +282,7 @@ public sealed class StaticSiteBuilder
         {
             throw new InvalidOperationException("Build can only be called once.");
         }
-        _ = Info;
+        _ = SiteInfo;
         _built = true;
         HostEnvironment.Freeze();
         return new StaticSite(this);

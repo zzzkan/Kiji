@@ -112,7 +112,7 @@ public sealed class PageServiceContentTests : IDisposable
     private StaticSite CreateApp(RelatedProbe probe, Func<bool>? includeTags = null, Func<string, string?>? environment = null)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")), environment);
-        builder.Info = new SiteInfo { Name = "Related", BaseUrl = new Uri("https://example.test/") };
+        builder.SiteInfo = new SiteInfo { Name = "Related", BaseUrl = new Uri("https://example.test/") };
         TestSite.TestSiteAssets.Bind(builder.Paths, Path.Combine(_root, "wwwroot"));
         builder.AddMarkdownContent<FrontMatter>();
         builder.AddContentSource<RelatedTag>("tags", provider => includeTags?.Invoke() == false ? []

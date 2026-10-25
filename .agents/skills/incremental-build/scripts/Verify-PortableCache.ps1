@@ -37,7 +37,7 @@ using Kiji.Markdown;
 using Microsoft.Extensions.DependencyInjection;
 using Portable;
 var builder = StaticSite.CreateBuilder(args);
-builder.Info = new SiteInfo { Name = "Portable", BaseUrl = new Uri("https://example.test/") };
+builder.SiteInfo = new SiteInfo { Name = "Portable", BaseUrl = new Uri("https://example.test/") };
 builder.AddMarkdownContent<FrontMatter>(options => options.AddHtmlPostProcessor(html => { Console.WriteLine("RENDER"); return html; }));
 builder.AddPageParameters<Article>(services => services.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>().Select(entry => new { Key = entry.Key }));
 await builder.Build().RunAsync();

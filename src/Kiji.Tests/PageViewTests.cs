@@ -67,7 +67,7 @@ public sealed class PageViewTests
         var siteInfo = TestArticleContents.CreateSiteInfo();
 
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.Info = siteInfo;
+        builder.SiteInfo = siteInfo;
         return builder.Build();
     }
 

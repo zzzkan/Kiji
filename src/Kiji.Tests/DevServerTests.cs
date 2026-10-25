@@ -455,7 +455,7 @@ public sealed class DevServerTests : IAsyncDisposable
         await File.WriteAllTextAsync(Path.Combine(posts, "post.md"), "---\ntitle: Post\n---\n\nOriginal body");
         await File.WriteAllTextAsync(Path.Combine(notes, "note.md"), "---\ntitle: Original note\n---\n");
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(Path.Combine(_testDir, "site")));
-        builder.Info = TestArticleContents.CreateSiteInfoWithBasePath();
+        builder.SiteInfo = TestArticleContents.CreateSiteInfoWithBasePath();
         string SourcePath(string path)
         {
             return absolute ? path : Path.GetRelativePath(builder.Paths.ProjectDirectory, path);
@@ -528,7 +528,7 @@ public sealed class DevServerTests : IAsyncDisposable
         await File.WriteAllTextAsync(Path.Combine(_contentsDir, "hello-world.md"), "---\ntitle: Hello World\n---\n");
 
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
-        builder.Info = site ?? TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = site ?? TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(builder.Paths, _staticDir);
         configureAssets?.Invoke(builder);
 

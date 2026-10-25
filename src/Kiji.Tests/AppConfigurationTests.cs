@@ -18,10 +18,10 @@ public sealed class AppConfigurationTests : IDisposable
 
         var exception = Assert.Throws<InvalidOperationException>(() => builder.Build());
 
-        Assert.Contains("StaticSiteBuilder.Info", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("StaticSiteBuilder.SiteInfo", exception.Message, StringComparison.Ordinal);
         Assert.False(Directory.Exists(_root));
-        Assert.Throws<InvalidOperationException>(() => builder.Info);
-        builder.Info = TestArticleContents.CreateSiteInfo();
+        Assert.Throws<InvalidOperationException>(() => builder.SiteInfo);
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         builder.Services.AddScoped<object>();
         await using var site = builder.Build();
     }
@@ -32,7 +32,7 @@ public sealed class AppConfigurationTests : IDisposable
     public async Task Build_FreezesConfiguration_AndLoadsContentOnlyAfterPathsSettle(bool serve)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
-        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         builder.Services.AddScoped<object>();
         var loads = 0;
         var routeCalls = 0;
@@ -89,7 +89,7 @@ public sealed class AppConfigurationTests : IDisposable
             Assert.Throws<InvalidOperationException>(() => builder.Build());
             Assert.Throws<InvalidOperationException>(() => builder.Services.AddScoped<object>());
             Assert.Throws<InvalidOperationException>(() => builder.Environment.EnvironmentName = "Staging");
-            Assert.Throws<InvalidOperationException>(() => builder.Info = TestArticleContents.CreateSiteInfo());
+            Assert.Throws<InvalidOperationException>(() => builder.SiteInfo = TestArticleContents.CreateSiteInfo());
             Assert.Throws<InvalidOperationException>(() => builder.AddContentSource<object>(static _ => []));
             Assert.Throws<InvalidOperationException>(() => builder.AddMarkdownContent<FrontMatter>(
                 _ => throw new Xunit.Sdk.XunitException("Configuration callback must not run after the site is built.")));

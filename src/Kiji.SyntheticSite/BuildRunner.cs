@@ -67,7 +67,7 @@ public static class BuildRunner
     public static async Task BuildSiteAsync(string root)
     {
         var builder = StaticSite.CreateBuilder([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "synthetic")), typeof(BuildRunner).Assembly);
-        builder.Info = new SiteInfo
+        builder.SiteInfo = new SiteInfo
         {
             BaseUrl = new Uri("https://bench.example.com/"),
             Name = "Kiji Bench",

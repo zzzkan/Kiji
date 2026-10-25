@@ -42,7 +42,7 @@ internal static class TestArticleContents
     private static StaticSite CreateApp(params (Post Metadata, string Html)[] entries)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.Info = CreateSiteInfo();
+        builder.SiteInfo = CreateSiteInfo();
 
         IReadOnlyList<Post> items = [.. entries.Select(static entry => ClonePost(entry.Metadata, entry.Html))];
         builder.AddContentSource(_ => items);

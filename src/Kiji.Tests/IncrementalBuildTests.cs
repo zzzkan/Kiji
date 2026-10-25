@@ -99,7 +99,7 @@ public sealed class IncrementalBuildTests : IDisposable
         foreach (var value in new[] { "first", "second" })
         {
             var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
-            builder.Info = TestArticleContents.CreateSiteInfo();
+            builder.SiteInfo = TestArticleContents.CreateSiteInfo();
             TestSiteAssets.Bind(builder.Paths, Path.Combine(_testDir, "static"));
             builder.Services.AddSingleton<Func<string>>(() => value);
             builder.AddPageParameters<RenderPolicyPage>(_ => [new { Kind = "cached" }, new { Kind = "child" }]);
@@ -139,7 +139,7 @@ public sealed class IncrementalBuildTests : IDisposable
         async Task BuildWithBasePath(string siteRoot)
         {
             var builder = CreateBuilder(siteRoot, RecordRender);
-            builder.Info = TestArticleContents.CreateSiteInfoWithBasePath();
+            builder.SiteInfo = TestArticleContents.CreateSiteInfoWithBasePath();
             await using var app = builder.Build();
             await app.PublishAsync(Path.Combine(siteRoot, "dist"));
         }
@@ -454,7 +454,7 @@ public sealed class IncrementalBuildTests : IDisposable
     private static async Task BuildRelatedAsync(string root)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
-        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(builder.Paths, Path.Combine(builder.Paths.ProjectDirectory, "static"));
 
         builder.AddMarkdownContent<FrontMatter>();
@@ -480,7 +480,7 @@ public sealed class IncrementalBuildTests : IDisposable
     private static async Task BuildScopedAsync(string root, string notesDirectory)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
-        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(builder.Paths, Path.Combine(builder.Paths.ProjectDirectory, "static"));
 
         builder.AddMarkdownContent<FrontMatter>(static options => options.Directory = "content/posts");
@@ -873,7 +873,7 @@ public sealed class IncrementalBuildTests : IDisposable
         Func<string, string?>? environment = null)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")), environment);
-        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(builder.Paths, Path.Combine(builder.Paths.ProjectDirectory, "static"));
 
         builder.AddMarkdownContent<FrontMatter>(options =>

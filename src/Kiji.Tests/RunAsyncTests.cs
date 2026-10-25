@@ -156,22 +156,34 @@ public sealed class RunAsyncTests : IDisposable
     }
 
     [Fact]
+    public void Environment_IsFixedWhenTheBuilderIsCreated()
+    {
+        var builder = CreateBuilder(EnvironmentWith([("DOTNET_ENVIRONMENT", "Staging")]));
+
+        // Changing the name later would leave the Staging configuration files selected.
+        var error = Assert.Throws<NotSupportedException>(() => builder.Environment.EnvironmentName = "Production");
+        Assert.Contains("DOTNET_ENVIRONMENT", error.Message, StringComparison.Ordinal);
+        Assert.Throws<NotSupportedException>(() => builder.Environment.ApplicationName = "Other");
+        Assert.Equal("Staging", builder.Environment.EnvironmentName);
+        Assert.Equal(typeof(RunAsyncTests).Assembly.GetName().Name, builder.Environment.ApplicationName);
+    }
+
+    [Fact]
     public async Task Publish_RendersPagesAgainWhenTheEnvironmentChanges()
     {
-        async Task<string> PublishAsync(string? environmentName, string? configuredName = null)
+        async Task<string> PublishAsync(string? environmentName)
         {
             var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir),
                 EnvironmentWith([("KIJI_OUTPUT", _outputDir), ("DOTNET_ENVIRONMENT", environmentName)]),
                 typeof(HostEnvironmentPage));
             builder.SiteInfo = TestArticleContents.CreateSiteInfo();
-            if (configuredName is not null) { builder.Environment.EnvironmentName = configuredName; }
             Assert.Equal(0, await builder.Build().RunAsync(CancellationToken.None));
             return await File.ReadAllTextAsync(Path.Combine(_outputDir, "environment", "index.html"));
         }
 
         Assert.Contains("environment:Production", await PublishAsync(null), StringComparison.Ordinal);
         Assert.Contains("environment:Staging", await PublishAsync("Staging"), StringComparison.Ordinal);
-        Assert.Contains("environment:Preview", await PublishAsync("Staging", "Preview"), StringComparison.Ordinal);
+        Assert.Contains("environment:Preview", await PublishAsync("Preview"), StringComparison.Ordinal);
     }
 
     [Fact]

@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 
 namespace Kiji;
 
@@ -36,6 +37,7 @@ public sealed class StaticSite : IAsyncDisposable
     private bool _forceFullBuild;
     private bool _hasRun;
     private bool _disposed;
+    private bool _startupValidated;
 
     internal StaticSite(StaticSiteBuilder builder)
     {
@@ -177,6 +179,7 @@ public sealed class StaticSite : IAsyncDisposable
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
         ObjectDisposedException.ThrowIf(_disposed, this);
+        ValidateOnStart();
 
         await using var cacheLease = await CacheLease.AcquireAsync(Paths.ResolveCachePath(), cancellationToken);
         var options = Paths.ResolveForPublish(outputPath);
@@ -326,6 +329,7 @@ public sealed class StaticSite : IAsyncDisposable
         DevServerStatusReporter? reporter = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        ValidateOnStart();
         var options = UseRunOptions(Paths.ResolveForDevelopment());
         OutputPathValidator.ValidateInputs(options.OutputDirectory, ContentRoots);
 
@@ -669,5 +673,22 @@ public sealed class StaticSite : IAsyncDisposable
     private ComponentRenderer GetRenderer()
     {
         return _renderer ??= new ComponentRenderer(ServiceProvider);
+    }
+
+    /// <summary>
+    /// Runs the options validation that <c>ValidateOnStart</c> registers, as the generic host does when it
+    /// starts: after Build, before any output. A failure surfaces in RunAsync, which then disposes the
+    /// services asynchronously.
+    /// </summary>
+    private void ValidateOnStart()
+    {
+        if (_startupValidated)
+        {
+            return;
+        }
+
+        // .NET 10 has only the synchronous validator; use IAsyncStartupValidator from .NET 11.
+        ServiceProvider.GetService<IStartupValidator>()?.Validate();
+        _startupValidated = true;
     }
 }

@@ -75,9 +75,9 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
     [InlineData("quality", "Quality")]
     [InlineData("max-width", "MaxWidth")]
     [InlineData("widths", "Widths")]
-    public void InvalidSettings_FailBuildBeforeAnyOutput(string setting, string property)
+    public async Task InvalidSettings_FailWhenTheSiteStartsBeforeAnyOutput(string setting, string property)
     {
-        var builder = CreateBuilder();
+        var builder = CreateBuilder(output: "dist");
         builder.Services.Configure<ImageProcessorOptions>(options =>
         {
             switch (setting)
@@ -87,18 +87,85 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
                 case "widths": options.Widths = [640, 0]; break;
             }
         });
+        var site = builder.Build();
 
-        var exception = Assert.Throws<OptionsValidationException>(() => builder.Build());
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() => site.RunAsync(CancellationToken.None));
 
         Assert.Contains($"ImageProcessorOptions.{property}", exception.Message, StringComparison.Ordinal);
         Assert.False(Directory.Exists(_root));
     }
 
-    private StaticSiteBuilder CreateBuilder()
+    [Theory]
+    [InlineData("dist")]
+    [InlineData(null)]
+    public async Task StartupValidationFailure_DisposesAsyncServicesAndKeepsTheError(string? output)
     {
-        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
+        var log = new DisposalLog();
+        var builder = CreateBuilder(output);
+        builder.Services.AddSingleton(_ => new AsyncOnlyDependency(log));
+        builder.Services.AddOptions<ImageProcessorOptions>()
+            .Configure<AsyncOnlyDependency>(static (options, _) => options.Quality = 0);
+        var site = builder.Build();
+        // Without validation the site would start running; a canceled run returns instead of serving.
+        using var canceled = new CancellationTokenSource();
+        await canceled.CancelAsync();
+
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() => site.RunAsync(canceled.Token));
+
+        Assert.Contains("ImageProcessorOptions.Quality", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(1, log.Created);
+        Assert.Equal(1, log.Disposed);
+        Assert.False(Directory.Exists(_root));
+    }
+
+    [Fact]
+    public async Task OwnOptionsWithValidateOnStart_FailWhenTheSiteStarts()
+    {
+        var builder = CreateBuilder(output: "dist");
+        builder.Services.AddOptions<SampleOptions>()
+            .Validate(static _ => false, "Sample options are invalid.")
+            .ValidateOnStart();
+        var site = builder.Build();
+
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() => site.RunAsync(CancellationToken.None));
+
+        Assert.Contains("Sample options are invalid.", exception.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(_root));
+    }
+
+    private StaticSiteBuilder CreateBuilder(string? output = null)
+    {
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root),
+            name => name == "KIJI_OUTPUT" ? output : null);
         builder.SiteInfo = new SiteInfo { Name = "Images", BaseUrl = new Uri("https://example.test/") };
         return builder;
+    }
+
+    private sealed class SampleOptions;
+
+    private sealed class DisposalLog
+    {
+        public int Created { get; set; }
+
+        public int Disposed { get; set; }
+    }
+
+    /// <summary>A dependency that, like many async resources, implements only IAsyncDisposable.</summary>
+    private sealed class AsyncOnlyDependency : IAsyncDisposable
+    {
+        private readonly DisposalLog _log;
+
+        public AsyncOnlyDependency(DisposalLog log)
+        {
+            _log = log;
+            log.Created++;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            _log.Disposed++;
+            return ValueTask.CompletedTask;
+        }
     }
 
     public void Dispose()

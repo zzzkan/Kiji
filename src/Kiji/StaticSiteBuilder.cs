@@ -64,7 +64,7 @@ public sealed class StaticSiteBuilder
         _services.AddSingleton(_ => SiteInfo);
         _services.AddSingleton<IHostEnvironment>(HostEnvironment);
         _services.AddSingleton<IConfiguration>(Configuration);
-        _services.AddOptions<ImageProcessorOptions>();
+        _services.AddOptions<ImageProcessorOptions>().ValidateOnStart();
         _services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<ImageProcessorOptions>, ImageProcessorOptionsValidator>());
         _services.AddSingleton<IImageProcessor>(static provider =>
             new ImageProcessor(provider.GetRequiredService<IOptions<ImageProcessorOptions>>().Value));
@@ -106,8 +106,9 @@ public sealed class StaticSiteBuilder
 
     /// <summary>The environment the site runs in, also available to components as <see cref="IHostEnvironment"/>.</summary>
     /// <remarks>
-    /// The name comes from <c>DOTNET_ENVIRONMENT</c>; otherwise it is <c>Production</c> during
-    /// <c>dotnet publish</c> and <c>Development</c> while serving. The content root is the project directory.
+    /// Read-only, because it selects the configuration files when the builder is created. The name comes
+    /// from <c>DOTNET_ENVIRONMENT</c>; otherwise it is <c>Production</c> during <c>dotnet publish</c> and
+    /// <c>Development</c> while serving. The content root is the project directory.
     /// </remarks>
     public IHostEnvironment Environment => HostEnvironment;
 
@@ -284,7 +285,6 @@ public sealed class StaticSiteBuilder
         }
         _ = SiteInfo;
         _built = true;
-        HostEnvironment.Freeze();
         return new StaticSite(this);
     }
 
@@ -297,22 +297,13 @@ public sealed class StaticSiteBuilder
         _services.MakeReadOnly();
 
         var assemblies = SiteServiceRegistration.CollectAssemblies(_services);
+        // ValidateOnBuild checks call sites without creating services, so a failed Build
+        // leaves nothing to dispose. Options are validated when the site starts running.
         var provider = _services.BuildServiceProvider(new ServiceProviderOptions
         {
             ValidateScopes = true,
             ValidateOnBuild = true,
         });
-        try
-        {
-            // The generic host's ValidateOnStart needs a started host, so Build reads the
-            // settings itself: invalid values fail here rather than midway through a publish.
-            _ = provider.GetRequiredService<IOptions<ImageProcessorOptions>>().Value;
-        }
-        catch
-        {
-            provider.Dispose();
-            throw;
-        }
         return (provider, assemblies);
     }
 

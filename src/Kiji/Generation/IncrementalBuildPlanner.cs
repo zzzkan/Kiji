@@ -537,9 +537,9 @@ internal sealed class IncrementalBuildPlanner(
         }
 
         // Which values a page reads is not tracked, so any configuration change renders
-        // every page. The manifest keeps only this SHA-256 digest, not the values.
+        // every page. Null values count: binding a key set to null differs from a missing
+        // key. The manifest keeps only this SHA-256 digest, not the values.
         foreach (var (key, value) in configuration.AsEnumerable()
-            .Where(static pair => pair.Value is not null)
             .OrderBy(static pair => pair.Key, StringComparer.Ordinal))
         {
             BuildFingerprint.AppendPart(builder, key);

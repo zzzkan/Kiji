@@ -60,7 +60,9 @@ if (builder.Environment.IsDevelopment())
 ```
 
 - `EnvironmentName` comes from `DOTNET_ENVIRONMENT`. Without it, the name is `Production`
-  during `dotnet publish` and `Development` while serving. You can also set it before `Build`.
+  during `dotnet publish` and `Development` while serving. It is read-only, because it
+  selects the configuration files when the builder is created; `ApplicationName` is the
+  entry assembly name.
 - `ContentRootPath` is the project directory and cannot be changed.
 - Changing the environment name renders every page again on the next publish.
 
@@ -92,8 +94,8 @@ builder.Services.Configure<ImageProcessorOptions>(builder.Configuration.GetSecti
 - Environment variables and command-line arguments are not read, because they differ
   between machines and `dotnet publish` passes no arguments. Add a source explicitly, with
   a prefix: `builder.Configuration.AddEnvironmentVariables("MYSITE_")`.
-- Every configuration value is part of the publish fingerprint: changing any value renders
-  every page again. The cache stores only a SHA-256 hash of the values.
+- Every configuration key and value, including keys set to `null`, is part of the publish
+  fingerprint: changing any of them renders every page again. The cache stores only a SHA-256 hash of the values.
 - Files are read once. Restart `dotnet watch` after editing them.
 
 ### Logging
@@ -326,7 +328,9 @@ builder.Services.Configure<ImageProcessorOptions>(options =>
 | `int MaxWidth`                   | `1920`   | The widest variant. Every image gets one variant at its own width, capped at this value.                   |
 | `int Quality`                    | `80`     | Lossy WebP quality from 1 to 100.                                                                           |
 
-- `Build` validates the settings and throws `OptionsValidationException` for invalid values.
+- The settings are validated when the site starts running, before any output: `RunAsync`
+  throws `OptionsValidationException` for invalid values. Your own options are validated at
+  the same time when you call `ValidateOnStart()`, as in other .NET hosts.
 - Changing a setting re-encodes images and renders their pages again on the next publish.
 - The settings apply only to the default processor, not to a replacement `IImageProcessor`.
 

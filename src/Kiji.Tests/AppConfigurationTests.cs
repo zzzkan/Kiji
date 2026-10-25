@@ -88,7 +88,6 @@ public sealed class AppConfigurationTests : IDisposable
         {
             Assert.Throws<InvalidOperationException>(() => builder.Build());
             Assert.Throws<InvalidOperationException>(() => builder.Services.AddScoped<object>());
-            Assert.Throws<InvalidOperationException>(() => builder.Environment.EnvironmentName = "Staging");
             Assert.Throws<InvalidOperationException>(() => builder.SiteInfo = TestArticleContents.CreateSiteInfo());
             Assert.Throws<InvalidOperationException>(() => builder.AddContentSource<object>(static _ => []));
             Assert.Throws<InvalidOperationException>(() => builder.AddMarkdownContent<FrontMatter>(

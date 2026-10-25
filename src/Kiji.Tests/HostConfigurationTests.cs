@@ -65,6 +65,27 @@ public sealed class HostConfigurationTests : IDisposable
     }
 
     [Fact]
+    public async Task Publish_RendersPagesAgainWhenASettingBecomesNull()
+    {
+        var output = Path.Combine(_root, "dist");
+        async Task<string> PublishAsync()
+        {
+            var builder = CreateBuilder(environmentName: null, typeof(FeatureOptionsPage));
+            builder.Services.Configure<FeatureOptions>(builder.Configuration.GetSection("Feature"));
+            await using var site = builder.Build();
+            await site.PublishAsync(output);
+            return await File.ReadAllTextAsync(Path.Combine(output, "feature", "index.html"));
+        }
+
+        WriteSettings("appsettings.json", """{ "Feature": { "Other": "x" } }""");
+        Assert.Contains("enabled:True", await PublishAsync(), StringComparison.Ordinal);
+
+        // Every non-null value stays the same, but binding the explicit null changes the option.
+        WriteSettings("appsettings.json", """{ "Feature": { "Other": "x", "Enabled": null } }""");
+        Assert.Contains("enabled:False", await PublishAsync(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ImageSettings_BindFromConfigurationWithoutKeepingDefaultWidths()
     {
         WriteSettings("appsettings.json", """{ "Images": { "Widths": [ 480 ], "MaxWidth": 900, "Quality": 70 } }""");

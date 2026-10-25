@@ -3,6 +3,7 @@ using Kiji.Assets;
 using Kiji.Generation;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.JSInterop;
 
 namespace Kiji.Hosting;
@@ -12,7 +13,7 @@ internal static class SiteServiceRegistration
 {
     internal static bool IsManaged(Type type) =>
         type == typeof(SiteInfo) || type == typeof(PageInfo) || type == typeof(ResolvedSitePaths)
-        || type == typeof(ContentFileRegistry)
+        || type == typeof(ContentFileRegistry) || type == typeof(IHostEnvironment)
         || type == typeof(NavigationManager)
         || type == typeof(IJSRuntime) || type == typeof(IComponentActivator)
         || type == typeof(IServiceProvider) || type == typeof(IServiceScopeFactory)
@@ -30,7 +31,7 @@ internal static class SiteServiceRegistration
             if (!expected[type].SequenceEqual(actual[type]))
             {
                 throw new InvalidOperationException(
-                    $"Service '{type.FullName}' is managed by Kiji and cannot be added, removed or replaced through UseServices.");
+                    $"Service '{type.FullName}' is managed by Kiji and cannot be added, removed or replaced through StaticSiteBuilder.Services.");
             }
         }
 
@@ -39,15 +40,13 @@ internal static class SiteServiceRegistration
         if (imageProcessor?.Lifetime != ServiceLifetime.Singleton)
         {
             throw new InvalidOperationException(
-                "IImageProcessor requires an unkeyed Singleton registration. Register it with AddSingleton in UseServices.");
+                "IImageProcessor requires an unkeyed Singleton registration. Register it with AddSingleton on StaticSiteBuilder.Services.");
         }
     }
 
-    internal static IReadOnlyCollection<Assembly> CollectAssemblies(
-        IServiceCollection services, IEnumerable<Action<IServiceCollection>> callbacks)
+    internal static IReadOnlyCollection<Assembly> CollectAssemblies(IServiceCollection services)
     {
         var assemblies = new HashSet<Assembly>();
-        foreach (var callback in callbacks) { AddDelegate(callback); }
         foreach (var descriptor in services)
         {
             AddType(descriptor.ServiceType);
@@ -72,7 +71,7 @@ internal static class SiteServiceRegistration
             {
                 // A DynamicMethod's host module does not identify its generated code.
                 AddType(entry.Method.DeclaringType ?? throw new NotSupportedException(
-                    "UseServices callbacks and factories must use a regular C# lambda or method, not a standalone runtime-generated method."));
+                    "Service factories must use a regular C# lambda or method, not a standalone runtime-generated method."));
                 AddType(entry.Target?.GetType());
                 foreach (var argument in entry.Method.GetGenericArguments()) { AddType(argument); }
             }

@@ -6,10 +6,10 @@ namespace Kiji.Tests.TestSite;
 
 internal static class TestSiteAssets
 {
-    internal static void Bind(StaticSite app, string directory)
+    internal static void Bind(SiteExecutionPaths paths, string directory)
     {
         Directory.CreateDirectory(directory);
-        var prefix = app.Paths.AssetManifestBasePath!;
+        var prefix = paths.AssetManifestBasePath!;
         Directory.CreateDirectory(Path.GetDirectoryName(prefix)!);
         var assets = Directory.GetFiles(directory, "*", SearchOption.AllDirectories)
             .Select(source => new StaticAsset(source, Path.GetRelativePath(directory, source).Replace('\\', '/'))).ToArray();

@@ -19,6 +19,7 @@ internal sealed class IncrementalBuildPlanner(
     string rootPath,
     string cacheDirectory,
     SiteInfo site,
+    string environmentName,
     ContentFileRegistry? hashRegistry = null,
     DependencyCatalog? catalog = null,
     IImageProcessor? imageProcessor = null,
@@ -526,8 +527,9 @@ internal sealed class IncrementalBuildPlanner(
     private string ComputeOptionsHash()
     {
         var builder = new StringBuilder();
+        // Components can branch on the host environment, so its name is a site-wide input.
         foreach (var value in new[] { site.BaseUrl.AbsoluteUri, site.Name, site.Description,
-            site.Language, site.Author })
+            site.Language, site.Author, environmentName })
         {
             BuildFingerprint.AppendPart(builder, value);
         }

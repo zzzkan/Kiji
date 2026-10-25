@@ -13,9 +13,10 @@ public sealed class ComponentRendererTests
     [Fact]
     public async Task RenderComponentAsync_ErrorBoundaryRendersAsyncFallbackWithoutLoggingProviders()
     {
-        await using var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory));
-        app.Info = TestArticleContents.CreateSiteInfo();
-        app.UseServices(services => services.AddLogging(logging => logging.ClearProviders()));
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
+        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.Services.AddLogging(logging => logging.ClearProviders());
+        await using var app = builder.Build();
         app.UsePlanningOptions();
         var renderer = new ComponentRenderer(app.ServiceProvider);
 
@@ -30,9 +31,10 @@ public sealed class ComponentRendererTests
     [InlineData("https://example.com/日本/")]
     public async Task RenderPageAsync_IsolatesNavigationAndNavLinksAcrossRenders(string baseUrl)
     {
-        await using var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory));
-        app.Info = new SiteInfo { Name = "Navigation", BaseUrl = new Uri(baseUrl) };
-        app.AddPageParameters<NavigationTestPage>(_ => [new { Id = "first" }, new { Id = "日本 語" }]);
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
+        builder.Info = new SiteInfo { Name = "Navigation", BaseUrl = new Uri(baseUrl) };
+        builder.AddPageParameters<NavigationTestPage>(_ => [new { Id = "first" }, new { Id = "日本 語" }]);
+        await using var app = builder.Build();
         var pages = app.CreateSnapshot().Pages;
 
         var html = await Task.WhenAll(pages.Select(page => app.RenderPageAsync(page, CancellationToken.None)));
@@ -59,8 +61,9 @@ public sealed class ComponentRendererTests
     [Fact]
     public async Task RenderPageAsync_IsolatesHeadAcrossParallelAndSequentialRenders()
     {
-        await using var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory));
-        app.Info = TestArticleContents.CreateSiteInfo();
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
+        builder.Info = TestArticleContents.CreateSiteInfo();
+        await using var app = builder.Build();
         string[] names = ["first", "second"];
 
         var html = await Task.WhenAll(names.Select(RenderAsync));

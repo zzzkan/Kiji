@@ -6,8 +6,8 @@ using Kiji.Markdown;
 using Kiji.Sitemaps;
 using Microsoft.Extensions.DependencyInjection;
 
-var site = StaticSite.Create(args);
-site.Info = new()
+var builder = StaticSite.CreateBuilder(args);
+builder.Info = new()
 {
     BaseUrl = new Uri("https://kiji-docs.zzzkan.workers.dev/"),
     Name = "Kiji",
@@ -16,13 +16,14 @@ site.Info = new()
     Author = "zzzkan",
 };
 
-site.UseMarkdownContent<FrontMatter, Article>(
+builder.AddMarkdownContent<FrontMatter, Article>(
     select: static content => Article.Create(content));
-site.UseDefaultLayout<MainLayout>();
-site.AddNotFoundPage<NotFoundPage>();
-site.AddPageParameters<ArticlePage>(static services => services
+builder.UseDefaultLayout<MainLayout>();
+builder.AddNotFoundPage<NotFoundPage>();
+builder.AddPageParameters<ArticlePage>(static services => services
     .GetRequiredService<ContentDictionary<Article>>()
     .Select(static doc => new { doc.Value.Slug, ContentKey = doc.Key }));
-site.AddSitemap();
+builder.AddSitemap();
 
+var site = builder.Build();
 return await site.RunAsync();

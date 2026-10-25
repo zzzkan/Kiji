@@ -66,9 +66,9 @@ public sealed class PageViewTests
     {
         var siteInfo = TestArticleContents.CreateSiteInfo();
 
-        var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory));
-        app.Info = siteInfo;
-        return app;
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
+        builder.Info = siteInfo;
+        return builder.Build();
     }
 
     private static Dictionary<string, object?> CreateRootParameters(Type pageType, Type? defaultLayout)

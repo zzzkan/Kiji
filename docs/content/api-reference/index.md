@@ -4,9 +4,10 @@ description: Configure pages, content, images, and generated files.
 order: 100
 ---
 
-Configure the site before `RunAsync`. Registration methods return the site, so calls can
-be chained. `Program.cs` examples assume `using Kiji;` and
-`using Microsoft.Extensions.DependencyInjection;`.
+Configure the site on `StaticSiteBuilder`, then build and run it. Registration methods return
+the builder, so calls can be chained. `Program.cs` examples assume `using Kiji;`,
+`using Microsoft.Extensions.DependencyInjection;`, and a `builder` from
+`StaticSite.CreateBuilder(args)`.
 
 - [Site setup](#site-setup)
 - [Pages and rendering](#pages-and-rendering)
@@ -17,26 +18,49 @@ be chained. `Program.cs` examples assume `using Kiji;` and
 
 ## Site setup
 
-### StaticSite
+### StaticSiteBuilder and StaticSite
 
 ```csharp
-var app = StaticSite.Create(args);
-app.Info = new SiteInfo
+var builder = StaticSite.CreateBuilder(args);
+builder.Info = new SiteInfo
 {
     BaseUrl = new Uri("https://example.com/"),
     Name = "My Site",
 };
 
-// Add* and Use* registrations
+// builder.Services, Add* and Use* registrations
 
-return await app.RunAsync();
+var site = builder.Build();
+return await site.RunAsync();
 ```
 
-| Member                                                     | Behavior                                                                                                                         |
-| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `static StaticSite Create(string[] args)`                  | Creates the site for the current project. During development, `args` go to ASP.NET Core configuration, for example `--urls`. |
-| `SiteInfo Info`                                            | Required site metadata.                                                                                                          |
-| `Task<int> RunAsync(CancellationToken cancellationToken = default)` | Serves during `dotnet watch` and generates the site during `dotnet publish`; return its exit code. A site runs only once.       |
+| Member                                                                  | Behavior                                                                                                                                        |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `static StaticSiteBuilder StaticSite.CreateBuilder(string[] args)`      | Creates a builder for the current project. During development, `args` go to ASP.NET Core configuration, for example `--urls`.                    |
+| `SiteInfo StaticSiteBuilder.Info`                                       | Required site metadata.                                                                                                                         |
+| `IServiceCollection StaticSiteBuilder.Services`                         | Services for components and site factories. See [Services](#services).                                                                         |
+| `IHostEnvironment StaticSiteBuilder.Environment`                        | The host environment. See [Environment](#environment).                                                                                         |
+| `StaticSite StaticSiteBuilder.Build()`                                  | Validates the services and makes the builder and `Services` read-only. Call it once. Content is not loaded yet.                                  |
+| `Task<int> StaticSite.RunAsync(CancellationToken cancellationToken = default)` | Serves during `dotnet watch` and generates the site during `dotnet publish`; return its exit code. A site runs only once and is disposed afterward. |
+
+### Environment
+
+`builder.Environment` is a standard
+[`IHostEnvironment`](https://learn.microsoft.com/dotnet/core/extensions/generic-host#ihostenvironment),
+also injectable into components and services. `IsDevelopment()` and similar checks need
+`using Microsoft.Extensions.Hosting;`:
+
+```csharp
+if (builder.Environment.IsDevelopment())
+{
+    // For example, also list draft posts while serving.
+}
+```
+
+- `EnvironmentName` comes from `DOTNET_ENVIRONMENT`. Without it, the name is `Production`
+  during `dotnet publish` and `Development` while serving. You can also set it before `Build`.
+- `ContentRootPath` is the project directory and cannot be changed.
+- Changing the environment name renders every page again on the next publish.
 
 ### SiteInfo
 
@@ -88,18 +112,20 @@ Without it, pages render directly inside `<body>`.
 
 ### Services
 
-`UseServices(Action<IServiceCollection> configure)` registers services with standard
+`builder.Services` registers services with standard
 [.NET dependency injection](https://learn.microsoft.com/dotnet/core/extensions/dependency-injection/overview):
 
 ```csharp
-app.UseServices(services => services.AddScoped<RelatedPosts>());
+builder.Services.AddScoped<RelatedPosts>();
 ```
 
-- Callbacks run once, in order, before rendering.
+- Register services before `Build`; the collection is read-only afterward. `Build` reports
+  missing dependencies.
 - Each page render has its own scope, shared by its page, layout, and child components.
 - Content loaders, page parameter and feed factories, and artifact writers cannot resolve
   scoped services.
-- `SiteInfo`, `PageInfo`, and `ContentDictionary<T>` come from Kiji and cannot be replaced.
+- `SiteInfo`, `PageInfo`, `IHostEnvironment`, and `ContentDictionary<T>` come from Kiji and
+  cannot be replaced.
 - Components and services can inject `ILogger<T>`. Kiji prints `Warning` and higher,
   including exceptions caught by
   [`ErrorBoundary`](https://learn.microsoft.com/aspnet/core/blazor/fundamentals/handle-errors?view=aspnetcore-10.0#error-boundaries).
@@ -141,11 +167,11 @@ factories inject. Keys ignore case and do not determine URLs; Markdown keys are 
 relative to the content directory, using `/`. Enumeration keeps source order. Reads are
 tracked as [page dependencies](../incremental-builds/#page-dependencies).
 
-`UseContentSource` registers custom data, such as JSON, or an index derived from other
+`AddContentSource` registers custom data, such as JSON, or an index derived from other
 content, such as tag counts. The loader runs when the content is first read, and again
 after content changes during development. Treat loaded values as immutable.
 
-#### `UseContentSource<T>(Func<IServiceProvider, IReadOnlyList<T>> loader)`
+#### `AddContentSource<T>(Func<IServiceProvider, IReadOnlyList<T>> loader)`
 
 Items get the keys `"0"`, `"1"`, and so on. Pages that read them render on every publish.
 This example counts the tags of the [Markdown example](../markdown/#register-markdown-content):
@@ -155,8 +181,8 @@ public sealed record TagSummary(string Name, int Count);
 ```
 
 ```csharp
-app.UseMarkdownContent<FrontMatter>();
-app.UseContentSource<TagSummary>(LoadTags);
+builder.AddMarkdownContent<FrontMatter>();
+builder.AddContentSource<TagSummary>(LoadTags);
 
 static IReadOnlyList<TagSummary> LoadTags(IServiceProvider services) =>
     services.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
@@ -168,12 +194,12 @@ static IReadOnlyList<TagSummary> LoadTags(IServiceProvider services) =>
         .ToArray();
 ```
 
-#### `UseContentSource<T>(string sourceId, Func<IServiceProvider, IReadOnlyList<ContentEntry<T>>> loader)`
+#### `AddContentSource<T>(string sourceId, Func<IServiceProvider, IReadOnlyList<ContentEntry<T>>> loader)`
 
 Give each item an `Id` and a `Digest` so that pages reading unchanged items can be reused:
 
 ```csharp
-app.UseContentSource<TagSummary>("tag-summary", services =>
+builder.AddContentSource<TagSummary>("tag-summary", services =>
     LoadTags(services)
         .Select(tag => new ContentEntry<TagSummary>(Id: tag.Name, Value: tag, Digest: tag.ToString()))
         .ToArray());
@@ -190,8 +216,8 @@ Import `Kiji.Markdown`. See [Markdown and images](../markdown/) for examples.
 
 | Method                                                                                                                         | Behavior                                                                          |
 | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| `UseMarkdownContent<TFrontMatter>(Action<MarkdownOptions>? configure = null)`                                                  | Loads `*.md` files and registers `ContentDictionary<MarkdownContent<TFrontMatter>>`. |
-| `UseMarkdownContent<TFrontMatter,TModel>(Func<MarkdownContent<TFrontMatter>,TModel> select, Action<MarkdownOptions>? configure = null)` | Converts each file with `select` and registers `ContentDictionary<TModel>`.        |
+| `AddMarkdownContent<TFrontMatter>(Action<MarkdownOptions>? configure = null)`                                                  | Loads `*.md` files and registers `ContentDictionary<MarkdownContent<TFrontMatter>>`. |
+| `AddMarkdownContent<TFrontMatter,TModel>(Func<MarkdownContent<TFrontMatter>,TModel> select, Action<MarkdownOptions>? configure = null)` | Converts each file with `select` and registers `ContentDictionary<TModel>`.        |
 
 | `MarkdownOptions` member                             | Behavior                                                                  |
 | ---------------------------------------------------- | ------------------------------------------------------------------------- |
@@ -216,8 +242,7 @@ To replace the default image processor, implement `IImageProcessor` from `Kiji.A
 register it as a singleton:
 
 ```csharp
-app.UseServices(services =>
-    services.AddSingleton<IImageProcessor, MyImageProcessor>());
+builder.Services.AddSingleton<IImageProcessor, MyImageProcessor>();
 ```
 
 | Member                                                                                                                                | Behavior                                                                                     |
@@ -250,7 +275,7 @@ Import `Kiji.Feeds`. This example publishes `feed.xml` from the `BlogPost` model
 [Getting started](../getting-started/#add-a-markdown-page), newest first:
 
 ```csharp
-app.AddRssFeed(services => services
+builder.AddRssFeed(services => services
     .GetRequiredService<ContentDictionary<BlogPost>>()
     .Values
     .OrderByDescending(post => post.Date)
@@ -277,7 +302,7 @@ describes one item. `RelativePath` is the page path relative to `BaseUrl` withou
 Import `Kiji.Sitemaps`:
 
 ```csharp
-app.AddSitemap(excludedPaths: ["preview/", "internal/status/"]);
+builder.AddSitemap(excludedPaths: ["preview/", "internal/status/"]);
 ```
 
 `AddSitemap(string path = "sitemap.xml", IEnumerable<string>? excludedPaths = null)` lists

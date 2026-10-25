@@ -39,7 +39,7 @@ public sealed class SiteArtifactTests : IDisposable
 
         public SiteOutputContext? ObservedContext { get; private set; }
 
-        public void Register(StaticSite app) => app.AddArtifact(OutputRelativePath, WriteAsync);
+        public void Register(StaticSiteBuilder builder) => builder.AddArtifact(OutputRelativePath, WriteAsync);
 
         public async Task WriteAsync(Stream output, SiteOutputContext context, CancellationToken cancellationToken)
         {
@@ -52,11 +52,12 @@ public sealed class SiteArtifactTests : IDisposable
     public async Task PublishAsync_WritesArtifact_AndExposesPagesAndRouteResolution()
     {
         var artifact = new RecordingArtifact("meta/info.txt");
-        await using var app = await CreateAppAsync(artifact);
-        app.AddPageParameters<MirrorPostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
+        var builder = await CreateBuilderAsync(artifact);
+        builder.AddPageParameters<MirrorPostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
-        app.AddSitemap("seo/sitemap.xml", ["mirror/hello-world/"]);
+        builder.AddSitemap("seo/sitemap.xml", ["mirror/hello-world/"]);
 
+        await using var app = builder.Build();
         await app.PublishAsync(_outputDir);
 
         var written = await File.ReadAllTextAsync(Path.Combine(_outputDir, "meta", "info.txt"));
@@ -75,8 +76,9 @@ public sealed class SiteArtifactTests : IDisposable
     public async Task PublishAsync_ArtifactPathEscapingOutputDirectory_Throws()
     {
         var artifact = new RecordingArtifact(Path.Combine("..", "evil.txt"));
-        await using var app = await CreateAppAsync(artifact);
+        var builder = await CreateBuilderAsync(artifact);
 
+        await using var app = builder.Build();
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => app.PublishAsync(_outputDir));
 
         Assert.Contains("escapes the output directory", exception.Message, StringComparison.Ordinal);
@@ -88,18 +90,19 @@ public sealed class SiteArtifactTests : IDisposable
     [InlineData(2 * 1024 * 1024)]
     public async Task PublishAsync_RegeneratesBufferedArtifacts_PreservingOnlyUnchangedOutput(int length)
     {
-        await using var app = await CreateAppAsync([], staticPath: null);
+        var builder = await CreateBuilderAsync([], staticPath: null);
         var writes = 0;
         var original = new string('a', length);
         var text = original;
         var fail = false;
-        app.AddArtifact("meta/state.txt", async (output, _, token) =>
+        builder.AddArtifact("meta/state.txt", async (output, _, token) =>
         {
             writes++;
             await output.WriteAsync(Encoding.UTF8.GetBytes(text), token);
             if (fail) { throw new IOException("Artifact failed."); }
         }, preserveUnchangedOutput: true);
         var path = Path.Combine(_outputDir, "meta", "state.txt");
+        await using var app = builder.Build();
         await app.PublishAsync(_outputDir);
         var stamp = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         File.SetLastWriteTimeUtc(path, stamp);
@@ -129,8 +132,9 @@ public sealed class SiteArtifactTests : IDisposable
     public async Task PublishAsync_ArtifactPathCollidingWithGeneratedPage_Throws()
     {
         var artifact = new RecordingArtifact(Path.Combine("blog", "hello-world", "index.html"));
-        await using var app = await CreateAppAsync(artifact);
+        var builder = await CreateBuilderAsync(artifact);
 
+        await using var app = builder.Build();
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => app.PublishAsync(_outputDir));
 
         Assert.Contains("collides with a generated page output path", exception.Message, StringComparison.Ordinal);
@@ -144,8 +148,9 @@ public sealed class SiteArtifactTests : IDisposable
         await File.WriteAllTextAsync(Path.Combine(staticDir, "feed.xml"), "static");
 
         var artifact = new RecordingArtifact("feed.xml");
-        await using var app = await CreateAppAsync([artifact], staticDir);
+        var builder = await CreateBuilderAsync([artifact], staticDir);
 
+        await using var app = builder.Build();
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => app.PublishAsync(_outputDir));
 
         Assert.Contains("collides with a static file output path", exception.Message, StringComparison.Ordinal);
@@ -156,8 +161,9 @@ public sealed class SiteArtifactTests : IDisposable
     {
         var first = new RecordingArtifact(Path.Combine("meta", "info.txt"));
         var second = new RecordingArtifact(Path.Combine("meta", "info.txt"));
-        await using var app = await CreateAppAsync([first, second], staticPath: null);
+        var builder = await CreateBuilderAsync([first, second], staticPath: null);
 
+        await using var app = builder.Build();
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => app.PublishAsync(_outputDir));
 
         Assert.Contains("collides with another artifact output path", exception.Message, StringComparison.Ordinal);
@@ -166,11 +172,11 @@ public sealed class SiteArtifactTests : IDisposable
     [Fact]
     public async Task PublishAsync_PassesCancellationToArtifactWriter()
     {
-        await using var app = await CreateAppAsync([],
+        var builder = await CreateBuilderAsync([],
             staticPath: null);
         using var cancellation = new CancellationTokenSource();
         var observed = false;
-        app.AddArtifact("cancel.txt", (_, _, token) =>
+        builder.AddArtifact("cancel.txt", (_, _, token) =>
         {
             observed = true;
             cancellation.Cancel();
@@ -178,28 +184,29 @@ public sealed class SiteArtifactTests : IDisposable
             return Task.CompletedTask;
         });
 
+        await using var app = builder.Build();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => app.PublishAsync(_outputDir, cancellation.Token));
         Assert.True(observed);
     }
 
-    private async Task<StaticSite> CreateAppAsync(RecordingArtifact artifact)
+    private async Task<StaticSiteBuilder> CreateBuilderAsync(RecordingArtifact artifact)
     {
-        return await CreateAppAsync([artifact], staticPath: null);
+        return await CreateBuilderAsync([artifact], staticPath: null);
     }
 
-    private async Task<StaticSite> CreateAppAsync(IReadOnlyList<RecordingArtifact> artifacts, string? staticPath)
+    private async Task<StaticSiteBuilder> CreateBuilderAsync(IReadOnlyList<RecordingArtifact> artifacts, string? staticPath)
     {
-        return await CreateAppCoreAsync(artifacts, staticPath);
+        return await CreateBuilderCoreAsync(artifacts, staticPath);
     }
 
-    private async Task<StaticSite> CreateAppCoreAsync(
+    private async Task<StaticSiteBuilder> CreateBuilderCoreAsync(
         IReadOnlyList<RecordingArtifact> artifacts,
         string? staticPath)
     {
-        var app = TestSiteFactory.Create(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
-        app.Info = TestArticleContents.CreateSiteInfo();
-        TestSiteAssets.Bind(app, staticPath ?? TestSitePaths.StaticDirectory);
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
+        builder.Info = TestArticleContents.CreateSiteInfo();
+        TestSiteAssets.Bind(builder.Paths, staticPath ?? TestSitePaths.StaticDirectory);
 
         IReadOnlyList<Post> items =
         [
@@ -211,14 +218,14 @@ public sealed class SiteArtifactTests : IDisposable
                 null,
                 "Testing"),
         ];
-        app.UseContentSource<Post>(_ => items);
-        TestArticleContents.MapSite(app);
+        builder.AddContentSource<Post>(_ => items);
+        TestArticleContents.MapSite(builder);
         foreach (var artifact in artifacts)
         {
-            artifact.Register(app);
+            artifact.Register(builder);
         }
 
         await Task.CompletedTask;
-        return app;
+        return builder;
     }
 }

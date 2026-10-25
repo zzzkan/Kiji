@@ -16,9 +16,10 @@ public sealed class PageRegistrationTests
     public async Task ForeignPage_RequiresExplicitAssemblyRegistration(bool notFound)
     {
         var type = CreatePageType("/foreign/");
-        await using var site = CreateSite();
-        if (notFound) { RegisterNotFound(site, type); }
-        else { RegisterTyped(site, type); }
+        var builder = CreateBuilder();
+        if (notFound) { RegisterNotFound(builder, type); }
+        else { RegisterTyped(builder, type); }
+        await using var site = builder.Build();
         var error = Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
         Assert.Contains("AddPageAssembly", error.Message, StringComparison.Ordinal);
         Assert.Contains(type.FullName!, error.Message, StringComparison.Ordinal);
@@ -27,13 +28,14 @@ public sealed class PageRegistrationTests
     [Fact]
     public async Task PageParameters_AreDeferredAndConcatenated()
     {
-        await using var site = CreateSite();
+        var builder = CreateBuilder();
         var calls = 0;
-        site.AddPageParameters<Parameterized>(_ => { calls++; return [new { Value = "one" }]; });
-        site.AddPageParameters<Parameterized>(static _ => []);
-        site.AddPageParameters<Parameterized>(_ => { calls++; return [new { Value = "two" }]; });
+        builder.AddPageParameters<Parameterized>(_ => { calls++; return [new { Value = "one" }]; });
+        builder.AddPageParameters<Parameterized>(static _ => []);
+        builder.AddPageParameters<Parameterized>(_ => { calls++; return [new { Value = "two" }]; });
         Assert.Equal(0, calls);
 
+        await using var site = builder.Build();
         var pages = site.CreateSnapshot().Pages;
 
         Assert.Equal(2, calls);
@@ -43,14 +45,15 @@ public sealed class PageRegistrationTests
     [Fact]
     public async Task TypedRegistration_AcceptsStringDictionaryAndAnonymousStrings()
     {
-        await using var site = CreateSite();
-        site.AddPageParameters<Parameterized>(static _ =>
+        var builder = CreateBuilder();
+        builder.AddPageParameters<Parameterized>(static _ =>
         [
             new Dictionary<string, string> { ["Value"] = "dictionary" },
             new { Value = "42" },
             new System.Collections.ObjectModel.ReadOnlyDictionary<string, string>(new Dictionary<string, string> { ["Value"] = "readonly" }),
         ]);
 
+        await using var site = builder.Build();
         Assert.Equal(
             ["/items/42/", "/items/dictionary/", "/items/readonly/"],
             site.CreateSnapshot().Pages.Select(static page => page.RoutePath).Order());
@@ -62,9 +65,10 @@ public sealed class PageRegistrationTests
     [InlineData("  ")]
     public async Task TypedRegistration_RejectsNullOrWhitespaceRouteValue(string? value)
     {
-        await using var site = CreateSite();
-        site.AddPageParameters<Parameterized>(_ => [new { Value = value }]);
+        var builder = CreateBuilder();
+        builder.AddPageParameters<Parameterized>(_ => [new { Value = value }]);
 
+        await using var site = builder.Build();
         var exception = Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
         Assert.Contains("null or whitespace", exception.Message, StringComparison.Ordinal);
     }
@@ -72,10 +76,11 @@ public sealed class PageRegistrationTests
     [Fact]
     public async Task RouteName_AlsoRequiresADeclaredParameter()
     {
-        await using var site = CreateSite();
+        var builder = CreateBuilder();
         var type = CreatePageType("/missing/{Value}/");
-        site.AddPageAssembly(type.Assembly);
-        RegisterTyped(site, type, new { Value = "one" });
+        builder.AddPageAssembly(type.Assembly);
+        RegisterTyped(builder, type, new { Value = "one" });
+        await using var site = builder.Build();
         var error = Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
         Assert.Contains("'Value'", error.Message, StringComparison.Ordinal);
         Assert.Contains("not a declared", error.Message, StringComparison.Ordinal);
@@ -86,27 +91,30 @@ public sealed class PageRegistrationTests
     {
         var first = CreatePageType("/first/");
         var second = CreatePageType("/second/");
-        await using var site = CreateSite();
-        site.AddPageAssembly(first.Assembly).AddPageAssembly(first.Assembly).AddPageAssembly(second.Assembly);
+        var builder = CreateBuilder();
+        builder.AddPageAssembly(first.Assembly).AddPageAssembly(first.Assembly).AddPageAssembly(second.Assembly);
 
+        await using var site = builder.Build();
         Assert.Equal(["/first/", "/second/"], site.CreateSnapshot().Pages.Select(page => page.RoutePath).Order());
     }
 
     [Fact]
     public async Task StaticDiscovery_DuplicateRegisteredRoutesAreRejected()
     {
-        await using var site = CreateSite();
-        site.AddPageAssembly(CreatePageType("/duplicate/").Assembly);
-        site.AddPageAssembly(CreatePageType("/duplicate/").Assembly);
+        var builder = CreateBuilder();
+        builder.AddPageAssembly(CreatePageType("/duplicate/").Assembly);
+        builder.AddPageAssembly(CreatePageType("/duplicate/").Assembly);
+        await using var site = builder.Build();
         Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
     }
 
     [Fact]
     public async Task MixedRoutes_ParametersTargetTheParameterizedRoute()
     {
-        await using var site = CreateSite();
-        site.AddPageParameters<MixedRoutes>(static _ => [new { Value = "one" }]);
+        var builder = CreateBuilder();
+        builder.AddPageParameters<MixedRoutes>(static _ => [new { Value = "one" }]);
 
+        await using var site = builder.Build();
         var pages = site.CreateSnapshot().Pages.OrderBy(static page => page.RoutePath, StringComparer.Ordinal).ToArray();
         Assert.Equal(["/mixed/", "/mixed/one/"], pages.Select(static page => page.RoutePath));
         Assert.Empty(pages[0].Parameters);
@@ -118,9 +126,10 @@ public sealed class PageRegistrationTests
     [InlineData(typeof(MultipleFixedRoutes), "/one/", "/two/")]
     public async Task MultipleRoutes_RenderEachParameterSetAtEveryReceivingRoute(Type type, string first, string second)
     {
-        await using var site = CreateSite();
-        RegisterTyped(site, type, new { Value = "a" });
+        var builder = CreateBuilder();
+        RegisterTyped(builder, type, new { Value = "a" });
 
+        await using var site = builder.Build();
         var pages = site.CreateSnapshot().Pages;
         Assert.Equal([first, second], pages.Select(static page => page.RoutePath).Order(StringComparer.Ordinal));
         Assert.All(pages, static page => Assert.Equal("a", page.Parameters["Value"]));
@@ -129,8 +138,9 @@ public sealed class PageRegistrationTests
     [Fact]
     public async Task MultipleParameterizedRoutes_RequireEveryRouteValue()
     {
-        await using var site = CreateSite();
-        site.AddPageParameters<DistinctRouteValues>(static _ => [new { First = "x" }]);
+        var builder = CreateBuilder();
+        builder.AddPageParameters<DistinctRouteValues>(static _ => [new { First = "x" }]);
+        await using var site = builder.Build();
         var exception = Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
         Assert.Contains("'/second/{Second}/'", exception.Message, StringComparison.Ordinal);
         Assert.Contains("'Second'", exception.Message, StringComparison.Ordinal);
@@ -139,8 +149,9 @@ public sealed class PageRegistrationTests
     [Fact]
     public async Task PageParameters_RequireARoute()
     {
-        await using var site = CreateSite();
-        RegisterTyped(site, typeof(NoRoute));
+        var builder = CreateBuilder();
+        RegisterTyped(builder, typeof(NoRoute));
+        await using var site = builder.Build();
         var exception = Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
         Assert.Contains("does not declare", exception.Message, StringComparison.Ordinal);
     }
@@ -148,16 +159,18 @@ public sealed class PageRegistrationTests
     [Fact]
     public async Task TypedRegistration_OutputCollisionIsRejected()
     {
-        await using var site = CreateSite();
-        site.AddPageParameters<Parameterized>(static _ => [new { Value = "same" }, new { Value = "same" }]);
+        var builder = CreateBuilder();
+        builder.AddPageParameters<Parameterized>(static _ => [new { Value = "same" }, new { Value = "same" }]);
+        await using var site = builder.Build();
         Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
     }
 
     [Fact]
     public async Task NotFound_MultipleRouteDeclarationsAreRejected()
     {
-        await using var site = CreateSite();
-        site.AddNotFoundPage<MultipleRoutes>();
+        var builder = CreateBuilder();
+        builder.AddNotFoundPage<MultipleRoutes>();
+        await using var site = builder.Build();
         var exception = Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
         Assert.Contains("exactly one", exception.Message, StringComparison.Ordinal);
     }
@@ -165,9 +178,10 @@ public sealed class PageRegistrationTests
     [Fact]
     public async Task NotFound_CannotOverwriteDirectoryRequiredByAnotherPage()
     {
-        await using var site = CreateSite();
-        site.AddPageAssembly(CreatePageType("/404.html/nested/").Assembly);
-        site.AddNotFoundPage<Fixed>();
+        var builder = CreateBuilder();
+        builder.AddPageAssembly(CreatePageType("/404.html/nested/").Assembly);
+        builder.AddNotFoundPage<Fixed>();
+        await using var site = builder.Build();
         var exception = Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
         Assert.Contains("also a page output file", exception.Message, StringComparison.Ordinal);
     }
@@ -176,9 +190,10 @@ public sealed class PageRegistrationTests
     public async Task NotFound_OriginalRouteCanBelongToAnotherRegisteredPage()
     {
         var notFound = CreatePageType("/missing/");
-        await using var site = CreateSite();
-        site.AddPageAssembly(notFound.Assembly).AddPageAssembly(CreatePageType("/missing/").Assembly);
-        RegisterNotFound(site, notFound);
+        var builder = CreateBuilder();
+        builder.AddPageAssembly(notFound.Assembly).AddPageAssembly(CreatePageType("/missing/").Assembly);
+        RegisterNotFound(builder, notFound);
+        await using var site = builder.Build();
         Assert.Equal(["/404.html", "/missing/"], site.CreateSnapshot().Pages.Select(page => page.RoutePath).Order());
     }
 
@@ -190,9 +205,10 @@ public sealed class PageRegistrationTests
         {
             Directory.CreateDirectory(Path.Combine(root, "wwwroot"));
             await File.WriteAllTextAsync(Path.Combine(root, "wwwroot", "404.html"), "existing");
-            await using var site = CreateSite(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
-            TestSite.TestSiteAssets.Bind(site, Path.Combine(root, "wwwroot"));
-            site.AddNotFoundPage<Fixed>();
+            var builder = CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
+            TestSite.TestSiteAssets.Bind(builder.Paths, Path.Combine(root, "wwwroot"));
+            builder.AddNotFoundPage<Fixed>();
+            await using var site = builder.Build();
             await Assert.ThrowsAsync<InvalidOperationException>(() => site.PublishAsync("dist"));
         }
         finally
@@ -209,16 +225,16 @@ public sealed class PageRegistrationTests
     [InlineData(true)]
     public async Task NotFound_CannotAlsoBeRegisteredWithParameters(bool notFoundFirst)
     {
-        await using var site = CreateSite();
+        var builder = CreateBuilder();
         if (notFoundFirst)
         {
-            site.AddNotFoundPage<Parameterized>();
-            Assert.Throws<InvalidOperationException>(() => site.AddPageParameters<Parameterized>(static _ => []));
+            builder.AddNotFoundPage<Parameterized>();
+            Assert.Throws<InvalidOperationException>(() => builder.AddPageParameters<Parameterized>(static _ => []));
         }
         else
         {
-            site.AddPageParameters<Parameterized>(static _ => []);
-            Assert.Throws<InvalidOperationException>(() => site.AddNotFoundPage<Parameterized>());
+            builder.AddPageParameters<Parameterized>(static _ => []);
+            Assert.Throws<InvalidOperationException>(() => builder.AddNotFoundPage<Parameterized>());
         }
     }
 
@@ -230,18 +246,19 @@ public sealed class PageRegistrationTests
         var root = Path.Combine(Path.GetTempPath(), $"KijiRegistration_{Guid.NewGuid():N}");
         try
         {
-            await using var site = CreateSite(new SiteExecutionPaths(root));
+            var builder = CreateBuilder(new SiteExecutionPaths(root));
             var type = CreatePageType(notFound ? "/missing/" : "/items/{Value}/");
             if (notFound)
             {
-                RegisterNotFound(site, type);
+                RegisterNotFound(builder, type);
             }
             else
             {
-                RegisterTyped(site, type);
+                RegisterTyped(builder, type);
             }
-            site.AddPageAssembly(type.Assembly);
+            builder.AddPageAssembly(type.Assembly);
 
+            await using var site = builder.Build();
             await site.PublishAsync("dist");
             using var manifest = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(root, ".kiji", "cache", "manifest.json")));
             var identity = $"{type.Assembly.GetName().Name}:unavailable";
@@ -270,22 +287,22 @@ public sealed class PageRegistrationTests
         Assert.Equal(typed.Select(page => page.SourceIdentifier), refreshed.Select(page => page.SourceIdentifier));
     }
 
-    private static StaticSite CreateSite(SiteExecutionPaths? paths = null)
+    private static StaticSiteBuilder CreateBuilder(SiteExecutionPaths? paths = null)
     {
-        var site = TestSiteFactory.Create(paths ?? new SiteExecutionPaths(AppContext.BaseDirectory));
-        site.Info = TestArticleContents.CreateSiteInfo();
-        return site;
+        var builder = TestSiteFactory.CreateBuilder(paths ?? new SiteExecutionPaths(AppContext.BaseDirectory));
+        builder.Info = TestArticleContents.CreateSiteInfo();
+        return builder;
     }
 
-    private static void RegisterTyped(StaticSite site, Type type, params object[] parameters)
+    private static void RegisterTyped(StaticSiteBuilder builder, Type type, params object[] parameters)
     {
-        typeof(StaticSite).GetMethod(nameof(StaticSite.AddPageParameters), 1, [typeof(Func<IServiceProvider, IEnumerable<object>>)])!.MakeGenericMethod(type)
-            .Invoke(site, [new Func<IServiceProvider, IEnumerable<object>>(_ => parameters)]);
+        typeof(StaticSiteBuilder).GetMethod(nameof(StaticSiteBuilder.AddPageParameters), 1, [typeof(Func<IServiceProvider, IEnumerable<object>>)])!.MakeGenericMethod(type)
+            .Invoke(builder, [new Func<IServiceProvider, IEnumerable<object>>(_ => parameters)]);
     }
 
-    private static void RegisterNotFound(StaticSite site, Type type)
+    private static void RegisterNotFound(StaticSiteBuilder builder, Type type)
     {
-        typeof(StaticSite).GetMethod(nameof(StaticSite.AddNotFoundPage))!.MakeGenericMethod(type).Invoke(site, null);
+        typeof(StaticSiteBuilder).GetMethod(nameof(StaticSiteBuilder.AddNotFoundPage))!.MakeGenericMethod(type).Invoke(builder, null);
     }
 
     private static Type CreatePageType(params string[] routes)

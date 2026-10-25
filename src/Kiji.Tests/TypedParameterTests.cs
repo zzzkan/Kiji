@@ -27,9 +27,10 @@ public sealed class TypedParameterTests : IDisposable
         var log = new ParameterRenderLog();
         var model = new ParameterModel("model title");
         string[] tags = ["dotnet", "kiji"];
-        await using (var site = CreateSite("render", log))
+        var builder = CreateBuilder("render", log);
+        builder.AddPageParameters<TypedParameterPage>(_ => [new { Id = 42, Featured = true, Kind = DayOfWeek.Friday, Count = count, Summary = summary, Tags = tags, Model = model, Resource = model }]);
+        await using (var site = builder.Build())
         {
-            site.AddPageParameters<TypedParameterPage>(_ => [new { Id = 42, Featured = true, Kind = DayOfWeek.Friday, Count = count, Summary = summary, Tags = tags, Model = model, Resource = model }]);
             var page = Assert.Single(site.CreateSnapshot().Pages);
             Assert.Equal("/typed/42/", page.RoutePath);
             Assert.Equal(42, Assert.IsType<int>(page.Parameters["Id"]));
@@ -49,14 +50,15 @@ public sealed class TypedParameterTests : IDisposable
     [Fact]
     public async Task DictionaryInputs_AreCopiedAndReadOnlyDictionariesAreRecognized()
     {
-        await using var site = CreateSite("dictionaries", new ParameterRenderLog());
+        var builder = CreateBuilder("dictionaries", new ParameterRenderLog());
         var mutable = new Dictionary<string, object?> { ["Id"] = 1 };
-        site.AddPageParameters<TypedParameterPage>(_ =>
+        builder.AddPageParameters<TypedParameterPage>(_ =>
         [
             mutable,
             new Dictionary<string, object?> { ["Id"] = 2 }.ToFrozenDictionary(),
             new ReadOnlyDictionary<string, object?>(new Dictionary<string, object?> { ["Id"] = 3 }),
         ]);
+        await using var site = builder.Build();
         var pages = site.CreateSnapshot().Pages;
         mutable["Id"] = 99;
         Assert.Equal(1, pages[0].Parameters["Id"]);
@@ -67,10 +69,11 @@ public sealed class TypedParameterTests : IDisposable
     [Fact]
     public async Task DictionaryKeysDifferingOnlyByCase_AreRejectedDuringNormalization()
     {
-        await using var site = CreateSite("duplicate-keys", new ParameterRenderLog());
-        site.AddPageParameters<TypedParameterPage>(_ =>
+        var builder = CreateBuilder("duplicate-keys", new ParameterRenderLog());
+        builder.AddPageParameters<TypedParameterPage>(_ =>
             [new Dictionary<string, object?>(StringComparer.Ordinal) { ["Id"] = 1, ["id"] = 2 }]);
 
+        await using var site = builder.Build();
         Assert.Throws<ArgumentException>(() => site.CreateSnapshot());
     }
 
@@ -80,9 +83,10 @@ public sealed class TypedParameterTests : IDisposable
     public async Task ParameterNames_AreCaseInsensitiveDuringPlanningAndRendering(int? count)
     {
         var log = new ParameterRenderLog();
-        await using var site = CreateSite("parameter-casing", log);
-        site.AddPageParameters<TypedParameterPage>(_ => [new { id = 42, COUNT = count, sUMMARY = "mixed case" }]);
+        var builder = CreateBuilder("parameter-casing", log);
+        builder.AddPageParameters<TypedParameterPage>(_ => [new { id = 42, COUNT = count, sUMMARY = "mixed case" }]);
 
+        await using var site = builder.Build();
         var page = Assert.Single(site.CreateSnapshot().Pages);
         Assert.Equal("/typed/42/", page.RoutePath);
         await site.RenderPageAsync(page, CancellationToken.None);
@@ -100,9 +104,10 @@ public sealed class TypedParameterTests : IDisposable
     [InlineData("Kind", "Friday", "System.DayOfWeek", "System.String")]
     public async Task IncompatibleValue_FailsDuringPlanning(string name, object? value, string expected, string actual)
     {
-        await using var site = CreateSite("invalid", new ParameterRenderLog());
+        var builder = CreateBuilder("invalid", new ParameterRenderLog());
         var values = new Dictionary<string, object?> { ["Id"] = 42, [name] = value };
-        site.AddPageParameters<TypedParameterPage>(_ => [values]);
+        builder.AddPageParameters<TypedParameterPage>(_ => [values]);
+        await using var site = builder.Build();
         var error = Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
         Assert.Contains(typeof(TypedParameterPage).FullName!, error.Message, StringComparison.Ordinal);
         Assert.Contains("/typed/{Id}/", error.Message, StringComparison.Ordinal);
@@ -114,9 +119,10 @@ public sealed class TypedParameterTests : IDisposable
     [Fact]
     public async Task InputGetter_IsReadOncePerSnapshot()
     {
-        await using var site = CreateSite("getter", new ParameterRenderLog());
+        var builder = CreateBuilder("getter", new ParameterRenderLog());
         var input = new ParameterInput();
-        site.AddPageParameters<TypedParameterPage>(_ => [input]);
+        builder.AddPageParameters<TypedParameterPage>(_ => [input]);
+        await using var site = builder.Build();
         var page = Assert.Single(site.CreateSnapshot().Pages);
         await site.RenderPageAsync(page, CancellationToken.None);
         await site.RenderPageAsync(page, CancellationToken.None);
@@ -126,8 +132,9 @@ public sealed class TypedParameterTests : IDisposable
     [Fact]
     public async Task PrivateSetter_IsRejectedAndMetadataIsClearedOnHotReload()
     {
-        await using var site = CreateSite("setter", new ParameterRenderLog());
-        site.AddPageParameters<ReadOnlyParameterPage>(_ => [new { Id = 1, Value = "text" }]);
+        var builder = CreateBuilder("setter", new ParameterRenderLog());
+        builder.AddPageParameters<ReadOnlyParameterPage>(_ => [new { Id = 1, Value = "text" }]);
+        await using var site = builder.Build();
         var error = Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
         Assert.Contains("public setter", error.Message, StringComparison.Ordinal);
         var before = PageDiscovery.Parameters(typeof(ReadOnlyParameterPage));
@@ -145,8 +152,9 @@ public sealed class TypedParameterTests : IDisposable
         var siteRoot = Path.Combine(_root, "incremental");
         async Task Build(string directory, ParameterRenderLog observer)
         {
-            await using var site = CreateSite(directory, observer);
-            site.AddPageParameters<TypedParameterPage>(_ => [new { Id = 1, Model = model }, new { Id = 2, Summary = "stable" }]);
+            var builder = CreateBuilder(directory, observer);
+            builder.AddPageParameters<TypedParameterPage>(_ => [new { Id = 1, Model = model }, new { Id = 2, Summary = "stable" }]);
+            await using var site = builder.Build();
             await site.PublishAsync("dist");
         }
         await Build("incremental", log);
@@ -178,12 +186,14 @@ public sealed class TypedParameterTests : IDisposable
     [Fact]
     public async Task DevServer_AndPublishRenderTheSameTypedValues()
     {
-        await using var published = CreateSite("publish", new ParameterRenderLog());
-        published.AddPageParameters<TypedParameterPage>(_ => [new { Id = 42, Count = (int?)7, Featured = true }]);
+        var publishing = CreateBuilder("publish", new ParameterRenderLog());
+        publishing.AddPageParameters<TypedParameterPage>(_ => [new { Id = 42, Count = (int?)7, Featured = true }]);
+        await using var published = publishing.Build();
         await published.PublishAsync("dist");
         var html = await File.ReadAllTextAsync(Path.Combine(_root, "publish", "dist", "typed", "42", "index.html"));
-        await using var served = CreateSite("serve", new ParameterRenderLog());
-        served.AddPageParameters<TypedParameterPage>(_ => [new { Id = 42, Count = (int?)7, Featured = true }]);
+        var serving = CreateBuilder("serve", new ParameterRenderLog());
+        serving.AddPageParameters<TypedParameterPage>(_ => [new { Id = 42, Count = (int?)7, Featured = true }]);
+        await using var served = serving.Build();
         var (server, web) = await served.StartDevServerAsync(TestUrls.EphemeralPort, CancellationToken.None);
         await using (server)
         {
@@ -193,13 +203,13 @@ public sealed class TypedParameterTests : IDisposable
         }
     }
 
-    private StaticSite CreateSite(string directory, ParameterRenderLog log)
+    private StaticSiteBuilder CreateBuilder(string directory, ParameterRenderLog log)
     {
-        var site = TestSiteFactory.Create(new SiteExecutionPaths(Path.Combine(_root, directory)));
-        site.Info = TestArticleContents.CreateSiteInfo();
-        Directory.CreateDirectory(Path.Combine(site.Paths.ProjectDirectory, "content"));
-        Directory.CreateDirectory(Path.Combine(site.Paths.ProjectDirectory, "wwwroot"));
-        site.UseContentSource<ParameterRenderLog>("render-log", _ => [new("0", log, "observer")]);
-        return site;
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(Path.Combine(_root, directory)));
+        builder.Info = TestArticleContents.CreateSiteInfo();
+        Directory.CreateDirectory(Path.Combine(builder.Paths.ProjectDirectory, "content"));
+        Directory.CreateDirectory(Path.Combine(builder.Paths.ProjectDirectory, "wwwroot"));
+        builder.AddContentSource<ParameterRenderLog>("render-log", _ => [new("0", log, "observer")]);
+        return builder;
     }
 }

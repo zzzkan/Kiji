@@ -15,10 +15,11 @@ public sealed class FixedPageParametersTests : IDisposable
         var output = Path.Combine(_root, "dist", "fixed-parameters", "index.html");
         async Task PublishAsync(IEnumerable<object>? parameters = null)
         {
-            await using var site = TestSiteFactory.Create(new SiteExecutionPaths(_root), typeof(FixedParameterPage));
-            site.Info = TestArticleContents.CreateSiteInfo();
-            site.UseServices(services => services.AddSingleton(log));
-            if (parameters is not null) { site.AddPageParameters<FixedParameterPage>(_ => parameters); }
+            var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root), typeof(FixedParameterPage));
+            builder.Info = TestArticleContents.CreateSiteInfo();
+            builder.Services.AddSingleton(log);
+            if (parameters is not null) { builder.AddPageParameters<FixedParameterPage>(_ => parameters); }
+            await using var site = builder.Build();
             await site.PublishAsync("dist");
         }
 

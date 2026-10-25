@@ -14,9 +14,9 @@ $project = Join-Path $site 'Consumer.csproj'
 "@ | Set-Content $project
 @'
 using Kiji;
-var site = StaticSite.Create(args);
-site.Info = new() { Name = "Consumer", BaseUrl = new Uri("https://example.test/sub/") };
-await site.RunAsync();
+var builder = StaticSite.CreateBuilder(args);
+builder.Info = new() { Name = "Consumer", BaseUrl = new Uri("https://example.test/sub/") };
+await builder.Build().RunAsync();
 '@ | Set-Content (Join-Path $site 'Program.cs')
 '@page "/"' + "`n<h1>Home</h1><Library.Card />" | Set-Content (Join-Path $site 'Home.razor')
 'h1 { color: red; }' | Set-Content (Join-Path $site 'Home.razor.css')

@@ -35,7 +35,7 @@ see the [reusable parameter types](../api-reference/#pages).
 ## Render pages that use external data
 
 Kiji tracks reads through `ContentDictionary<T>`. To track other data, load it with
-[UseContentSource](../api-reference/#content-sources-and-contentdictionary) and supply
+[AddContentSource](../api-reference/#content-sources-and-contentdictionary) and supply
 digests. Kiji cannot see other reads, such as files, HTTP, environment variables, the
 clock, or service state. Mark components that render such values:
 
@@ -50,7 +50,7 @@ publish. If external state decides whether a child component appears, mark the p
 
 `AlwaysRender` only re-renders HTML; it does not refresh data a service has cached, and
 content reloads do not recreate singletons. Build shared derived data with
-`UseContentSource` instead. During development, restart `dotnet watch` when external data
+`AddContentSource` instead. During development, restart `dotnet watch` when external data
 changes.
 
 ## Reset and inspect

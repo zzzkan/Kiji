@@ -12,18 +12,19 @@ public sealed class ContentDictionaryTests
     [Fact]
     public async Task ConcurrentReaders_MaterializeContentOnlyOnce()
     {
-        await using var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory));
-        app.Info = TestArticleContents.CreateSiteInfo();
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
+        builder.Info = TestArticleContents.CreateSiteInfo();
         var calls = 0;
         using var entered = new ManualResetEventSlim();
         using var release = new ManualResetEventSlim();
-        app.UseContentSource<Item>(_ =>
+        builder.AddContentSource<Item>(_ =>
         {
             Interlocked.Increment(ref calls);
             entered.Set();
             Assert.True(release.Wait(TimeSpan.FromSeconds(10)));
             return [new Item("shared", 1)];
         });
+        await using var app = builder.Build();
         var dictionary = app.ServiceProvider.GetRequiredService<ContentDictionary<Item>>();
         var first = Task.Run(() => dictionary["0"]);
         Task<Item>? second = null;
@@ -95,11 +96,12 @@ public sealed class ContentDictionaryTests
     }
 
     [Fact]
-    public void UseContentSource_AssignsOpaqueOrdinalKeysInLoaderOrder()
+    public void AddContentSource_AssignsOpaqueOrdinalKeysInLoaderOrder()
     {
-        var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory));
-        app.Info = TestArticleContents.CreateSiteInfo();
-        app.UseContentSource<Item>(static _ => [new("b", 2), new("a", 1)]);
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
+        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.AddContentSource<Item>(static _ => [new("b", 2), new("a", 1)]);
+        var app = builder.Build();
         var dictionary = app.ServiceProvider.GetRequiredService<ContentDictionary<Item>>();
 
         Assert.Equal(["0", "1"], dictionary.Keys);
@@ -108,14 +110,14 @@ public sealed class ContentDictionaryTests
     }
 
     [Fact]
-    public void UseContentSource_SameElementTypeTwice_Throws()
+    public void AddContentSource_SameElementTypeTwice_Throws()
     {
-        var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory));
-        app.Info = TestArticleContents.CreateSiteInfo();
-        app.UseContentSource<Item>(static _ => []);
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
+        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.AddContentSource<Item>(static _ => []);
 
         var exception = Assert.Throws<InvalidOperationException>(
-            () => app.UseContentSource<Item>(static _ => []));
+            () => builder.AddContentSource<Item>(static _ => []));
 
         Assert.Contains("already registered", exception.Message, StringComparison.Ordinal);
         Assert.Contains(nameof(Item), exception.Message, StringComparison.Ordinal);
@@ -129,11 +131,12 @@ public sealed class ContentDictionaryTests
     [Fact]
     public void Dictionary_CanBeDerivedFromAnother()
     {
-        var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory));
-        app.Info = TestArticleContents.CreateSiteInfo();
-        app.UseContentSource<Item>(static _ => [new("a", 1), new("b", 2)]);
-        app.UseContentSource<Derived>(
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
+        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.AddContentSource<Item>(static _ => [new("a", 1), new("b", 2)]);
+        builder.AddContentSource<Derived>(
             static services => [.. services.GetRequiredService<ContentDictionary<Item>>().Values.Select(static item => new Derived(item.Slug.ToUpperInvariant()))]);
+        var app = builder.Build();
 
         var derived = app.ServiceProvider.GetRequiredService<ContentDictionary<Derived>>();
         Assert.Equal(["0", "1"], derived.Keys);
@@ -143,12 +146,14 @@ public sealed class ContentDictionaryTests
     [Fact]
     public async Task Dictionary_CanReadTheSameModelFromAnotherSite()
     {
-        await using var source = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory));
-        source.Info = TestArticleContents.CreateSiteInfo();
-        source.UseContentSource<Item>(static _ => [new("a", 1)]);
-        await using var destination = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory));
-        destination.Info = TestArticleContents.CreateSiteInfo();
-        destination.UseContentSource<Item>(_ => [.. source.ServiceProvider.GetRequiredService<ContentDictionary<Item>>().Values]);
+        var sourceBuilder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
+        sourceBuilder.Info = TestArticleContents.CreateSiteInfo();
+        sourceBuilder.AddContentSource<Item>(static _ => [new("a", 1)]);
+        await using var source = sourceBuilder.Build();
+        var destinationBuilder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
+        destinationBuilder.Info = TestArticleContents.CreateSiteInfo();
+        destinationBuilder.AddContentSource<Item>(_ => [.. source.ServiceProvider.GetRequiredService<ContentDictionary<Item>>().Values]);
+        await using var destination = destinationBuilder.Build();
 
         var item = Assert.Single(destination.ServiceProvider.GetRequiredService<ContentDictionary<Item>>());
         Assert.Equal("a", item.Value.Slug);
@@ -157,12 +162,13 @@ public sealed class ContentDictionaryTests
     [Fact]
     public void Dictionary_CircularDerivation_ThrowsNamingThePath()
     {
-        var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory));
-        app.Info = TestArticleContents.CreateSiteInfo();
-        app.UseContentSource<Item>(
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
+        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.AddContentSource<Item>(
             static services => [.. services.GetRequiredService<ContentDictionary<Derived>>().Values.Select(static d => new Item(d.Slug, 1))]);
-        app.UseContentSource<Derived>(
+        builder.AddContentSource<Derived>(
             static services => [.. services.GetRequiredService<ContentDictionary<Item>>().Values.Select(static i => new Derived(i.Slug))]);
+        var app = builder.Build();
 
         var exception = Assert.Throws<InvalidOperationException>(() => app.ServiceProvider.GetRequiredService<ContentDictionary<Item>>().Count);
 
@@ -181,14 +187,15 @@ public sealed class ContentDictionaryTests
     public void ResolvingTheDictionary_TakesTheHandleWithoutLoading()
     {
         var loads = 0;
-        var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory));
-        app.Info = TestArticleContents.CreateSiteInfo();
-        app.UseContentSource<Item>(
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
+        builder.Info = TestArticleContents.CreateSiteInfo();
+        builder.AddContentSource<Item>(
             _ =>
             {
                 loads++;
                 return [new("a", 1)];
             });
+        var app = builder.Build();
         var dictionary = app.ServiceProvider.GetRequiredService<ContentDictionary<Item>>();
 
         Assert.Equal(0, loads);

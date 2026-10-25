@@ -25,7 +25,9 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
 
 ## Design
 
-- Build with Create -> Add*/Use* -> RunAsync. Kiji parses no command line:
+- Follow the .NET host builder shape: CreateBuilder -> builder.Services/Add*/Use* -> Build
+  -> RunAsync. Every registration lives on StaticSiteBuilder; StaticSite only runs. Add* adds,
+  Use* sets a single value. Kiji parses no command line:
   watch serves, publish generates, clean cleans. MSBuild owns KijiForce/KijiVerbose;
   ASP.NET Core configuration owns the dev server address. Prefer conventions to flags.
 - Dev and publish share StaticSite.RenderPageAsync. Never emit stale output;
@@ -49,20 +51,23 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   requires its own route and a registered page assembly.
 - MSBuild supplies the project directory through runtimeconfig; missing metadata is an error.
   Content becomes accessible through factories/loaders/artifacts only after execution
-  paths settle. Do not expose a provider or content dictionary on StaticSite.
+  paths settle. Do not expose a provider or content dictionary on StaticSite. The environment
+  name comes from DOTNET_ENVIRONMENT, else Production for publish and Development for serving,
+  and is part of the options fingerprint.
 - The dev server enforces BaseUrl's path prefix and uses `.kiji/dev-site`.
   Only `.kiji/cache` is portable; planning creates no output directories.
-- UseServices configures standard DI once before provider construction; then the
-  collection is read-only. Each render owns a scope. Loaders, page parameter/feed
+- StaticSiteBuilder.Services is standard DI; Build validates it, makes it read-only and
+  builds the provider. Kiji's defaults and managed services are registered when the builder
+  is created. Each render owns a scope. Loaders, page parameter/feed
   factories and artifacts use the root provider and cannot resolve scoped services. Validate
-  Kiji-owned registrations after callbacks. Derived indexes use UseContentSource;
+  Kiji-owned registrations in Build. Derived indexes use AddContentSource;
   content reload does not recreate singletons. Use AlwaysRender on components reading
   untracked external state. KijiForce refreshes all pages for a whole publish.
 - Use Blazor's PageTitle and HeadContent; KijiRoot supplies the single HeadOutlet.
   Each page gets a fresh renderer/dispatcher, isolating the framework's section state.
   HeadContent replaces earlier providers rather than appending; compose shared tags
   inside the page's HeadContent. Await quiescence before serializing the document.
-- Customize IImageProcessor through UseServices. The last unkeyed registration must
+- Customize IImageProcessor through builder.Services. The last unkeyed registration must
   be a singleton; standard DI ownership applies. It must support concurrency and retain
   no page/content state. Reload does not recreate it. Include external configuration
   and encoder versions in cache identities; HTML reuse controls do not clear image caches.

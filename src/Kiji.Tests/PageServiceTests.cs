@@ -4,6 +4,7 @@ using Kiji.Feeds;
 using Kiji.Tests.TestSite.PageServices;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Xunit;
 
 namespace Kiji.Tests;
@@ -16,8 +17,9 @@ public sealed class PageServiceTests : IDisposable
     public async Task Renders_ShareWithinPage_IsolateConcurrentPages_AndDispose()
     {
         var probe = new ServiceProbe { Release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously) };
-        await using var app = CreateApp(probe);
-        app.AddPageParameters<ServicePage>(_ => [new { Key = "first" }, new { Key = "second" }]);
+        var builder = CreateBuilder(probe);
+        builder.AddPageParameters<ServicePage>(_ => [new { Key = "first" }, new { Key = "second" }]);
+        await using var app = builder.Build();
         var requests = app.CreateSnapshot().Pages;
 
         var renders = requests.Select(request => app.RenderPageAsync(request, CancellationToken.None)).ToArray();
@@ -59,8 +61,9 @@ public sealed class PageServiceTests : IDisposable
     public async Task FailedRender_DisposesBothAsyncAndSyncServices()
     {
         var probe = new ServiceProbe();
-        await using var app = CreateApp(probe);
-        app.AddPageParameters<ServicePage>(_ => [new { Key = "failure", Fail = true }]);
+        var builder = CreateBuilder(probe);
+        builder.AddPageParameters<ServicePage>(_ => [new { Key = "failure", Fail = true }]);
+        await using var app = builder.Build();
         var request = Assert.Single(app.CreateSnapshot().Pages);
         await Assert.ThrowsAsync<InvalidOperationException>(() => app.RenderPageAsync(request, CancellationToken.None));
         var service = Assert.Single(probe.Created);
@@ -75,71 +78,64 @@ public sealed class PageServiceTests : IDisposable
     [InlineData("keyed")]
     [InlineData("open-generic")]
     [InlineData("provider")]
-    public async Task Registration_ValidatesTheFinalManagedRegistrations(string operation)
+    [InlineData("environment")]
+    [InlineData("content")]
+    public void Build_ValidatesTheFinalManagedRegistrations(string operation)
     {
-        await using var app = CreateApp();
-        app.UseServices(services =>
+        var builder = CreateBuilder(new ServiceProbe());
+        var services = builder.Services;
+        switch (operation)
         {
-            switch (operation)
-            {
-                case "duplicate": services.Add(services.Single(descriptor => descriptor.ServiceType == typeof(PageInfo))); break;
-                case "remove": services.RemoveAll<PageInfo>(); break;
-                case "replace": services.Replace(ServiceDescriptor.Singleton(app.Info)); break;
-                case "keyed": services.AddKeyedSingleton("alternate", app.Info); break;
-                case "open-generic": services.AddSingleton(typeof(ContentDictionary<>), typeof(ContentDictionary<>)); break;
-                case "provider": services.AddSingleton<IServiceProvider>(_ => throw new NotSupportedException()); break;
-            }
-        });
-        var exception = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());
+            case "duplicate": services.Add(services.Single(descriptor => descriptor.ServiceType == typeof(PageInfo))); break;
+            case "remove": services.RemoveAll<PageInfo>(); break;
+            case "replace": services.Replace(ServiceDescriptor.Singleton(builder.Info)); break;
+            case "keyed": services.AddKeyedSingleton("alternate", builder.Info); break;
+            case "open-generic": services.AddSingleton(typeof(ContentDictionary<>), typeof(ContentDictionary<>)); break;
+            case "provider": services.AddSingleton<IServiceProvider>(_ => throw new NotSupportedException()); break;
+            case "environment": services.Replace(ServiceDescriptor.Singleton(builder.Environment)); break;
+            case "content": services.RemoveAll<ContentDictionary<ServiceProbe>>(); break;
+        }
+        var exception = Assert.Throws<InvalidOperationException>(() => builder.Build());
         Assert.Contains("managed by Kiji", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task Configuration_IsDeferredOrderedAndFrozen_AndFactoriesResolveSettledPaths()
+    public async Task Services_AreVisibleToExtensionsAndFrozenByBuild_AndFactoriesResolveSettledPaths()
     {
-        await using var app = CreateApp();
-        IServiceCollection? captured = null;
-        var calls = new List<int>();
-        app.UseServices(services =>
-        {
-            calls.Add(1);
-            captured = services;
-            services.AddSingleton(provider => provider.GetRequiredService<ResolvedSitePaths>().OutputDirectory);
-        });
-        app.UseServices(services =>
-        {
-            calls.Add(2);
-            // Existing managed registrations are visible to ordinary extension methods.
-            services.TryAddSingleton(app.Info);
-        });
-        Assert.Empty(calls);
+        var builder = CreateBuilder();
+        builder.Services.AddSingleton(provider => provider.GetRequiredService<ResolvedSitePaths>().OutputDirectory);
+        // Managed registrations are present from the start, so ordinary extension methods see them.
+        builder.Services.TryAddSingleton(new SiteInfo { Name = "Replacement", BaseUrl = new Uri("https://replacement.test/") });
+        builder.Services.TryAddSingleton<IHostEnvironment>(new ReplacementEnvironment());
+        await using var app = builder.Build();
+        Assert.Throws<InvalidOperationException>(() => builder.Services.AddSingleton("late"));
+
         app.CreateSnapshot();
-        app.CreateSnapshot();
-        Assert.Equal([1, 2], calls);
+        Assert.Same(builder.Info, app.ServiceProvider.GetRequiredService<SiteInfo>());
+        Assert.Same(builder.Environment, app.ServiceProvider.GetRequiredService<IHostEnvironment>());
         Assert.EndsWith(Path.Combine(".kiji", "dev-site"), app.ServiceProvider.GetRequiredService<string>(), StringComparison.Ordinal);
-        Assert.Throws<InvalidOperationException>(() => captured!.AddSingleton("late"));
     }
 
     [Fact]
-    public async Task MissingDependency_FailsBeforeRendering()
+    public void MissingDependency_FailsBuild()
     {
-        await using var app = CreateApp();
-        app.UseServices(services => services.AddScoped<object, MissingDependencyService>());
-        var exception = Assert.Throws<AggregateException>(() => app.CreateSnapshot());
+        var builder = CreateBuilder();
+        builder.Services.AddScoped<object, MissingDependencyService>();
+        var exception = Assert.Throws<AggregateException>(() => builder.Build());
         Assert.Contains(nameof(MissingDependencyService), exception.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task DynamicFactory_WithAStableHostModule_IsRejected()
+    public void DynamicFactory_WithAStableHostModule_IsRejected()
     {
-        await using var app = CreateApp();
+        var builder = CreateBuilder();
         var method = new DynamicMethod("Create", typeof(object), [typeof(IServiceProvider)], typeof(PageServiceTests).Module);
         var il = method.GetILGenerator();
         il.Emit(OpCodes.Newobj, typeof(object).GetConstructor(Type.EmptyTypes)!);
         il.Emit(OpCodes.Ret);
-        app.UseServices(services => services.AddSingleton(method.CreateDelegate<Func<IServiceProvider, object>>()));
+        builder.Services.AddSingleton(method.CreateDelegate<Func<IServiceProvider, object>>());
 
-        var exception = Assert.Throws<NotSupportedException>(() => app.CreateSnapshot());
+        var exception = Assert.Throws<NotSupportedException>(() => builder.Build());
         Assert.Contains("regular C# lambda or method", exception.Message, StringComparison.Ordinal);
     }
 
@@ -153,25 +149,23 @@ public sealed class PageServiceTests : IDisposable
         // Plugin code need not be referenced by a page assembly. If its identity cannot
         // be recorded, a registration must make the build conservative even before resolution.
         var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName($"Plugin{Guid.NewGuid():N}"), AssemblyBuilderAccess.RunAndCollect);
-        var builder = assembly.DefineDynamicModule("Plugin").DefineType("PluginService", TypeAttributes.Public);
-        var constructor = builder.DefineDefaultConstructor(MethodAttributes.Public);
-        var create = builder.DefineMethod("Create", MethodAttributes.Public | MethodAttributes.Static, typeof(object), [typeof(IServiceProvider)]);
+        var typeBuilder = assembly.DefineDynamicModule("Plugin").DefineType("PluginService", TypeAttributes.Public);
+        var constructor = typeBuilder.DefineDefaultConstructor(MethodAttributes.Public);
+        var create = typeBuilder.DefineMethod("Create", MethodAttributes.Public | MethodAttributes.Static, typeof(object), [typeof(IServiceProvider)]);
         var il = create.GetILGenerator();
         il.Emit(OpCodes.Newobj, constructor);
         il.Emit(OpCodes.Ret);
-        var type = builder.CreateType()!;
+        var type = typeBuilder.CreateType()!;
         var probe = new ServiceProbe();
-        await using var app = CreateApp(probe);
-        app.AddPageParameters<ServicePage>(_ => [new { Key = "test" }]);
-        app.UseServices(services =>
+        var builder = CreateBuilder(probe);
+        builder.AddPageParameters<ServicePage>(_ => [new { Key = "test" }]);
+        switch (registration)
         {
-            switch (registration)
-            {
-                case "type": services.Add(new ServiceDescriptor(typeof(object), type, ServiceLifetime.Singleton)); break;
-                case "instance": services.AddSingleton(Activator.CreateInstance(type)!); break;
-                case "factory": services.AddSingleton(type.GetMethod("Create")!.CreateDelegate<Func<IServiceProvider, object>>()); break;
-            }
-        });
+            case "type": builder.Services.Add(new ServiceDescriptor(typeof(object), type, ServiceLifetime.Singleton)); break;
+            case "instance": builder.Services.AddSingleton(Activator.CreateInstance(type)!); break;
+            case "factory": builder.Services.AddSingleton(type.GetMethod("Create")!.CreateDelegate<Func<IServiceProvider, object>>()); break;
+        }
+        await using var app = builder.Build();
         var output = Path.Combine(_root, "dist");
         await app.PublishAsync(output);
         Assert.Single(probe.Created);
@@ -188,66 +182,64 @@ public sealed class PageServiceTests : IDisposable
     [InlineData("loader")]
     public async Task PageServices_CannotBeResolvedOutsidePage(string consumer)
     {
-        await using var app = CreateApp();
-        app.UseServices(services => services.AddScoped<IDisposable, RenderDependency>());
+        var builder = CreateBuilder();
+        builder.Services.AddScoped<IDisposable, RenderDependency>();
         switch (consumer)
         {
             case "route":
-                app.AddPageParameters<ServicePage>(provider =>
+                builder.AddPageParameters<ServicePage>(provider =>
                 {
                     _ = provider.GetRequiredService<IDisposable>();
                     return [new { Key = "test" }];
                 });
                 break;
             case "feed":
-                app.AddRssFeed(provider =>
+                builder.AddRssFeed(provider =>
                 {
                     _ = provider.GetRequiredService<IDisposable>();
                     return [];
                 });
                 break;
             case "artifact":
-                app.AddArtifact("service.txt", static (_, context, _) =>
+                builder.AddArtifact("service.txt", static (_, context, _) =>
                 {
                     _ = context.Services.GetRequiredService<IDisposable>();
                     return Task.CompletedTask;
                 });
                 break;
             case "loader":
-                app.UseContentSource<ServiceProbe>(provider =>
+                builder.AddContentSource<ServiceProbe>(provider =>
                 {
                     _ = provider.GetRequiredService<IDisposable>();
                     return [];
                 });
-                app.AddPageParameters<ServicePage>(provider =>
+                builder.AddPageParameters<ServicePage>(provider =>
                 {
                     _ = provider.GetRequiredService<ContentDictionary<ServiceProbe>>().Count;
                     return [];
                 });
                 break;
         }
+        await using var app = builder.Build();
         var exception = await Assert.ThrowsAnyAsync<Exception>(() => app.PublishAsync(Path.Combine(_root, "dist")));
         Assert.Contains("scoped service", exception.ToString(), StringComparison.OrdinalIgnoreCase);
         Assert.Contains(nameof(IDisposable), exception.ToString(), StringComparison.Ordinal);
     }
 
-    private StaticSite CreateApp(ServiceProbe? probe = null)
+    private StaticSiteBuilder CreateBuilder(ServiceProbe? probe = null)
     {
-        var app = TestSiteFactory.Create(new SiteExecutionPaths(_root));
-        app.Info = new SiteInfo { Name = "Services", BaseUrl = new Uri("https://example.test/") };
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
+        builder.Info = new SiteInfo { Name = "Services", BaseUrl = new Uri("https://example.test/") };
         if (probe is not null)
         {
-            app.UseContentSource<ServiceProbe>("probes", _ => [new ContentEntry<ServiceProbe>("0", probe, "stable")]);
-            app.UseServices(services =>
-            {
-                services.AddScoped<RenderDependency>();
-                services.AddScoped<IRenderService>(provider => new RenderService(
-                    provider.GetRequiredService<ContentDictionary<ServiceProbe>>(),
-                    provider.GetRequiredService<RenderDependency>(), provider.GetRequiredService<PageInfo>()));
-            });
-            app.UseDefaultLayout<ServiceLayout>();
+            builder.AddContentSource<ServiceProbe>("probes", _ => [new ContentEntry<ServiceProbe>("0", probe, "stable")]);
+            builder.Services.AddScoped<RenderDependency>();
+            builder.Services.AddScoped<IRenderService>(provider => new RenderService(
+                provider.GetRequiredService<ContentDictionary<ServiceProbe>>(),
+                provider.GetRequiredService<RenderDependency>(), provider.GetRequiredService<PageInfo>()));
+            builder.UseDefaultLayout<ServiceLayout>();
         }
-        return app;
+        return builder;
     }
 
     public void Dispose()
@@ -256,5 +248,14 @@ public sealed class PageServiceTests : IDisposable
         {
             Directory.Delete(_root, recursive: true);
         }
+    }
+
+    private sealed class ReplacementEnvironment : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = "Replacement";
+        public string ApplicationName { get; set; } = "Replacement";
+        public string ContentRootPath { get; set; } = "/";
+        public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; } =
+            new Microsoft.Extensions.FileProviders.NullFileProvider();
     }
 }

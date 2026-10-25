@@ -22,8 +22,8 @@ Pages in another assembly, such as a Razor class library, need `AddPageAssembly`
 out one of its pages, register an empty parameter sequence:
 
 ```csharp
-app.AddPageAssembly(typeof(SharedPage).Assembly);
-app.AddPageParameters<UnwantedPage>(_ => []);
+builder.AddPageAssembly(typeof(SharedPage).Assembly);
+builder.AddPageParameters<UnwantedPage>(_ => []);
 ```
 
 ## Parameterized routes
@@ -42,7 +42,7 @@ page:
 ```
 
 ```csharp
-app.AddPageParameters<PostPage>(_ =>
+builder.AddPageParameters<PostPage>(_ =>
 [
     new { Slug = "first-post" },
     new { Slug = "second-post" },
@@ -67,7 +67,7 @@ Return an empty sequence to generate no pages; multiple calls for one component 
 ```
 
 ```csharp
-app.AddPageParameters<BlogIndex>(_ => [new { Page = 2 }, new { Page = 3 }]);
+builder.AddPageParameters<BlogIndex>(_ => [new { Page = 2 }, new { Page = 3 }]);
 ```
 
 This generates `blog/index.html` with the default `Page`, plus `blog/page/2/index.html`
@@ -80,7 +80,7 @@ Properties that match route parameters build the URL; the others are only passed
 component. Use this to look up content by key without putting the key in the URL:
 
 ```csharp
-app.AddPageParameters<PostPage>(services => services
+builder.AddPageParameters<PostPage>(services => services
     .GetRequiredService<ContentDictionary<Post>>()
     .Select(post => new { post.Value.Slug, ContentKey = post.Key }));
 ```
@@ -107,7 +107,7 @@ Give the component a route and register it with `AddNotFoundPage<TPage>()`:
 ```
 
 ```csharp
-app.AddNotFoundPage<NotFoundPage>();
+builder.AddNotFoundPage<NotFoundPage>();
 ```
 
 Kiji writes it as `404.html` at the output root. Do not also register it with

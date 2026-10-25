@@ -36,48 +36,48 @@ internal static class TestArticleContents
     }
 
     /// <summary>
-    /// Creates a StaticSite wired exactly like the real site (pages, not-found, content
+    /// Builds a site wired exactly like the real site (pages, not-found, content
     /// and tag route mappings) over the given posts.
     /// </summary>
     private static StaticSite CreateApp(params (Post Metadata, string Html)[] entries)
     {
-        var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory));
-        app.Info = CreateSiteInfo();
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
+        builder.Info = CreateSiteInfo();
 
         IReadOnlyList<Post> items = [.. entries.Select(static entry => ClonePost(entry.Metadata, entry.Html))];
-        app.UseContentSource(_ => items);
-        MapSite(app);
-        return app;
+        builder.AddContentSource(_ => items);
+        MapSite(builder);
+        return builder.Build();
     }
 
     /// <summary>
     /// Includes the shared fixture's fixed pages; callers supply dynamic parameters explicitly.
     /// </summary>
-    public static StaticSite MapTestAssemblyPages(StaticSite app)
+    public static StaticSiteBuilder MapTestAssemblyPages(StaticSiteBuilder builder)
     {
-        app.AddPageParameters<HomePage>(static _ => [new { }]);
-        app.AddPageParameters<AboutPage>(static _ => [new { }]);
-        app.AddPageParameters<PrivacyPolicyPage>(static _ => [new { }]);
-        app.AddPageParameters<BlogIndexPage>(static _ => [new { }]);
-        return app;
+        builder.AddPageParameters<HomePage>(static _ => [new { }]);
+        builder.AddPageParameters<AboutPage>(static _ => [new { }]);
+        builder.AddPageParameters<PrivacyPolicyPage>(static _ => [new { }]);
+        builder.AddPageParameters<BlogIndexPage>(static _ => [new { }]);
+        return builder;
     }
 
-    public static StaticSite MapSite(StaticSite app)
+    public static StaticSiteBuilder MapSite(StaticSiteBuilder builder)
     {
-        ArgumentNullException.ThrowIfNull(app);
+        ArgumentNullException.ThrowIfNull(builder);
 
-        app.UseDefaultLayout<MainLayout>();
-        MapTestAssemblyPages(app);
-        app.AddNotFoundPage<NotFoundPage>();
+        builder.UseDefaultLayout<MainLayout>();
+        MapTestAssemblyPages(builder);
+        builder.AddNotFoundPage<NotFoundPage>();
 
-        app.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
+        builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
-        app.AddPageParameters<TagsPage>(static services => services.GetRequiredService<ContentDictionary<Post>>().Values
+        builder.AddPageParameters<TagsPage>(static services => services.GetRequiredService<ContentDictionary<Post>>().Values
             .SelectMany(static post => post.Tags.Select(static tag => tag.UrlSlug))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Select(static slug => new { TagSlug = slug }));
 
-        return app;
+        return builder;
     }
 
     public static IReadOnlyList<PageRenderRequest> CreatePageRequests(params (Post Metadata, string Html)[] entries)

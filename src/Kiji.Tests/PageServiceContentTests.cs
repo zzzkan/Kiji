@@ -36,14 +36,14 @@ public sealed class PageServiceContentTests : IDisposable
             incremental[Path.Combine("service-related", "first", "index.html")], StringComparison.Ordinal);
 
         // A different output can restore the portable cache. Force a clean render.
-        await using var fresh = CreateApp(new RelatedProbe());
         var full = Path.Combine(_root, "full");
-        await fresh.RunAsync(name => name switch
+        await using var fresh = CreateApp(new RelatedProbe(), environment: name => name switch
         {
             "KIJI_OUTPUT" => full,
             "KIJI_FORCE" => "true",
             _ => null,
-        }, CancellationToken.None);
+        });
+        await fresh.RunAsync(CancellationToken.None);
         var expected = ReadHtml(full);
         Assert.Equal(expected.Keys.Order(), incremental.Keys.Order());
         foreach (var (key, html) in expected)
@@ -109,23 +109,23 @@ public sealed class PageServiceContentTests : IDisposable
         }
     }
 
-    private StaticSite CreateApp(RelatedProbe probe, Func<bool>? includeTags = null)
+    private StaticSite CreateApp(RelatedProbe probe, Func<bool>? includeTags = null, Func<string, string?>? environment = null)
     {
-        var app = TestSiteFactory.Create(new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")));
-        app.Info = new SiteInfo { Name = "Related", BaseUrl = new Uri("https://example.test/") };
-        TestSite.TestSiteAssets.Bind(app, Path.Combine(_root, "wwwroot"));
-        app.UseMarkdownContent<FrontMatter>();
-        app.UseContentSource<RelatedTag>("tags", provider => includeTags?.Invoke() == false ? []
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")), environment);
+        builder.Info = new SiteInfo { Name = "Related", BaseUrl = new Uri("https://example.test/") };
+        TestSite.TestSiteAssets.Bind(builder.Paths, Path.Combine(_root, "wwwroot"));
+        builder.AddMarkdownContent<FrontMatter>();
+        builder.AddContentSource<RelatedTag>("tags", provider => includeTags?.Invoke() == false ? []
             : [.. RelatedTag.Collect(provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>(), probe)
                 .Select(tag => new ContentEntry<RelatedTag>(tag.Name, tag, string.Join("|", tag.Keys)))]);
-        app.UseServices(services => services.AddScoped<RelatedPosts>());
-        app.AddPageParameters<RelatedPage>(provider => provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
+        builder.Services.AddScoped<RelatedPosts>();
+        builder.AddPageParameters<RelatedPage>(provider => provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
             .Select(post => new
             {
                 Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name),
                 ContentKey = post.Key,
             }));
-        return app;
+        return builder.Build();
     }
 
     private void Change(string change)

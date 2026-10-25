@@ -204,7 +204,7 @@ public sealed class StaticSite : IAsyncDisposable
             SiteInfo,
             _environment.EnvironmentName,
             _configuration,
-            _services.GetService<ContentFileRegistry>(), _runtime.Dependencies,
+            _runtime.Files, _runtime.Dependencies,
             _services.GetRequiredService<IImageProcessor>(), assetManifest.Resources);
 
         // Snapshot planning already required every page type to come from a page assembly.
@@ -352,11 +352,7 @@ public sealed class StaticSite : IAsyncDisposable
         return output.ToString();
     }
 
-    internal void InvalidateContent()
-    {
-        _runtime.Invalidate();
-        _services.GetService<ContentFileRegistry>()?.Invalidate();
-    }
+    internal void InvalidateContent() => _runtime.Invalidate();
 
     internal SiteSnapshot CreateSnapshot()
     {

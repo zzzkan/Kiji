@@ -1,5 +1,4 @@
 using Kiji.Assets;
-using Kiji.Generation;
 using Microsoft.Extensions.DependencyInjection;
 using YamlDotNet.Serialization;
 
@@ -51,6 +50,7 @@ public static class MarkdownStaticSiteBuilderExtensions
         var sourceCache = new MarkdownSourceCache<TFrontMatter>();
 
         var paths = builder.Paths;
+        var files = builder.Runtime.Files;
         return builder.RegisterContent(
             services =>
             {
@@ -67,7 +67,7 @@ public static class MarkdownStaticSiteBuilderExtensions
                         cancellationToken),
                     CreateFrontMatterDeserializer,
                     sourceCache,
-                    services.GetService<ContentFileRegistry>(),
+                    files,
                     contentOptions.FileFilter)
                     .Build();
 

@@ -2,7 +2,6 @@ using Kiji.Rendering;
 using Kiji.Tests.TestSite;
 using Kiji.Tests.TestSite.ErrorHandling;
 using Kiji.Tests.TestSite.Head;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xunit;
 
@@ -15,7 +14,7 @@ public sealed class ComponentRendererTests
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
         builder.SiteInfo = TestArticleContents.CreateSiteInfo();
-        builder.Services.AddLogging(logging => logging.ClearProviders());
+        builder.Logging.ClearProviders();
         await using var app = builder.Build();
         app.UsePlanningOptions();
         var renderer = new ComponentRenderer(app.ServiceProvider);

@@ -1,6 +1,5 @@
 using System.Reflection;
 using Kiji.Assets;
-using Kiji.Generation;
 using Kiji.Hosting;
 using Kiji.Rendering;
 using Microsoft.AspNetCore.Components;
@@ -49,7 +48,7 @@ public sealed class StaticSiteBuilder
             // Relative paths in later AddJsonFile calls also resolve against the project.
             Configuration.SetBasePath(paths.ProjectDirectory);
             Configuration.AddJsonFile("appsettings.json", optional: true, reloadOnChange: false);
-            Configuration.AddJsonFile($"appsettings.{settings.EnvironmentName}.json", optional: true, reloadOnChange: false);
+            Configuration.AddJsonFile($"appsettings.{HostEnvironment.EnvironmentName}.json", optional: true, reloadOnChange: false);
         }
         if (HostEnvironment.IsDevelopment())
         {
@@ -58,17 +57,26 @@ public sealed class StaticSiteBuilder
 
         // Defaults are registered first so that later registrations replace them. Managed
         // services are present from the start, so TryAdd-style extensions see them.
-        ComponentRenderer.AddComponentRenderingServices(_services);
-        Logging = new SiteLoggingBuilder(_services);
-        Logging.AddConfiguration(Configuration.GetSection("Logging"));
         _services.AddSingleton(_ => SiteInfo);
         _services.AddSingleton<IHostEnvironment>(HostEnvironment);
         _services.AddSingleton<IConfiguration>(Configuration);
+
+        // As in other .NET hosts, the Logging section applies and builder.Logging changes the rest.
+        _services.AddLogging();
+        Logging = new SiteLoggingBuilder(_services);
+        Logging.AddConfiguration(Configuration.GetSection("Logging"));
+        // Standard error, because MSBuild hides ordinary output at publish's default verbosity.
+        Logging.AddConsole(static options => options.LogToStandardErrorThreshold = LogLevel.Warning);
+        Logging.SetMinimumLevel(LogLevel.Warning);
+
+        ComponentRenderer.AddComponentRenderingServices(_services);
+
+        // The default processor reads its options once. A replacement IImageProcessor ignores them.
         _services.AddOptions<ImageProcessorOptions>().ValidateOnStart();
         _services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<ImageProcessorOptions>, ImageProcessorOptionsValidator>());
         _services.AddSingleton<IImageProcessor>(static provider =>
             new ImageProcessor(provider.GetRequiredService<IOptions<ImageProcessorOptions>>().Value));
-        _services.AddSingleton<ContentFileRegistry>();
+
         _managedServices = [.. _services.Where(static descriptor => SiteServiceRegistration.IsManaged(descriptor.ServiceType))];
     }
 

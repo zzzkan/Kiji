@@ -102,8 +102,10 @@ builder.Services.Configure<ImageProcessorOptions>(builder.Configuration.GetSecti
 `builder.Logging` is a standard
 [`ILoggingBuilder`](https://learn.microsoft.com/dotnet/core/extensions/logging). By default,
 Kiji writes `Warning` and higher to the console, using standard error so that
-`dotnet publish` shows it. The `Logging` configuration section applies as in other .NET
-hosts. `LogLevel` and the extension methods need `using Microsoft.Extensions.Logging;`:
+`dotnet publish` shows it. This includes exceptions caught by
+[`ErrorBoundary`](https://learn.microsoft.com/aspnet/core/blazor/fundamentals/handle-errors?view=aspnetcore-10.0#error-boundaries).
+The `Logging` configuration section applies as in other .NET hosts. `LogLevel` and the
+extension methods need `using Microsoft.Extensions.Logging;`:
 
 ```csharp
 builder.Logging.SetMinimumLevel(LogLevel.Information);
@@ -179,9 +181,7 @@ builder.Services.AddScoped<RelatedPosts>();
   scoped services.
 - `SiteInfo`, `PageInfo`, `IHostEnvironment`, `IConfiguration`, and `ContentDictionary<T>` come
   from Kiji and cannot be replaced.
-- Components and services can inject `ILogger<T>`. Kiji prints `Warning` and higher, including
-  exceptions caught by
-  [`ErrorBoundary`](https://learn.microsoft.com/aspnet/core/blazor/fundamentals/handle-errors?view=aspnetcore-10.0#error-boundaries).
+- Components and services can inject `ILogger<T>`. See [Logging](#logging).
 
 ### Page metadata
 

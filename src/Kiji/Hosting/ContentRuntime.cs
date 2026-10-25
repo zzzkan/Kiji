@@ -11,6 +11,10 @@ namespace Kiji.Hosting;
 internal sealed class ContentRuntime
 {
     internal Generation.DependencyCatalog Dependencies { get; } = new();
+
+    /// <summary>Hashes of the content files read in the current snapshot.</summary>
+    internal Generation.ContentFileRegistry Files { get; } = new();
+
     private readonly HashSet<Type> _registeredTypes = [];
     private readonly ConcurrentDictionary<object, object> _materialized = new();
     private readonly Lock _materializationLock = new();
@@ -49,6 +53,7 @@ internal sealed class ContentRuntime
         {
             _materialized.Clear();
             Dependencies.Invalidate();
+            Files.Invalidate();
         }
     }
 

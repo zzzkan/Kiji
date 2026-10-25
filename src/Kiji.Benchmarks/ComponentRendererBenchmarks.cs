@@ -25,6 +25,7 @@ public class ComponentRendererBenchmarks
         };
 
         var services = new ServiceCollection();
+        services.AddLogging();
         ComponentRenderer.AddComponentRenderingServices(services);
         services.AddSingleton(site);
         _serviceProvider = services.BuildServiceProvider();

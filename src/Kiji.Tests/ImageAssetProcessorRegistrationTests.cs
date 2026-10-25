@@ -3,6 +3,7 @@ using Kiji.Markdown;
 using Kiji.Tests.TestSite.PageServices;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace Kiji.Tests;
@@ -68,6 +69,29 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
         var exception = Assert.Throws<InvalidOperationException>(() => invalid.Build());
         Assert.Contains(nameof(IImageProcessor), exception.Message, StringComparison.Ordinal);
         Assert.Contains("unkeyed", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("quality", "Quality")]
+    [InlineData("max-width", "MaxWidth")]
+    [InlineData("widths", "Widths")]
+    public void InvalidSettings_FailBuildBeforeAnyOutput(string setting, string property)
+    {
+        var builder = CreateBuilder();
+        builder.Services.Configure<ImageProcessorOptions>(options =>
+        {
+            switch (setting)
+            {
+                case "quality": options.Quality = 101; break;
+                case "max-width": options.MaxWidth = 0; break;
+                case "widths": options.Widths = [640, 0]; break;
+            }
+        });
+
+        var exception = Assert.Throws<OptionsValidationException>(() => builder.Build());
+
+        Assert.Contains($"ImageProcessorOptions.{property}", exception.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(_root));
     }
 
     private StaticSiteBuilder CreateBuilder()

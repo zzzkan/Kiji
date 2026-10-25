@@ -12,24 +12,33 @@ internal sealed class ImageProcessor : IImageProcessor
     /// </summary>
     private static readonly SemaphoreSlim ConcurrencyGate = new(Environment.ProcessorCount);
 
-    private static readonly int[] Widths = [320, 640, 960, 1280];
-    private const int MaxSourceWidth = 1920;
-    private const int Quality = 80;
-    private readonly SemaphoreSlim _generationGate;
-    internal Func<string, CancellationToken, Task>? BeforeEncodeAsync { get; init; }
-
-    internal ImageProcessor(SemaphoreSlim? generationGate = null)
-    {
-        _generationGate = generationGate ?? ConcurrencyGate;
-    }
-
     // Native code is not covered by managed assembly dependency tracking. Include
     // its version and platform so caches cannot cross incompatible native builds.
     private static readonly string EncoderIdentity =
         $"mvid:{typeof(SKWebpEncoder).Assembly.ManifestModule.ModuleVersionId:N}:{SkiaSharpVersion.Native}:{RuntimeInformation.RuntimeIdentifier}";
 
-    public string CacheIdentity => BuildFingerprint.HashText(FormattableString.Invariant(
-        $"skia-webp-v1:{Quality}:{MaxSourceWidth}:{string.Join(",", Widths)}:{EncoderIdentity}"));
+    private readonly int[] _widths;
+    private readonly int _maxWidth;
+    private readonly int _quality;
+    private readonly SemaphoreSlim _generationGate;
+    internal Func<string, CancellationToken, Task>? BeforeEncodeAsync { get; init; }
+
+    /// <param name="options">Validated settings, copied so later changes cannot alter cached output.</param>
+    /// <param name="generationGate">Overrides the process-wide decode limit. For tests.</param>
+    internal ImageProcessor(ImageProcessorOptions? options = null, SemaphoreSlim? generationGate = null)
+    {
+        options ??= new ImageProcessorOptions();
+        _maxWidth = options.MaxWidth;
+        _quality = options.Quality;
+        // Equivalent width lists share one identity, and so one image cache.
+        _widths = [.. (options.Widths ?? ImageProcessorOptions.DefaultWidths)
+            .Where(width => width < _maxWidth).Distinct().Order()];
+        _generationGate = generationGate ?? ConcurrencyGate;
+        CacheIdentity = BuildFingerprint.HashText(FormattableString.Invariant(
+            $"skia-webp-v1:{_quality}:{_maxWidth}:{string.Join(",", _widths)}:{EncoderIdentity}"));
+    }
+
+    public string CacheIdentity { get; }
 
     /// <inheritdoc/>
     public async Task<ProcessedImageInfo> ProcessAsync(
@@ -60,9 +69,9 @@ internal sealed class ImageProcessor : IImageProcessor
         // Another page may still reference an older variant with this basename.
         // Only output reconciliation knows which files are safe to remove.
 
-        var targetWidths = Widths
+        var targetWidths = _widths
             .Where(width => width < originalWidth)
-            .Append(Math.Min(originalWidth, MaxSourceWidth))
+            .Append(Math.Min(originalWidth, _maxWidth))
             .Distinct()
             .Order()
             .ToArray();
@@ -98,7 +107,7 @@ internal sealed class ImageProcessor : IImageProcessor
                             {
                                 await beforeEncode(materializedPath, cancellationToken);
                             }
-                            await EncodeVariantAsync(image, originalWidth, originalHeight, targetWidth, materializedPath, cancellationToken);
+                            await EncodeVariantAsync(image, originalWidth, originalHeight, targetWidth, _quality, materializedPath, cancellationToken);
                             BuildOutput.Detail($"Generated: {materializedPath} ({targetWidth}w)");
                         }
                     }
@@ -152,6 +161,7 @@ internal sealed class ImageProcessor : IImageProcessor
         int originalWidth,
         int originalHeight,
         int targetWidth,
+        int quality,
         string destinationPath,
         CancellationToken cancellationToken)
     {
@@ -166,7 +176,7 @@ internal sealed class ImageProcessor : IImageProcessor
                 image.Resize(new SKSizeI(targetWidth, targetHeight), new SKSamplingOptions(SKCubicResampler.Mitchell))
                     ?? throw new InvalidDataException("Cannot resize image.");
             using var pixels = (resized ?? image).PeekPixels();
-            using var encoded = SKWebpEncoder.Encode(pixels, new SKWebpEncoderOptions(SKWebpEncoderCompression.Lossy, Quality))
+            using var encoded = SKWebpEncoder.Encode(pixels, new SKWebpEncoderOptions(SKWebpEncoderCompression.Lossy, quality))
                 ?? throw new InvalidDataException("Cannot encode WebP image.");
             cancellationToken.ThrowIfCancellationRequested();
             await using (var output = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, useAsync: true))

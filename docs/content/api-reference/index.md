@@ -236,6 +236,30 @@ Import `Kiji.Markdown`. See [Markdown and images](../markdown/) for examples.
 Call `RenderAsync` while rendering a page, because local images are written beside that
 page.
 
+### Image settings
+
+Configure `ImageProcessorOptions` from `Kiji.Assets` to change the default processor's
+output with the standard
+[options pattern](https://learn.microsoft.com/dotnet/core/extensions/options):
+
+```csharp
+builder.Services.Configure<ImageProcessorOptions>(options =>
+{
+    options.Widths = [480, 960];
+    options.Quality = 75;
+});
+```
+
+| `ImageProcessorOptions` property | Default  | Behavior                                                                                                    |
+| -------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------- |
+| `IReadOnlyList<int>? Widths`     | `null`   | Widths of the smaller variants. `null` uses `DefaultWidths`: 320, 640, 960, and 1280. Widths at or above the source width or `MaxWidth` are skipped. |
+| `int MaxWidth`                   | `1920`   | The widest variant. Every image gets one variant at its own width, capped at this value.                   |
+| `int Quality`                    | `80`     | Lossy WebP quality from 1 to 100.                                                                           |
+
+- `Build` validates the settings and throws `OptionsValidationException` for invalid values.
+- Changing a setting re-encodes images and renders their pages again on the next publish.
+- The settings apply only to the default processor, not to a replacement `IImageProcessor`.
+
 ### Image processing
 
 To replace the default image processor, implement `IImageProcessor` from `Kiji.Assets` and

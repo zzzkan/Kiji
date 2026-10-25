@@ -67,6 +67,46 @@ public sealed class ImageProcessorTests : IDisposable
         Assert.Equal([320, 640, 960, 1280, 1920], info.Variants.Select(static variant => variant.Width));
     }
 
+    [Theory]
+    [InlineData(null, 800, new[] { 320, 640, 800 })]
+    [InlineData(new[] { 960, 480, 480, 3000 }, 1000, new[] { 480, 960, 1000 })]
+    [InlineData(new int[0], 1200, new[] { 1200 })]
+    public async Task ProcessImage_UsesConfiguredWidthsAndMaxWidth(int[]? widths, int maxWidth, int[] expected)
+    {
+        var imagePath = Path.Combine(_sourceDir, "configured.png");
+        await CreateTestImageAsync(imagePath, 2500, 1400);
+        var processor = new ImageProcessor(new ImageProcessorOptions { Widths = widths, MaxWidth = maxWidth });
+
+        var info = await processor.ProcessAsync(imagePath, _outputDir);
+
+        Assert.Equal(expected, info.Variants.Select(static variant => variant.Width));
+        Assert.All(info.Variants, variant => Assert.True(File.Exists(Path.Combine(_outputDir, variant.FileName))));
+    }
+
+    [Fact]
+    public async Task Settings_DetermineCacheIdentityAndEncodedQuality()
+    {
+        var imagePath = Path.Combine(_sourceDir, "quality.png");
+        await CreateTestImageAsync(imagePath, 600, 400);
+        var low = new ImageProcessor(new ImageProcessorOptions { Quality = 10 });
+
+        var lowInfo = await low.ProcessAsync(imagePath, Path.Combine(_outputDir, "low"));
+        var defaultInfo = await _processor.ProcessAsync(imagePath, Path.Combine(_outputDir, "default"));
+
+        // Each setting must reach the identity, or cached variants would outlive a change.
+        Assert.Equal(_processor.CacheIdentity, new ImageProcessor(new ImageProcessorOptions { Widths = [1280, 320, 960, 640, 320] }).CacheIdentity);
+        Assert.Equal(4, new[]
+        {
+            _processor.CacheIdentity,
+            low.CacheIdentity,
+            new ImageProcessor(new ImageProcessorOptions { MaxWidth = 1600 }).CacheIdentity,
+            new ImageProcessor(new ImageProcessorOptions { Widths = [480] }).CacheIdentity,
+        }.Distinct(StringComparer.Ordinal).Count());
+        Assert.True(
+            new FileInfo(Path.Combine(_outputDir, "low", lowInfo.Variants[^1].FileName)).Length
+            < new FileInfo(Path.Combine(_outputDir, "default", defaultInfo.Variants[^1].FileName)).Length);
+    }
+
     [Fact]
     public async Task ProcessImage_ExistingVariants_AreNotRegenerated()
     {

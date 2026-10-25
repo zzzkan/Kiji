@@ -71,6 +71,9 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   be a singleton; standard DI ownership applies. It must support concurrency and retain
   no page/content state. Reload does not recreate it. Include external configuration
   and encoder versions in cache identities; HTML reuse controls do not clear image caches.
+  The default processor reads ImageProcessorOptions (IOptions) once; Build validates them,
+  and every setting must stay in its CacheIdentity. Null Widths means DefaultWidths so
+  configuration binding cannot append to the defaults.
 
 Do not reintroduce evaluated alternatives: pooled HtmlRenderer (root/scope state cannot
 reset), RouteView (PageView owns Kiji's layout resolution), AOT/trimming (reflection),

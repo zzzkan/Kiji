@@ -5,7 +5,9 @@ using Kiji.Hosting;
 using Kiji.Rendering;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 
 namespace Kiji;
 
@@ -16,7 +18,7 @@ namespace Kiji;
 /// </remarks>
 public sealed class StaticSiteBuilder
 {
-    private readonly ServiceCollection _services = new();
+    private readonly ServiceCollection _services = [];
     private readonly List<ServiceDescriptor> _managedServices;
     private readonly List<string> _contentPaths = [];
     private readonly List<PageParameterRegistration> _pageParameters = [];
@@ -39,7 +41,10 @@ public sealed class StaticSiteBuilder
         ComponentRenderer.AddComponentRenderingServices(_services);
         _services.AddSingleton(_ => Info);
         _services.AddSingleton<IHostEnvironment>(HostEnvironment);
-        _services.AddSingleton<IImageProcessor>(static _ => new ImageProcessor());
+        _services.AddOptions<ImageProcessorOptions>();
+        _services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<ImageProcessorOptions>, ImageProcessorOptionsValidator>());
+        _services.AddSingleton<IImageProcessor>(static provider =>
+            new ImageProcessor(provider.GetRequiredService<IOptions<ImageProcessorOptions>>().Value));
         _services.AddSingleton<ContentFileRegistry>();
         _managedServices = [.. _services.Where(static descriptor => SiteServiceRegistration.IsManaged(descriptor.ServiceType))];
     }
@@ -247,6 +252,17 @@ public sealed class StaticSiteBuilder
             ValidateScopes = true,
             ValidateOnBuild = true,
         });
+        try
+        {
+            // The generic host's ValidateOnStart needs a started host, so Build reads the
+            // settings itself: invalid values fail here rather than midway through a publish.
+            _ = provider.GetRequiredService<IOptions<ImageProcessorOptions>>().Value;
+        }
+        catch
+        {
+            provider.Dispose();
+            throw;
+        }
         return (provider, assemblies);
     }
 

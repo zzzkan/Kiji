@@ -150,7 +150,8 @@ content/
 For `.jpg`, `.jpeg`, `.png`, `.gif`, and `.webp` files, Kiji writes WebP versions beside
 the page's `index.html`: 320, 640, 960, and 1280 pixels wide when the source is wider,
 plus one at the source width, up to 1920 pixels. The `<img>` gets a `srcset` and the source
-dimensions, and every image after the first loads lazily.
+dimensions, and every image after the first loads lazily. To change the widths or the
+quality, see [Image settings](../api-reference/#image-settings).
 
 The output is static: animated images keep only their first frame, metadata such as EXIF
 is removed, and colors are converted to sRGB. To keep an image as is, put it in `wwwroot/`

@@ -192,6 +192,39 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         Assert.Contains(detail.Dependencies, static dependency => dependency is { Kind: "file", Key: "content/hello/hello-world.md" });
     }
 
+    [Fact]
+    public async Task PublishAsync_ChangedImageSettings_ReplaceReusedVariants()
+    {
+        await File.WriteAllTextAsync(Path.Combine(_contentsDir, "photos.md"), "---\ntitle: Photos\n---\n\n![Photo](photo.png)\n");
+        await CreateTestImageAsync(Path.Combine(_contentsDir, "photo.png"), 1400, 700);
+        var pageDir = Path.Combine(_outputDir, "md", "photos");
+
+        async Task<string> PublishAsync(Action<Kiji.Assets.ImageProcessorOptions>? configure = null)
+        {
+            var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir));
+            builder.Info = TestArticleContents.CreateSiteInfo();
+            if (configure is not null) { builder.Services.Configure(configure); }
+            builder.AddMarkdownContent<FrontMatter>();
+            builder.AddPageParameters<MarkdownPostTestPage>(static services => services
+                .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
+                .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
+            await using var app = builder.Build();
+            await app.PublishAsync(_outputDir);
+            return await File.ReadAllTextAsync(Path.Combine(pageDir, "index.html"));
+        }
+
+        var original = await PublishAsync();
+        Assert.Contains(" 1280w", original, StringComparison.Ordinal);
+        Assert.Equal(5, Directory.GetFiles(pageDir, "photo.png.*.webp").Length);
+
+        var configured = await PublishAsync(static options => { options.Widths = [480]; options.MaxWidth = 900; });
+        Assert.Contains(" 480w, ", configured, StringComparison.Ordinal);
+        Assert.Contains(" 900w\"", configured, StringComparison.Ordinal);
+        Assert.DoesNotContain(" 1280w", configured, StringComparison.Ordinal);
+        Assert.Equal(["480w", "900w"], Directory.GetFiles(pageDir, "photo.png.*.webp")
+            .Select(static file => Path.GetFileNameWithoutExtension(file).Split('.')[^1]).Order(StringComparer.Ordinal));
+    }
+
     private async Task<Kiji.Generation.BuildManifest> ReadManifestAsync()
     {
         return System.Text.Json.JsonSerializer.Deserialize(

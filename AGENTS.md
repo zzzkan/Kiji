@@ -30,8 +30,10 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   Use* sets a single value. Kiji parses no command line:
   watch serves, publish generates, clean cleans. MSBuild owns KijiForce;
   ASP.NET Core configuration owns the dev server address. Prefer conventions to flags.
-- All output goes through the site's ILogger (Kiji's own under Kiji.Build); the dev server's
-  watch-style status lines are the exception. Log levels decide what is written and MSBuild
+- All output goes through the site's ILogger (Kiji's own under Kiji.Build). The exceptions are
+  the dev server's watch-style status lines and a publish failure before the site's logging
+  exists, which goes to standard error in the same format. RunAsync logs its own failures
+  before disposing the site, as the generic host does. Log levels decide what is written and MSBuild
   verbosity what is shown: publish writes warnings and errors in MSBuild's canonical format,
   the only output the terminal logger shows by default, and everything else at high importance.
   Log levels come from the Logging section, not MSBuild properties.

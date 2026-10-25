@@ -70,6 +70,20 @@ public sealed class RunAsyncTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_PublishFailure_IsLoggedAndRethrown()
+    {
+        var logs = new RecordingLoggerProvider();
+        var builder = CreateBuilder(EnvironmentWith([("KIJI_OUTPUT", _outputDir)]));
+        builder.Logging.AddProvider(logs);
+        var site = builder.Build();
+        File.Delete(site.Paths.AssetManifestBasePath + ".staticwebassets.publish.runtime.json");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => site.RunAsync(CancellationToken.None));
+
+        Assert.Contains(("Kiji.Build", LogLevel.Error, "Publishing failed."), logs.Entries);
+    }
+
+    [Fact]
     public async Task RunAsync_DisposesTheSite_AndRejectsASecondRun()
     {
         var app = CreateBuilder(EnvironmentWith([("KIJI_OUTPUT", _outputDir)])).Build();

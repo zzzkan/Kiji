@@ -41,7 +41,7 @@ return await builder.Build().RunAsync();
 | `IHostEnvironment StaticSiteBuilder.Environment`                               | See [Environment](#environment).                                                                                          |
 | `ConfigurationManager StaticSiteBuilder.Configuration`                         | See [Configuration](#configuration).                                                                                      |
 | `ILoggingBuilder StaticSiteBuilder.Logging`                                    | See [Logging](#logging).                                                                                                  |
-| `StaticSite StaticSiteBuilder.Build()`                                         | Validates the services and makes the builder read-only. Call it once.                                                     |
+| `StaticSite StaticSiteBuilder.Build()`                                         | Validates the services and makes them read-only. Call it once.                                                            |
 | `Task<int> StaticSite.RunAsync(CancellationToken cancellationToken = default)` | Serves during `dotnet watch` or generates the site during `dotnet publish`, then disposes the site. Return its exit code. |
 
 ### Environment

@@ -16,7 +16,8 @@ namespace Kiji;
 /// <summary>Configures a static site's metadata, services, content, pages, and generated files.</summary>
 /// <remarks>
 /// Create it with <see cref="StaticSite.CreateBuilder(string[])"/> and call <see cref="Build"/> once.
-/// The builder and <see cref="Services"/> become read-only when the site is built.
+/// Building the site makes <see cref="Services"/> and the registration methods read-only.
+/// <see cref="Configuration"/> stays writable, as in other .NET hosts.
 /// </remarks>
 public sealed class StaticSiteBuilder
 {

@@ -95,7 +95,9 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
             @code { [Parameter] public string Slug { get; set; } = ""; }
             """);
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.PublishAsync());
-        Assert.Matches(@"Kiji : error : InvalidOperationException: Page component '[^']*UnregisteredPage'.*AddPageParameters<UnregisteredPage>.*\[[^\]]*PackageSite\.csproj\]", failure.Message);
+        Assert.Matches(@"Kiji\.Build : error : Publishing failed\. InvalidOperationException: Page component '[^']*UnregisteredPage'.*AddPageParameters<UnregisteredPage>.*\[[^\]]*PackageSite\.csproj\]", failure.Message);
+        // The site's logging reported it, so the handler for failures before logging exists stays silent.
+        Assert.DoesNotContain("Kiji.Build : error : InvalidOperationException", failure.Message, StringComparison.Ordinal);
         File.Delete(Path.Combine(fixture.Site, "UnregisteredPage.razor"));
 
         var stagingDirectory = Assert.Single(Directory.GetDirectories(Path.Combine(fixture.Site, "obj"), "site", SearchOption.AllDirectories));

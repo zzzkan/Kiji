@@ -158,10 +158,31 @@ public sealed class StaticSite : IAsyncDisposable
                 return _settings.Publishing ? 1 : 0;
             }
         }
+        catch (Exception exception) when (LogPublishFailure(exception))
+        {
+            // Not reached: the filter only logs, before the finally below disposes the logging services.
+            throw;
+        }
         finally
         {
             await DisposeAsync();
         }
+    }
+
+    /// <summary>
+    /// Logs a failed publish, as the generic host logs a failed start, so the site's logging
+    /// settings apply and MSBuild reports it. While serving, the failure reaches the terminal as is.
+    /// </summary>
+    /// <returns>Always <see langword="false"/>, so the exception keeps propagating. A filter that
+    /// throws also counts as false, so a logging failure cannot hide the original exception.</returns>
+    private bool LogPublishFailure(Exception exception)
+    {
+        if (_settings.Publishing && !_disposed)
+        {
+            BuildLogger.PublishFailed(exception);
+            UnhandledPublishErrorReporter.MarkLogged(exception);
+        }
+        return false;
     }
 
     /// <summary>Releases the site's services. <see cref="RunAsync"/> disposes the site when it finishes.</summary>

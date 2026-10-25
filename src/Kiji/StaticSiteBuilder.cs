@@ -4,9 +4,11 @@ using Kiji.Generation;
 using Kiji.Hosting;
 using Kiji.Rendering;
 using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Kiji;
@@ -36,11 +38,32 @@ public sealed class StaticSiteBuilder
         HostEnvironment = new SiteHostEnvironment(
             settings.EnvironmentName, entryAssembly.GetName().Name ?? string.Empty, paths.ProjectDirectory);
 
+        // Every configuration value is part of the publish fingerprint, so the default
+        // sources are only those that travel with the project. Environment variables and
+        // command-line arguments would differ between machines and between serve and publish.
+        Configuration = new ConfigurationManager();
+        // A site started through MSBuild always has its project directory. Without one, as
+        // when tests only plan pages, there are no files to read and no base path to set.
+        if (Directory.Exists(paths.ProjectDirectory))
+        {
+            // Relative paths in later AddJsonFile calls also resolve against the project.
+            Configuration.SetBasePath(paths.ProjectDirectory);
+            Configuration.AddJsonFile("appsettings.json", optional: true, reloadOnChange: false);
+            Configuration.AddJsonFile($"appsettings.{settings.EnvironmentName}.json", optional: true, reloadOnChange: false);
+        }
+        if (HostEnvironment.IsDevelopment())
+        {
+            Configuration.AddUserSecrets(entryAssembly, optional: true, reloadOnChange: false);
+        }
+
         // Defaults are registered first so that later registrations replace them. Managed
         // services are present from the start, so TryAdd-style extensions see them.
         ComponentRenderer.AddComponentRenderingServices(_services);
+        Logging = new SiteLoggingBuilder(_services);
+        Logging.AddConfiguration(Configuration.GetSection("Logging"));
         _services.AddSingleton(_ => Info);
         _services.AddSingleton<IHostEnvironment>(HostEnvironment);
+        _services.AddSingleton<IConfiguration>(Configuration);
         _services.AddOptions<ImageProcessorOptions>();
         _services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<ImageProcessorOptions>, ImageProcessorOptionsValidator>());
         _services.AddSingleton<IImageProcessor>(static provider =>
@@ -75,6 +98,21 @@ public sealed class StaticSiteBuilder
     /// <c>dotnet publish</c> and <c>Development</c> while serving. The content root is the project directory.
     /// </remarks>
     public IHostEnvironment Environment => HostEnvironment;
+
+    /// <summary>The site configuration, also available to components as <see cref="IConfiguration"/>.</summary>
+    /// <remarks>
+    /// It reads <c>appsettings.json</c> and <c>appsettings.{Environment}.json</c> from the project directory, and user
+    /// secrets in Development. Add other sources, such as prefixed environment variables, explicitly. Every value is
+    /// part of the publish fingerprint: changing one renders every page again. Files are read once per process.
+    /// </remarks>
+    public ConfigurationManager Configuration { get; }
+
+    /// <summary>The logging configuration for components and services.</summary>
+    /// <remarks>
+    /// Kiji writes Warning and higher to the console, using standard error so that <c>dotnet publish</c> shows it.
+    /// The <c>Logging</c> configuration section applies, as in other .NET hosts.
+    /// </remarks>
+    public ILoggingBuilder Logging { get; }
 
     internal string[] Args { get; }
 

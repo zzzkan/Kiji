@@ -10,6 +10,7 @@ using Kiji.Rendering;
 using Kiji.Routing;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -22,6 +23,7 @@ public sealed class StaticSite : IAsyncDisposable
     private readonly SiteRunSettings _settings;
     private readonly ContentRuntime _runtime;
     private readonly SiteHostEnvironment _environment;
+    private readonly ConfigurationManager _configuration;
     private readonly IReadOnlyList<PageParameterRegistration> _pageParameters;
     private readonly IReadOnlyList<SiteArtifactRegistration> _artifacts;
     private readonly IReadOnlyList<Assembly> _pageAssemblies;
@@ -41,6 +43,7 @@ public sealed class StaticSite : IAsyncDisposable
         _settings = builder.RunSettings;
         _runtime = builder.Runtime;
         _environment = builder.HostEnvironment;
+        _configuration = builder.Configuration;
         _pageParameters = [.. builder.PageParameters];
         _artifacts = [.. builder.Artifacts];
         _pageAssemblies = [.. builder.PageAssemblies];
@@ -164,6 +167,7 @@ public sealed class StaticSite : IAsyncDisposable
 
         await _services.DisposeAsync();
         _environment.DisposeContentRootFileProvider();
+        _configuration.Dispose();
     }
 
     /// <summary>Generates the site, reusing unchanged output from a previous publish.</summary>
@@ -198,6 +202,7 @@ public sealed class StaticSite : IAsyncDisposable
             Paths.ResolveCachePath(),
             Info,
             EnvironmentName,
+            _configuration,
             _services.GetService<ContentFileRegistry>(), _runtime.Dependencies,
             _services.GetRequiredService<IImageProcessor>(), assetManifest.Resources);
 

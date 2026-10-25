@@ -16,7 +16,7 @@ nothing it depends on has changed, and always produce a complete site.
 | Page parameters change | Render affected pages. |
 | A local image changes | Render pages that use it and update its variants. |
 | A static asset changes | Update the asset and pages that link it through `Assets` or `ImportMap`. |
-| Code, packages, the .NET runtime, or site settings change | Render all pages. |
+| Code, packages, the .NET runtime, `SiteInfo`, the environment name, or [configuration](../api-reference/#configuration) change | Render all pages. |
 | A page uses an `AlwaysRender` component | Render that page on every publish. |
 
 Feeds, sitemaps, and custom artifacts are regenerated on every publish.
@@ -36,8 +36,8 @@ see the [reusable parameter types](../api-reference/#pages).
 
 Kiji tracks reads through `ContentDictionary<T>`. To track other data, load it with
 [AddContentSource](../api-reference/#content-sources-and-contentdictionary) and supply
-digests. Kiji cannot see other reads, such as files, HTTP, environment variables, the
-clock, or service state. Mark components that render such values:
+digests. Values from `builder.Configuration` are covered by the fingerprint. Kiji cannot see
+other reads, such as files, HTTP, environment variables, the clock, or service state. Mark components that render such values:
 
 ```razor
 @attribute [AlwaysRender]

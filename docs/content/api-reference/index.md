@@ -40,6 +40,8 @@ return await site.RunAsync();
 | `SiteInfo StaticSiteBuilder.Info`                                       | Required site metadata.                                                                                                                         |
 | `IServiceCollection StaticSiteBuilder.Services`                         | Services for components and site factories. See [Services](#services).                                                                         |
 | `IHostEnvironment StaticSiteBuilder.Environment`                        | The host environment. See [Environment](#environment).                                                                                         |
+| `ConfigurationManager StaticSiteBuilder.Configuration`                  | Site configuration. See [Configuration](#configuration).                                                                                       |
+| `ILoggingBuilder StaticSiteBuilder.Logging`                             | Logging providers and filters. See [Logging](#logging).                                                                                        |
 | `StaticSite StaticSiteBuilder.Build()`                                  | Validates the services and makes the builder and `Services` read-only. Call it once. Content is not loaded yet.                                  |
 | `Task<int> StaticSite.RunAsync(CancellationToken cancellationToken = default)` | Serves during `dotnet watch` and generates the site during `dotnet publish`; return its exit code. A site runs only once and is disposed afterward. |
 
@@ -61,6 +63,53 @@ if (builder.Environment.IsDevelopment())
   during `dotnet publish` and `Development` while serving. You can also set it before `Build`.
 - `ContentRootPath` is the project directory and cannot be changed.
 - Changing the environment name renders every page again on the next publish.
+
+### Configuration
+
+`builder.Configuration` is a standard
+[configuration](https://learn.microsoft.com/dotnet/core/extensions/configuration), also
+injectable into components and services as `IConfiguration` from
+`Microsoft.Extensions.Configuration`. It reads these sources from the project directory,
+later ones overriding earlier ones:
+
+1. `appsettings.json`
+2. `appsettings.{Environment}.json`, for example `appsettings.Production.json` during `dotnet publish`
+3. [User secrets](https://learn.microsoft.com/aspnet/core/security/app-secrets), in the
+   `Development` environment only
+
+Bind a section to options, or read values in a component:
+
+```csharp
+builder.Services.Configure<ImageProcessorOptions>(builder.Configuration.GetSection("Images"));
+```
+
+```razor
+@inject IConfiguration Configuration
+
+<p>@Configuration["Site:Tagline"]</p>
+```
+
+- Environment variables and command-line arguments are not read, because they differ
+  between machines and `dotnet publish` passes no arguments. Add a source explicitly, with
+  a prefix: `builder.Configuration.AddEnvironmentVariables("MYSITE_")`.
+- Every configuration value is part of the publish fingerprint: changing any value renders
+  every page again. The cache stores only a SHA-256 hash of the values.
+- Files are read once. Restart `dotnet watch` after editing them.
+
+### Logging
+
+`builder.Logging` is a standard
+[`ILoggingBuilder`](https://learn.microsoft.com/dotnet/core/extensions/logging). By default,
+Kiji writes `Warning` and higher to the console, using standard error so that
+`dotnet publish` shows it. The `Logging` configuration section applies as in other .NET
+hosts. `LogLevel` and the extension methods need `using Microsoft.Extensions.Logging;`:
+
+```csharp
+builder.Logging.SetMinimumLevel(LogLevel.Information);
+```
+
+Information messages go to standard output, which `dotnet publish` hides at its default
+verbosity. Removing the console provider with `ClearProviders()` also hides Kiji's warnings.
 
 ### SiteInfo
 
@@ -124,10 +173,10 @@ builder.Services.AddScoped<RelatedPosts>();
 - Each page render has its own scope, shared by its page, layout, and child components.
 - Content loaders, page parameter and feed factories, and artifact writers cannot resolve
   scoped services.
-- `SiteInfo`, `PageInfo`, `IHostEnvironment`, and `ContentDictionary<T>` come from Kiji and
-  cannot be replaced.
-- Components and services can inject `ILogger<T>`. Kiji prints `Warning` and higher,
-  including exceptions caught by
+- `SiteInfo`, `PageInfo`, `IHostEnvironment`, `IConfiguration`, and `ContentDictionary<T>` come
+  from Kiji and cannot be replaced.
+- Components and services can inject `ILogger<T>`. Kiji prints `Warning` and higher, including
+  exceptions caught by
   [`ErrorBoundary`](https://learn.microsoft.com/aspnet/core/blazor/fundamentals/handle-errors?view=aspnetcore-10.0#error-boundaries).
 
 ### Page metadata

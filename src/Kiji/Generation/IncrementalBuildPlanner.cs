@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Kiji.Rendering;
 using Kiji.Assets;
+using Microsoft.Extensions.Configuration;
 
 namespace Kiji.Generation;
 
@@ -20,6 +21,7 @@ internal sealed class IncrementalBuildPlanner(
     string cacheDirectory,
     SiteInfo site,
     string environmentName,
+    IConfiguration configuration,
     ContentFileRegistry? hashRegistry = null,
     DependencyCatalog? catalog = null,
     IImageProcessor? imageProcessor = null,
@@ -531,6 +533,16 @@ internal sealed class IncrementalBuildPlanner(
         foreach (var value in new[] { site.BaseUrl.AbsoluteUri, site.Name, site.Description,
             site.Language, site.Author, environmentName })
         {
+            BuildFingerprint.AppendPart(builder, value);
+        }
+
+        // Which values a page reads is not tracked, so any configuration change renders
+        // every page. The manifest keeps only this SHA-256 digest, not the values.
+        foreach (var (key, value) in configuration.AsEnumerable()
+            .Where(static pair => pair.Value is not null)
+            .OrderBy(static pair => pair.Key, StringComparer.Ordinal))
+        {
+            BuildFingerprint.AppendPart(builder, key);
             BuildFingerprint.AppendPart(builder, value);
         }
 

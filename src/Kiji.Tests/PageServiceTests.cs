@@ -80,6 +80,7 @@ public sealed class PageServiceTests : IDisposable
     [InlineData("provider")]
     [InlineData("environment")]
     [InlineData("content")]
+    [InlineData("configuration")]
     public void Build_ValidatesTheFinalManagedRegistrations(string operation)
     {
         var builder = CreateBuilder(new ServiceProbe());
@@ -94,6 +95,7 @@ public sealed class PageServiceTests : IDisposable
             case "provider": services.AddSingleton<IServiceProvider>(_ => throw new NotSupportedException()); break;
             case "environment": services.Replace(ServiceDescriptor.Singleton(builder.Environment)); break;
             case "content": services.RemoveAll<ContentDictionary<ServiceProbe>>(); break;
+            case "configuration": services.AddSingleton<Microsoft.Extensions.Configuration.IConfiguration>(new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build()); break;
         }
         var exception = Assert.Throws<InvalidOperationException>(() => builder.Build());
         Assert.Contains("managed by Kiji", exception.Message, StringComparison.Ordinal);

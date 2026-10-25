@@ -2,6 +2,7 @@ using System.Reflection;
 using Kiji.Assets;
 using Kiji.Generation;
 using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.JSInterop;
@@ -13,7 +14,7 @@ internal static class SiteServiceRegistration
 {
     internal static bool IsManaged(Type type) =>
         type == typeof(SiteInfo) || type == typeof(PageInfo) || type == typeof(ResolvedSitePaths)
-        || type == typeof(ContentFileRegistry) || type == typeof(IHostEnvironment)
+        || type == typeof(ContentFileRegistry) || type == typeof(IHostEnvironment) || type == typeof(IConfiguration)
         || type == typeof(NavigationManager)
         || type == typeof(IJSRuntime) || type == typeof(IComponentActivator)
         || type == typeof(IServiceProvider) || type == typeof(IServiceScopeFactory)

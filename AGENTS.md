@@ -53,7 +53,10 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   Content becomes accessible through factories/loaders/artifacts only after execution
   paths settle. Do not expose a provider or content dictionary on StaticSite. The environment
   name comes from DOTNET_ENVIRONMENT, else Production for publish and Development for serving,
-  and is part of the options fingerprint.
+  and is part of the options fingerprint. Configuration defaults to project-local sources only
+  (appsettings*.json, user secrets in Development): no environment variables or command line,
+  which differ between machines and between serve and publish. Every configuration value is
+  hashed into the options fingerprint because per-key reads are not tracked.
 - The dev server enforces BaseUrl's path prefix and uses `.kiji/dev-site`.
   Only `.kiji/cache` is portable; planning creates no output directories.
 - StaticSiteBuilder.Services is standard DI; Build validates it, makes it read-only and

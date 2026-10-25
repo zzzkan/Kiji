@@ -48,7 +48,7 @@ public sealed class IncrementalBuildTests : IDisposable
             AssetManifestPath = catalogPath,
         };
         var planner = new Generation.IncrementalBuildPlanner(options, _testDir, Path.Combine(_testDir, "cache"),
-            TestArticleContents.CreateSiteInfo(), "Production");
+            TestArticleContents.CreateSiteInfo(), "Production", new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build());
         async Task Sync()
         {
             var files = await planner.SyncStaticFilesAsync(Assets.StaticAssetManifest.Load(catalogPath).Assets);

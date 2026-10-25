@@ -25,5 +25,4 @@ builder.AddPageParameters<ArticlePage>(static services => services
     .Select(static doc => new { doc.Value.Slug, ContentKey = doc.Key }));
 builder.AddSitemap();
 
-var site = builder.Build();
-return await site.RunAsync();
+return await builder.Build().RunAsync();

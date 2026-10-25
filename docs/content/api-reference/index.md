@@ -34,15 +34,15 @@ var site = builder.Build();
 return await site.RunAsync();
 ```
 
-| Member                                                                  | Behavior                                                                                                                                        |
-| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `static StaticSiteBuilder StaticSite.CreateBuilder(string[] args)`      | Creates a builder for the current project. During development, `args` go to ASP.NET Core configuration, for example `--urls`.                    |
-| `SiteInfo StaticSiteBuilder.SiteInfo`                                       | Required site metadata.                                                                                                                         |
-| `IServiceCollection StaticSiteBuilder.Services`                         | Services for components and site factories. See [Services](#services).                                                                         |
-| `IHostEnvironment StaticSiteBuilder.Environment`                        | The host environment. See [Environment](#environment).                                                                                         |
-| `ConfigurationManager StaticSiteBuilder.Configuration`                  | Site configuration. See [Configuration](#configuration).                                                                                       |
-| `ILoggingBuilder StaticSiteBuilder.Logging`                             | Logging providers and filters. See [Logging](#logging).                                                                                        |
-| `StaticSite StaticSiteBuilder.Build()`                                  | Validates the services and makes the builder and `Services` read-only. Call it once. Content is not loaded yet.                                  |
+| Member                                                                         | Behavior                                                                                                                                            |
+| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `static StaticSiteBuilder StaticSite.CreateBuilder(string[] args)`             | Creates a builder for the current project. During development, `args` go to ASP.NET Core configuration, for example `--urls`.                       |
+| `SiteInfo StaticSiteBuilder.SiteInfo`                                          | Required site metadata.                                                                                                                             |
+| `IServiceCollection StaticSiteBuilder.Services`                                | Services for components and site factories. See [Services](#services).                                                                              |
+| `IHostEnvironment StaticSiteBuilder.Environment`                               | The host environment. See [Environment](#environment).                                                                                              |
+| `ConfigurationManager StaticSiteBuilder.Configuration`                         | Site configuration. See [Configuration](#configuration).                                                                                            |
+| `ILoggingBuilder StaticSiteBuilder.Logging`                                    | Logging providers and filters. See [Logging](#logging).                                                                                             |
+| `StaticSite StaticSiteBuilder.Build()`                                         | Validates the services and makes the builder and `Services` read-only. Call it once. Content is not loaded yet.                                     |
 | `Task<int> StaticSite.RunAsync(CancellationToken cancellationToken = default)` | Serves during `dotnet watch` and generates the site during `dotnet publish`; return its exit code. A site runs only once and is disposed afterward. |
 
 ### Environment
@@ -115,38 +115,17 @@ verbosity. Removing the console provider with `ClearProviders()` also hides Kiji
 
 ### SiteInfo
 
-| Property             | Default  | Behavior                                                                                         |
-| -------------------- | -------- | ------------------------------------------------------------------------------------------------ |
+| Property             | Default  | Behavior                                                                                                                 |
+| -------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `Uri BaseUrl`        | Required | Absolute HTTP or HTTPS URL without a query or fragment. Its path, with `/` appended if missing, is the site's base path. |
-| `string Name`        | Required | Site name, also the RSS channel title. Must not be blank.                                        |
-| `string Description` | `""`     | Site description, also the RSS channel description.                                              |
-| `string Language`    | `"en"`   | Written to `<html lang>` and the RSS channel.                                                    |
-| `string Author`      | `""`     | For your components; Kiji does not write it.                                                     |
+| `string Name`        | Required | Site name, also the RSS channel title. Must not be blank.                                                                |
+| `string Description` | `""`     | Site description, also the RSS channel description.                                                                      |
+| `string Language`    | `"en"`   | Written to `<html lang>` and the RSS channel.                                                                            |
+| `string Author`      | `""`     | For your components; Kiji does not write it.                                                                             |
 
 `ResolveUrl(string path)` returns the absolute URL of a site-relative path. A leading `/`
 is ignored, so `"about/"` and `"/about/"` both stay under the base path, and `""` returns
 `BaseUrl`. External URLs and `..` are rejected.
-
-To use a different `BaseUrl` per environment, such as a staging deployment, read
-`SiteInfo` from [configuration](#configuration). `Get<T>` needs
-`using Microsoft.Extensions.Configuration;`:
-
-```json
-// appsettings.json
-{ "Site": { "BaseUrl": "https://example.com/", "Name": "My Site" } }
-```
-
-```json
-// appsettings.Staging.json
-{ "Site": { "BaseUrl": "https://staging.example.com/" } }
-```
-
-```csharp
-builder.SiteInfo = builder.Configuration.GetRequiredSection("Site").Get<SiteInfo>()!;
-```
-
-Values are validated as in code. Assigning a `SiteInfo` whose section sets no `BaseUrl` or
-`Name` throws `ArgumentException`.
 
 ## Pages and rendering
 
@@ -155,11 +134,11 @@ Values are validated as in code. Assigning a `SiteInfo` whose section sets no `B
 Kiji discovers `@page` routes on public, non-abstract components in the entry assembly.
 See [Routing](../routing/) for examples.
 
-| Method                                                                             | Behavior                                                                                                       |
-| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `AddPageAssembly(Assembly assembly)`                                               | Also discovers routed components in another assembly.                                                          |
-| `AddPageParameters<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)` | Adds parameter sets for a component. The factory runs once per build or reload and can read content.          |
-| `UseNotFoundPage<TPage>()`                                                         | Writes the component as `404.html`. It needs exactly one route and cannot also receive page parameters. A later call replaces it.        |
+| Method                                                                             | Behavior                                                                                                                          |
+| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `AddPageAssembly(Assembly assembly)`                                               | Also discovers routed components in another assembly.                                                                             |
+| `AddPageParameters<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)` | Adds parameter sets for a component. The factory runs once per build or reload and can read content.                              |
+| `UseNotFoundPage<TPage>()`                                                         | Writes the component as `404.html`. It needs exactly one route and cannot also receive page parameters. A later call replaces it. |
 
 Page parameter sets follow these rules:
 
@@ -289,23 +268,23 @@ no reliable digest exists; pages that read the item or its collection then alway
 
 Import `Kiji.Markdown`. See [Markdown and images](../markdown/) for examples.
 
-| Method                                                                                                                         | Behavior                                                                          |
-| ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| `AddMarkdownContent<TFrontMatter>(Action<MarkdownOptions>? configure = null)`                                                  | Loads `*.md` files and registers `ContentDictionary<MarkdownContent<TFrontMatter>>`. |
-| `AddMarkdownContent<TFrontMatter,TModel>(Func<MarkdownContent<TFrontMatter>,TModel> select, Action<MarkdownOptions>? configure = null)` | Converts each file with `select` and registers `ContentDictionary<TModel>`.        |
+| Method                                                                                                                                  | Behavior                                                                             |
+| --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `AddMarkdownContent<TFrontMatter>(Action<MarkdownOptions>? configure = null)`                                                           | Loads `*.md` files and registers `ContentDictionary<MarkdownContent<TFrontMatter>>`. |
+| `AddMarkdownContent<TFrontMatter,TModel>(Func<MarkdownContent<TFrontMatter>,TModel> select, Action<MarkdownOptions>? configure = null)` | Converts each file with `select` and registers `ContentDictionary<TModel>`.          |
 
-| `MarkdownOptions` member                             | Behavior                                                                  |
-| ---------------------------------------------------- | ------------------------------------------------------------------------- |
+| `MarkdownOptions` member                             | Behavior                                                                     |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------- |
 | `string Directory`                                   | Directory to load, absolute or relative to the project. Default `"content"`. |
-| `Func<FileInfo,bool>? FileFilter`                    | Returns `false` to skip a file. Default: load every `*.md` file.          |
-| `ConfigureMarkdown(Action<MarkdownPipelineBuilder>)` | Adds Markdig configuration after Kiji's defaults.                         |
-| `ConfigureYaml(Action<DeserializerBuilder>)`         | Adds YamlDotNet configuration after Kiji's defaults.                      |
-| `AddHtmlPostProcessor(Func<string,string>)`          | Transforms the rendered HTML. Processors run in registration order.       |
+| `Func<FileInfo,bool>? FileFilter`                    | Returns `false` to skip a file. Default: load every `*.md` file.             |
+| `ConfigureMarkdown(Action<MarkdownPipelineBuilder>)` | Adds Markdig configuration after Kiji's defaults.                            |
+| `ConfigureYaml(Action<DeserializerBuilder>)`         | Adds YamlDotNet configuration after Kiji's defaults.                         |
+| `AddHtmlPostProcessor(Func<string,string>)`          | Transforms the rendered HTML. Processors run in registration order.          |
 
-| `MarkdownContent<TFrontMatter>` member                                         | Behavior                                                       |
-| ------------------------------------------------------------------------------ | -------------------------------------------------------------- |
-| `FileInfo FileInfo`                                                            | The source Markdown file.                                      |
-| `TFrontMatter FrontMatter`                                                     | The parsed front matter.                                       |
+| `MarkdownContent<TFrontMatter>` member                                         | Behavior                                                                      |
+| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| `FileInfo FileInfo`                                                            | The source Markdown file.                                                     |
+| `TFrontMatter FrontMatter`                                                     | The parsed front matter.                                                      |
 | `ValueTask<string> RenderAsync(CancellationToken cancellationToken = default)` | Renders the body to HTML and writes its local images beside the current page. |
 
 Call `RenderAsync` while rendering a page, because local images are written beside that
@@ -325,11 +304,11 @@ builder.Services.Configure<ImageProcessorOptions>(options =>
 });
 ```
 
-| `ImageProcessorOptions` property | Default  | Behavior                                                                                                    |
-| -------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------- |
-| `IReadOnlyList<int>? Widths`     | `null`   | Widths of the smaller variants. `null` uses `DefaultWidths`: 320, 640, 960, and 1280. Widths at or above the source width or `MaxWidth` are skipped. |
-| `int MaxWidth`                   | `1920`   | The widest variant. Every image gets one variant at its own width, capped at this value.                   |
-| `int Quality`                    | `80`     | Lossy WebP quality from 1 to 100.                                                                           |
+| `ImageProcessorOptions` property | Default | Behavior                                                                                                                                             |
+| -------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `IReadOnlyList<int>? Widths`     | `null`  | Widths of the smaller variants. `null` uses `DefaultWidths`: 320, 640, 960, and 1280. Widths at or above the source width or `MaxWidth` are skipped. |
+| `int MaxWidth`                   | `1920`  | The widest variant. Every image gets one variant at its own width, capped at this value.                                                             |
+| `int Quality`                    | `80`    | Lossy WebP quality from 1 to 100.                                                                                                                    |
 
 - The settings are validated when the site starts running, before any output: `RunAsync`
   throws `OptionsValidationException` for invalid values.
@@ -345,9 +324,9 @@ register it as a singleton:
 builder.Services.AddSingleton<IImageProcessor, MyImageProcessor>();
 ```
 
-| Member                                                                                                                                | Behavior                                                                                     |
-| ------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `Task<ProcessedImageInfo> ProcessAsync(string sourceFilePath, string outputDirectory, CancellationToken cancellationToken = default)` | Writes variants of the source image into `outputDirectory` and describes them.               |
+| Member                                                                                                                                | Behavior                                                                                      |
+| ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `Task<ProcessedImageInfo> ProcessAsync(string sourceFilePath, string outputDirectory, CancellationToken cancellationToken = default)` | Writes variants of the source image into `outputDirectory` and describes them.                |
 | `string? CacheIdentity`                                                                                                               | Identifies the implementation and settings for reuse across publishes. `null` disables reuse. |
 
 `ProcessedImageInfo` has the source's `OriginalWidth` and `OriginalHeight`, used for the
@@ -414,11 +393,11 @@ exact path, ignoring case: `preview/` removes `/preview/` but not `/preview/draf
 `AddArtifact(string outputRelativePath, Func<Stream, SiteOutputContext, CancellationToken, Task> write)`
 writes a file after all pages. Write to the stream without disposing it.
 
-| `SiteOutputContext` property        | Behavior                                                         |
-| ----------------------------------- | ---------------------------------------------------------------- |
-| `SiteInfo Site`                     | The site metadata.                                               |
-| `IReadOnlyList<SitePageInfo> Pages` | Every generated page.                                            |
-| `IServiceProvider Services`         | Site services, including content dictionaries.                   |
+| `SiteOutputContext` property        | Behavior                                       |
+| ----------------------------------- | ---------------------------------------------- |
+| `SiteInfo Site`                     | The site metadata.                             |
+| `IReadOnlyList<SitePageInfo> Pages` | Every generated page.                          |
+| `IServiceProvider Services`         | Site services, including content dictionaries. |
 
 `SitePageInfo` has two properties: `RelativePath`, the page URL relative to `BaseUrl` such
 as `posts/hello/` (`""` for the home page), and `OutputRelativePath`, the file path in the

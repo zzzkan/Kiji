@@ -36,8 +36,9 @@ see the [reusable parameter types](../api-reference/#pages).
 
 Kiji tracks reads through `ContentDictionary<T>`. To track other data, load it with
 [AddContentSource](../api-reference/#content-sources-and-contentdictionary) and supply
-digests. Values from `builder.Configuration` are covered by the fingerprint. Kiji cannot see
-other reads, such as files, HTTP, environment variables, the clock, or service state. Mark components that render such values:
+digests. Configuration changes already render every page. Kiji cannot see other reads,
+such as files, HTTP, environment variables, the clock, or service state. Mark components
+that render such values:
 
 ```razor
 @attribute [AlwaysRender]
@@ -59,16 +60,15 @@ changes.
 # Render every page once; later publishes reuse the results.
 dotnet publish -p:KijiForce=true
 
-# Show Kiji's messages. In a terminal, -v d makes its display show them.
+# Show Kiji's summary in a terminal.
 dotnet publish -v d
 
 # Remove build output and the cache.
 dotnet clean
 ```
 
-For a message per page and generated file, set `Kiji.Build` to `Debug` in the
-[Logging](../api-reference/#logging) section. The section is not part of the fingerprint,
-so changing it keeps the cache.
+For a message per page, set `Kiji.Build` to `Debug` in the
+[Logging](../api-reference/#logging) section. Changing that section keeps the cache.
 
 Kiji keeps its publish cache in `.kiji/cache` and development output in `.kiji/dev-site`.
 Saving the cache between CI runs often does not pay off, because transferring it takes time

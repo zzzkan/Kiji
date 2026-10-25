@@ -33,23 +33,22 @@ builder.SiteInfo = new SiteInfo
 return await builder.Build().RunAsync();
 ```
 
-| Member                                                                         | Behavior                                                                                                                                            |
-| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `static StaticSiteBuilder StaticSite.CreateBuilder(string[] args)`             | Creates a builder for the current project. During development, `args` go to ASP.NET Core configuration, for example `--urls`.                       |
-| `SiteInfo StaticSiteBuilder.SiteInfo`                                          | Required site metadata.                                                                                                                             |
-| `IServiceCollection StaticSiteBuilder.Services`                                | Services for components and site factories. See [Services](#services).                                                                              |
-| `IHostEnvironment StaticSiteBuilder.Environment`                               | The host environment. See [Environment](#environment).                                                                                              |
-| `ConfigurationManager StaticSiteBuilder.Configuration`                         | Site configuration. See [Configuration](#configuration).                                                                                            |
-| `ILoggingBuilder StaticSiteBuilder.Logging`                                    | Logging providers and filters. See [Logging](#logging).                                                                                             |
-| `StaticSite StaticSiteBuilder.Build()`                                         | Validates the services and makes the builder and `Services` read-only. Call it once. Content is not loaded yet.                                     |
-| `Task<int> StaticSite.RunAsync(CancellationToken cancellationToken = default)` | Serves during `dotnet watch` and generates the site during `dotnet publish`; return its exit code. A site runs only once and is disposed afterward. |
+| Member                                                                         | Behavior                                                                                                                  |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `static StaticSiteBuilder StaticSite.CreateBuilder(string[] args)`             | Creates a builder for the current project. While serving, `args` go to ASP.NET Core configuration, such as `--urls`.      |
+| `SiteInfo StaticSiteBuilder.SiteInfo`                                          | Required site metadata.                                                                                                   |
+| `IServiceCollection StaticSiteBuilder.Services`                                | See [Services](#services).                                                                                                |
+| `IHostEnvironment StaticSiteBuilder.Environment`                               | See [Environment](#environment).                                                                                          |
+| `ConfigurationManager StaticSiteBuilder.Configuration`                         | See [Configuration](#configuration).                                                                                      |
+| `ILoggingBuilder StaticSiteBuilder.Logging`                                    | See [Logging](#logging).                                                                                                  |
+| `StaticSite StaticSiteBuilder.Build()`                                         | Validates the services and makes the builder read-only. Call it once.                                                     |
+| `Task<int> StaticSite.RunAsync(CancellationToken cancellationToken = default)` | Serves during `dotnet watch` or generates the site during `dotnet publish`, then disposes the site. Return its exit code. |
 
 ### Environment
 
 `builder.Environment` is a standard
 [`IHostEnvironment`](https://learn.microsoft.com/dotnet/core/extensions/generic-host#ihostenvironment),
-also injectable into components and services. `IsDevelopment()` and similar checks need
-`using Microsoft.Extensions.Hosting;`:
+also injectable into components. `IsDevelopment()` needs `using Microsoft.Extensions.Hosting;`:
 
 ```csharp
 if (builder.Environment.IsDevelopment())
@@ -58,74 +57,53 @@ if (builder.Environment.IsDevelopment())
 }
 ```
 
-- `EnvironmentName` comes from `DOTNET_ENVIRONMENT`. Without it, the name is `Production`
-  during `dotnet publish` and `Development` while serving. It is read-only, because it
-  selects the configuration files when the builder is created; `ApplicationName` is the
-  entry assembly name.
-- `ContentRootPath` is the project directory and cannot be changed.
-- Changing the environment name renders every page again on the next publish.
+The name comes from `DOTNET_ENVIRONMENT`, or is `Production` during `dotnet publish` and
+`Development` while serving. It is read-only, and `ContentRootPath` is the project
+directory. Changing the name renders every page again on the next publish.
 
 ### Configuration
 
 `builder.Configuration` is a standard
 [configuration](https://learn.microsoft.com/dotnet/core/extensions/configuration), also
-injectable into components and services as `IConfiguration` from
-`Microsoft.Extensions.Configuration`. It reads these sources from the project directory,
-later ones overriding earlier ones:
+injectable as `IConfiguration`. It reads these files from the project directory, each
+overriding the ones before it:
 
 1. `appsettings.json`
-2. `appsettings.{Environment}.json`, for example `appsettings.Production.json` during `dotnet publish`
-3. [User secrets](https://learn.microsoft.com/aspnet/core/security/app-secrets), in the
-   `Development` environment only
-
-Bind a section to options, or read values in a component:
+2. `appsettings.{Environment}.json`
+3. [User secrets](https://learn.microsoft.com/aspnet/core/security/app-secrets), in `Development` only
 
 ```csharp
 builder.Services.Configure<ImageProcessorOptions>(builder.Configuration.GetSection("Images"));
 ```
 
-```razor
-@inject IConfiguration Configuration
-
-<p>@Configuration["Site:Tagline"]</p>
-```
-
-- Environment variables and command-line arguments are not read, because they differ
-  between machines and `dotnet publish` passes no arguments. Add a source explicitly, with
-  a prefix: `builder.Configuration.AddEnvironmentVariables("MYSITE_")`.
-- Every configuration key and value, including keys set to `null`, is part of the publish
-  fingerprint: changing any of them renders every page again. The `Logging` section is the
-  exception, because it does not change the output. The cache stores only a SHA-256 hash of the values.
+- Environment variables and command-line arguments are not read. Add them with a prefix:
+  `builder.Configuration.AddEnvironmentVariables("MYSITE_")`.
+- Changing any value outside the `Logging` section, including setting a key to `null`,
+  renders every page again on the next publish.
 - Files are read once. Restart `dotnet watch` after editing them.
 
 ### Logging
 
 `builder.Logging` is a standard
-[`ILoggingBuilder`](https://learn.microsoft.com/dotnet/core/extensions/logging). By default,
-Kiji writes `Warning` and higher to the console, including exceptions caught by
+[`ILoggingBuilder`](https://learn.microsoft.com/dotnet/core/extensions/logging), and the
+`Logging` configuration section applies as in other .NET hosts. The console shows `Warning`
+and higher, including exceptions caught by
 [`ErrorBoundary`](https://learn.microsoft.com/aspnet/core/blazor/fundamentals/handle-errors?view=aspnetcore-10.0#error-boundaries),
-and its own progress messages under the `Kiji.Build` category. The `Logging` configuration
-section applies as in other .NET hosts. `LogLevel` and the extension methods need
-`using Microsoft.Extensions.Logging;`:
+and Kiji's summary in the `Kiji.Build` category. `Debug` adds a message for each page and
+generated file:
 
-```csharp
-builder.Logging.SetMinimumLevel(LogLevel.Information);
+```json
+{ "Logging": { "LogLevel": { "Kiji.Build": "Debug" } } }
 ```
 
-- During `dotnet publish`, warnings and errors become MSBuild warnings and errors, so the
-  publish output lists them, as it does the message of an unhandled exception. An error
-  fails the publish, and `-warnaserror` makes warnings fail it too.
-- Other messages, such as the `Kiji.Build` summary, are high-importance build messages. CI
-  logs and `--tl:off` show them by default. The terminal display of an interactive
-  `dotnet publish` shows them with `-v d`, and `-v q` hides them everywhere. Set `Kiji.Build`
-  to `Debug` for a message per page and generated file:
-  `{ "Logging": { "LogLevel": { "Kiji.Build": "Debug" } } }`. Pages reused from the cache
-  log nothing; publish with `-p:KijiForce=true` to render them.
-- The development server's ASP.NET Core messages use the same logging, for example
-  `builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Information)`
-  shows each request.
-- Replacing the console formatter, for example with `AddJsonConsole()`, keeps MSBuild from
-  recognizing warnings. Removing the console provider with `ClearProviders()` hides them.
+- During `dotnet publish`, warnings, errors, and an unhandled exception become MSBuild
+  warnings and errors. An error fails the publish; `-warnaserror` makes warnings fail it too.
+- Other messages appear in CI logs and with `--tl:off`. In a terminal, add `-v d`. `-v q`
+  hides them.
+- Pages reused from the cache log nothing. Publish with `-p:KijiForce=true` to render them.
+- The development server's ASP.NET Core messages use the same settings.
+- With another console formatter, such as `AddJsonConsole()`, MSBuild no longer recognizes
+  warnings.
 
 ### SiteInfo
 
@@ -184,17 +162,13 @@ Without it, pages render directly inside `<body>`.
 builder.Services.AddScoped<RelatedPosts>();
 ```
 
-- Register services before `Build`; the collection is read-only afterward. `Build` reports
-  missing dependencies.
-- Options registered with `ValidateOnStart()` are validated when the site starts running,
-  before any output, as in other .NET hosts. `RunAsync` throws `OptionsValidationException`
-  for invalid values.
+- Register services before `Build`, which reports missing dependencies.
+- Options with `ValidateOnStart()` are validated when the site starts, before any output.
 - Each page render has its own scope, shared by its page, layout, and child components.
 - Content loaders, page parameter and feed factories, and artifact writers cannot resolve
   scoped services.
 - `SiteInfo`, `PageInfo`, `IHostEnvironment`, `IConfiguration`, and `ContentDictionary<T>` come
   from Kiji and cannot be replaced.
-- Components and services can inject `ILogger<T>`. See [Logging](#logging).
 
 ### Page metadata
 
@@ -304,8 +278,7 @@ page.
 
 ### Image settings
 
-Configure `ImageProcessorOptions` from `Kiji.Assets` to change the default processor's
-output with the standard
+Configure the default processor with `ImageProcessorOptions` from `Kiji.Assets`, using the
 [options pattern](https://learn.microsoft.com/dotnet/core/extensions/options):
 
 ```csharp
@@ -322,11 +295,9 @@ builder.Services.Configure<ImageProcessorOptions>(options =>
 | `int MaxWidth`                   | `1920`  | The widest variant. Every image gets one variant at its own width, capped at this value.                                                             |
 | `int Quality`                    | `80`    | Lossy WebP quality from 1 to 100.                                                                                                                    |
 
-- The settings are validated when the site starts running, before any output: `RunAsync`
-  throws `OptionsValidationException` for invalid values.
+- Invalid values make `RunAsync` fail before any output.
 - Changing a setting re-encodes images and renders their pages again on the next publish.
-- The settings apply only to the default processor. A replacement `IImageProcessor` neither
-  uses nor validates them.
+- A replacement `IImageProcessor` neither uses nor validates the settings.
 
 ### Image processing
 

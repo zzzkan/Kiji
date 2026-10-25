@@ -37,7 +37,6 @@ public sealed class StaticSite : IAsyncDisposable
     private bool _forceFullBuild;
     private bool _hasRun;
     private bool _disposed;
-    private bool _startupValidated;
 
     internal StaticSite(StaticSiteBuilder builder)
     {
@@ -68,8 +67,6 @@ public sealed class StaticSite : IAsyncDisposable
     internal SiteExecutionPaths Paths { get; }
 
     internal string[] ContentRoots { get; }
-
-    internal string EnvironmentName => _environment.EnvironmentName;
 
     // Content must not resolve execution paths before publish/serve has settled them.
     internal IServiceProvider ServiceProvider
@@ -205,7 +202,7 @@ public sealed class StaticSite : IAsyncDisposable
             Paths.ProjectDirectory,
             Paths.ResolveCachePath(),
             SiteInfo,
-            EnvironmentName,
+            _environment.EnvironmentName,
             _configuration,
             _services.GetService<ContentFileRegistry>(), _runtime.Dependencies,
             _services.GetRequiredService<IImageProcessor>(), assetManifest.Resources);
@@ -683,13 +680,7 @@ public sealed class StaticSite : IAsyncDisposable
     /// </summary>
     private void ValidateOnStart()
     {
-        if (_startupValidated)
-        {
-            return;
-        }
-
         // .NET 10 has only the synchronous validator; use IAsyncStartupValidator from .NET 11.
         ServiceProvider.GetService<IStartupValidator>()?.Validate();
-        _startupValidated = true;
     }
 }

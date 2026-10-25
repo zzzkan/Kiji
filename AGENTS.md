@@ -51,13 +51,11 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   requires its own route and a registered page assembly.
 - MSBuild supplies the project directory through runtimeconfig; missing metadata is an error.
   Content becomes accessible through factories/loaders/artifacts only after execution
-  paths settle. Do not expose a provider or content dictionary on StaticSite. The environment
-  name comes from DOTNET_ENVIRONMENT, else Production for publish and Development for serving;
-  IHostEnvironment is read-only because it selects the configuration sources at creation,
-  and is part of the options fingerprint. Configuration defaults to project-local sources only
-  (appsettings*.json, user secrets in Development): no environment variables or command line,
-  which differ between machines and between serve and publish. Every configuration key and value, nulls included, is
-  hashed into the options fingerprint because per-key reads are not tracked.
+  paths settle. Do not expose a provider or content dictionary on StaticSite. IHostEnvironment
+  is read-only: its name selects the configuration files at creation. Default configuration
+  sources stay project-local (no environment variables or command line, which differ between
+  machines). The environment name and every configuration key and value, nulls included, are
+  in the options fingerprint because per-key reads are not tracked.
 - The dev server enforces BaseUrl's path prefix and uses `.kiji/dev-site`.
   Only `.kiji/cache` is portable; planning creates no output directories.
 - StaticSiteBuilder.Services is standard DI; Build validates it, makes it read-only and
@@ -75,10 +73,9 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   be a singleton; standard DI ownership applies. It must support concurrency and retain
   no page/content state. Reload does not recreate it. Include external configuration
   and encoder versions in cache identities; HTML reuse controls do not clear image caches.
-  The default processor reads ImageProcessorOptions (IOptions) once; ValidateOnStart validates them
-  when the site starts running (IStartupValidator, IAsyncStartupValidator from .NET 11), never in Build,
-  and every setting must stay in its CacheIdentity. Null Widths means DefaultWidths so
-  configuration binding cannot append to the defaults.
+  Every ImageProcessorOptions setting must stay in its CacheIdentity. Options are validated when
+  the site starts running, never in Build. Null Widths keeps configuration binding from
+  appending to the defaults.
 
 Do not reintroduce evaluated alternatives: pooled HtmlRenderer (root/scope state cannot
 reset), RouteView (PageView owns Kiji's layout resolution), AOT/trimming (reflection),

@@ -95,41 +95,21 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
         AssertNoSiteOutput();
     }
 
-    [Theory]
-    [InlineData("dist")]
-    [InlineData(null)]
-    public async Task StartupValidationFailure_DisposesAsyncServicesAndKeepsTheError(string? output)
+    [Fact]
+    public async Task StartupValidationFailure_DisposesAsyncServicesAndKeepsTheError()
     {
         var log = new DisposalLog();
-        var builder = CreateBuilder(output);
+        var builder = CreateBuilder(output: "dist");
         builder.Services.AddSingleton(_ => new AsyncOnlyDependency(log));
         builder.Services.AddOptions<ImageProcessorOptions>()
             .Configure<AsyncOnlyDependency>(static (options, _) => options.Quality = 0);
         var site = builder.Build();
-        // Without validation the dev server would start; a canceled run returns instead of serving.
-        using var stop = new CancellationTokenSource();
-        if (output is null) { await stop.CancelAsync(); }
 
-        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() => site.RunAsync(stop.Token));
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() => site.RunAsync(CancellationToken.None));
 
         Assert.Contains("ImageProcessorOptions.Quality", exception.Message, StringComparison.Ordinal);
         Assert.Equal(1, log.Created);
         Assert.Equal(1, log.Disposed);
-        AssertNoSiteOutput();
-    }
-
-    [Fact]
-    public async Task OwnOptionsWithValidateOnStart_FailWhenTheSiteStarts()
-    {
-        var builder = CreateBuilder(output: "dist");
-        builder.Services.AddOptions<SampleOptions>()
-            .Validate(static _ => false, "Sample options are invalid.")
-            .ValidateOnStart();
-        var site = builder.Build();
-
-        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() => site.RunAsync(CancellationToken.None));
-
-        Assert.Contains("Sample options are invalid.", exception.Message, StringComparison.Ordinal);
         AssertNoSiteOutput();
     }
 

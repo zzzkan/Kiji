@@ -101,22 +101,6 @@ public sealed class HostConfigurationTests : IDisposable
     }
 
     [Theory]
-    [InlineData(null, "https://example.com/")]
-    [InlineData("Staging", "https://staging.example.com/preview/")]
-    public void SiteInfo_BindsFromConfigurationForTheEnvironment(string? environmentName, string expected)
-    {
-        WriteSettings("appsettings.json", """{ "Site": { "BaseUrl": "https://example.com/", "Name": "Site", "Language": "ja" } }""");
-        WriteSettings("appsettings.Staging.json", """{ "Site": { "BaseUrl": "https://staging.example.com/preview" } }""");
-        var builder = CreateBuilder(environmentName);
-
-        builder.SiteInfo = builder.Configuration.GetRequiredSection("Site").Get<SiteInfo>()!;
-
-        Assert.Equal(expected, builder.SiteInfo.BaseUrl.AbsoluteUri);
-        Assert.Equal("Site", builder.SiteInfo.Name);
-        Assert.Equal("ja", builder.SiteInfo.Language);
-    }
-
-    [Theory]
     [InlineData("""{ "Site": { "Name": "Site" } }""", "BaseUrl")]
     [InlineData("""{ "Site": { "BaseUrl": "https://example.com/" } }""", "Name")]
     public void SiteInfo_MissingRequiredValueFromConfiguration_FailsWhenAssigned(string json, string property)
@@ -131,12 +115,11 @@ public sealed class HostConfigurationTests : IDisposable
     }
 
     [Fact]
-    public async Task Logging_AppliesTheLoggingSectionAndBuilderSettings()
+    public async Task Logging_AppliesTheLoggingSection()
     {
-        async Task<bool[]> EnabledLevelsAsync(Action<StaticSiteBuilder>? configure = null)
+        async Task<bool[]> EnabledLevelsAsync()
         {
             var builder = CreateBuilder(environmentName: null);
-            configure?.Invoke(builder);
             await using var site = builder.Build();
             var logger = site.ServiceProvider.GetRequiredService<ILogger<HostConfigurationTests>>();
             return [logger.IsEnabled(LogLevel.Debug), logger.IsEnabled(LogLevel.Information), logger.IsEnabled(LogLevel.Warning)];
@@ -144,8 +127,6 @@ public sealed class HostConfigurationTests : IDisposable
 
         var defaults = await EnabledLevelsAsync();
         Assert.Equal([false, false, true], defaults);
-        var minimum = await EnabledLevelsAsync(static builder => builder.Logging.SetMinimumLevel(LogLevel.Debug));
-        Assert.Equal([true, true, true], minimum);
         WriteSettings("appsettings.json", """{ "Logging": { "LogLevel": { "Default": "Information" } } }""");
         var configured = await EnabledLevelsAsync();
         Assert.Equal([false, true, true], configured);

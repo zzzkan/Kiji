@@ -193,6 +193,9 @@ builder.Services.AddScoped<RelatedPosts>();
 
 - Register services before `Build`; the collection is read-only afterward. `Build` reports
   missing dependencies.
+- Options registered with `ValidateOnStart()` are validated when the site starts running,
+  before any output, as in other .NET hosts. `RunAsync` throws `OptionsValidationException`
+  for invalid values.
 - Each page render has its own scope, shared by its page, layout, and child components.
 - Content loaders, page parameter and feed factories, and artifact writers cannot resolve
   scoped services.
@@ -329,8 +332,7 @@ builder.Services.Configure<ImageProcessorOptions>(options =>
 | `int Quality`                    | `80`     | Lossy WebP quality from 1 to 100.                                                                           |
 
 - The settings are validated when the site starts running, before any output: `RunAsync`
-  throws `OptionsValidationException` for invalid values. Your own options are validated at
-  the same time when you call `ValidateOnStart()`, as in other .NET hosts.
+  throws `OptionsValidationException` for invalid values.
 - Changing a setting re-encodes images and renders their pages again on the next publish.
 - The settings apply only to the default processor, not to a replacement `IImageProcessor`.
 

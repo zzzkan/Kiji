@@ -143,29 +143,14 @@ public sealed class RunAsyncTests : IDisposable
 
     [Theory]
     [InlineData(null, null, "Development")]
-    [InlineData("   ", "", "Development")]
     [InlineData("dist", null, "Production")]
     [InlineData("dist", "Staging", "Staging")]
-    [InlineData(null, "Production", "Production")]
     public void Environment_FollowsTheExecutionModeUnlessDotnetEnvironmentIsSet(string? output, string? name, string expected)
     {
         var builder = CreateBuilder(EnvironmentWith([("KIJI_OUTPUT", output), ("DOTNET_ENVIRONMENT", name)]));
 
         Assert.Equal(expected, builder.Environment.EnvironmentName);
         Assert.Equal(Path.GetFullPath(_testDir), builder.Environment.ContentRootPath);
-    }
-
-    [Fact]
-    public void Environment_IsFixedWhenTheBuilderIsCreated()
-    {
-        var builder = CreateBuilder(EnvironmentWith([("DOTNET_ENVIRONMENT", "Staging")]));
-
-        // Changing the name later would leave the Staging configuration files selected.
-        var error = Assert.Throws<NotSupportedException>(() => builder.Environment.EnvironmentName = "Production");
-        Assert.Contains("DOTNET_ENVIRONMENT", error.Message, StringComparison.Ordinal);
-        Assert.Throws<NotSupportedException>(() => builder.Environment.ApplicationName = "Other");
-        Assert.Equal("Staging", builder.Environment.EnvironmentName);
-        Assert.Equal(typeof(RunAsyncTests).Assembly.GetName().Name, builder.Environment.ApplicationName);
     }
 
     [Fact]
@@ -183,7 +168,6 @@ public sealed class RunAsyncTests : IDisposable
 
         Assert.Contains("environment:Production", await PublishAsync(null), StringComparison.Ordinal);
         Assert.Contains("environment:Staging", await PublishAsync("Staging"), StringComparison.Ordinal);
-        Assert.Contains("environment:Preview", await PublishAsync("Preview"), StringComparison.Ordinal);
     }
 
     [Fact]

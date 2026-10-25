@@ -11,9 +11,8 @@ namespace Kiji.Hosting;
 internal sealed class SiteHostEnvironment(string environmentName, string applicationName, string contentRootPath)
     : IHostEnvironment
 {
-    private readonly Lock _lock = new();
-    private PhysicalFileProvider? _contentRootFileProvider;
-    private bool _disposed;
+    // Created on first use: most sites never read it.
+    private readonly Lazy<PhysicalFileProvider> _contentRootFileProvider = new(() => new PhysicalFileProvider(contentRootPath));
 
     public string EnvironmentName
     {
@@ -37,25 +36,16 @@ internal sealed class SiteHostEnvironment(string environmentName, string applica
 
     public IFileProvider ContentRootFileProvider
     {
-        get
-        {
-            lock (_lock)
-            {
-                ObjectDisposedException.ThrowIf(_disposed, this);
-                // Created on first use: most sites never read it.
-                return _contentRootFileProvider ??= new PhysicalFileProvider(contentRootPath);
-            }
-        }
+        get => _contentRootFileProvider.Value;
         set => throw new NotSupportedException(
             "The content root is the site project directory supplied by Kiji's MSBuild targets and cannot be changed.");
     }
 
     internal void DisposeContentRootFileProvider()
     {
-        lock (_lock)
+        if (_contentRootFileProvider.IsValueCreated)
         {
-            _disposed = true;
-            _contentRootFileProvider?.Dispose();
+            _contentRootFileProvider.Value.Dispose();
         }
     }
 }

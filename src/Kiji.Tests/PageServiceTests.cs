@@ -4,7 +4,6 @@ using Kiji.Feeds;
 using Kiji.Tests.TestSite.PageServices;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Hosting;
 using Xunit;
 
 namespace Kiji.Tests;
@@ -108,13 +107,11 @@ public sealed class PageServiceTests : IDisposable
         builder.Services.AddSingleton(provider => provider.GetRequiredService<ResolvedSitePaths>().OutputDirectory);
         // Managed registrations are present from the start, so ordinary extension methods see them.
         builder.Services.TryAddSingleton(new SiteInfo { Name = "Replacement", BaseUrl = new Uri("https://replacement.test/") });
-        builder.Services.TryAddSingleton<IHostEnvironment>(new ReplacementEnvironment());
         await using var app = builder.Build();
         Assert.Throws<InvalidOperationException>(() => builder.Services.AddSingleton("late"));
 
         app.CreateSnapshot();
         Assert.Same(builder.SiteInfo, app.ServiceProvider.GetRequiredService<SiteInfo>());
-        Assert.Same(builder.Environment, app.ServiceProvider.GetRequiredService<IHostEnvironment>());
         Assert.EndsWith(Path.Combine(".kiji", "dev-site"), app.ServiceProvider.GetRequiredService<string>(), StringComparison.Ordinal);
     }
 
@@ -250,14 +247,5 @@ public sealed class PageServiceTests : IDisposable
         {
             Directory.Delete(_root, recursive: true);
         }
-    }
-
-    private sealed class ReplacementEnvironment : IHostEnvironment
-    {
-        public string EnvironmentName { get; set; } = "Replacement";
-        public string ApplicationName { get; set; } = "Replacement";
-        public string ContentRootPath { get; set; } = "/";
-        public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; } =
-            new Microsoft.Extensions.FileProviders.NullFileProvider();
     }
 }

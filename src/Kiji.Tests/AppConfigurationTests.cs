@@ -95,7 +95,7 @@ public sealed class AppConfigurationTests : IDisposable
                 _ => throw new Xunit.Sdk.XunitException("Configuration callback must not run after the site is built.")));
             Assert.Throws<InvalidOperationException>(() => builder.AddPageAssembly(typeof(PostPage).Assembly));
             Assert.Throws<InvalidOperationException>(() => builder.UseDefaultLayout<MainLayout>());
-            Assert.Throws<InvalidOperationException>(() => builder.AddNotFoundPage<NotFoundPage>());
+            Assert.Throws<InvalidOperationException>(() => builder.UseNotFoundPage<NotFoundPage>());
             Assert.Throws<InvalidOperationException>(() => builder.AddPageParameters<PostPage>(static _ => []));
             Assert.Throws<InvalidOperationException>(() => builder.AddSitemap());
         }

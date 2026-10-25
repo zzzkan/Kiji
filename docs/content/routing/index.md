@@ -98,7 +98,7 @@ output paths also fail before any page is rendered.
 
 ## Not-found pages
 
-Give the component a route and register it with `AddNotFoundPage<TPage>()`:
+Give the component a route and register it with `UseNotFoundPage<TPage>()`:
 
 ```razor
 @page "/not-found/"
@@ -107,7 +107,7 @@ Give the component a route and register it with `AddNotFoundPage<TPage>()`:
 ```
 
 ```csharp
-builder.AddNotFoundPage<NotFoundPage>();
+builder.UseNotFoundPage<NotFoundPage>();
 ```
 
 Kiji writes it as `404.html` at the output root. Do not also register it with

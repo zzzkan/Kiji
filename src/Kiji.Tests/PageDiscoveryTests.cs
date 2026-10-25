@@ -74,7 +74,7 @@ public sealed class PageDiscoveryTests
         builder.AddContentSource<Post>(static _ => []);
         builder.UseDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(builder);
-        builder.AddNotFoundPage<NotFoundPage>();
+        builder.UseNotFoundPage<NotFoundPage>();
         builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
         // No mapping for the dynamic /tags/{TagSlug}/ template.
@@ -139,13 +139,13 @@ public sealed class PageDiscoveryTests
     }
 
     [Fact]
-    public void CreateSnapshot_AddNotFoundPageWithoutPageTemplate_ThrowsInformativeException()
+    public void CreateSnapshot_UseNotFoundPageWithoutPageTemplate_ThrowsInformativeException()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
         builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         builder.UseDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(builder);
-        builder.AddNotFoundPage<PostListComponent>();
+        builder.UseNotFoundPage<PostListComponent>();
         var app = builder.Build();
 
         var exception = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());
@@ -160,7 +160,7 @@ public sealed class PageDiscoveryTests
         builder.AddContentSource<Post>(static _ => []);
         builder.UseDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(builder);
-        builder.AddNotFoundPage<NotFoundPage>();
+        builder.UseNotFoundPage<NotFoundPage>();
         builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
         builder.AddPageParameters<TagsPage>(_ => tagRoutes());

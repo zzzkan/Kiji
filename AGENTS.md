@@ -47,7 +47,7 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   require AddPageParameters; an empty sequence generates no pages. Each entry is a whole
   parameter set rendered at every parameterized route; fixed routes beside them keep default
   rendering, while components with only fixed routes receive the sets. Supplied values must
-  name writable [Parameter] properties; do not enforce EditorRequired. AddNotFoundPage still
+  name writable [Parameter] properties; do not enforce EditorRequired. UseNotFoundPage still
   requires its own route and a registered page assembly.
 - MSBuild supplies the project directory through runtimeconfig; missing metadata is an error.
   Content becomes accessible through factories/loaders/artifacts only after execution

@@ -219,9 +219,9 @@ public sealed class StaticSiteBuilder
         return this;
     }
 
-    /// <summary>Adds a page written as <c>404.html</c>.</summary>
-    /// <remarks>The component must belong to a page assembly, declare exactly one route, and cannot also receive <c>AddPageParameters&lt;TPage&gt;</c>.</remarks>
-    public StaticSiteBuilder AddNotFoundPage<TPage>()
+    /// <summary>Uses a routed page as <c>404.html</c> instead of at its own route.</summary>
+    /// <remarks>The component must belong to a page assembly, declare exactly one route, and cannot also receive <c>AddPageParameters&lt;TPage&gt;</c>. A later call replaces the page.</remarks>
+    public StaticSiteBuilder UseNotFoundPage<TPage>()
         where TPage : IComponent
     {
         EnsureConfigurable();

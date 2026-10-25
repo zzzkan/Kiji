@@ -157,7 +157,7 @@ See [Routing](../routing/) for examples.
 | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `AddPageAssembly(Assembly assembly)`                                               | Also discovers routed components in another assembly.                                                          |
 | `AddPageParameters<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)` | Adds parameter sets for a component. The factory runs once per build or reload and can read content.          |
-| `AddNotFoundPage<TPage>()`                                                         | Writes the component as `404.html`. It needs exactly one route and cannot also receive page parameters.        |
+| `UseNotFoundPage<TPage>()`                                                         | Writes the component as `404.html`. It needs exactly one route and cannot also receive page parameters. A later call replaces it.        |
 
 Page parameter sets follow these rules:
 

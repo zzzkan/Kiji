@@ -169,7 +169,7 @@ public sealed class PageRegistrationTests
     public async Task NotFound_MultipleRouteDeclarationsAreRejected()
     {
         var builder = CreateBuilder();
-        builder.AddNotFoundPage<MultipleRoutes>();
+        builder.UseNotFoundPage<MultipleRoutes>();
         await using var site = builder.Build();
         var exception = Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
         Assert.Contains("exactly one", exception.Message, StringComparison.Ordinal);
@@ -180,7 +180,7 @@ public sealed class PageRegistrationTests
     {
         var builder = CreateBuilder();
         builder.AddPageAssembly(CreatePageType("/404.html/nested/").Assembly);
-        builder.AddNotFoundPage<Fixed>();
+        builder.UseNotFoundPage<Fixed>();
         await using var site = builder.Build();
         var exception = Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
         Assert.Contains("also a page output file", exception.Message, StringComparison.Ordinal);
@@ -207,7 +207,7 @@ public sealed class PageRegistrationTests
             await File.WriteAllTextAsync(Path.Combine(root, "wwwroot", "404.html"), "existing");
             var builder = CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
             TestSite.TestSiteAssets.Bind(builder.Paths, Path.Combine(root, "wwwroot"));
-            builder.AddNotFoundPage<Fixed>();
+            builder.UseNotFoundPage<Fixed>();
             await using var site = builder.Build();
             await Assert.ThrowsAsync<InvalidOperationException>(() => site.PublishAsync("dist"));
         }
@@ -228,13 +228,13 @@ public sealed class PageRegistrationTests
         var builder = CreateBuilder();
         if (notFoundFirst)
         {
-            builder.AddNotFoundPage<Parameterized>();
+            builder.UseNotFoundPage<Parameterized>();
             Assert.Throws<InvalidOperationException>(() => builder.AddPageParameters<Parameterized>(static _ => []));
         }
         else
         {
             builder.AddPageParameters<Parameterized>(static _ => []);
-            Assert.Throws<InvalidOperationException>(() => builder.AddNotFoundPage<Parameterized>());
+            Assert.Throws<InvalidOperationException>(() => builder.UseNotFoundPage<Parameterized>());
         }
     }
 
@@ -302,7 +302,7 @@ public sealed class PageRegistrationTests
 
     private static void RegisterNotFound(StaticSiteBuilder builder, Type type)
     {
-        typeof(StaticSiteBuilder).GetMethod(nameof(StaticSiteBuilder.AddNotFoundPage))!.MakeGenericMethod(type).Invoke(builder, null);
+        typeof(StaticSiteBuilder).GetMethod(nameof(StaticSiteBuilder.UseNotFoundPage))!.MakeGenericMethod(type).Invoke(builder, null);
     }
 
     private static Type CreatePageType(params string[] routes)

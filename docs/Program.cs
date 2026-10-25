@@ -19,7 +19,7 @@ builder.SiteInfo = new()
 builder.AddMarkdownContent<FrontMatter, Article>(
     select: static content => Article.Create(content));
 builder.UseDefaultLayout<MainLayout>();
-builder.AddNotFoundPage<NotFoundPage>();
+builder.UseNotFoundPage<NotFoundPage>();
 builder.AddPageParameters<ArticlePage>(static services => services
     .GetRequiredService<ContentDictionary<Article>>()
     .Select(static doc => new { doc.Value.Slug, ContentKey = doc.Key }));

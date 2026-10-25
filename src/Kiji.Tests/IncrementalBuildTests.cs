@@ -461,7 +461,7 @@ public sealed class IncrementalBuildTests : IDisposable
         builder.AddContentSource<Post>(static _ => []);
         builder.UseDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(builder);
-        builder.AddNotFoundPage<NotFoundPage>();
+        builder.UseNotFoundPage<NotFoundPage>();
 
         builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
@@ -490,7 +490,7 @@ public sealed class IncrementalBuildTests : IDisposable
         builder.AddContentSource<Post>(static _ => []);
         builder.UseDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(builder);
-        builder.AddNotFoundPage<NotFoundPage>();
+        builder.UseNotFoundPage<NotFoundPage>();
         builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
         builder.AddPageParameters<MarkdownPostTestPage>(static services => services

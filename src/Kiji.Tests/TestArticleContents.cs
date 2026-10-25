@@ -68,7 +68,7 @@ internal static class TestArticleContents
 
         builder.UseDefaultLayout<MainLayout>();
         MapTestAssemblyPages(builder);
-        builder.AddNotFoundPage<NotFoundPage>();
+        builder.UseNotFoundPage<NotFoundPage>();
 
         builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));

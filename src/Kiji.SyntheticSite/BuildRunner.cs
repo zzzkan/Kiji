@@ -78,7 +78,7 @@ public static class BuildRunner
 
         builder.AddMarkdownContent<PostFrontMatter>(static options => options.Directory = "contents");
         builder.UseDefaultLayout<MainLayout>();
-        builder.AddNotFoundPage<NotFoundPage>();
+        builder.UseNotFoundPage<NotFoundPage>();
 
         builder.AddPageParameters<PostPage>(static services => services
             .GetRequiredService<ContentDictionary<MarkdownContent<PostFrontMatter>>>()

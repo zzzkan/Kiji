@@ -179,7 +179,6 @@ public sealed class StaticSite : IAsyncDisposable
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
         ObjectDisposedException.ThrowIf(_disposed, this);
-        ValidateOnStart();
 
         await using var cacheLease = await CacheLease.AcquireAsync(Paths.ResolveCachePath(), cancellationToken);
         var options = Paths.ResolveForPublish(outputPath);
@@ -190,6 +189,8 @@ public sealed class StaticSite : IAsyncDisposable
         OutputPathValidator.Validate(options, assetManifest, Paths.ProjectDirectory, Paths.ResolveKijiPath(), ContentRoots);
         UseRunOptions(options);
         InvalidateContent();
+        // After the paths settle, so validators can read content, and before any output.
+        ValidateOnStart();
 
         var stopwatch = Stopwatch.StartNew();
         var phases = new BuildPhaseTimer();
@@ -329,9 +330,9 @@ public sealed class StaticSite : IAsyncDisposable
         DevServerStatusReporter? reporter = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        ValidateOnStart();
         var options = UseRunOptions(Paths.ResolveForDevelopment());
         OutputPathValidator.ValidateInputs(options.OutputDirectory, ContentRoots);
+        ValidateOnStart();
 
         var devServer = new DevServer(this, reporter);
         try

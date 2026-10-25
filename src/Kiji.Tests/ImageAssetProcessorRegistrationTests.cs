@@ -92,7 +92,7 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
         var exception = await Assert.ThrowsAsync<OptionsValidationException>(() => site.RunAsync(CancellationToken.None));
 
         Assert.Contains($"ImageProcessorOptions.{property}", exception.Message, StringComparison.Ordinal);
-        Assert.False(Directory.Exists(_root));
+        AssertNoSiteOutput();
     }
 
     [Theory]
@@ -106,16 +106,16 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
         builder.Services.AddOptions<ImageProcessorOptions>()
             .Configure<AsyncOnlyDependency>(static (options, _) => options.Quality = 0);
         var site = builder.Build();
-        // Without validation the site would start running; a canceled run returns instead of serving.
-        using var canceled = new CancellationTokenSource();
-        await canceled.CancelAsync();
+        // Without validation the dev server would start; a canceled run returns instead of serving.
+        using var stop = new CancellationTokenSource();
+        if (output is null) { await stop.CancelAsync(); }
 
-        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() => site.RunAsync(canceled.Token));
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() => site.RunAsync(stop.Token));
 
         Assert.Contains("ImageProcessorOptions.Quality", exception.Message, StringComparison.Ordinal);
         Assert.Equal(1, log.Created);
         Assert.Equal(1, log.Disposed);
-        Assert.False(Directory.Exists(_root));
+        AssertNoSiteOutput();
     }
 
     [Fact]
@@ -130,7 +130,40 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
         var exception = await Assert.ThrowsAsync<OptionsValidationException>(() => site.RunAsync(CancellationToken.None));
 
         Assert.Contains("Sample options are invalid.", exception.Message, StringComparison.Ordinal);
-        Assert.False(Directory.Exists(_root));
+        AssertNoSiteOutput();
+    }
+
+    [Theory]
+    [InlineData("dist")]
+    [InlineData(null)]
+    public async Task OwnOptionsWithValidateOnStart_CanReadContent(string? output)
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "content"));
+        File.WriteAllText(Path.Combine(_root, "content", "post.md"), "---\ntitle: Post\n---\nBody");
+        var validations = 0;
+        var builder = CreateBuilder(output);
+        builder.AddMarkdownContent<FrontMatter>();
+        builder.Services.AddOptions<SampleOptions>()
+            .Validate<ContentDictionary<MarkdownContent<FrontMatter>>>((_, posts) =>
+            {
+                validations++;
+                return posts.Count == 1;
+            }, "A post is required.")
+            .ValidateOnStart();
+        var site = builder.Build();
+        // Publishing runs to completion; serving returns at once with a canceled token.
+        using var stop = new CancellationTokenSource();
+        if (output is null) { await stop.CancelAsync(); }
+
+        Assert.Equal(0, await site.RunAsync(stop.Token));
+        Assert.Equal(1, validations);
+    }
+
+    // The cache lock may exist; the published site and the dev server mirror must not.
+    private void AssertNoSiteOutput()
+    {
+        Assert.False(Directory.Exists(Path.Combine(_root, "dist")));
+        Assert.False(Directory.Exists(Path.Combine(_root, ".kiji", "dev-site")));
     }
 
     private StaticSiteBuilder CreateBuilder(string? output = null)

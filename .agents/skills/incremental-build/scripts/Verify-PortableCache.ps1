@@ -68,7 +68,7 @@ namespace Portable { public sealed class FrontMatter { public string? Title { ge
 }
 
 function Publish-Fixture([string] $root, [string] $label, [int] $expectedRenders, [string[]] $extra = @()) {
-    $output = @(& dotnet publish $root -c Release -o (Join-Path $root 'dist') -p:KijiVerbose=true "-p:SourceRevisionId=$label" "-p:RestorePackagesPath=$runRoot/packages" @extra 2>&1)
+    $output = @(& dotnet publish $root -c Release -o (Join-Path $root 'dist') "-p:SourceRevisionId=$label" "-p:RestorePackagesPath=$runRoot/packages" @extra 2>&1)
     $output | Set-Content (Join-Path $runRoot ($label + '.log'))
     if ($LASTEXITCODE -ne 0) { throw "Publish failed: $label. See $runRoot." }
     $renders = @($output | Where-Object { "$_".Trim() -eq 'RENDER' }).Count

@@ -1,4 +1,6 @@
+using System.Text.Json;
 using Kiji.Assets;
+using Kiji.Generation;
 using Kiji.Tests.TestSite;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -83,6 +85,29 @@ public sealed class HostConfigurationTests : IDisposable
         // Every non-null value stays the same, but binding the explicit null changes the option.
         WriteSettings("appsettings.json", """{ "Feature": { "Other": "x", "Enabled": null } }""");
         Assert.Contains("enabled:False", await PublishAsync(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("""{ "Site": { "Title": "same" }, "Logging": { "LogLevel": { "Kiji.Build": "Debug" } } }""", true)]
+    [InlineData("""{ "Site": { "Title": "same" }, "logging": { "Console": { "FormatterName": "simple" } } }""", true)]
+    [InlineData("""{ "Site": { "Title": "same" }, "LoggingTheme": "dark" }""", false)]
+    public async Task Fingerprint_LeavesOutOnlyTheLoggingSection(string changed, bool reused)
+    {
+        async Task<string> PublishAsync()
+        {
+            var builder = CreateBuilder(environmentName: null, typeof(ConfigurationPage));
+            await using var site = builder.Build();
+            await site.PublishAsync(Path.Combine(_root, "dist"));
+            var manifest = await File.ReadAllTextAsync(Path.Combine(_root, ".kiji", "cache", "manifest.json"));
+            return JsonSerializer.Deserialize(manifest, BuildManifestJsonContext.Default.BuildManifest)!.OptionsHash;
+        }
+
+        WriteSettings("appsettings.json", """{ "Site": { "Title": "same" } }""");
+        var first = await PublishAsync();
+        WriteSettings("appsettings.json", changed);
+
+        // Raising a log level to inspect a build must not render every page again.
+        Assert.Equal(reused, first == await PublishAsync());
     }
 
     [Fact]

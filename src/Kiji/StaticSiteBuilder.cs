@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Console;
 using Microsoft.Extensions.Options;
 
 namespace Kiji;
@@ -62,20 +63,34 @@ public sealed class StaticSiteBuilder
         _services.AddSingleton<IConfiguration>(Configuration);
 
         // As in other .NET hosts, the Logging section applies and builder.Logging changes the rest.
+        // Rules for the same category apply in order, so defaults come before the section.
         _services.AddLogging();
         Logging = new SiteLoggingBuilder(_services);
-        Logging.AddConfiguration(Configuration.GetSection("Logging"));
-        // Standard error, because MSBuild hides ordinary output at publish's default verbosity.
-        Logging.AddConsole(static options => options.LogToStandardErrorThreshold = LogLevel.Warning);
         Logging.SetMinimumLevel(LogLevel.Warning);
+        Logging.AddFilter(BuildLog.Category, LogLevel.Information);
+        Logging.AddConfiguration(Configuration.GetSection("Logging"));
+        Logging.AddConsole(options =>
+        {
+            options.LogToStandardErrorThreshold = LogLevel.Warning;
+            if (settings.Publishing)
+            {
+                // dotnet publish runs the site through MSBuild, which reports only its own warnings.
+                options.FormatterName = MSBuildConsoleFormatter.FormatterName;
+            }
+        });
+        if (settings.Publishing)
+        {
+            Logging.AddConsoleFormatter<MSBuildConsoleFormatter, ConsoleFormatterOptions>();
+        }
 
         ComponentRenderer.AddComponentRenderingServices(_services);
 
         // The default processor reads its options once. A replacement IImageProcessor ignores them.
         _services.AddOptions<ImageProcessorOptions>().ValidateOnStart();
         _services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<ImageProcessorOptions>, ImageProcessorOptionsValidator>());
-        _services.AddSingleton<IImageProcessor>(static provider =>
-            new ImageProcessor(provider.GetRequiredService<IOptions<ImageProcessorOptions>>().Value));
+        _services.AddSingleton<IImageProcessor>(static provider => new ImageProcessor(
+            provider.GetRequiredService<IOptions<ImageProcessorOptions>>().Value,
+            logger: provider.GetRequiredService<ILoggerFactory>().CreateLogger(BuildLog.Category)));
 
         _managedServices = [.. _services.Where(static descriptor => SiteServiceRegistration.IsManaged(descriptor.ServiceType))];
     }
@@ -123,14 +138,16 @@ public sealed class StaticSiteBuilder
     /// <summary>The site configuration, also available to components as <see cref="IConfiguration"/>.</summary>
     /// <remarks>
     /// It reads <c>appsettings.json</c> and <c>appsettings.{Environment}.json</c> from the project directory, and user
-    /// secrets in Development. Add other sources, such as prefixed environment variables, explicitly. Every value is
-    /// part of the publish fingerprint: changing one renders every page again. Files are read once per process.
+    /// secrets in Development. Add other sources, such as prefixed environment variables, explicitly. Every value outside
+    /// the <c>Logging</c> section is part of the publish fingerprint: changing one renders every page again. Files are read
+    /// once per process.
     /// </remarks>
     public ConfigurationManager Configuration { get; }
 
-    /// <summary>The logging configuration for components and services.</summary>
+    /// <summary>The logging configuration for components, services, Kiji, and the development server.</summary>
     /// <remarks>
-    /// Kiji writes Warning and higher to the console, using standard error so that <c>dotnet publish</c> shows it.
+    /// Kiji writes Warning and higher to the console, and its own progress messages under <c>Kiji.Build</c>.
+    /// During <c>dotnet publish</c>, warnings and errors become MSBuild warnings and errors.
     /// The <c>Logging</c> configuration section applies, as in other .NET hosts.
     /// </remarks>
     public ILoggingBuilder Logging { get; }

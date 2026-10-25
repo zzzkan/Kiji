@@ -59,12 +59,16 @@ changes.
 # Render every page once; later publishes reuse the results.
 dotnet publish -p:KijiForce=true
 
-# Show per-file details. --tl:off is needed because the default terminal display hides them.
-dotnet publish -p:KijiVerbose=true --tl:off
+# Show Kiji's messages. In a terminal, -v d makes its display show them.
+dotnet publish -v d
 
 # Remove build output and the cache.
 dotnet clean
 ```
+
+For a message per page and generated file, set `Kiji.Build` to `Debug` in the
+[Logging](../api-reference/#logging) section. The section is not part of the fingerprint,
+so changing it keeps the cache.
 
 Kiji keeps its publish cache in `.kiji/cache` and development output in `.kiji/dev-site`.
 Saving the cache between CI runs often does not pay off, because transferring it takes time

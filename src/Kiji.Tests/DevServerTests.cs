@@ -4,6 +4,7 @@ using System.Text;
 using Kiji.Markdown;
 using Kiji.Tests.TestSite;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace Kiji.Tests;
@@ -440,6 +441,32 @@ public sealed class DevServerTests : IAsyncDisposable
     private static HttpClient CreateClient()
     {
         return new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+    }
+
+    [Fact]
+    public async Task Serve_WebHostUsesTheSiteEnvironmentAndLogging()
+    {
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(Path.Combine(_testDir, "site")),
+            name => name == "DOTNET_ENVIRONMENT" ? "Staging" : null);
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        var logs = new RecordingLoggerProvider();
+        builder.Logging.AddProvider(logs);
+        builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Information);
+        _app = builder.Build();
+        var (server, web) = await _app.StartDevServerAsync(TestUrls.EphemeralPort, CancellationToken.None,
+            new Kiji.Hosting.DevServerStatusReporter(TextWriter.Null, "kiji", useEmoji: false));
+        await using (server)
+        {
+            Assert.Equal("Staging", web.Environment.EnvironmentName);
+            Assert.Equal(builder.Environment.ContentRootPath, web.Environment.ContentRootPath);
+
+            using var client = CreateClient();
+            using var response = await client.GetAsync(new Uri(new Uri(web.Urls.First()), "/missing/"));
+
+            // ASP.NET Core logs the request through the site's providers and filters.
+            Assert.Contains(logs.Entries, static entry => entry.Category == "Microsoft.AspNetCore.Hosting.Diagnostics"
+                && entry.Message.StartsWith("Request starting", StringComparison.Ordinal));
+        }
     }
 
     [Theory]

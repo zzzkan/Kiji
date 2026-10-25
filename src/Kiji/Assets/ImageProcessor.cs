@@ -1,4 +1,6 @@
 using Kiji.Generation;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using SkiaSharp;
 using System.Runtime.InteropServices;
 
@@ -21,12 +23,15 @@ internal sealed class ImageProcessor : IImageProcessor
     private readonly int _maxWidth;
     private readonly int _quality;
     private readonly SemaphoreSlim _generationGate;
+    private readonly ILogger _logger;
     internal Func<string, CancellationToken, Task>? BeforeEncodeAsync { get; init; }
 
     /// <param name="options">Validated settings, copied so later changes cannot alter cached output.</param>
     /// <param name="generationGate">Overrides the process-wide decode limit. For tests.</param>
-    internal ImageProcessor(ImageProcessorOptions? options = null, SemaphoreSlim? generationGate = null)
+    /// <param name="logger">Receives a Debug message per generated variant.</param>
+    internal ImageProcessor(ImageProcessorOptions? options = null, SemaphoreSlim? generationGate = null, ILogger? logger = null)
     {
+        _logger = logger ?? NullLogger.Instance;
         options ??= new ImageProcessorOptions();
         _maxWidth = options.MaxWidth;
         _quality = options.Quality;
@@ -108,7 +113,7 @@ internal sealed class ImageProcessor : IImageProcessor
                                 await beforeEncode(materializedPath, cancellationToken);
                             }
                             await EncodeVariantAsync(image, originalWidth, originalHeight, targetWidth, _quality, materializedPath, cancellationToken);
-                            BuildOutput.Detail($"Generated: {materializedPath} ({targetWidth}w)");
+                            _logger.ImageVariantGenerated(materializedPath, targetWidth);
                         }
                     }
 

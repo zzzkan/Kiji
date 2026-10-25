@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Kiji;
@@ -68,6 +69,9 @@ public sealed class StaticSite : IAsyncDisposable
 
     internal string[] ContentRoots { get; }
 
+    // Created on first use, so building the site creates no services.
+    private ILogger BuildLogger => field ??= ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(BuildLog.Category);
+
     // Content must not resolve execution paths before publish/serve has settled them.
     internal IServiceProvider ServiceProvider
     {
@@ -83,6 +87,12 @@ public sealed class StaticSite : IAsyncDisposable
     public static StaticSiteBuilder CreateBuilder(string[] args)
     {
         ArgumentNullException.ThrowIfNull(args);
+        var settings = SiteRunSettings.FromEnvironment(Environment.GetEnvironmentVariable);
+        if (settings.Publishing)
+        {
+            // Before anything can fail, including in Program.cs after this call.
+            UnhandledPublishErrorReporter.Register();
+        }
         var entryAssembly = Assembly.GetEntryAssembly() ?? throw new InvalidOperationException(
             "No entry assembly is available in this host. Run the site project as an application with dotnet run, dotnet watch or dotnet publish.");
 
@@ -90,7 +100,7 @@ public sealed class StaticSite : IAsyncDisposable
             args,
             SiteExecutionPaths.FromRuntimeMetadata(AppContext.GetData("Kiji.ProjectDirectory"), entryAssembly),
             entryAssembly,
-            SiteRunSettings.FromEnvironment(Environment.GetEnvironmentVariable));
+            settings);
     }
 
     /// <param name="args">Arguments forwarded to ASP.NET Core configuration when serving.</param>
@@ -133,7 +143,6 @@ public sealed class StaticSite : IAsyncDisposable
             {
                 if (_settings.OutputPath is { } outputPath)
                 {
-                    BuildOutput.Verbose = _settings.Verbose;
                     _forceFullBuild = _settings.Force;
                     await PublishAsync(outputPath, cts.Token);
                     return 0;
@@ -205,7 +214,7 @@ public sealed class StaticSite : IAsyncDisposable
             _environment.EnvironmentName,
             _configuration,
             _runtime.Files, _runtime.Dependencies,
-            _services.GetRequiredService<IImageProcessor>(), assetManifest.Resources);
+            _services.GetRequiredService<IImageProcessor>(), assetManifest.Resources, BuildLogger);
 
         // Snapshot planning already required every page type to come from a page assembly.
         // Helpers and custom encoder factories may live outside the page assemblies.
@@ -243,7 +252,8 @@ public sealed class StaticSite : IAsyncDisposable
                 static page => page.OutputRelativePath,
                 StringComparer.OrdinalIgnoreCase),
             cancellationToken,
-            planner.OutputStampsValid);
+            planner.OutputStampsValid,
+            BuildLogger);
         phases.Mark(BuildPhaseTimer.Render);
 
         var artifacts = await GenerateArtifactsAsync(options, snapshot, reservedPaths, cancellationToken);
@@ -298,9 +308,8 @@ public sealed class StaticSite : IAsyncDisposable
 
         var written = rendered.Count(static page => page.Written);
         var reproduced = rendered.Count - written;
-        var reproducedNote = reproduced > 0 ? $", {reproduced} re-rendered but unchanged" : string.Empty;
-        BuildOutput.Info(
-            $"Generated {written} pages ({plan.CarriedPages.Count} unchanged, skipped{reproducedNote}) in {stopwatch.ElapsedMilliseconds} ms.");
+        if (reproduced > 0) { BuildLogger.PagesGeneratedWithReproduced(written, plan.CarriedPages.Count, reproduced, stopwatch.ElapsedMilliseconds); }
+        else { BuildLogger.PagesGenerated(written, plan.CarriedPages.Count, stopwatch.ElapsedMilliseconds); }
     }
 
     /// <summary>Starts the development server with automatic browser reload on content changes.</summary>
@@ -603,7 +612,7 @@ public sealed class StaticSite : IAsyncDisposable
             await artifact.WriteFileAsync(fullPath, context, cancellationToken);
 
             artifactRelativePaths.Add(Path.GetRelativePath(options.OutputDirectory, fullPath));
-            BuildOutput.Info($"Generated: {fullPath}");
+            BuildLogger.ArtifactGenerated(fullPath);
         }
 
         return artifactRelativePaths;

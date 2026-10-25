@@ -28,8 +28,13 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
 - Follow the .NET host builder shape: CreateBuilder -> builder.Services/Add*/Use* -> Build
   -> RunAsync. Every registration lives on StaticSiteBuilder; StaticSite only runs. Add* adds,
   Use* sets a single value. Kiji parses no command line:
-  watch serves, publish generates, clean cleans. MSBuild owns KijiForce/KijiVerbose;
+  watch serves, publish generates, clean cleans. MSBuild owns KijiForce;
   ASP.NET Core configuration owns the dev server address. Prefer conventions to flags.
+- All output goes through the site's ILogger (Kiji's own under Kiji.Build); the dev server's
+  watch-style status lines are the exception. Log levels decide what is written and MSBuild
+  verbosity what is shown: publish writes warnings and errors in MSBuild's canonical format,
+  the only output the terminal logger shows by default, and everything else at high importance.
+  Log levels come from the Logging section, not MSBuild properties.
 - Dev and publish share StaticSite.RenderPageAsync. Never emit stale output;
   ambiguous incremental state requires rendering.
 - One type per file. Library components and library test components are hand-written ComponentBase classes;
@@ -55,7 +60,8 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   is read-only: its name selects the configuration files at creation. Default configuration
   sources stay project-local (no environment variables or command line, which differ between
   machines). The environment name and every configuration key and value, nulls included, are
-  in the options fingerprint because per-key reads are not tracked.
+  in the options fingerprint because per-key reads are not tracked; only the Logging section,
+  which cannot change output, is left out.
 - The dev server enforces BaseUrl's path prefix and uses `.kiji/dev-site`.
   Only `.kiji/cache` is portable; planning creates no output directories.
 - StaticSiteBuilder.Services is standard DI; Build validates it, makes it read-only and

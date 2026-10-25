@@ -5,6 +5,8 @@ using System.Text.Json;
 using Kiji.Rendering;
 using Kiji.Assets;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Kiji.Generation;
 
@@ -25,8 +27,10 @@ internal sealed class IncrementalBuildPlanner(
     ContentFileRegistry? hashRegistry = null,
     DependencyCatalog? catalog = null,
     IImageProcessor? imageProcessor = null,
-    AssetResources? assets = null)
+    AssetResources? assets = null,
+    ILogger? logger = null)
 {
+    private readonly ILogger _logger = logger ?? NullLogger.Instance;
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Assembly, IReadOnlyList<string>> CodeDependencies = [];
     private readonly ArtifactCache _cache = new(cacheDirectory);
     private readonly string _rootPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
@@ -269,7 +273,7 @@ internal sealed class IncrementalBuildPlanner(
 
         if (files.Count > 0)
         {
-            BuildOutput.Info($"Static files: {copied} copied, {files.Count - copied} unchanged.");
+            _logger.StaticFilesSynced(copied, files.Count - copied);
         }
 
         return entries;
@@ -333,7 +337,7 @@ internal sealed class IncrementalBuildPlanner(
         if (removed > 0)
         {
             PruneEmptyDirectories(options.OutputDirectory);
-            BuildOutput.Info($"Removed {removed} file(s) the build did not produce.");
+            _logger.OutputsRemoved(removed);
         }
     }
 
@@ -539,7 +543,10 @@ internal sealed class IncrementalBuildPlanner(
         // Which values a page reads is not tracked, so any configuration change renders
         // every page. Null values count: binding a key set to null differs from a missing
         // key. The manifest keeps only this SHA-256 digest, not the values.
+        // The Logging section configures logging, not output, so raising a log level to
+        // inspect a build keeps its reuse.
         foreach (var (key, value) in configuration.AsEnumerable()
+            .Where(static pair => !IsLoggingKey(pair.Key))
             .OrderBy(static pair => pair.Key, StringComparer.Ordinal))
         {
             BuildFingerprint.AppendPart(builder, key);
@@ -548,6 +555,13 @@ internal sealed class IncrementalBuildPlanner(
 
         return BuildFingerprint.HashText(builder.ToString());
     }
+
+    // Configuration keys ignore case, so "logging:..." from a JSON file is the same section.
+    private static bool IsLoggingKey(string key) =>
+        key.StartsWith(LoggingSection, StringComparison.OrdinalIgnoreCase)
+        && (key.Length == LoggingSection.Length || key[LoggingSection.Length] == ConfigurationPath.KeyDelimiter[0]);
+
+    private const string LoggingSection = "Logging";
 
     internal static IReadOnlyList<string> CollectCodeDependencies(IEnumerable<Assembly> roots)
     {

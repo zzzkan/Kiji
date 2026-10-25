@@ -30,7 +30,7 @@ internal sealed class RunningCommand : IAsyncDisposable
         start.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
         start.Environment["DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER"] = "0";
         start.Environment["DOTNET_WATCH_SUPPRESS_BROWSER_REFRESH"] = "0";
-        foreach (var key in new[] { "KIJI_OUTPUT", "KIJI_FORCE", "KIJI_VERBOSE" }) { start.Environment.Remove(key); }
+        foreach (var key in new[] { "KIJI_OUTPUT", "KIJI_FORCE" }) { start.Environment.Remove(key); }
         _process = Process.Start(start)!;
         _drain = Task.WhenAll(ReadAsync(_process.StandardOutput), ReadAsync(_process.StandardError));
     }

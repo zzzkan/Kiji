@@ -94,25 +94,38 @@ builder.Services.Configure<ImageProcessorOptions>(builder.Configuration.GetSecti
   between machines and `dotnet publish` passes no arguments. Add a source explicitly, with
   a prefix: `builder.Configuration.AddEnvironmentVariables("MYSITE_")`.
 - Every configuration key and value, including keys set to `null`, is part of the publish
-  fingerprint: changing any of them renders every page again. The cache stores only a SHA-256 hash of the values.
+  fingerprint: changing any of them renders every page again. The `Logging` section is the
+  exception, because it does not change the output. The cache stores only a SHA-256 hash of the values.
 - Files are read once. Restart `dotnet watch` after editing them.
 
 ### Logging
 
 `builder.Logging` is a standard
 [`ILoggingBuilder`](https://learn.microsoft.com/dotnet/core/extensions/logging). By default,
-Kiji writes `Warning` and higher to the console, using standard error so that
-`dotnet publish` shows it. This includes exceptions caught by
-[`ErrorBoundary`](https://learn.microsoft.com/aspnet/core/blazor/fundamentals/handle-errors?view=aspnetcore-10.0#error-boundaries).
-The `Logging` configuration section applies as in other .NET hosts. `LogLevel` and the
-extension methods need `using Microsoft.Extensions.Logging;`:
+Kiji writes `Warning` and higher to the console, including exceptions caught by
+[`ErrorBoundary`](https://learn.microsoft.com/aspnet/core/blazor/fundamentals/handle-errors?view=aspnetcore-10.0#error-boundaries),
+and its own progress messages under the `Kiji.Build` category. The `Logging` configuration
+section applies as in other .NET hosts. `LogLevel` and the extension methods need
+`using Microsoft.Extensions.Logging;`:
 
 ```csharp
 builder.Logging.SetMinimumLevel(LogLevel.Information);
 ```
 
-Information messages go to standard output, which `dotnet publish` hides at its default
-verbosity. Removing the console provider with `ClearProviders()` also hides Kiji's warnings.
+- During `dotnet publish`, warnings and errors become MSBuild warnings and errors, so the
+  publish output lists them, as it does the message of an unhandled exception. An error
+  fails the publish, and `-warnaserror` makes warnings fail it too.
+- Other messages, such as the `Kiji.Build` summary, are high-importance build messages. CI
+  logs and `--tl:off` show them by default. The terminal display of an interactive
+  `dotnet publish` shows them with `-v d`, and `-v q` hides them everywhere. Set `Kiji.Build`
+  to `Debug` for a message per page and generated file:
+  `{ "Logging": { "LogLevel": { "Kiji.Build": "Debug" } } }`. Pages reused from the cache
+  log nothing; publish with `-p:KijiForce=true` to render them.
+- The development server's ASP.NET Core messages use the same logging, for example
+  `builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Information)`
+  shows each request.
+- Replacing the console formatter, for example with `AddJsonConsole()`, keeps MSBuild from
+  recognizing warnings. Removing the console provider with `ClearProviders()` hides them.
 
 ### SiteInfo
 

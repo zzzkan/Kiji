@@ -35,8 +35,12 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
 
         var output = await fixture.PublishAsync();
 
-        Assert.Contains("boundary-publish-warning", output, StringComparison.Ordinal);
+        // MSBuild reports it as a warning of the project, which every MSBuild logger shows.
+        Assert.Matches(@"ErrorBoundary : warning : Unhandled exception rendering component: boundary-publish-warning \[[^\]]*PackageSite\.csproj\]", output);
         Assert.DoesNotContain("boundary-publish-information", output, StringComparison.Ordinal);
+        // The summary is a high-importance message, which a redirected publish shows by default.
+        Assert.Matches(@"Generated \d+ pages \(\d+ unchanged, skipped", output);
+        Assert.DoesNotContain("Unchanged: ", output, StringComparison.Ordinal);
         Assert.Contains("Boundary fallback", Read("boundary/index.html"), StringComparison.Ordinal);
 
         var html = Read("index.html");
@@ -84,6 +88,15 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         using (var reader = new StreamReader(gzip))
         { Assert.Equal(Read("index.html"), await reader.ReadToEndAsync()); }
         Assert.True(File.Exists(PublicFile(AssetUrl(Read("index.html"), "library")) + ".gz"));
+
+        // A failure is an MSBuild error with its message, not only an exit code.
+        fixture.Write("Site/UnregisteredPage.razor", """
+            @page "/unregistered/{Slug}/"
+            @code { [Parameter] public string Slug { get; set; } = ""; }
+            """);
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.PublishAsync());
+        Assert.Matches(@"Kiji : error : InvalidOperationException: Page component '[^']*UnregisteredPage'.*AddPageParameters<UnregisteredPage>.*\[[^\]]*PackageSite\.csproj\]", failure.Message);
+        File.Delete(Path.Combine(fixture.Site, "UnregisteredPage.razor"));
 
         var stagingDirectory = Assert.Single(Directory.GetDirectories(Path.Combine(fixture.Site, "obj"), "site", SearchOption.AllDirectories));
         await fixture.DotnetAsync("clean", "Site/PackageSite.csproj", "-c", "Release");

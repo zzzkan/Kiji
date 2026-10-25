@@ -3,7 +3,9 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Kiji.Hosting;
@@ -46,8 +48,17 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
         // The slim host does not run hosting startups, so dotnet watch's browser
         // refresh middleware is not injected. Watch still applies code updates
         // and rebuilds scoped CSS; Kiji reloads after those outputs change.
-        var builder = WebApplication.CreateSlimBuilder(args);
-        builder.Logging.SetMinimumLevel(LogLevel.Warning);
+        var environment = app.ServiceProvider.GetRequiredService<IHostEnvironment>();
+        var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions
+        {
+            Args = args,
+            // The site's environment, so both hosts read the same configuration files.
+            EnvironmentName = environment.EnvironmentName,
+            ContentRootPath = environment.ContentRootPath,
+        });
+        // The site's logging, so builder.Logging and the Logging section also apply to ASP.NET Core.
+        builder.Logging.ClearProviders();
+        builder.Services.AddSingleton(app.ServiceProvider.GetRequiredService<ILoggerFactory>());
         // This host always serves live source files, including outside Development.
         // Its own fallback renders pages and discovers new assets without stealing routes.
         builder.Configuration["ReloadStaticAssetsAtRuntime"] = "true";

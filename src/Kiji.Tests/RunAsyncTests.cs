@@ -1,6 +1,6 @@
-using System.Diagnostics;
 using Kiji.Markdown;
 using Kiji.Tests.TestSite;
+using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace Kiji.Tests;
@@ -158,45 +158,28 @@ public sealed class RunAsyncTests : IDisposable
         Assert.Contains("environment:Staging", await PublishAsync("Staging"), StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task VerbosePublish_EmitsPerPageOutputInIsolatedProcess()
+    [Theory]
+    [InlineData(null, true, false)]
+    [InlineData("Debug", true, true)]
+    [InlineData("Warning", false, false)]
+    public async Task Publish_LogsProgressUnderKijiBuild(string? configuredLevel, bool summary, bool details)
     {
-        const string childOutputVariable = "KIJI_TEST_VERBOSE_OUTPUT";
-        if (Environment.GetEnvironmentVariable(childOutputVariable) is { } childOutput)
+        if (configuredLevel is not null)
         {
-            await CreateBuilder(EnvironmentWith([("KIJI_OUTPUT", childOutput), ("KIJI_VERBOSE", "true")])).Build().RunAsync(CancellationToken.None);
-            return;
+            await File.WriteAllTextAsync(Path.Combine(_testDir, "appsettings.json"),
+                $$"""{ "Logging": { "LogLevel": { "Kiji.Build": "{{configuredLevel}}" } } }""");
         }
+        var logs = new RecordingLoggerProvider();
+        var builder = CreateBuilder(EnvironmentWith([("KIJI_OUTPUT", _outputDir)]));
+        builder.Logging.AddProvider(logs);
 
-        // Run only this test in a child process; BuildOutput and Console are process-wide.
-        var start = new ProcessStartInfo("dotnet")
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        start.ArgumentList.Add(typeof(RunAsyncTests).Assembly.Location);
-        start.ArgumentList.Add("--filter-method");
-        start.ArgumentList.Add($"{typeof(RunAsyncTests).FullName}.{nameof(VerbosePublish_EmitsPerPageOutputInIsolatedProcess)}");
-        start.ArgumentList.Add("--results-directory");
-        start.ArgumentList.Add(Path.Combine(_testDir, "results"));
-        start.Environment[childOutputVariable] = _outputDir;
-        using var process = Process.Start(start)!;
-        var output = process.StandardOutput.ReadToEndAsync();
-        var error = process.StandardError.ReadToEndAsync();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        try { await process.WaitForExitAsync(timeout.Token); }
-        catch (OperationCanceledException)
-        {
-            process.Kill(entireProcessTree: true);
-            await process.WaitForExitAsync();
-            throw;
-        }
-        var log = await output;
-        Assert.True(process.ExitCode == 0, log + await error);
-        Assert.Contains($"Generated: {Path.Combine(_outputDir, "index.html")}", log, StringComparison.Ordinal);
-        Assert.True(File.Exists(Path.Combine(_outputDir, "index.html")));
+        Assert.Equal(0, await builder.Build().RunAsync(CancellationToken.None));
+
+        // Summaries are Information by default, and the Logging section changes the level.
+        var build = logs.Entries.Where(static entry => entry.Category == "Kiji.Build").ToArray();
+        Assert.Equal(summary, build.Any(static entry => entry.Level == LogLevel.Information
+            && entry.Message.StartsWith("Generated ", StringComparison.Ordinal) && entry.Message.Contains(" pages (", StringComparison.Ordinal)));
+        Assert.Equal(details, build.Contains(("Kiji.Build", LogLevel.Debug, $"Generated: {Path.Combine(_outputDir, "index.html")}")));
     }
 
     private StaticSiteBuilder CreateBuilder(Func<string, string?>? environment = null)

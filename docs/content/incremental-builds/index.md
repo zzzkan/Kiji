@@ -18,6 +18,7 @@ nothing it depends on has changed, and always produce a complete site.
 | A static asset changes | Update the asset and pages that link it through `Assets` or `ImportMap`. |
 | Code, packages, the .NET runtime, `SiteInfo`, the environment name, or [configuration](../api-reference/#configuration) change | Render all pages. |
 | A page uses an `AlwaysRender` component | Render that page on every publish. |
+| A page logs a warning or an error | Render that page on every publish until it stops. |
 
 Feeds, sitemaps, and custom artifacts are regenerated on every publish.
 

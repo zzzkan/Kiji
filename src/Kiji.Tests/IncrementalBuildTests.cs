@@ -3,6 +3,7 @@ using Kiji.Markdown;
 using Kiji.Tests.TestSite.Pages;
 using Kiji.Tests.TestSite;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace Kiji.Tests;
@@ -110,6 +111,40 @@ public sealed class IncrementalBuildTests : IDisposable
 
         Assert.Contains("second", await File.ReadAllTextAsync(Path.Combine(output, "policy/child/index.html")), StringComparison.Ordinal);
         Assert.Contains(useLayout ? "second" : "first", await File.ReadAllTextAsync(Path.Combine(output, "policy/cached/index.html")), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(LogLevel.Information, false)]
+    [InlineData(LogLevel.Warning, true)]
+    [InlineData(LogLevel.Error, true)]
+    public async Task PageLoggingAWarningOrError_IsNotReused_UntilItStops(LogLevel level, bool rendersAgain)
+    {
+        var state = new DiagnosticSwitch { Level = level };
+        async Task<int> RendersInPublishAsync(bool clearProviders = false)
+        {
+            var before = state.Renders;
+            var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")),
+                typeof(DiagnosticPage));
+            builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+            TestSiteAssets.Bind(builder.Paths, Path.Combine(_testDir, "static"));
+            builder.Services.AddSingleton(state);
+            if (clearProviders) { builder.Logging.ClearProviders(); }
+            await using var app = builder.Build();
+            await app.PublishAsync(Path.Combine(_testDir, "dist"));
+            return state.Renders - before;
+        }
+
+        Assert.Equal(1, await RendersInPublishAsync());
+        // While the page logs a warning or an error, every publish renders it, so the message
+        // and a publish failing on it persist. Removing the console does not change that.
+        Assert.Equal(rendersAgain ? 1 : 0, await RendersInPublishAsync());
+        Assert.Equal(rendersAgain ? 1 : 0, await RendersInPublishAsync(clearProviders: true));
+
+        // After the fix, one render records a reusable page, and later publishes reuse it.
+        state.Level = null;
+        Assert.Equal(rendersAgain ? 1 : 0, await RendersInPublishAsync());
+        Assert.Equal(0, await RendersInPublishAsync());
+        Assert.Equal(0, await RendersInPublishAsync());
     }
 
     [Fact]

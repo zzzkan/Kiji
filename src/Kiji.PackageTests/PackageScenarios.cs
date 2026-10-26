@@ -100,6 +100,25 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         Assert.DoesNotContain("Kiji.Build : error : InvalidOperationException", failure.Message, StringComparison.Ordinal);
         File.Delete(Path.Combine(fixture.Site, "UnregisteredPage.razor"));
 
+        // A page that logs an error fails every publish until it is fixed, not only the first.
+        fixture.Write("Site/LoggingPage.razor", """
+            @page "/logging/"
+            @using Microsoft.Extensions.Logging
+            @inject ILogger<LoggingPage> Logger
+            @code { protected override void OnInitialized() => Logger.LogError("logging-page-error"); }
+            """);
+        foreach (var _ in Enumerable.Range(0, 2))
+        {
+            var logged = await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.PublishAsync());
+            Assert.Matches(@"LoggingPage : error : logging-page-error \[[^\]]*PackageSite\.csproj\]", logged.Message);
+        }
+        fixture.Write("Site/LoggingPage.razor", """
+            @page "/logging/"
+            <p>Fixed page</p>
+            """);
+        Assert.DoesNotContain("logging-page-error", await fixture.PublishAsync(), StringComparison.Ordinal);
+        Assert.Contains("Fixed page", Read("logging/index.html"), StringComparison.Ordinal);
+
         var stagingDirectory = Assert.Single(Directory.GetDirectories(Path.Combine(fixture.Site, "obj"), "site", SearchOption.AllDirectories));
         await fixture.DotnetAsync("clean", "Site/PackageSite.csproj", "-c", "Release");
         Assert.False(Directory.Exists(Path.Combine(fixture.Site, ".kiji")));

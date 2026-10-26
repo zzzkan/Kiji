@@ -103,7 +103,8 @@ generated file:
   warnings and errors. An error fails the publish; `-warnaserror` makes warnings fail it too.
 - Other messages appear in CI logs and with `--tl:off`. In a terminal, add `-v d`. `-v q`
   hides them.
-- Pages reused from the cache log nothing. Publish with `-p:KijiForce=true` to render them.
+- A page that logs a warning or an error is rendered on every publish until it stops, so the
+  message, and a publish failing on it, does not disappear.
 - The development server's ASP.NET Core messages use the same settings.
 - With another console formatter, such as `AddJsonConsole()`, MSBuild no longer recognizes
   warnings.

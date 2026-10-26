@@ -333,6 +333,9 @@ public sealed class StaticSiteBuilder
                     "ImageProcessorOptions.Widths must contain only positive widths.")
                 .ValidateOnStart();
         }
+        // Added here so that ClearProviders cannot remove it. The site's filters still apply,
+        // so a level the site turns off is neither shown nor keeps pages from being reused.
+        _services.TryAddEnumerable(ServiceDescriptor.Singleton<ILoggerProvider, PageDiagnosticsLoggerProvider>());
         // A default here would pin the singleton to the wrong execution mode.
         _services.AddSingleton(_ => resolvePaths());
         _services.MakeReadOnly();

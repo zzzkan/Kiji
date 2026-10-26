@@ -39,7 +39,7 @@ return await builder.Build().RunAsync();
 | `SiteInfo StaticSiteBuilder.SiteInfo`                                          | Required site metadata.                                                                                                   |
 | `IServiceCollection StaticSiteBuilder.Services`                                | See [Services](#services).                                                                                                |
 | `IHostEnvironment StaticSiteBuilder.Environment`                               | See [Environment](#environment).                                                                                          |
-| `ConfigurationManager StaticSiteBuilder.Configuration`                         | See [Configuration](#configuration).                                                                                      |
+| `IConfigurationManager StaticSiteBuilder.Configuration`                        | See [Configuration](#configuration).                                                                                      |
 | `ILoggingBuilder StaticSiteBuilder.Logging`                                    | See [Logging](#logging).                                                                                                  |
 | `StaticSite StaticSiteBuilder.Build()`                                         | Validates the services and makes them read-only. Call it once.                                                            |
 | `Task<int> StaticSite.RunAsync(CancellationToken cancellationToken = default)` | Serves during `dotnet watch` or generates the site during `dotnet publish`, then disposes the site. Return its exit code. |
@@ -81,6 +81,9 @@ builder.Services.Configure<ImageProcessorOptions>(builder.Configuration.GetSecti
 - Changing any value outside the `Logging` section, including setting a key to `null`,
   renders every page again on the next publish.
 - Files are read once. Restart `dotnet watch` after editing them.
+- Configuration is fixed when the site starts running; later changes and reloads do not apply.
+- The development server reads its own settings, such as `urls`, from the site's
+  configuration. `--urls` and `ASPNETCORE_URLS` still override them.
 
 ### Logging
 

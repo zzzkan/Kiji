@@ -10,7 +10,6 @@ using Kiji.Rendering;
 using Kiji.Routing;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -25,7 +24,7 @@ public sealed class StaticSite : IAsyncDisposable
     private readonly SiteRunSettings _settings;
     private readonly ContentRuntime _runtime;
     private readonly SiteHostEnvironment _environment;
-    private readonly ConfigurationManager _configuration;
+    private readonly SiteConfiguration _configuration;
     private readonly IReadOnlyList<PageParameterRegistration> _pageParameters;
     private readonly IReadOnlyList<SiteArtifactRegistration> _artifacts;
     private readonly IReadOnlyList<Assembly> _pageAssemblies;
@@ -45,7 +44,7 @@ public sealed class StaticSite : IAsyncDisposable
         _settings = builder.RunSettings;
         _runtime = builder.Runtime;
         _environment = builder.HostEnvironment;
-        _configuration = builder.Configuration;
+        _configuration = builder.HostConfiguration;
         _pageParameters = [.. builder.PageParameters];
         _artifacts = [.. builder.Artifacts];
         _pageAssemblies = [.. builder.PageAssemblies];
@@ -389,7 +388,7 @@ public sealed class StaticSite : IAsyncDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         // Planning expands page parameter factories, which read content. If nothing has settled
         // the options yet, fall back to paths that cannot be mistaken for a deliverable.
-        _activeOptions ??= Paths.ResolveForDevelopment();
+        UsePlanningOptions();
 
         var snapshotPhases = new BuildPhaseTimer();
         var scanned = new List<PageDiscovery.DiscoveredPage>();
@@ -682,6 +681,7 @@ public sealed class StaticSite : IAsyncDisposable
                 "This StaticSite has already settled its paths. Build a new site to use a different output directory or switch between publishing and serving.");
         }
 
+        _configuration.Freeze();
         return _activeOptions = options;
     }
 
@@ -691,6 +691,7 @@ public sealed class StaticSite : IAsyncDisposable
     /// </summary>
     internal void UsePlanningOptions()
     {
+        _configuration.Freeze();
         _activeOptions ??= Paths.ResolveForDevelopment();
     }
 

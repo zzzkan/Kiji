@@ -61,9 +61,11 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   paths settle. Do not expose a provider or content dictionary on StaticSite. IHostEnvironment
   is read-only: its name selects the configuration files at creation. Default configuration
   sources stay project-local (no environment variables or command line, which differ between
-  machines). The environment name and every configuration key and value, nulls included, are
-  in the options fingerprint because per-key reads are not tracked; only the Logging section,
-  which cannot change output, is left out.
+  machines). Execution freezes a read-only configuration snapshot shared by captured sections,
+  options binding and the fingerprint. The dev server inherits it below its standard
+  environment and command-line sources. The environment name and every configuration key and
+  value, nulls included, are in the options fingerprint because per-key reads are not tracked;
+  only the Logging section, which cannot change output, is left out.
 - The dev server enforces BaseUrl's path prefix and uses `.kiji/dev-site`.
   Only `.kiji/cache` is portable; planning creates no output directories.
 - StaticSiteBuilder.Services is standard DI; Build validates it, makes it read-only and

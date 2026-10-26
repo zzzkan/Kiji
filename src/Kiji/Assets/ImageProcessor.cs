@@ -77,8 +77,6 @@ internal sealed class ImageProcessor : IImageProcessor
         var targetWidths = _widths
             .Where(width => width < originalWidth)
             .Append(Math.Min(originalWidth, _maxWidth))
-            .Distinct()
-            .Order()
             .ToArray();
 
         // Lock the materialized image family, not its source: differing requested

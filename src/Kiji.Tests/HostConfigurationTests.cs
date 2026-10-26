@@ -67,6 +67,58 @@ public sealed class HostConfigurationTests : IDisposable
     }
 
     [Fact]
+    public async Task Publish_FreezesConfigurationAndCapturedSectionsBeforeRendering_AndReusesTheSameSnapshot()
+    {
+        const string first = """{ "Site": { "Title": "first" }, "Feature": { "Enabled": true } }""";
+        const string changed = """{ "Site": { "Title": "changed" }, "Feature": { "Enabled": null } }""";
+        WriteSettings("live.json", first);
+        using var live = new ConfigurationManager();
+        live.AddJsonFile(Path.Combine(_root, "live.json"), optional: false, reloadOnChange: false);
+        var renders = 0;
+
+        async Task<string> PublishAsync(bool changeDuringRender = false)
+        {
+            var builder = CreateBuilder(environmentName: null, typeof(ConfigurationSnapshotPage));
+            builder.Configuration.AddConfiguration(live);
+            var section = builder.Configuration.GetSection("Site");
+            builder.Services.Configure<FeatureOptions>(builder.Configuration.GetSection("Feature"));
+            builder.Services.AddSingleton<Action>(() =>
+            {
+                renders++;
+                if (changeDuringRender)
+                {
+                    WriteSettings("live.json", changed);
+                    ((IConfigurationRoot)live).Reload();
+                    Assert.Equal("first", section["Title"]);
+                    Assert.Throws<InvalidOperationException>(() => section["Title"] = "mutated");
+                    Assert.Throws<InvalidOperationException>(() => builder.Configuration["Site:Title"] = "mutated");
+                    Assert.Throws<NotSupportedException>(() => builder.Configuration.Sources.Clear());
+                    Assert.Throws<InvalidOperationException>(() => ((IConfigurationRoot)builder.Configuration).Reload());
+                }
+            });
+            await using var site = builder.Build();
+            // Configuration remains editable between Build and execution.
+            builder.Configuration.AddInMemoryCollection([new("LateSetting", "included")]);
+            await site.PublishAsync(Path.Combine(_root, "dist"));
+            return await File.ReadAllTextAsync(Path.Combine(_root, "dist", "snapshot", "index.html"));
+        }
+
+        var original = await PublishAsync(changeDuringRender: true);
+        Assert.Contains("title:first;enabled:True", original, StringComparison.Ordinal);
+        Assert.Equal(1, renders);
+
+        WriteSettings("live.json", first);
+        ((IConfigurationRoot)live).Reload();
+        Assert.Equal(original, await PublishAsync());
+        Assert.Equal(1, renders);
+
+        WriteSettings("live.json", changed);
+        ((IConfigurationRoot)live).Reload();
+        Assert.Contains("title:changed;enabled:False", await PublishAsync(), StringComparison.Ordinal);
+        Assert.Equal(2, renders);
+    }
+
+    [Fact]
     public async Task Publish_RendersPagesAgainWhenASettingBecomesNull()
     {
         var output = Path.Combine(_root, "dist");

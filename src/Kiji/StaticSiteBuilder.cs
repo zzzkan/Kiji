@@ -17,7 +17,7 @@ namespace Kiji;
 /// <remarks>
 /// Create it with <see cref="StaticSite.CreateBuilder(string[])"/> and call <see cref="Build"/> once.
 /// Building the site makes <see cref="Services"/> and the registration methods read-only.
-/// <see cref="Configuration"/> stays writable, as in other .NET hosts.
+/// <see cref="Configuration"/> stays writable until execution starts, then becomes a fixed snapshot.
 /// </remarks>
 public sealed class StaticSiteBuilder
 {
@@ -43,7 +43,6 @@ public sealed class StaticSiteBuilder
         // Every configuration value is part of the publish fingerprint, so the default
         // sources are only those that travel with the project. Environment variables and
         // command-line arguments would differ between machines and between serve and publish.
-        Configuration = new ConfigurationManager();
         // A site started through MSBuild always has its project directory. Without one, as
         // when tests only plan pages, there are no files to read and no base path to set.
         if (Directory.Exists(paths.ProjectDirectory))
@@ -141,9 +140,9 @@ public sealed class StaticSiteBuilder
     /// It reads <c>appsettings.json</c> and <c>appsettings.{Environment}.json</c> from the project directory, and user
     /// secrets in Development. Add other sources, such as prefixed environment variables, explicitly. Every value outside
     /// the <c>Logging</c> section is part of the publish fingerprint: changing one renders every page again. Files are read
-    /// once per process.
+    /// once per process. Execution fixes a read-only snapshot, including sections already captured by options binding.
     /// </remarks>
-    public ConfigurationManager Configuration { get; }
+    public IConfigurationManager Configuration => HostConfiguration;
 
     /// <summary>The logging configuration for components, services, Kiji, and the development server.</summary>
     /// <remarks>
@@ -162,6 +161,8 @@ public sealed class StaticSiteBuilder
     internal ContentRuntime Runtime { get; } = new();
 
     internal SiteHostEnvironment HostEnvironment { get; }
+
+    internal SiteConfiguration HostConfiguration { get; } = new();
 
     internal IReadOnlyList<string> ContentPaths => _contentPaths;
 
@@ -323,8 +324,14 @@ public sealed class StaticSiteBuilder
         if (ReferenceEquals(_services.Last(static descriptor =>
             descriptor.ServiceType == typeof(IImageProcessor) && !descriptor.IsKeyedService), _defaultImageProcessor))
         {
-            _services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<ImageProcessorOptions>, ImageProcessorOptionsValidator>());
-            _services.AddOptions<ImageProcessorOptions>().ValidateOnStart();
+            _services.AddOptions<ImageProcessorOptions>()
+                .Validate(static options => options.Quality is >= 1 and <= 100,
+                    "ImageProcessorOptions.Quality must be between 1 and 100.")
+                .Validate(static options => options.MaxWidth > 0,
+                    "ImageProcessorOptions.MaxWidth must be positive.")
+                .Validate(static options => options.Widths is null || options.Widths.All(static width => width > 0),
+                    "ImageProcessorOptions.Widths must contain only positive widths.")
+                .ValidateOnStart();
         }
         // A default here would pin the singleton to the wrong execution mode.
         _services.AddSingleton(_ => resolvePaths());

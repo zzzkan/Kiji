@@ -2,6 +2,8 @@ using Kiji.Assets;
 using Kiji.Markdown;
 using Kiji.Tests.TestSite.Pages;
 using Kiji.Tests.TestSite;
+using Kiji.Tests.TestSite.ErrorHandling;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xunit;
@@ -114,13 +116,14 @@ public sealed class IncrementalBuildTests : IDisposable
     }
 
     [Theory]
-    [InlineData(LogLevel.Information, false)]
-    [InlineData(LogLevel.Warning, true)]
-    [InlineData(LogLevel.Error, true)]
-    public async Task PageLoggingAWarningOrError_IsNotReused_UntilItStops(LogLevel level, bool rendersAgain)
+    [InlineData(LogLevel.Information)]
+    [InlineData(LogLevel.Warning)]
+    [InlineData(LogLevel.Error)]
+    [InlineData(LogLevel.Critical)]
+    public async Task PageLogging_DoesNotControlReuse(LogLevel level)
     {
         var state = new DiagnosticSwitch { Level = level };
-        async Task<int> RendersInPublishAsync(bool clearProviders = false)
+        async Task<int> RendersInPublishAsync(LogLevel minimumLevel)
         {
             var before = state.Renders;
             var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")),
@@ -128,23 +131,105 @@ public sealed class IncrementalBuildTests : IDisposable
             builder.SiteInfo = TestArticleContents.CreateSiteInfo();
             TestSiteAssets.Bind(builder.Paths, Path.Combine(_testDir, "static"));
             builder.Services.AddSingleton(state);
-            if (clearProviders) { builder.Logging.ClearProviders(); }
+            builder.Configuration["Logging:LogLevel:Default"] = minimumLevel.ToString();
             await using var app = builder.Build();
             await app.PublishAsync(Path.Combine(_testDir, "dist"));
             return state.Renders - before;
         }
 
-        Assert.Equal(1, await RendersInPublishAsync());
-        // While the page logs a warning or an error, every publish renders it, so the message
-        // and a publish failing on it persist. Removing the console does not change that.
-        Assert.Equal(rendersAgain ? 1 : 0, await RendersInPublishAsync());
-        Assert.Equal(rendersAgain ? 1 : 0, await RendersInPublishAsync(clearProviders: true));
+        Assert.Equal(1, await RendersInPublishAsync(LogLevel.Trace));
+        Assert.Equal(0, await RendersInPublishAsync(LogLevel.Trace));
+        Assert.Equal(0, await RendersInPublishAsync(LogLevel.None));
+        Assert.Equal(0, await RendersInPublishAsync(LogLevel.Trace));
+    }
 
-        // After the fix, one render records a reusable page, and later publishes reuse it.
-        state.Level = null;
-        Assert.Equal(rendersAgain ? 1 : 0, await RendersInPublishAsync());
-        Assert.Equal(0, await RendersInPublishAsync());
-        Assert.Equal(0, await RendersInPublishAsync());
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CaughtRenderException_IsNotReused_EvenWhenLoggingIsSuppressed(bool clearProviders)
+    {
+        var state = new DiagnosticSwitch { Fail = true };
+        async Task<int> RendersInPublishAsync(bool suppress)
+        {
+            var before = state.Renders;
+            var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")),
+                typeof(DiagnosticPage));
+            builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+            TestSiteAssets.Bind(builder.Paths, Path.Combine(_testDir, "static"));
+            builder.Services.AddSingleton(state);
+            builder.Logging.ClearProviders();
+            var logs = new RecordingLoggerProvider();
+            if (!clearProviders) { builder.Logging.AddProvider(logs); }
+            builder.Configuration["Logging:LogLevel:Default"] = suppress ? "None" : "Warning";
+            await using var app = builder.Build();
+            await app.PublishAsync(Path.Combine(_testDir, "dist"));
+
+            var html = await File.ReadAllTextAsync(Path.Combine(_testDir, "dist", "diagnostic", "index.html"));
+            Assert.Contains(state.Fail ? "Boundary fallback" : "diagnostic", html, StringComparison.Ordinal);
+            var diagnostics = logs.Entries.Where(static entry => entry.Category == "Microsoft.AspNetCore.Components.Web.ErrorBoundary");
+            if (!clearProviders && !suppress && state.Fail)
+            {
+                Assert.Contains(diagnostics, static entry => entry.Level == LogLevel.Warning
+                    && entry.Message.Contains("Private failure", StringComparison.Ordinal));
+            }
+            else
+            {
+                Assert.Empty(diagnostics);
+            }
+            return state.Renders - before;
+        }
+
+        Assert.Equal(1, await RendersInPublishAsync(suppress: true));
+        Assert.Equal(1, await RendersInPublishAsync(suppress: true));
+        Assert.Equal(1, await RendersInPublishAsync(suppress: false));
+        Assert.Equal(1, await RendersInPublishAsync(suppress: false));
+
+        // Removing the boundary allows the next successful render to be reused.
+        state.Fail = false;
+        Assert.Equal(1, await RendersInPublishAsync(suppress: false));
+        Assert.Equal(0, await RendersInPublishAsync(suppress: false));
+        Assert.Equal(0, await RendersInPublishAsync(suppress: true));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ErrorBoundaries_AreNeverReused_IncludingHealthyAndCustomBoundaries(bool replaceLogger)
+    {
+        var state = new BoundaryPolicyState();
+        string[] kinds = ["plain", "standard", "custom", "base", "dynamic", "removed"];
+        var builder = CreateBoundaryPolicyBuilder(state, kinds);
+        if (replaceLogger) { builder.Services.AddScoped<IErrorBoundaryLogger, SilentErrorBoundaryLogger>(); }
+        await using var app = builder.Build();
+
+        for (var publish = 1; publish <= 4; publish++)
+        {
+            // The same component code first succeeds, then throws, then succeeds again.
+            state.Fail = publish == 3;
+            await app.PublishAsync(Path.Combine(_testDir, "dist"));
+            foreach (var kind in kinds)
+            {
+                Assert.Equal(kind == "plain" ? 1 : publish, state.Renders[kind]);
+                var html = await File.ReadAllTextAsync(Path.Combine(_testDir, "dist", "boundary-policy", kind, "index.html"));
+                var expected = kind is "plain" or "removed" ? "Healthy page"
+                    : state.Fail ? "Boundary fallback" : "Healthy child";
+                Assert.Contains(expected, html, StringComparison.Ordinal);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ErrorBoundary_InLayout_PreventsPageReuseWhileHealthy()
+    {
+        var state = new BoundaryPolicyState();
+        var builder = CreateBoundaryPolicyBuilder(state, "plain");
+        builder.UseDefaultLayout<BoundaryPolicyLayout>();
+        await using var app = builder.Build();
+
+        await app.PublishAsync(Path.Combine(_testDir, "dist"));
+        await app.PublishAsync(Path.Combine(_testDir, "dist"));
+
+        Assert.Equal(2, state.Renders["plain"]);
     }
 
     [Fact]
@@ -882,6 +967,18 @@ public sealed class IncrementalBuildTests : IDisposable
         WritePostAsync(root, "stable", "Stable Post", "Stable body.").GetAwaiter().GetResult();
         WritePostAsync(root, "changing", "Changing Post", "Original body.").GetAwaiter().GetResult();
         return root;
+    }
+
+    private StaticSiteBuilder CreateBoundaryPolicyBuilder(BoundaryPolicyState state, params string[] kinds)
+    {
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")),
+            typeof(BoundaryPolicyPage));
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        TestSiteAssets.Bind(builder.Paths, Path.Combine(_testDir, "static"));
+        builder.Services.AddSingleton(state);
+        builder.Logging.ClearProviders();
+        builder.AddPageParameters<BoundaryPolicyPage>(_ => kinds.Select(static kind => new { Kind = kind }));
+        return builder;
     }
 
     private static async Task WritePostAsync(string root, string slug, string title, string body)

@@ -1,10 +1,11 @@
+using Kiji.Tests.TestSite.ErrorHandling;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Rendering;
 using Microsoft.Extensions.Logging;
 
 namespace Kiji.Tests.TestSite;
 
-/// <summary>Logs at the switch's level while rendering, as a page with a problem would.</summary>
+/// <summary>Independently controls logged messages and a caught rendering exception.</summary>
 [Route("/diagnostic/")]
 public sealed partial class DiagnosticPage : ComponentBase
 {
@@ -22,7 +23,15 @@ public sealed partial class DiagnosticPage : ComponentBase
 
     protected override void BuildRenderTree(RenderTreeBuilder builder)
     {
-        builder.AddContent(0, "diagnostic");
+        if (Switch.Fail)
+        {
+            builder.OpenComponent<ErrorBoundaryComponent>(0);
+            builder.CloseComponent();
+        }
+        else
+        {
+            builder.AddContent(1, "diagnostic");
+        }
     }
 
     [LoggerMessage(Message = "The diagnostic page has a problem.")]

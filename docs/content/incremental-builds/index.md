@@ -18,9 +18,15 @@ nothing it depends on has changed, and always produce a complete site.
 | A static asset changes | Update the asset and pages that link it through `Assets` or `ImportMap`. |
 | Code, packages, the .NET runtime, `SiteInfo`, the environment name, or [configuration](../api-reference/#configuration) change | Render all pages. |
 | A page uses an `AlwaysRender` component | Render that page on every publish. |
-| A page logs a warning or an error | Render that page on every publish until it stops. |
+| A page renders an `ErrorBoundaryBase` component | Render that page on every publish, even when healthy, including custom boundaries. |
 
 Feeds, sitemaps, and custom artifacts are regenerated on every publish.
+
+Boundaries in layouts and dynamic children count too. A boundary in a shared layout makes
+every page using that layout render on every publish. This policy does not clear image caches.
+
+Reusing HTML does not replay its log messages. A publish rejected by MSBuild because of a
+log diagnostic can still leave a reusable cache; see [Logging](../api-reference/#logging).
 
 ## Page dependencies
 

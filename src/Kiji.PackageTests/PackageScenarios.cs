@@ -11,6 +11,8 @@ namespace Kiji.PackageTests;
 
 public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<PackageFixture>
 {
+    private static readonly string[] LogOnlyLevels = ["Error", "Warning"];
+
     [Fact]
     public Task Publish_Edit_AndClean() => fixture.ScenarioAsync(async () =>
     {
@@ -35,7 +37,6 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
 
         var output = await fixture.PublishAsync();
 
-        // MSBuild reports it as a warning of the project, which every MSBuild logger shows.
         Assert.Matches(@"ErrorBoundary : warning : Unhandled exception rendering component: boundary-publish-warning \[[^\]]*PackageSite\.csproj\]", output);
         Assert.DoesNotContain("boundary-publish-information", output, StringComparison.Ordinal);
         // The summary is a high-importance message, which a redirected publish shows by default.
@@ -100,24 +101,56 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         Assert.DoesNotContain("Kiji.Build : error : InvalidOperationException", failure.Message, StringComparison.Ordinal);
         File.Delete(Path.Combine(fixture.Site, "UnregisteredPage.razor"));
 
-        // A page that logs an error fails every publish until it is fixed, not only the first.
-        fixture.Write("Site/LoggingPage.razor", """
-            @page "/logging/"
-            @using Microsoft.Extensions.Logging
-            @inject ILogger<LoggingPage> Logger
-            @code { protected override void OnInitialized() => Logger.LogError("logging-page-error"); }
-            """);
+        // A caught exception allows the fallback to publish with a visible warning.
+        // The boundary is rendered again, so -warnaserror fails on every invocation.
+        await fixture.PublishAsync();
         foreach (var _ in Enumerable.Range(0, 2))
         {
-            var logged = await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.PublishAsync());
-            Assert.Matches(@"LoggingPage : error : logging-page-error \[[^\]]*PackageSite\.csproj\]", logged.Message);
+            var logged = await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.PublishAsync("-warnaserror"));
+            Assert.Matches(@"ErrorBoundary : error : Unhandled exception rendering component: boundary-publish-warning \[[^\]]*PackageSite\.csproj\]", logged.Message);
         }
-        fixture.Write("Site/LoggingPage.razor", """
-            @page "/logging/"
-            <p>Fixed page</p>
+        // A custom boundary can bypass the default logger entirely. Its fallback
+        // must still render on every publish, and healthy boundaries follow the same policy.
+        fixture.Write("Site/CustomBoundary.razor", """
+            @inherits ErrorBoundary
+            @if (CurrentException is null)
+            {
+                @ChildContent
+            }
+            else if (ErrorContent is not null)
+            {
+                @ErrorContent(CurrentException)
+            }
+            @code { protected override Task OnErrorAsync(Exception exception) => Task.CompletedTask; }
             """);
-        Assert.DoesNotContain("logging-page-error", await fixture.PublishAsync(), StringComparison.Ordinal);
-        Assert.Contains("Fixed page", Read("logging/index.html"), StringComparison.Ordinal);
+        fixture.Replace("Site/BoundaryPage.razor", "ErrorBoundary", "CustomBoundary");
+        await fixture.PublishAsync();
+        Assert.Contains("Boundary fallback", Read("boundary/index.html"), StringComparison.Ordinal);
+        Assert.Matches(@"Generated 0 pages \(\d+ unchanged, skipped, 1 re-rendered but unchanged\)", await fixture.PublishAsync());
+
+        fixture.Write("Site/FailingChild.razor", "<p>Fixed child</p>");
+        Assert.DoesNotContain("boundary-publish-warning", await fixture.PublishAsync(), StringComparison.Ordinal);
+        Assert.Contains("Fixed child", Read("boundary/index.html"), StringComparison.Ordinal);
+        Assert.Matches(@"Generated 0 pages \(\d+ unchanged, skipped, 1 re-rendered but unchanged\)", await fixture.PublishAsync());
+
+        // Logging does not turn a successful render into an exception. MSBuild can
+        // reject that invocation after Kiji has saved its reusable HTML and cache.
+        foreach (var level in LogOnlyLevels)
+        {
+            fixture.Write("Site/LoggingPage.razor", $$"""
+                @page "/logging/"
+                @using Microsoft.Extensions.Logging
+                @inject ILogger<LoggingPage> Logger
+                <p>Log-only result</p>
+                @code { protected override void OnInitialized() => Logger.Log{{level}}("logging-page-{{level}}"); }
+                """);
+            string[] publishOptions = level == "Warning" ? ["-warnaserror"] : [];
+            var logged = await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.PublishAsync(publishOptions));
+            Assert.Matches($@"LoggingPage : error : logging-page-{level} \[[^\]]*PackageSite\.csproj\]", logged.Message);
+            var reused = await fixture.PublishAsync(publishOptions);
+            Assert.DoesNotContain($"logging-page-{level}", reused, StringComparison.Ordinal);
+            Assert.Contains("Log-only result", Read("logging/index.html"), StringComparison.Ordinal);
+        }
 
         var stagingDirectory = Assert.Single(Directory.GetDirectories(Path.Combine(fixture.Site, "obj"), "site", SearchOption.AllDirectories));
         await fixture.DotnetAsync("clean", "Site/PackageSite.csproj", "-c", "Release");

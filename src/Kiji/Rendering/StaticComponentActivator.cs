@@ -22,7 +22,8 @@ internal sealed class StaticComponentActivator(IServiceProvider services) : ICom
 
         var (create, alwaysRender) = Factories.GetOrAdd(componentType,
             static type => (ActivatorUtilities.CreateFactory(type, Type.EmptyTypes),
-                type.IsDefined(typeof(AlwaysRenderAttribute), inherit: true)));
+                type.IsDefined(typeof(AlwaysRenderAttribute), inherit: true)
+                    || typeof(ErrorBoundaryBase).IsAssignableFrom(type)));
         if (alwaysRender)
         {
             PageRenderContext.Current?.Dependencies?.DisableCache();

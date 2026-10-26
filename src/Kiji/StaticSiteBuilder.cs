@@ -5,7 +5,6 @@ using Kiji.Rendering;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
@@ -90,7 +89,7 @@ public sealed class StaticSiteBuilder
         _defaultImageProcessor = ServiceDescriptor.Singleton<IImageProcessor>(static provider => new ImageProcessor(
             provider.GetRequiredService<IOptions<ImageProcessorOptions>>().Value,
             logger: provider.GetRequiredService<ILoggerFactory>().CreateLogger(BuildLoggerExtensions.CategoryName)));
-        _services.Add(_defaultImageProcessor);
+        Services.Add(_defaultImageProcessor);
 
         _managedServices = [.. _services.Where(static descriptor => SiteServiceRegistration.IsManaged(descriptor.ServiceType))];
     }
@@ -333,9 +332,6 @@ public sealed class StaticSiteBuilder
                     "ImageProcessorOptions.Widths must contain only positive widths.")
                 .ValidateOnStart();
         }
-        // Added here so that ClearProviders cannot remove it. The site's filters still apply,
-        // so a level the site turns off is neither shown nor keeps pages from being reused.
-        _services.TryAddEnumerable(ServiceDescriptor.Singleton<ILoggerProvider, PageDiagnosticsLoggerProvider>());
         // A default here would pin the singleton to the wrong execution mode.
         _services.AddSingleton(_ => resolvePaths());
         _services.MakeReadOnly();

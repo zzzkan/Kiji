@@ -5,6 +5,7 @@ using Kiji.Rendering;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
@@ -58,7 +59,7 @@ public sealed class StaticSiteBuilder
 
         // Defaults are registered first so that later registrations replace them. Managed
         // services are present from the start, so TryAdd-style extensions see them.
-        _services.AddSingleton(_ => SiteInfo);
+        Services.Add(ServiceDescriptor.Singleton<SiteInfo>(ResolveSiteInfo));
         _services.AddSingleton<IHostEnvironment>(HostEnvironment);
         _services.AddSingleton<IConfiguration>(Configuration);
 
@@ -216,9 +217,11 @@ public sealed class StaticSiteBuilder
         EnsureConfigurable();
         // Source identities use the project directory, including when a caller supplied
         // an absolute path inside the checkout, keeping those identities portable.
-        var descriptor = Runtime.Register(() => new ContentDictionary<T>(Runtime, loader, directory is null
+        var runtime = Runtime;
+        var paths = Paths;
+        var descriptor = runtime.Register(() => new ContentDictionary<T>(runtime, loader, directory is null
             ? contentSetScope
-            : Path.GetRelativePath(Path.GetFullPath(Paths.ProjectDirectory), Paths.ResolveAgainstRoot(directory)).Replace('\\', '/')));
+            : Path.GetRelativePath(Path.GetFullPath(paths.ProjectDirectory), paths.ResolveAgainstRoot(directory)).Replace('\\', '/')));
         Services.Add(descriptor);
         _managedServices.Add(descriptor);
         if (directory is not null) { _contentPaths.Add(directory); }
@@ -318,6 +321,8 @@ public sealed class StaticSiteBuilder
     internal (ServiceProvider Services, IReadOnlyCollection<Assembly> Assemblies) BuildServices(Func<ResolvedSitePaths> resolvePaths)
     {
         SiteServiceRegistration.Validate(_services, _managedServices);
+        // Validate the original managed registration before replacing it with the final value.
+        _services.Replace(ServiceDescriptor.Singleton(SiteInfo));
         // The settings configure only Kiji's processor. A replacement does not read them, so they
         // are validated only when Kiji's processor is the last registration, which Validate requires.
         if (ReferenceEquals(_services.Last(static descriptor =>
@@ -354,4 +359,6 @@ public sealed class StaticSiteBuilder
             throw new InvalidOperationException("The site has already been built. Configure the builder before calling Build.");
         }
     }
+
+    private SiteInfo ResolveSiteInfo(IServiceProvider _) => SiteInfo;
 }

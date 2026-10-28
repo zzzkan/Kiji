@@ -74,6 +74,8 @@ public sealed class PageServiceTests : IDisposable
     [InlineData("duplicate")]
     [InlineData("remove")]
     [InlineData("replace")]
+    [InlineData("remove-site")]
+    [InlineData("duplicate-site")]
     [InlineData("keyed")]
     [InlineData("open-generic")]
     [InlineData("provider")]
@@ -89,6 +91,8 @@ public sealed class PageServiceTests : IDisposable
             case "duplicate": services.Add(services.Single(descriptor => descriptor.ServiceType == typeof(PageInfo))); break;
             case "remove": services.RemoveAll<PageInfo>(); break;
             case "replace": services.Replace(ServiceDescriptor.Singleton(builder.SiteInfo)); break;
+            case "remove-site": services.RemoveAll<SiteInfo>(); break;
+            case "duplicate-site": services.AddSingleton(builder.SiteInfo); break;
             case "keyed": services.AddKeyedSingleton("alternate", builder.SiteInfo); break;
             case "open-generic": services.AddSingleton(typeof(ContentDictionary<>), typeof(ContentDictionary<>)); break;
             case "provider": services.AddSingleton<IServiceProvider>(_ => throw new NotSupportedException()); break;

@@ -2,6 +2,7 @@ using Kiji.Markdown;
 using Kiji.Sitemaps;
 using Kiji.Tests.TestSite;
 using Kiji.Tests.TestSite.Pages;
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -10,6 +11,59 @@ namespace Kiji.Tests;
 public sealed class AppConfigurationTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"KijiConfiguration-{Guid.NewGuid():N}");
+
+    [Fact]
+    public async Task Build_RegistersFinalSiteInfoInstance()
+    {
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
+        var info = TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = info;
+        using (var temporaryProvider = builder.Services.BuildServiceProvider())
+        {
+            Assert.Same(info, temporaryProvider.GetRequiredService<SiteInfo>());
+        }
+
+        var finalInfo = TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = finalInfo;
+        await using var site = builder.Build();
+        var registration = Assert.Single(builder.Services, static descriptor => descriptor.ServiceType == typeof(SiteInfo));
+        Assert.Same(finalInfo, registration.ImplementationInstance);
+        Assert.Same(finalInfo, site.ServiceProvider.GetRequiredService<SiteInfo>());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BuiltSite_DoesNotRetainBuilder(bool withContent)
+    {
+        var (site, builderReference, info) = BuildWithoutKeepingBuilder(_root, withContent);
+        await using (site)
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+
+            Assert.False(builderReference.IsAlive);
+            Assert.Same(info, site.ServiceProvider.GetRequiredService<SiteInfo>());
+            await site.PublishAsync(Path.Combine(_root, "output"));
+            GC.KeepAlive(site);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static (StaticSite Site, WeakReference Builder, SiteInfo Info) BuildWithoutKeepingBuilder(string root, bool withContent)
+    {
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root));
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        var info = TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = info;
+        if (withContent)
+        {
+            builder.AddContentSource<Post>(static _ => []);
+            builder.AddMarkdownContent<FrontMatter>();
+        }
+        return (builder.Build(), new WeakReference(builder), info);
+    }
 
     [Fact]
     public async Task MissingSite_FailsBuildBeforeCreatingOutput_AndCanBeCorrected()

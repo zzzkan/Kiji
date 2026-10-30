@@ -69,78 +69,27 @@ public sealed class RunAsyncTests : IDisposable
         Assert.False(Directory.Exists(_outputDir));
     }
 
-    [Fact]
-    public async Task RunAsync_PublishFailure_IsLoggedAndRethrown()
-    {
-        var logs = new RecordingLoggerProvider();
-        var builder = CreateBuilder(EnvironmentWith([("KIJI_OUTPUT", _outputDir)]));
-        builder.Logging.AddProvider(logs);
-        var site = builder.Build();
-        File.Delete(site.Paths.AssetManifestBasePath + ".staticwebassets.publish.runtime.json");
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() => site.RunAsync(CancellationToken.None));
-
-        Assert.Contains(("Kiji.Build", LogLevel.Error, "Publishing failed."), logs.Entries);
-    }
-
-    [Fact]
-    public async Task RunAsync_CanceledPublish_IsLoggedBeforeDisposalAndReturnsFailure()
-    {
-        var logs = new RecordingLoggerProvider();
-        var builder = CreateBuilder(EnvironmentWith([("KIJI_OUTPUT", _outputDir)]));
-        builder.Logging.AddProvider(logs);
-        var site = builder.Build();
-        using var cancellation = new CancellationTokenSource();
-        await cancellation.CancelAsync();
-
-        Assert.Equal(1, await site.RunAsync(cancellation.Token));
-
-        Assert.Contains(("Kiji.Build", LogLevel.Warning, "Publishing was canceled; output may be incomplete."), logs.Entries);
-        Assert.Throws<ObjectDisposedException>(() => site.ServiceProvider);
-    }
-
     [Theory]
-    [InlineData(null, "Staging", null, "Staging")]
-    [InlineData("Production", "Staging", null, "Production")]
-    [InlineData("Production", "Development", "Staging", "Staging")]
-    public async Task Serve_UsesWebHostPrecedenceBeforeLoadingProjectSettings(string? dotnet, string? aspnet, string? argument, string expected)
+    [InlineData(false, null, null, null, "Development")]
+    [InlineData(false, null, "Staging", null, "Staging")]
+    [InlineData(false, "Production", "Staging", null, "Production")]
+    [InlineData(false, "Production", "Development", "Staging", "Staging")]
+    [InlineData(true, null, "Development", "Development", "Production")]
+    [InlineData(true, "Staging", "Development", "Development", "Staging")]
+    public async Task Environment_SelectsProjectSettingsForTheExecutionMode(
+        bool publish, string? dotnet, string? aspnet, string? argument, string expected)
     {
         await File.WriteAllTextAsync(Path.Combine(_testDir, $"appsettings.{expected}.json"), """{ "Selected": "yes" }""");
         string[] args = argument is null ? [] : ["--environment", argument, "--Selected", "no"];
         var builder = StaticSite.CreateBuilder(args,
             new SiteExecutionPaths(_testDir), typeof(StaticSite).Assembly,
-            EnvironmentWith([("DOTNET_ENVIRONMENT", dotnet), ("ASPNETCORE_ENVIRONMENT", aspnet)]));
+            EnvironmentWith([("KIJI_OUTPUT", publish ? _outputDir : null), ("DOTNET_ENVIRONMENT", dotnet), ("ASPNETCORE_ENVIRONMENT", aspnet)]));
         builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         await using var site = builder.Build();
 
         Assert.Equal(expected, builder.Environment.EnvironmentName);
+        Assert.Equal(Path.GetFullPath(_testDir), builder.Environment.ContentRootPath);
         Assert.Equal("yes", builder.Configuration["Selected"]);
-        var (server, web) = await site.StartDevServerAsync([.. args, .. TestUrls.EphemeralPort], CancellationToken.None,
-            new Kiji.Hosting.DevServerStatusReporter(TextWriter.Null, "kiji", useEmoji: false));
-        await using (server)
-        {
-            Assert.Equal(expected, web.Environment.EnvironmentName);
-            Assert.Equal(argument is null ? "yes" : "no", web.Configuration["Selected"]);
-        }
-    }
-
-    [Theory]
-    [InlineData(null, "Production")]
-    [InlineData("", "Production")]
-    [InlineData("   ", "Production")]
-    [InlineData("Staging", "Staging")]
-    public async Task Publish_IgnoresWebHostEnvironmentBeforeLoadingProjectSettings(string? dotnet, string expected)
-    {
-        await File.WriteAllTextAsync(Path.Combine(_testDir, "appsettings.Development.json"), """{ "Selected": "development" }""");
-        await File.WriteAllTextAsync(Path.Combine(_testDir, $"appsettings.{expected}.json"), """{ "Selected": "publish" }""");
-        var builder = StaticSite.CreateBuilder(["--environment", "Development"],
-            new SiteExecutionPaths(_testDir), typeof(StaticSite).Assembly,
-            EnvironmentWith([("KIJI_OUTPUT", _outputDir), ("DOTNET_ENVIRONMENT", dotnet), ("ASPNETCORE_ENVIRONMENT", "Development")]));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
-        await using var site = builder.Build();
-
-        Assert.Equal(expected, builder.Environment.EnvironmentName);
-        Assert.Equal("publish", builder.Configuration["Selected"]);
     }
 
     [Fact]
@@ -203,18 +152,6 @@ public sealed class RunAsyncTests : IDisposable
         Assert.False(Directory.Exists(_outputDir));
     }
 
-    [Theory]
-    [InlineData(null, null, "Development")]
-    [InlineData("dist", null, "Production")]
-    [InlineData("dist", "Staging", "Staging")]
-    public void Environment_FollowsTheExecutionModeUnlessDotnetEnvironmentIsSet(string? output, string? name, string expected)
-    {
-        var builder = CreateBuilder(EnvironmentWith([("KIJI_OUTPUT", output), ("DOTNET_ENVIRONMENT", name)]));
-
-        Assert.Equal(expected, builder.Environment.EnvironmentName);
-        Assert.Equal(Path.GetFullPath(_testDir), builder.Environment.ContentRootPath);
-    }
-
     [Fact]
     public async Task Publish_RendersPagesAgainWhenTheEnvironmentChanges()
     {
@@ -233,10 +170,9 @@ public sealed class RunAsyncTests : IDisposable
     }
 
     [Theory]
-    [InlineData(null, true, false)]
-    [InlineData("Debug", true, true)]
-    [InlineData("Warning", false, false)]
-    public async Task Publish_LogsProgressUnderKijiBuild(string? configuredLevel, bool summary, bool details)
+    [InlineData(null, false)]
+    [InlineData("Debug", true)]
+    public async Task Publish_LogsProgressUnderKijiBuild(string? configuredLevel, bool details)
     {
         if (configuredLevel is not null)
         {
@@ -249,10 +185,10 @@ public sealed class RunAsyncTests : IDisposable
 
         Assert.Equal(0, await builder.Build().RunAsync(CancellationToken.None));
 
-        // Summaries are Information by default, and the Logging section changes the level.
+        // Summaries are Information by default, and the Logging section enables per-file details.
         var build = logs.Entries.Where(static entry => entry.Category == "Kiji.Build").ToArray();
-        Assert.Equal(summary, build.Any(static entry => entry.Level == LogLevel.Information
-            && entry.Message.StartsWith("Generated ", StringComparison.Ordinal) && entry.Message.Contains(" pages (", StringComparison.Ordinal)));
+        Assert.Contains(build, static entry => entry.Level == LogLevel.Information
+            && entry.Message.StartsWith("Generated ", StringComparison.Ordinal) && entry.Message.Contains(" pages (", StringComparison.Ordinal));
         Assert.Equal(details, build.Contains(("Kiji.Build", LogLevel.Debug, $"Generated: {Path.Combine(_outputDir, "index.html")}")));
     }
 

@@ -71,85 +71,15 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
         Assert.Contains("unkeyed", exception.Message, StringComparison.Ordinal);
     }
 
-    [Theory]
-    [InlineData("quality", "Quality")]
-    [InlineData("max-width", "MaxWidth")]
-    [InlineData("widths", "Widths")]
-    public async Task InvalidSettings_FailWhenTheSiteStartsBeforeAnyOutput(string setting, string property)
-    {
-        var builder = CreateBuilder(output: "dist");
-        builder.Services.Configure<ImageProcessorOptions>(options =>
-        {
-            switch (setting)
-            {
-                case "quality": options.Quality = 101; break;
-                case "max-width": options.MaxWidth = 0; break;
-                case "widths": options.Widths = [640, 0]; break;
-            }
-        });
-        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() => builder.Build().RunAsync(CancellationToken.None));
-
-        Assert.Contains($"ImageProcessorOptions.{property}", exception.Message, StringComparison.Ordinal);
-        AssertNoSiteOutput();
-    }
-
     [Fact]
-    public async Task CustomProcessor_LeavesTheDefaultProcessorSettingsUnvalidated()
+    public async Task InvalidSettings_FailWhenTheSiteStartsBeforeAnyOutput()
     {
         var builder = CreateBuilder(output: "dist");
         builder.Services.Configure<ImageProcessorOptions>(static options => options.Quality = 101);
-        builder.Services.AddSingleton<IImageProcessor, TrackingImageProcessor>();
-
-        // The settings configure only the default processor, so nothing reads them here.
-        Assert.Equal(0, await builder.Build().RunAsync(CancellationToken.None));
-    }
-
-    [Fact]
-    public async Task StartupValidationFailure_DisposesAsyncServicesAndKeepsTheError()
-    {
-        var log = new DisposalLog();
-        var builder = CreateBuilder(output: "dist");
-        builder.Services.AddSingleton(_ => new AsyncOnlyDependency(log));
-        builder.Services.AddOptions<ImageProcessorOptions>()
-            .Configure<AsyncOnlyDependency>(static (options, _) => options.Quality = 0);
         var exception = await Assert.ThrowsAsync<OptionsValidationException>(() => builder.Build().RunAsync(CancellationToken.None));
 
         Assert.Contains("ImageProcessorOptions.Quality", exception.Message, StringComparison.Ordinal);
-        Assert.Equal(1, log.Created);
-        Assert.Equal(1, log.Disposed);
-        AssertNoSiteOutput();
-    }
-
-    [Theory]
-    [InlineData("dist")]
-    [InlineData(null)]
-    public async Task OwnOptionsWithValidateOnStart_CanReadContent(string? output)
-    {
-        Directory.CreateDirectory(Path.Combine(_root, "content"));
-        File.WriteAllText(Path.Combine(_root, "content", "post.md"), "---\ntitle: Post\n---\nBody");
-        var validations = 0;
-        var builder = CreateBuilder(output);
-        builder.AddMarkdownContent<FrontMatter>();
-        builder.Services.AddOptions<SampleOptions>()
-            .Validate<ContentDictionary<MarkdownContent<FrontMatter>>>((_, posts) =>
-            {
-                validations++;
-                return posts.Count == 1;
-            }, "A post is required.")
-            .ValidateOnStart();
-        // Publishing runs to completion; serving returns at once with a canceled token.
-        using var stop = new CancellationTokenSource();
-        if (output is null) { await stop.CancelAsync(); }
-
-        Assert.Equal(0, await builder.Build().RunAsync(stop.Token));
-        Assert.Equal(1, validations);
-    }
-
-    // The cache lock may exist; the published site and the dev server mirror must not.
-    private void AssertNoSiteOutput()
-    {
         Assert.False(Directory.Exists(Path.Combine(_root, "dist")));
-        Assert.False(Directory.Exists(Path.Combine(_root, ".kiji", "dev-site")));
     }
 
     private StaticSiteBuilder CreateBuilder(string? output = null)
@@ -158,33 +88,6 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
             name => name == "KIJI_OUTPUT" ? output : null);
         builder.SiteInfo = new SiteInfo { Name = "Images", BaseUrl = new Uri("https://example.test/") };
         return builder;
-    }
-
-    private sealed class SampleOptions;
-
-    private sealed class DisposalLog
-    {
-        public int Created { get; set; }
-
-        public int Disposed { get; set; }
-    }
-
-    /// <summary>A dependency that, like many async resources, implements only IAsyncDisposable.</summary>
-    private sealed class AsyncOnlyDependency : IAsyncDisposable
-    {
-        private readonly DisposalLog _log;
-
-        public AsyncOnlyDependency(DisposalLog log)
-        {
-            _log = log;
-            log.Created++;
-        }
-
-        public ValueTask DisposeAsync()
-        {
-            _log.Disposed++;
-            return ValueTask.CompletedTask;
-        }
     }
 
     public void Dispose()

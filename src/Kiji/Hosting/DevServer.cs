@@ -3,9 +3,6 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Configuration.Json;
-using Microsoft.Extensions.Configuration.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
@@ -58,23 +55,6 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
             // Both hosts use the site's environment and project directory.
             EnvironmentName = environment.EnvironmentName,
             ContentRootPath = environment.ContentRootPath,
-        });
-        // Replace the host's JSON files and user secrets with the site's snapshot.
-        // Keep the standard environment and command-line sources above it, so
-        // ASPNETCORE_URLS and --urls retain their normal precedence.
-        var sources = builder.Configuration.Sources;
-        for (var i = sources.Count - 1; i >= 0; i--)
-        {
-            if (sources[i] is JsonConfigurationSource)
-            {
-                sources.RemoveAt(i);
-            }
-        }
-        // Copy the values: ASP.NET Core writes its own settings through every
-        // provider, which must not write back into the site's immutable root.
-        sources.Insert(0, new MemoryConfigurationSource
-        {
-            InitialData = app.ServiceProvider.GetRequiredService<IConfiguration>().AsEnumerable(),
         });
         // The site's logging, so builder.Logging and the Logging section also apply to ASP.NET Core.
         builder.Logging.ClearProviders();

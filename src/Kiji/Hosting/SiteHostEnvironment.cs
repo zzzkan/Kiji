@@ -10,38 +10,23 @@ namespace Kiji.Hosting;
 internal sealed class SiteHostEnvironment(string environmentName, string applicationName, string contentRootPath)
     : IHostEnvironment
 {
+    private const string ReadOnlyMessage =
+        "The host environment is fixed when the builder is created. Set DOTNET_ENVIRONMENT, or pass --environment while serving.";
+
     private readonly PhysicalFileProvider? _contentRootFileProvider = Directory.Exists(contentRootPath)
         ? new PhysicalFileProvider(contentRootPath) : null;
 
-    public string EnvironmentName
-    {
-        get => environmentName;
-        set => throw new NotSupportedException(
-            "The environment name selects the configuration files when the builder is created and cannot be changed. Set DOTNET_ENVIRONMENT, or pass --environment while serving.");
-    }
+    public string EnvironmentName { get => environmentName; set => throw new NotSupportedException(ReadOnlyMessage); }
 
-    public string ApplicationName
-    {
-        get => applicationName;
-        set => throw new NotSupportedException("The application name is the entry assembly name and cannot be changed.");
-    }
+    public string ApplicationName { get => applicationName; set => throw new NotSupportedException(ReadOnlyMessage); }
 
-    public string ContentRootPath
-    {
-        get => contentRootPath;
-        set => throw new NotSupportedException(
-            "The content root is the site project directory supplied by Kiji's MSBuild targets and cannot be changed.");
-    }
+    public string ContentRootPath { get => contentRootPath; set => throw new NotSupportedException(ReadOnlyMessage); }
 
     public IFileProvider ContentRootFileProvider
     {
         get => (IFileProvider?)_contentRootFileProvider ?? new NullFileProvider();
-        set => throw new NotSupportedException(
-            "The content root is the site project directory supplied by Kiji's MSBuild targets and cannot be changed.");
+        set => throw new NotSupportedException(ReadOnlyMessage);
     }
 
-    internal void DisposeContentRootFileProvider()
-    {
-        _contentRootFileProvider?.Dispose();
-    }
+    internal void DisposeContentRootFileProvider() => _contentRootFileProvider?.Dispose();
 }

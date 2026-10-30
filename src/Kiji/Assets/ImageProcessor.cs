@@ -14,6 +14,8 @@ internal sealed class ImageProcessor : IImageProcessor
     /// </summary>
     private static readonly SemaphoreSlim ConcurrencyGate = new(Environment.ProcessorCount);
 
+    private static readonly int[] DefaultWidths = [320, 640, 960, 1280];
+
     // Native code is not covered by managed assembly dependency tracking. Include
     // its version and platform so caches cannot cross incompatible native builds.
     private static readonly string EncoderIdentity =
@@ -36,7 +38,7 @@ internal sealed class ImageProcessor : IImageProcessor
         _maxWidth = options.MaxWidth;
         _quality = options.Quality;
         // Equivalent width lists share one identity, and so one image cache.
-        _widths = [.. (options.Widths ?? ImageProcessorOptions.DefaultWidths)
+        _widths = [.. (options.Widths ?? DefaultWidths)
             .Where(width => width < _maxWidth).Distinct().Order()];
         _generationGate = generationGate ?? ConcurrencyGate;
         CacheIdentity = BuildFingerprint.HashText(FormattableString.Invariant(

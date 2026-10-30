@@ -31,9 +31,9 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   watch serves, publish generates, clean cleans. MSBuild owns KijiForce;
   ASP.NET Core configuration owns the dev server address. Serving reads only the standard
   --environment host argument. Prefer conventions to flags.
-- All output goes through the site's ILogger (Kiji's own under Kiji.Build), except the dev
-  server's watch-style status lines. RunAsync logs its own failures before disposing the site,
-  as the generic host does. Publish uses the standard console formatter; MSBuild receives every
+- All log output goes through the site's ILogger (Kiji's own under Kiji.Build), except the dev
+  server's watch-style status lines. RunAsync propagates failures after disposing the site.
+  Publish uses the standard console formatter; MSBuild receives every
   line as a high-importance message and ignores its error/warning format. Only the exit code
   fails a publish. Log levels come from the Logging section, not MSBuild properties.
 - Dev and publish share StaticSite.RenderPageAsync. Never emit stale output;
@@ -62,11 +62,10 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   only from DOTNET_ENVIRONMENT; serving follows WebApplicationBuilder's order (--environment,
   DOTNET_ENVIRONMENT, ASPNETCORE_ENVIRONMENT). Default configuration sources stay
   project-local (no environment variables, command line or user secrets, which differ between
-  machines). Execution freezes a read-only configuration snapshot shared by captured sections,
-  options binding and the fingerprint; keys read before execution stay in it even when their
-  provider cannot enumerate them. The dev server inherits it below its standard
-  environment and command-line sources. The environment name and every configuration key and
-  value, nulls included, are in the options fingerprint because per-key reads are not tracked;
+  machines). Use the standard ConfigurationManager and finish configuration before execution.
+  The dev server uses standard ASP.NET Core configuration with the same project directory and
+  environment. The environment name and every enumerated configuration key and value, nulls
+  included, are in the publish options fingerprint because per-key reads are not tracked;
   only the Logging section, which cannot change output, is left out.
 - The dev server enforces BaseUrl's path prefix and uses `.kiji/dev-site`.
   Only `.kiji/cache` is portable; planning creates no output directories.
@@ -90,7 +89,7 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   no page/content state. Reload does not recreate it. Include external configuration
   and encoder versions in cache identities; HTML reuse controls do not clear image caches.
   Every ImageProcessorOptions setting must stay in its CacheIdentity. Options are validated when
-  the site starts running, never in Build, and only while the default processor is registered.
+  the site starts running, never in Build.
   Null Widths keeps configuration binding from appending to the defaults.
 
 Do not reintroduce evaluated alternatives: pooled HtmlRenderer (root/scope state cannot

@@ -24,6 +24,7 @@ Feeds, sitemaps, and custom artifacts are regenerated on every publish.
 
 Boundaries in layouts and dynamic children count too. A boundary in a shared layout makes
 every page using that layout render on every publish. This policy does not clear image caches.
+It applies regardless of logging settings or custom boundary loggers.
 
 Reusing HTML does not replay its log messages, and logs never fail a publish; see
 [Logging](../api-reference/#logging).

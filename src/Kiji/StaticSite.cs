@@ -10,6 +10,7 @@ using Kiji.Rendering;
 using Kiji.Routing;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -18,13 +19,13 @@ using Microsoft.Extensions.Options;
 namespace Kiji;
 
 /// <summary>Generates and serves a static website configured with <see cref="StaticSiteBuilder"/>.</summary>
-public sealed class StaticSite : IAsyncDisposable
+public sealed class StaticSite
 {
     private readonly string[] _args;
     private readonly SiteRunSettings _settings;
     private readonly ContentRuntime _runtime;
     private readonly SiteHostEnvironment _environment;
-    private readonly SiteConfiguration _configuration;
+    private readonly ConfigurationManager _configuration;
     private readonly IReadOnlyList<PageParameterRegistration> _pageParameters;
     private readonly IReadOnlyList<SiteArtifactRegistration> _artifacts;
     private readonly IReadOnlyList<Assembly> _pageAssemblies;
@@ -114,8 +115,7 @@ public sealed class StaticSite : IAsyncDisposable
     /// <summary>Publishes or serves the site according to the MSBuild execution context, then disposes the site.</summary>
     /// <remarks>Await this method in the entry point so <c>dotnet publish</c> generates the site.</remarks>
     /// <returns>
-    /// The process exit code: 1 when a publish is canceled, otherwise 0. Failures are rethrown, and a failed
-    /// publish is logged first.
+    /// The process exit code: 1 when a publish is canceled, otherwise 0. Failures are rethrown.
     /// </returns>
     public async Task<int> RunAsync(CancellationToken cancellationToken = default)
     {
@@ -127,7 +127,6 @@ public sealed class StaticSite : IAsyncDisposable
 
         try
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
             void HandleShutdownSignal(PosixSignalContext context)
@@ -155,20 +154,8 @@ public sealed class StaticSite : IAsyncDisposable
             {
                 // Stopping the dev server with Ctrl+C is a normal exit; an interrupted
                 // generation left partial output and is reported as failure.
-                if (_settings.Publishing)
-                {
-                    // Logging providers must not change the cancellation exit code.
-                    try { BuildLogger.PublishCanceled(); }
-                    catch { }
-                    return 1;
-                }
-                return 0;
+                return _settings.Publishing ? 1 : 0;
             }
-        }
-        catch (Exception exception) when (LogPublishFailure(exception))
-        {
-            // Not reached: the filter only logs, before the finally below disposes the logging services.
-            throw;
         }
         finally
         {
@@ -176,27 +163,8 @@ public sealed class StaticSite : IAsyncDisposable
         }
     }
 
-    /// <summary>
-    /// Logs a failed publish, as the generic host logs a failed start, so the site's logging
-    /// settings apply. While serving, the failure reaches the terminal as is.
-    /// </summary>
-    /// <returns>Always <see langword="false"/>, so the exception keeps propagating. A filter that
-    /// throws also counts as false, so a logging failure cannot hide the original exception.</returns>
-    private bool LogPublishFailure(Exception exception)
-    {
-        if (_settings.Publishing && !_disposed)
-        {
-            BuildLogger.PublishFailed(exception);
-        }
-        return false;
-    }
-
     /// <summary>Releases the site's services and configuration.</summary>
-    /// <remarks>
-    /// <see cref="RunAsync"/> disposes the site when it finishes, so dispose it yourself only when it never runs.
-    /// Later calls have no effect.
-    /// </remarks>
-    public async ValueTask DisposeAsync()
+    internal async ValueTask DisposeAsync()
     {
         if (_disposed)
         {
@@ -204,21 +172,9 @@ public sealed class StaticSite : IAsyncDisposable
         }
         _disposed = true;
 
-        try
-        {
-            await _services.DisposeAsync();
-        }
-        finally
-        {
-            try
-            {
-                _configuration.Dispose();
-            }
-            finally
-            {
-                _environment.DisposeContentRootFileProvider();
-            }
-        }
+        await _services.DisposeAsync();
+        _configuration.Dispose();
+        _environment.DisposeContentRootFileProvider();
     }
 
     /// <summary>Generates the site, reusing unchanged output from a previous publish.</summary>
@@ -350,9 +306,7 @@ public sealed class StaticSite : IAsyncDisposable
         phases.Mark(BuildPhaseTimer.Manifest);
 
         var written = rendered.Count(static page => page.Written);
-        var reproduced = rendered.Count - written;
-        if (reproduced > 0) { BuildLogger.PagesGeneratedWithReproduced(written, plan.CarriedPages.Count, reproduced, stopwatch.ElapsedMilliseconds); }
-        else { BuildLogger.PagesGenerated(written, plan.CarriedPages.Count, stopwatch.ElapsedMilliseconds); }
+        BuildLogger.PagesGenerated(written, plan.CarriedPages.Count, rendered.Count - written, stopwatch.ElapsedMilliseconds);
     }
 
     /// <summary>Starts the development server with automatic browser reload on content changes.</summary>
@@ -704,7 +658,6 @@ public sealed class StaticSite : IAsyncDisposable
                 "This StaticSite has already settled its paths. Build a new site to use a different output directory or switch between publishing and serving.");
         }
 
-        _configuration.Freeze();
         return _activeOptions = options;
     }
 
@@ -714,7 +667,6 @@ public sealed class StaticSite : IAsyncDisposable
     /// </summary>
     internal void UsePlanningOptions()
     {
-        _configuration.Freeze();
         _activeOptions ??= Paths.ResolveForDevelopment();
     }
 

@@ -43,7 +43,6 @@ return await builder.Build().RunAsync();
 | `ILoggingBuilder StaticSiteBuilder.Logging`                                    | See [Logging](#logging).                                                                                                                                                    |
 | `StaticSite StaticSiteBuilder.Build()`                                         | Validates the services and makes them read-only. It can be called only once, even after a validation failure.                                                               |
 | `Task<int> StaticSite.RunAsync(CancellationToken cancellationToken = default)` | Serves during `dotnet watch` or generates the site during `dotnet publish`, then disposes the site. Return its exit code.                                                   |
-| `ValueTask StaticSite.DisposeAsync()`                                          | Releases the site. `RunAsync` already does, so call it only for a site that never runs.                                                                                     |
 
 ### Environment
 
@@ -60,8 +59,8 @@ if (builder.Environment.IsDevelopment())
 
 During `dotnet publish`, the name comes only from `DOTNET_ENVIRONMENT` and defaults to
 `Production`. While serving, `--environment` comes first, then `DOTNET_ENVIRONMENT`, then
-`ASPNETCORE_ENVIRONMENT`, and the default is `Development`. A blank variable counts as
-unset. The name is read-only, and `ContentRootPath` is the project directory. Changing the
+`ASPNETCORE_ENVIRONMENT`, and the default is `Development`. The name is read-only, and
+`ContentRootPath` is the project directory. Changing the
 name renders every page again on the next publish.
 
 ### Configuration
@@ -84,10 +83,11 @@ builder.Services.Configure<ImageProcessorOptions>(builder.Configuration.GetSecti
 - Changing any value outside the `Logging` section, including setting a key to `null`,
   renders every page again on the next publish.
 - Files are read once. Restart `dotnet watch` after editing them.
-- Configuration is fixed when the site starts running; later changes and reloads do not apply.
-  A key that its provider does not enumerate stays readable only if it was read before then.
-- The development server reads its own settings, such as `urls`, from the site's
-  configuration. `--urls` and `ASPNETCORE_URLS` still override them.
+- Finish configuring the site before calling `RunAsync`. The publish fingerprint uses
+  the values enumerated at the start of each publish.
+- The development server reads its own settings, such as `urls`, through standard
+  ASP.NET Core configuration, including the project's appsettings files, `--urls`, and
+  `ASPNETCORE_URLS`.
 
 ### Logging
 
@@ -105,18 +105,15 @@ message for each page and generated file:
 ```
 
 - Logs never fail a publish, whatever their level. A publish fails when an exception ends
-  `RunAsync`, which logs the exception first, or when the publish is canceled, which logs a
-  warning and returns exit code 1. For validation that must stop publication, throw an
+  `RunAsync`, or when the publish is canceled, which returns exit code 1.
+  For validation that must stop publication, throw an
   exception that is not handled by an error boundary. Kiji propagates it and does not publish a new successful cache manifest.
   Mark a component with `AlwaysRender` when its page logic must run on every publish.
 - During `dotnet publish`, log messages are MSBuild messages, not warnings or errors. CI logs
   and `--tl:off` show them. In a terminal, add `-v d`, also to see why a publish failed.
   `-v q` hides them.
 - Cached pages do not replay their messages.
-- A page that renders an `ErrorBoundaryBase` component, including `ErrorBoundary` or a custom
-  boundary, is rendered on every publish even when healthy, so its warning is logged on every
-  publish. This includes boundaries in layouts and dynamic children, and applies regardless
-  of logging settings or custom boundary loggers.
+- Error boundaries [prevent HTML reuse](../incremental-builds/), even while healthy.
 - The development server's ASP.NET Core messages use the same settings.
 
 ### SiteInfo
@@ -303,15 +300,14 @@ builder.Services.Configure<ImageProcessorOptions>(options =>
 });
 ```
 
-| `ImageProcessorOptions` property | Default | Behavior                                                                                                                                             |
-| -------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `IReadOnlyList<int>? Widths`     | `null`  | Widths of the smaller variants. `null` uses `DefaultWidths`: 320, 640, 960, and 1280. Widths at or above the source width or `MaxWidth` are skipped. |
-| `int MaxWidth`                   | `1920`  | The widest variant. Every image gets one variant at its own width, capped at this value.                                                             |
-| `int Quality`                    | `80`    | Lossy WebP quality from 1 to 100.                                                                                                                    |
+| `ImageProcessorOptions` property | Default | Behavior                                                                                                                            |
+| -------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `IReadOnlyList<int>? Widths`     | `null`  | Widths of the smaller variants. `null` uses 320, 640, 960, and 1280. Widths at or above the source width or `MaxWidth` are skipped. |
+| `int MaxWidth`                   | `1920`  | The widest variant. Every image gets one variant at its own width, capped at this value.                                            |
+| `int Quality`                    | `80`    | Lossy WebP quality from 1 to 100.                                                                                                   |
 
 - Invalid values make `RunAsync` fail before any output.
 - Changing a setting re-encodes images and renders their pages again on the next publish.
-- A replacement `IImageProcessor` neither uses nor validates the settings.
 
 ### Image processing
 

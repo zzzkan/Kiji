@@ -4,14 +4,11 @@ namespace Kiji.Assets;
 /// <remarks>
 /// Configure it with <c>builder.Services.Configure&lt;ImageProcessorOptions&gt;(...)</c>. The values are validated
 /// when the site starts running, and the processor reads them once. A replaced <see cref="IImageProcessor"/>
-/// neither uses nor validates them. Changing them re-encodes images on the next publish.
+/// does not use them. Changing them re-encodes images on the next publish.
 /// </remarks>
 public sealed class ImageProcessorOptions
 {
-    /// <summary>The variant widths used when <see cref="Widths"/> is not set: 320, 640, 960 and 1280 pixels.</summary>
-    public static IReadOnlyList<int> DefaultWidths { get; } = [320, 640, 960, 1280];
-
-    /// <summary>Widths in pixels of the smaller variants, or <see langword="null"/> for <see cref="DefaultWidths"/>.</summary>
+    /// <summary>Widths in pixels of the smaller variants, or <see langword="null"/> for 320, 640, 960 and 1280.</summary>
     /// <remarks>
     /// Widths at or above the source width or <see cref="MaxWidth"/> are skipped. Every image also gets
     /// a variant at its own width, capped at <see cref="MaxWidth"/>.

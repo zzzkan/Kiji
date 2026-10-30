@@ -5,7 +5,6 @@ using Kiji.Rendering;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -16,13 +15,11 @@ namespace Kiji;
 /// <remarks>
 /// Create it with <see cref="StaticSite.CreateBuilder(string[])"/> and call <see cref="Build"/> once.
 /// Building the site makes <see cref="Services"/> and the registration methods read-only.
-/// <see cref="Configuration"/> stays writable until execution starts, then becomes a fixed snapshot.
 /// </remarks>
 public sealed class StaticSiteBuilder
 {
     private readonly ServiceCollection _services = [];
     private readonly List<ServiceDescriptor> _managedServices;
-    private readonly ServiceDescriptor _defaultImageProcessor;
     private readonly List<string> _contentPaths = [];
     private readonly List<PageParameterRegistration> _pageParameters = [];
     private readonly List<SiteArtifactRegistration> _artifacts = [];
@@ -54,7 +51,7 @@ public sealed class StaticSiteBuilder
 
         // Defaults are registered first so that later registrations replace them. Managed
         // services are present from the start, so TryAdd-style extensions see them.
-        Services.Add(ServiceDescriptor.Singleton<SiteInfo>(ResolveSiteInfo));
+        Services.AddSingleton(_ => SiteInfo);
         _services.AddSingleton<IHostEnvironment>(HostEnvironment);
         _services.AddSingleton<IConfiguration>(Configuration);
 
@@ -69,11 +66,17 @@ public sealed class StaticSiteBuilder
 
         ComponentRenderer.AddComponentRenderingServices(_services);
 
-        // The default processor reads its options once. Build validates them only while it is the processor.
-        _defaultImageProcessor = ServiceDescriptor.Singleton<IImageProcessor>(static provider => new ImageProcessor(
+        _services.AddOptions<ImageProcessorOptions>()
+            .Validate(static options => options.Quality is >= 1 and <= 100,
+                "ImageProcessorOptions.Quality must be between 1 and 100.")
+            .Validate(static options => options.MaxWidth > 0,
+                "ImageProcessorOptions.MaxWidth must be positive.")
+            .Validate(static options => options.Widths is null || options.Widths.All(static width => width > 0),
+                "ImageProcessorOptions.Widths must contain only positive widths.")
+            .ValidateOnStart();
+        Services.AddSingleton<IImageProcessor>(static provider => new ImageProcessor(
             provider.GetRequiredService<IOptions<ImageProcessorOptions>>().Value,
             logger: provider.GetRequiredService<ILoggerFactory>().CreateLogger(BuildLoggerExtensions.CategoryName)));
-        Services.Add(_defaultImageProcessor);
 
         _managedServices = [.. _services.Where(static descriptor => SiteServiceRegistration.IsManaged(descriptor.ServiceType))];
     }
@@ -115,7 +118,7 @@ public sealed class StaticSiteBuilder
     /// Read-only, because the name selects the configuration files when the builder is created. During
     /// <c>dotnet publish</c>, the name comes from <c>DOTNET_ENVIRONMENT</c> and defaults to <c>Production</c>.
     /// While serving, <c>--environment</c> comes first, then <c>DOTNET_ENVIRONMENT</c>, then
-    /// <c>ASPNETCORE_ENVIRONMENT</c>, and the default is <c>Development</c>. A blank variable counts as unset.
+    /// <c>ASPNETCORE_ENVIRONMENT</c>, and the default is <c>Development</c>.
     /// The content root is the project directory.
     /// </remarks>
     public IHostEnvironment Environment => HostEnvironment;
@@ -125,8 +128,7 @@ public sealed class StaticSiteBuilder
     /// It reads <c>appsettings.json</c> and <c>appsettings.{Environment}.json</c> from the project directory. Add other
     /// sources, such as prefixed environment variables or user secrets, explicitly. Every value outside the <c>Logging</c>
     /// section is part of the publish fingerprint: changing one renders every page again. Files are read once per process.
-    /// When the site starts running, the configuration becomes a read-only snapshot, which sections already captured by
-    /// options binding also read. A key that its provider does not enumerate stays readable only if it was read before then.
+    /// Finish configuring the site before calling <see cref="StaticSite.RunAsync"/>.
     /// </remarks>
     public IConfigurationManager Configuration => HostConfiguration;
 
@@ -148,7 +150,7 @@ public sealed class StaticSiteBuilder
 
     internal SiteHostEnvironment HostEnvironment { get; }
 
-    internal SiteConfiguration HostConfiguration { get; } = new();
+    internal ConfigurationManager HostConfiguration { get; } = new();
 
     internal IReadOnlyList<string> ContentPaths => _contentPaths;
 
@@ -203,11 +205,9 @@ public sealed class StaticSiteBuilder
         EnsureConfigurable();
         // Source identities use the project directory, including when a caller supplied
         // an absolute path inside the checkout, keeping those identities portable.
-        var runtime = Runtime;
-        var paths = Paths;
-        var descriptor = runtime.Register(() => new ContentDictionary<T>(runtime, loader, directory is null
+        var descriptor = Runtime.Register(() => new ContentDictionary<T>(Runtime, loader, directory is null
             ? contentSetScope
-            : Path.GetRelativePath(Path.GetFullPath(paths.ProjectDirectory), paths.ResolveAgainstRoot(directory)).Replace('\\', '/')));
+            : Path.GetRelativePath(Path.GetFullPath(Paths.ProjectDirectory), Paths.ResolveAgainstRoot(directory)).Replace('\\', '/')));
         Services.Add(descriptor);
         _managedServices.Add(descriptor);
         if (directory is not null) { _contentPaths.Add(directory); }
@@ -292,8 +292,7 @@ public sealed class StaticSiteBuilder
 
     /// <summary>Builds the site, validating its services. Call it once.</summary>
     /// <remarks>
-    /// Content is not loaded until the site runs. If the services fail validation, the builder releases its
-    /// configuration and cannot be built again.
+    /// Content is not loaded until the site runs.
     /// </remarks>
     public StaticSite Build()
     {
@@ -303,44 +302,13 @@ public sealed class StaticSiteBuilder
         }
         _ = SiteInfo;
         _built = true;
-        try
-        {
-            return new StaticSite(this);
-        }
-        catch
-        {
-            try
-            {
-                HostConfiguration.Dispose();
-            }
-            finally
-            {
-                HostEnvironment.DisposeContentRootFileProvider();
-            }
-            throw;
-        }
+        return new StaticSite(this);
     }
 
     /// <param name="resolvePaths">Returns the execution paths once the site has settled them.</param>
     internal (ServiceProvider Services, IReadOnlyCollection<Assembly> Assemblies) BuildServices(Func<ResolvedSitePaths> resolvePaths)
     {
         SiteServiceRegistration.Validate(_services, _managedServices);
-        // Validate the original managed registration before replacing it with the final value.
-        _services.Replace(ServiceDescriptor.Singleton(SiteInfo));
-        // The settings configure only Kiji's processor. A replacement does not read them, so they
-        // are validated only when Kiji's processor is the last registration, which Validate requires.
-        if (ReferenceEquals(_services.Last(static descriptor =>
-            descriptor.ServiceType == typeof(IImageProcessor) && !descriptor.IsKeyedService), _defaultImageProcessor))
-        {
-            _services.AddOptions<ImageProcessorOptions>()
-                .Validate(static options => options.Quality is >= 1 and <= 100,
-                    "ImageProcessorOptions.Quality must be between 1 and 100.")
-                .Validate(static options => options.MaxWidth > 0,
-                    "ImageProcessorOptions.MaxWidth must be positive.")
-                .Validate(static options => options.Widths is null || options.Widths.All(static width => width > 0),
-                    "ImageProcessorOptions.Widths must contain only positive widths.")
-                .ValidateOnStart();
-        }
         // A default here would pin the singleton to the wrong execution mode.
         _services.AddSingleton(_ => resolvePaths());
         _services.MakeReadOnly();
@@ -363,6 +331,4 @@ public sealed class StaticSiteBuilder
             throw new InvalidOperationException("The site has already been built. Configure the builder before calling Build.");
         }
     }
-
-    private SiteInfo ResolveSiteInfo(IServiceProvider _) => SiteInfo;
 }

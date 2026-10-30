@@ -472,37 +472,6 @@ public sealed class DevServerTests : IAsyncDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Serve_InheritsSiteConfigurationBelowEnvironmentAndCommandLine(bool commandLine)
-    {
-        var root = Path.Combine(_testDir, "configuration");
-        Directory.CreateDirectory(root);
-        await File.WriteAllTextAsync(Path.Combine(root, "appsettings.json"), """{ "Review": { "Value": "file" } }""");
-        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
-        builder.Configuration["urls"] = commandLine ? "http://127.0.0.1:1" : "http://127.0.0.1:0";
-        builder.Configuration["Review:Value"] = "site";
-        builder.Configuration["PATH"] = "site-path";
-        _app = builder.Build();
-        var (server, web) = await _app.StartDevServerAsync(commandLine ? TestUrls.EphemeralPort : [], CancellationToken.None,
-            new Kiji.Hosting.DevServerStatusReporter(TextWriter.Null, "kiji", useEmoji: false));
-        await using (server)
-        {
-            Assert.Equal("site", web.Configuration["Review:Value"]);
-            Assert.Equal(Environment.GetEnvironmentVariable("PATH"), web.Configuration["PATH"]);
-            Assert.NotEqual(1, new Uri(web.Urls.First()).Port);
-
-            // The web host no longer reloads a second copy of the site's JSON files.
-            await File.WriteAllTextAsync(Path.Combine(root, "appsettings.json"), """{ "Review": { "Value": "changed" } }""");
-            ((Microsoft.Extensions.Configuration.IConfigurationRoot)web.Configuration).Reload();
-            Assert.Equal("site", web.Configuration["Review:Value"]);
-            web.Configuration["Review:Value"] = "server";
-            Assert.Equal("site", builder.Configuration["Review:Value"]);
-        }
-    }
-
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
     public async Task Serve_MultipleMarkdownRoots_ReloadsAfterEditsAndRootReplacement(bool absolute)
     {
         var inputs = Path.Combine(_testDir, "inputs");

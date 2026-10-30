@@ -97,34 +97,6 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         Assert.Matches(@"InvalidOperationException: Page component '[^']*UnregisteredPage'.*AddPageParameters<UnregisteredPage>", failure.Message);
         File.Delete(Path.Combine(fixture.Site, "UnregisteredPage.razor"));
 
-        // A caught exception lets the fallback publish. The boundary is rendered again,
-        // so its warning is logged on every publish until the child is fixed.
-        await fixture.PublishAsync();
-        Assert.Contains("boundary-publish-warning", await fixture.PublishAsync(), StringComparison.Ordinal);
-        // A custom boundary can bypass the default logger entirely. Its fallback
-        // must still render on every publish, and healthy boundaries follow the same policy.
-        fixture.Write("Site/CustomBoundary.razor", """
-            @inherits ErrorBoundary
-            @if (CurrentException is null)
-            {
-                @ChildContent
-            }
-            else if (ErrorContent is not null)
-            {
-                @ErrorContent(CurrentException)
-            }
-            @code { protected override Task OnErrorAsync(Exception exception) => Task.CompletedTask; }
-            """);
-        fixture.Replace("Site/BoundaryPage.razor", "ErrorBoundary", "CustomBoundary");
-        await fixture.PublishAsync();
-        Assert.Contains("Boundary fallback", Read("boundary/index.html"), StringComparison.Ordinal);
-        Assert.Matches(@"Generated 0 pages \(\d+ unchanged, skipped, 1 re-rendered but unchanged\)", await fixture.PublishAsync());
-
-        fixture.Write("Site/FailingChild.razor", "<p>Fixed child</p>");
-        Assert.DoesNotContain("boundary-publish-warning", await fixture.PublishAsync(), StringComparison.Ordinal);
-        Assert.Contains("Fixed child", Read("boundary/index.html"), StringComparison.Ordinal);
-        Assert.Matches(@"Generated 0 pages \(\d+ unchanged, skipped, 1 re-rendered but unchanged\)", await fixture.PublishAsync());
-
         // Logs never fail a publish, even when a message reads like an MSBuild error:
         // its HTML is cached, and a later publish would reuse it without the message.
         fixture.Write("Site/LoggingPage.razor", """

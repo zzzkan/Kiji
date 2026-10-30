@@ -49,15 +49,13 @@ public static class MarkdownStaticSiteBuilderExtensions
         // in the dev server; fresh hashes let it re-parse only changed files.
         var sourceCache = new MarkdownSourceCache<TFrontMatter>();
 
-        var paths = builder.Paths;
-        var files = builder.Runtime.Files;
         return builder.RegisterContent(
             services =>
             {
                 var options = services.GetRequiredService<ResolvedSitePaths>();
                 var imageProcessor = services.GetRequiredService<IImageProcessor>();
                 var markdownProcessor = new MarkdownProcessor(options, imageProcessor, contentOptions);
-                var sourceDirectory = paths.ResolveAgainstRoot(directory);
+                var sourceDirectory = builder.Paths.ResolveAgainstRoot(directory);
 
                 var sources = new MarkdownContentsBuilder<TFrontMatter>(
                     sourceDirectory,
@@ -67,7 +65,7 @@ public static class MarkdownStaticSiteBuilderExtensions
                         cancellationToken),
                     CreateFrontMatterDeserializer,
                     sourceCache,
-                    files,
+                    builder.Runtime.Files,
                     contentOptions.FileFilter)
                     .Build();
 

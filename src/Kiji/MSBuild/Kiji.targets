@@ -107,11 +107,12 @@
   <PropertyGroup Condition="'$(_KijiIsSiteApp)' == 'true'">
     <StaticWebAssetsEnabled Condition="'$(StaticWebAssetsEnabled)' == ''">true</StaticWebAssetsEnabled>
     <!-- Static hosts compress responses themselves, so .gz/.br copies are opt-in for
-         servers that send precompressed files. Build/watch skips compression.
-         A project or command-line setting remains authoritative. Set this before the
-         SDK, which otherwise enables compression. -->
+         servers that send precompressed files. A project or command-line setting remains
+         authoritative. Set these before the SDK, which otherwise enables compression.
+         KijiCompressSite compresses the published site; the SDK's own formats stay empty
+         so it does not also compress assets that Kiji publishes from its own copies. -->
     <CompressionEnabled Condition="'$(CompressionEnabled)' == ''">false</CompressionEnabled>
-    <DisableBuildCompression Condition="'$(DisableBuildCompression)' == ''">true</DisableBuildCompression>
+    <EnableDefaultCompressionFormats Condition="'$(EnableDefaultCompressionFormats)' == ''">false</EnableDefaultCompressionFormats>
     <_KijiConfiguredStaticWebAssetBasePath>$(StaticWebAssetBasePath)</_KijiConfiguredStaticWebAssetBasePath>
     <!-- The site is published at its root, including SDK-generated service-worker
          URLs. Referenced libraries retain their own base paths. -->
@@ -168,9 +169,11 @@
          publishing to a different -o directory no longer forces a full rebuild.
          $(IntermediateOutputPath) already varies by configuration, framework, and RID; it is
          relative, so anchor it on the project directory rather than the MSBuild working
-         directory. -->
+         directory. The opt-in service worker and compressed copies sit beside the staged
+         site: the site removes any file in its staging directory that it did not write. -->
     <PropertyGroup>
-      <_KijiStagingDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'kiji', 'site'))</_KijiStagingDir>
+      <_KijiDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'kiji'))</_KijiDir>
+      <_KijiStagingDir>$(_KijiDir)site$([System.IO.Path]::DirectorySeparatorChar)</_KijiStagingDir>
     </PropertyGroup>
   </Target>
 
@@ -200,6 +203,7 @@
          item glob written here expands at execution time rather than at project evaluation. -->
     <ItemGroup>
       <KijiSiteFile Include="$(_KijiStagingDir)**\*" />
+      <KijiSiteFile RelativePath="%(RecursiveDir)%(Filename)%(Extension)" />
     </ItemGroup>
 
     <Error Condition="'@(KijiSiteFile)' == ''"
@@ -208,28 +212,86 @@
   </Target>
 
   <!-- ==============================================================
+       Opt-in service worker, configured as for the SDK:
+       $(ServiceWorkerAssetsManifest) and an optional
+       <ServiceWorker Include="wwwroot/..." PublishedContent="..." />
+       ============================================================== -->
+  <Target Name="KijiGenerateServiceWorker" Condition="'$(ServiceWorkerAssetsManifest)' != ''">
+    <!-- The SDK's tasks, run over the generated site rather than its asset graph, so the
+         manifest lists every published page and asset with the hash of its final bytes. -->
+    <PropertyGroup>
+      <_KijiWorkerDir>$(_KijiDir)service-worker$([System.IO.Path]::DirectorySeparatorChar)</_KijiWorkerDir>
+      <!-- Published at its path under wwwroot, as the SDK publishes it. -->
+      <_KijiWorkerPath>@(ServiceWorker->'%(FullPath)')</_KijiWorkerPath>
+      <_KijiWorkerPath Condition="'$(_KijiWorkerPath)' != ''">$([MSBuild]::MakeRelative($([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', 'wwwroot')), '$(_KijiWorkerPath)'))</_KijiWorkerPath>
+    </PropertyGroup>
+    <GetFileHash Files="@(KijiSiteFile)" Algorithm="SHA256" HashEncoding="base64" MetadataName="Integrity">
+      <Output TaskParameter="Items" ItemName="_KijiWorkerAsset" />
+    </GetFileHash>
+    <ItemGroup>
+      <_KijiWorkerAsset AssetUrl="$([System.String]::Copy('%(RelativePath)').Replace('\', '/'))" />
+      <_KijiServiceWorkerFile Include="$(_KijiWorkerDir)$(ServiceWorkerAssetsManifest)" RelativePath="$(ServiceWorkerAssetsManifest)" />
+      <_KijiServiceWorkerFile Include="$(_KijiWorkerDir)$(_KijiWorkerPath)" RelativePath="$(_KijiWorkerPath)" Condition="'$(_KijiWorkerPath)' != ''" />
+    </ItemGroup>
+    <MakeDir Directories="@(_KijiServiceWorkerFile->'%(RootDir)%(Directory)')" />
+
+    <GenerateServiceWorkerAssetsManifest Version="$(ServiceWorkerAssetsManifestVersion)" Assets="@(_KijiWorkerAsset)"
+                                         OutputPath="$(_KijiWorkerDir)$(ServiceWorkerAssetsManifest)">
+      <Output TaskParameter="CalculatedVersion" PropertyName="_KijiWorkerVersion" />
+    </GenerateServiceWorkerAssetsManifest>
+    <UpdateServiceWorkerFileWithVersion Condition="'$(_KijiWorkerPath)' != ''"
+                                        ServiceWorkerSource="@(ServiceWorker->'%(PublishedContent)')"
+                                        ServiceWorkerDestination="$(_KijiWorkerDir)$(_KijiWorkerPath)"
+                                        ManifestVersion="$(_KijiWorkerVersion)" />
+  </Target>
+
+  <!-- ==============================================================
+       Opt-in compression: CompressionEnabled=true
+       ============================================================== -->
+  <Target Name="KijiCompressSite" Condition="'$(CompressionEnabled)' == 'true'">
+    <!-- The SDK's compressors, given each published text file. They skip a copy that is
+         newer than its source, as the SDK does for its own assets. -->
+    <ItemGroup>
+      <_KijiCompressible Include="@(KijiSiteFile);@(_KijiServiceWorkerFile)"
+                         Condition="'%(Extension)' == '.html' or '%(Extension)' == '.css' or '%(Extension)' == '.js' or
+                                    '%(Extension)' == '.mjs' or '%(Extension)' == '.json' or '%(Extension)' == '.xml' or
+                                    '%(Extension)' == '.svg' or '%(Extension)' == '.txt'" />
+      <_KijiCompressible RelatedAsset="%(FullPath)" />
+      <_KijiGzipFile Include="@(_KijiCompressible->'$(_KijiDir)compressed\%(RelativePath).gz')" />
+      <_KijiGzipFile RelativePath="%(RelativePath).gz" />
+      <_KijiBrotliFile Include="@(_KijiCompressible->'$(_KijiDir)compressed\%(RelativePath).br')" />
+      <_KijiBrotliFile RelativePath="%(RelativePath).br" />
+    </ItemGroup>
+    <GZipCompress Condition="'@(_KijiGzipFile)' != ''" FilesToCompress="@(_KijiGzipFile)" />
+    <BrotliCompress Condition="'@(_KijiBrotliFile)' != ''" FilesToCompress="@(_KijiBrotliFile)"
+                    CompressionLevel="$(BrotliCompressionLevel)" ToolAssembly="$(_StaticWebAssetsSdkToolAssembly)"
+                    ToolExe="$(_DotNetHostFileName)" ToolPath="$(_DotNetHostDirectory)" />
+    <ItemGroup>
+      <_KijiCompressedFile Include="@(_KijiGzipFile);@(_KijiBrotliFile)" />
+    </ItemGroup>
+  </Target>
+
+  <!-- ==============================================================
        Publish the site instead of the application
        ============================================================== -->
   <Target Name="KijiComputeFilesToPublish"
           AfterTargets="ComputeFilesToPublish"
-          DependsOnTargets="KijiResolvePublicAssets"
+          DependsOnTargets="KijiGenerateSite;KijiGenerateServiceWorker;KijiCompressSite"
           Condition="'$(_KijiIsSiteApp)' == 'true' and '$(DesignTimeBuild)' != 'true'">
 
-    <!-- Run after the SDK finishes computing the ordinary application publish list,
-         and resolve the complete static asset graph before replacing that list.
-         This stays ahead of
-         CopyFilesToPublishDirectory, so the incremental cleanup sees the final list and
-         deletes anything a previous publish left behind. -->
+    <!-- Run after the SDK finishes computing the ordinary application publish list. This
+         stays ahead of CopyFilesToPublishDirectory, so the incremental cleanup sees the final
+         list and deletes anything a previous publish left behind. -->
     <ItemGroup>
       <!-- Assemblies, apphost, deps.json, runtimeconfig.json, content, package assets: all of
            it. Removing only the known entries would let anything the SDK adds later leak into
            a site, and there is no way to notice from the outside. -->
       <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" />
 
-      <ResolvedFileToPublish Include="@(_KijiPublicFile->'%(PublishSource)')">
-        <!-- Switching optimizers can select an older cached source for the same
-             public URL (notably the finalized service worker). Compare either
-             direction so a newer destination never hides that replacement. -->
+      <ResolvedFileToPublish Include="@(KijiSiteFile);@(_KijiServiceWorkerFile);@(_KijiCompressedFile)">
+        <!-- Sources live under obj per configuration, so switching configurations can
+             select an older source for the same file. Compare either direction so a newer
+             destination never hides that replacement. -->
         <CopyToPublishDirectory>IfDifferent</CopyToPublishDirectory>
       </ResolvedFileToPublish>
     </ItemGroup>
@@ -245,9 +307,9 @@
     <!-- Plain directory removal rather than asking the app to clean up after itself: by the
          time Clean has run there is no assembly left to invoke, and hooking BeforeTargets
          instead would then need its own handling for a tree that was never built.
-         The staging directory sits under obj but is not tracked in @(FileWrites), so Clean
+         The staged site sits under obj but is not tracked in @(FileWrites), so Clean
          would otherwise leave it. -->
-    <RemoveDir Directories="$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '.kiji'));$(_KijiStagingDir)"
+    <RemoveDir Directories="$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '.kiji'));$(_KijiDir)"
                ContinueOnError="WarnAndContinue" />
   </Target>
 

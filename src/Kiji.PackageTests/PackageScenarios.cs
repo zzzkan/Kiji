@@ -115,6 +115,11 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         Assert.Matches(@"InvalidOperationException: Page component '[^']*UnregisteredPage'.*AddPageParameters<UnregisteredPage>", failure.Message);
         File.Delete(Path.Combine(fixture.Site, "UnregisteredPage.razor"));
 
+        // A worker outside wwwroot keeps its project path, which must never resolve to its source.
+        fixture.Replace("Site/PackageSite.csproj", "wwwroot/service-worker.js", "worker/service-worker.js");
+        Directory.CreateDirectory(Path.Combine(fixture.Site, "worker"));
+        File.Move(Path.Combine(fixture.Site, "wwwroot", "service-worker.js"), Path.Combine(fixture.Site, "worker", "service-worker.js"));
+
         // Logs never fail a publish, even when a message reads like an MSBuild error:
         // its HTML is cached, and a later publish would reuse it without the message.
         fixture.Write("Site/LoggingPage.razor", """
@@ -126,6 +131,8 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
             """);
         Assert.Contains("error: logging-page-error", await fixture.PublishAsync("-warnaserror"), StringComparison.Ordinal);
         Assert.Contains("Log-only result", Read("logging/index.html"), StringComparison.Ordinal);
+        Assert.Contains("published worker", Read("worker/service-worker.js"), StringComparison.Ordinal);
+        Assert.DoesNotContain("published worker", File.ReadAllText(Path.Combine(fixture.Site, "worker", "service-worker.js")), StringComparison.Ordinal);
 
         var stagingDirectory = Assert.Single(Directory.GetDirectories(Path.Combine(fixture.Site, "obj"), "site", SearchOption.AllDirectories));
         await fixture.DotnetAsync("clean", "Site/PackageSite.csproj", "-c", "Release");

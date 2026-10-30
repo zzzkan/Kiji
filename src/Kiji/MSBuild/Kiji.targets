@@ -93,10 +93,19 @@
   <Target Name="KijiGenerateServiceWorker" Condition="'$(ServiceWorkerAssetsManifest)' != ''">
     <PropertyGroup>
       <_KijiWorkerDir>$(_KijiDir)service-worker$([System.IO.Path]::DirectorySeparatorChar)</_KijiWorkerDir>
-      <!-- Publish at the worker's wwwroot-relative path. -->
-      <_KijiWorkerPath>@(ServiceWorker->'%(FullPath)')</_KijiWorkerPath>
-      <_KijiWorkerPath Condition="'$(_KijiWorkerPath)' != ''">$([MSBuild]::MakeRelative($([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', 'wwwroot')), '$(_KijiWorkerPath)'))</_KijiWorkerPath>
+      <_KijiParentPath>..$([System.IO.Path]::DirectorySeparatorChar)</_KijiParentPath>
+      <_KijiWorkerSource>@(ServiceWorker->'%(FullPath)')</_KijiWorkerSource>
+      <_KijiWorkerPublishedSource>@(ServiceWorker->'%(PublishedContent)')</_KijiWorkerPublishedSource>
+      <!-- Publish where the SDK does: at the worker's path under wwwroot, otherwise under the project. -->
+      <_KijiWorkerPath></_KijiWorkerPath>
+      <_KijiWorkerPath Condition="'$(_KijiWorkerSource)' != ''">$([MSBuild]::MakeRelative($([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', 'wwwroot')), '$(_KijiWorkerSource)'))</_KijiWorkerPath>
+      <_KijiWorkerPath Condition="$(_KijiWorkerPath.StartsWith('$(_KijiParentPath)'))">$([MSBuild]::MakeRelative($([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)')), '$(_KijiWorkerSource)'))</_KijiWorkerPath>
     </PropertyGroup>
+    <!-- A path outside the project would publish outside the publish directory, possibly over a source file. -->
+    <Error Condition="'$(_KijiWorkerPath)' != '' and ($(_KijiWorkerPath.StartsWith('$(_KijiParentPath)')) or $([System.IO.Path]::IsPathRooted('$(_KijiWorkerPath)')))"
+           Code="KIJI1006" Text="ServiceWorker '$(_KijiWorkerSource)' is outside the project directory. Move it into the project, normally under wwwroot." />
+    <Error Condition="'$(_KijiWorkerPath)' != '' and '$(_KijiWorkerPublishedSource)' == ''" Code="KIJI1006"
+           Text="ServiceWorker '$(_KijiWorkerSource)' has no PublishedContent. Set it to the worker to publish, such as wwwroot/service-worker.published.js." />
     <GetFileHash Files="@(KijiSiteFile)" Algorithm="SHA256" HashEncoding="base64" MetadataName="Integrity">
       <Output TaskParameter="Items" ItemName="_KijiWorkerAsset" />
     </GetFileHash>
@@ -112,7 +121,7 @@
       <Output TaskParameter="CalculatedVersion" PropertyName="_KijiWorkerVersion" />
     </GenerateServiceWorkerAssetsManifest>
     <UpdateServiceWorkerFileWithVersion Condition="'$(_KijiWorkerPath)' != ''"
-                                        ServiceWorkerSource="@(ServiceWorker->'%(PublishedContent)')"
+                                        ServiceWorkerSource="$(_KijiWorkerPublishedSource)"
                                         ServiceWorkerDestination="$(_KijiWorkerDir)$(_KijiWorkerPath)"
                                         ManifestVersion="$(_KijiWorkerVersion)" />
   </Target>

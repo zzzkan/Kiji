@@ -119,6 +119,7 @@ A service worker can cache the site for offline reading. Declare it as in a Blaz
 
 Publishing writes `service-worker-assets.js`, which lists every published page and asset
 with its SHA-256 hash, and publishes `service-worker.published.js` as `service-worker.js`.
+`PublishedContent` is required.
 Its first line names the manifest version, which changes whenever a published file does.
 The published worker loads the list with `self.importScripts('./service-worker-assets.js')`.
 `dotnet watch` serves `wwwroot/service-worker.js` instead.

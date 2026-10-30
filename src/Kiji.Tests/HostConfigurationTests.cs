@@ -1,9 +1,13 @@
 using System.Text.Json;
+using System.Reflection;
+using System.Reflection.Emit;
 using Kiji.Assets;
 using Kiji.Generation;
 using Kiji.Tests.TestSite;
+using Kiji.Tests.TestSite.PageServices;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Configuration.Json;
+using Microsoft.Extensions.Configuration.UserSecrets;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -48,7 +52,90 @@ public sealed class HostConfigurationTests : IDisposable
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void BuildFailure_DisposesConfiguration(bool dynamicFactory)
+    {
+        WriteSettings("live.json", """{ "Value": "loaded" }""");
+        var builder = CreateBuilder(environmentName: null);
+        builder.Configuration.AddJsonFile("live.json", optional: false, reloadOnChange: true);
+        var source = new OnDemandConfigurationSource("Private:Value", "secret");
+        builder.Configuration.Add(source);
+        if (dynamicFactory)
+        {
+            var method = new DynamicMethod("Create", typeof(object), [typeof(IServiceProvider)]);
+            var il = method.GetILGenerator();
+            il.Emit(OpCodes.Ldnull);
+            il.Emit(OpCodes.Ret);
+            builder.Services.AddSingleton(method.CreateDelegate<Func<IServiceProvider, object>>());
+            Assert.Throws<NotSupportedException>(() => builder.Build());
+        }
+        else
+        {
+            builder.Services.AddSingleton<MissingDependencyService>();
+            Assert.Throws<AggregateException>(() => builder.Build());
+        }
+        Assert.Equal(1, source.DisposeCount);
+        Assert.Throws<InvalidOperationException>(() => builder.Build());
+        Assert.Equal(1, source.DisposeCount);
+    }
+
+    [Fact]
+    public async Task Development_DoesNotAddUserSecretsEvenWhenTheEntryAssemblyDeclaresThem()
+    {
+        var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("SecretsSite"), AssemblyBuilderAccess.Run);
+        assembly.SetCustomAttribute(new CustomAttributeBuilder(typeof(UserSecretsIdAttribute).GetConstructor([typeof(string)])!,
+            [$"kiji-test-{Guid.NewGuid():N}"]));
+        var builder = StaticSite.CreateBuilder([], new SiteExecutionPaths(_root), assembly);
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        await using var site = builder.Build();
+
+        var files = builder.Configuration.Sources.OfType<JsonConfigurationSource>().Select(source => source.Path);
+        Assert.Equal(["appsettings.json", "appsettings.Development.json"], files);
+    }
+
+    [Fact]
+    public async Task Publish_PreservesPreviouslyReadOnDemandKeysInTheSnapshotAndFingerprint()
+    {
+        var renders = 0;
+        async Task PublishAsync(string? value)
+        {
+            var builder = CreateBuilder(environmentName: null, typeof(ConfigurationSnapshotPage));
+            var source = new OnDemandConfigurationSource("Site:Title", value);
+            builder.Configuration.Add(source);
+            builder.Configuration.Add(new OnDemandConfigurationSource("Captured:Value", "captured"));
+            var captured = builder.Configuration.GetSection("Captured:Value");
+            var section = builder.Configuration.GetSection("Site");
+            Assert.Equal(value, section["Title"]);
+            builder.Services.Configure<FeatureOptions>(builder.Configuration.GetSection("Feature"));
+            builder.Services.AddSingleton<Action>(() =>
+            {
+                renders++;
+                source.Value = "changed after freezing";
+                Assert.Equal(value, section["Title"]);
+                Assert.Equal("captured", captured.Value);
+                Assert.Contains(builder.Configuration.AsEnumerable(), pair => pair.Key == "Site:Title" && pair.Value == value);
+            });
+            await using var site = builder.Build();
+            await site.PublishAsync(Path.Combine(_root, "dist"));
+            Assert.Equal(1, source.DisposeCount);
+            var html = await File.ReadAllTextAsync(Path.Combine(_root, "dist", "snapshot", "index.html"));
+            Assert.Contains($"title:{value};", html, StringComparison.Ordinal);
+        }
+
+        await PublishAsync("first");
+        Assert.Equal(1, renders);
+        await PublishAsync("first");
+        Assert.Equal(1, renders);
+        await PublishAsync("second");
+        Assert.Equal(2, renders);
+        await PublishAsync(null);
+        Assert.Equal(3, renders);
+    }
+
+    [Theory]
     [InlineData(null, "base")]
+    [InlineData("Development", "base")]
     [InlineData("Staging", "staging")]
     public async Task Configuration_ReadsOnlyTheProjectSettingsForTheEnvironment(string? environmentName, string expected)
     {

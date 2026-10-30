@@ -7,18 +7,17 @@ namespace Kiji.Hosting;
 /// The site's read-only <see cref="IHostEnvironment"/>. Its values are fixed when the builder is
 /// created, because they select the configuration sources and identify the build.
 /// </summary>
-/// <remarks>The built site owns the lazily created file provider and releases it when disposed.</remarks>
 internal sealed class SiteHostEnvironment(string environmentName, string applicationName, string contentRootPath)
     : IHostEnvironment
 {
-    // Created on first use: most sites never read it.
-    private readonly Lazy<PhysicalFileProvider> _contentRootFileProvider = new(() => new PhysicalFileProvider(contentRootPath));
+    private readonly PhysicalFileProvider? _contentRootFileProvider = Directory.Exists(contentRootPath)
+        ? new PhysicalFileProvider(contentRootPath) : null;
 
     public string EnvironmentName
     {
         get => environmentName;
         set => throw new NotSupportedException(
-            "The environment name selects the configuration files when the builder is created and cannot be changed. Set DOTNET_ENVIRONMENT instead.");
+            "The environment name selects the configuration files when the builder is created and cannot be changed. Set DOTNET_ENVIRONMENT, or pass --environment while serving.");
     }
 
     public string ApplicationName
@@ -36,16 +35,13 @@ internal sealed class SiteHostEnvironment(string environmentName, string applica
 
     public IFileProvider ContentRootFileProvider
     {
-        get => _contentRootFileProvider.Value;
+        get => (IFileProvider?)_contentRootFileProvider ?? new NullFileProvider();
         set => throw new NotSupportedException(
             "The content root is the site project directory supplied by Kiji's MSBuild targets and cannot be changed.");
     }
 
     internal void DisposeContentRootFileProvider()
     {
-        if (_contentRootFileProvider.IsValueCreated)
-        {
-            _contentRootFileProvider.Value.Dispose();
-        }
+        _contentRootFileProvider?.Dispose();
     }
 }

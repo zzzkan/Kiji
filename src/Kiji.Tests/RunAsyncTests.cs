@@ -84,6 +84,66 @@ public sealed class RunAsyncTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_CanceledPublish_IsLoggedBeforeDisposalAndReturnsFailure()
+    {
+        var logs = new RecordingLoggerProvider();
+        var builder = CreateBuilder(EnvironmentWith([("KIJI_OUTPUT", _outputDir)]));
+        builder.Logging.AddProvider(logs);
+        var site = builder.Build();
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+
+        Assert.Equal(1, await site.RunAsync(cancellation.Token));
+
+        Assert.Contains(("Kiji.Build", LogLevel.Warning, "Publishing was canceled; output may be incomplete."), logs.Entries);
+        Assert.Throws<ObjectDisposedException>(() => site.ServiceProvider);
+    }
+
+    [Theory]
+    [InlineData(null, "Staging", null, "Staging")]
+    [InlineData("Production", "Staging", null, "Production")]
+    [InlineData("Production", "Development", "Staging", "Staging")]
+    public async Task Serve_UsesWebHostPrecedenceBeforeLoadingProjectSettings(string? dotnet, string? aspnet, string? argument, string expected)
+    {
+        await File.WriteAllTextAsync(Path.Combine(_testDir, $"appsettings.{expected}.json"), """{ "Selected": "yes" }""");
+        string[] args = argument is null ? [] : ["--environment", argument, "--Selected", "no"];
+        var builder = StaticSite.CreateBuilder(args,
+            new SiteExecutionPaths(_testDir), typeof(StaticSite).Assembly,
+            EnvironmentWith([("DOTNET_ENVIRONMENT", dotnet), ("ASPNETCORE_ENVIRONMENT", aspnet)]));
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        await using var site = builder.Build();
+
+        Assert.Equal(expected, builder.Environment.EnvironmentName);
+        Assert.Equal("yes", builder.Configuration["Selected"]);
+        var (server, web) = await site.StartDevServerAsync([.. args, .. TestUrls.EphemeralPort], CancellationToken.None,
+            new Kiji.Hosting.DevServerStatusReporter(TextWriter.Null, "kiji", useEmoji: false));
+        await using (server)
+        {
+            Assert.Equal(expected, web.Environment.EnvironmentName);
+            Assert.Equal(argument is null ? "yes" : "no", web.Configuration["Selected"]);
+        }
+    }
+
+    [Theory]
+    [InlineData(null, "Production")]
+    [InlineData("", "Production")]
+    [InlineData("   ", "Production")]
+    [InlineData("Staging", "Staging")]
+    public async Task Publish_IgnoresWebHostEnvironmentBeforeLoadingProjectSettings(string? dotnet, string expected)
+    {
+        await File.WriteAllTextAsync(Path.Combine(_testDir, "appsettings.Development.json"), """{ "Selected": "development" }""");
+        await File.WriteAllTextAsync(Path.Combine(_testDir, $"appsettings.{expected}.json"), """{ "Selected": "publish" }""");
+        var builder = StaticSite.CreateBuilder(["--environment", "Development"],
+            new SiteExecutionPaths(_testDir), typeof(StaticSite).Assembly,
+            EnvironmentWith([("KIJI_OUTPUT", _outputDir), ("DOTNET_ENVIRONMENT", dotnet), ("ASPNETCORE_ENVIRONMENT", "Development")]));
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        await using var site = builder.Build();
+
+        Assert.Equal(expected, builder.Environment.EnvironmentName);
+        Assert.Equal("publish", builder.Configuration["Selected"]);
+    }
+
+    [Fact]
     public async Task RunAsync_DisposesTheSite_AndRejectsASecondRun()
     {
         var app = CreateBuilder(EnvironmentWith([("KIJI_OUTPUT", _outputDir)])).Build();

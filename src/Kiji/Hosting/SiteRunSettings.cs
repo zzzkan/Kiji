@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 
 namespace Kiji.Hosting;
@@ -23,12 +24,25 @@ internal sealed record SiteRunSettings(string? OutputPath, bool Force, string En
     /// Reads an environment variable. Injected so tests can exercise both modes without
     /// mutating the process environment, which parallel test classes share.
     /// </param>
-    internal static SiteRunSettings FromEnvironment(Func<string, string?> environment)
+    /// <param name="args">Command-line arguments. Only <c>--environment</c> is read, and only while serving.</param>
+    internal static SiteRunSettings FromEnvironment(Func<string, string?> environment, string[]? args = null)
     {
         ArgumentNullException.ThrowIfNull(environment);
         var outputPath = environment(OutputPathVariable);
         var publishing = !string.IsNullOrWhiteSpace(outputPath);
         var environmentName = environment(EnvironmentNameVariable);
+        if (!publishing && string.IsNullOrWhiteSpace(environmentName))
+        {
+            environmentName = environment("ASPNETCORE_ENVIRONMENT");
+        }
+        if (!publishing && args is { Length: > 0 })
+        {
+            // Use ASP.NET Core's command-line provider only to select the host environment.
+            // Application configuration remains project-local.
+            using var commandLine = new ConfigurationManager();
+            commandLine.AddCommandLine(args);
+            environmentName = commandLine[HostDefaults.EnvironmentKey] ?? environmentName;
+        }
 
         return new SiteRunSettings(
             publishing ? outputPath : null,

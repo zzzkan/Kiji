@@ -26,6 +26,9 @@ internal static partial class BuildLoggerExtensions
     [LoggerMessage(5, LogLevel.Error, "Publishing failed.")]
     internal static partial void PublishFailed(this ILogger logger, Exception exception);
 
+    [LoggerMessage(6, LogLevel.Warning, "Publishing was canceled; output may be incomplete.")]
+    internal static partial void PublishCanceled(this ILogger logger);
+
     [LoggerMessage(10, LogLevel.Debug, "Generated: {Path}")]
     internal static partial void PageGenerated(this ILogger logger, string path);
 

@@ -11,6 +11,7 @@ internal sealed class SiteConfiguration : IConfigurationManager, IConfigurationR
 
     private readonly ConfigurationManager _builder = new();
     private IConfigurationRoot _configuration;
+    private readonly HashSet<string> _readKeys = new(StringComparer.OrdinalIgnoreCase);
     private bool _frozen;
 
     internal SiteConfiguration()
@@ -22,7 +23,11 @@ internal sealed class SiteConfiguration : IConfigurationManager, IConfigurationR
 
     public string? this[string key]
     {
-        get => _configuration[key];
+        get
+        {
+            if (!_frozen) { _readKeys.Add(key); }
+            return _configuration[key];
+        }
         set
         {
             EnsureWritable();
@@ -38,7 +43,11 @@ internal sealed class SiteConfiguration : IConfigurationManager, IConfigurationR
 
     // Sections must retain this root, so sections captured by Configure<T> before
     // startup also read the snapshot rather than a detached live provider.
-    public IConfigurationSection GetSection(string key) => new ConfigurationSection(this, key);
+    public IConfigurationSection GetSection(string key)
+    {
+        if (!_frozen) { _readKeys.Add(key); }
+        return new ConfigurationSection(this, key);
+    }
 
     public IEnumerable<IConfigurationSection> GetChildren()
         => _configuration.GetChildren().Select(section => GetSection(section.Path));
@@ -64,11 +73,22 @@ internal sealed class SiteConfiguration : IConfigurationManager, IConfigurationR
     {
         if (_frozen) { return; }
 
-        var snapshot = new ConfigurationRoot([new ReadOnlyConfigurationProvider(_configuration.AsEnumerable())]);
+        var values = _configuration.AsEnumerable().ToDictionary(StringComparer.OrdinalIgnoreCase);
+        // On-demand providers may expose a key through TryGet without enumerating it.
+        // Include keys read during setup so captured sections and the fingerprint agree.
+        foreach (var key in _readKeys)
+        {
+            if (_configuration.Providers.Any(provider => provider.TryGet(key, out _)))
+            {
+                values[key] = _configuration[key];
+            }
+        }
+        var snapshot = new ConfigurationRoot([new ReadOnlyConfigurationProvider(values)]);
         Sources = Array.AsReadOnly(Sources.ToArray());
         Properties = new ReadOnlyDictionary<string, object>(new Dictionary<string, object>(Properties));
         _configuration = snapshot;
         _frozen = true;
+        _readKeys.Clear();
         // Stop file watchers and detach live providers only after the snapshot is complete.
         _builder.Dispose();
     }

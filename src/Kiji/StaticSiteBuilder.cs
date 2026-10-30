@@ -40,8 +40,8 @@ public sealed class StaticSiteBuilder
             settings.EnvironmentName, entryAssembly.GetName().Name ?? string.Empty, paths.ProjectDirectory);
 
         // Every configuration value is part of the publish fingerprint, so the default
-        // sources are only those that travel with the project. Environment variables and
-        // command-line arguments would differ between machines and between serve and publish.
+        // sources are only those that travel with the project. Environment variables, command-line
+        // arguments, and user secrets would differ between machines or between serve and publish.
         // A site started through MSBuild always has its project directory. Without one, as
         // when tests only plan pages, there are no files to read and no base path to set.
         if (Directory.Exists(paths.ProjectDirectory))
@@ -50,10 +50,6 @@ public sealed class StaticSiteBuilder
             Configuration.SetFileProvider(HostEnvironment.ContentRootFileProvider);
             Configuration.AddJsonFile("appsettings.json", optional: true, reloadOnChange: false);
             Configuration.AddJsonFile($"appsettings.{HostEnvironment.EnvironmentName}.json", optional: true, reloadOnChange: false);
-        }
-        if (HostEnvironment.IsDevelopment())
-        {
-            Configuration.AddUserSecrets(entryAssembly, optional: true, reloadOnChange: false);
         }
 
         // Defaults are registered first so that later registrations replace them. Managed
@@ -116,25 +112,28 @@ public sealed class StaticSiteBuilder
 
     /// <summary>The environment the site runs in, also available to components as <see cref="IHostEnvironment"/>.</summary>
     /// <remarks>
-    /// Read-only, because it selects the configuration files when the builder is created. The name comes
-    /// from <c>DOTNET_ENVIRONMENT</c>; otherwise it is <c>Production</c> during <c>dotnet publish</c> and
-    /// <c>Development</c> while serving. The content root is the project directory.
+    /// Read-only, because the name selects the configuration files when the builder is created. During
+    /// <c>dotnet publish</c>, the name comes from <c>DOTNET_ENVIRONMENT</c> and defaults to <c>Production</c>.
+    /// While serving, <c>--environment</c> comes first, then <c>DOTNET_ENVIRONMENT</c>, then
+    /// <c>ASPNETCORE_ENVIRONMENT</c>, and the default is <c>Development</c>. A blank variable counts as unset.
+    /// The content root is the project directory.
     /// </remarks>
     public IHostEnvironment Environment => HostEnvironment;
 
     /// <summary>The site configuration, also available to components as <see cref="IConfiguration"/>.</summary>
     /// <remarks>
-    /// It reads <c>appsettings.json</c> and <c>appsettings.{Environment}.json</c> from the project directory, and user
-    /// secrets in Development. Add other sources, such as prefixed environment variables, explicitly. Every value outside
-    /// the <c>Logging</c> section is part of the publish fingerprint: changing one renders every page again. Files are read
-    /// once per process. Execution fixes a read-only snapshot, including sections already captured by options binding.
+    /// It reads <c>appsettings.json</c> and <c>appsettings.{Environment}.json</c> from the project directory. Add other
+    /// sources, such as prefixed environment variables or user secrets, explicitly. Every value outside the <c>Logging</c>
+    /// section is part of the publish fingerprint: changing one renders every page again. Files are read once per process.
+    /// When the site starts running, the configuration becomes a read-only snapshot, which sections already captured by
+    /// options binding also read. A key that its provider does not enumerate stays readable only if it was read before then.
     /// </remarks>
     public IConfigurationManager Configuration => HostConfiguration;
 
     /// <summary>The logging configuration for components, services, Kiji, and the development server.</summary>
     /// <remarks>
     /// Kiji writes Warning and higher to the console, and its own progress messages under <c>Kiji.Build</c>.
-    /// During <c>dotnet publish</c>, they are MSBuild messages at any level; only an exception fails the publish.
+    /// During <c>dotnet publish</c>, every message reaches MSBuild as a message, whatever its level, and never fails the publish.
     /// The <c>Logging</c> configuration section applies, as in other .NET hosts.
     /// </remarks>
     public ILoggingBuilder Logging { get; }
@@ -292,7 +291,10 @@ public sealed class StaticSiteBuilder
     }
 
     /// <summary>Builds the site, validating its services. Call it once.</summary>
-    /// <remarks>Content is not loaded until the site runs.</remarks>
+    /// <remarks>
+    /// Content is not loaded until the site runs. If the services fail validation, the builder releases its
+    /// configuration and cannot be built again.
+    /// </remarks>
     public StaticSite Build()
     {
         if (_built)
@@ -301,7 +303,22 @@ public sealed class StaticSiteBuilder
         }
         _ = SiteInfo;
         _built = true;
-        return new StaticSite(this);
+        try
+        {
+            return new StaticSite(this);
+        }
+        catch
+        {
+            try
+            {
+                HostConfiguration.Dispose();
+            }
+            finally
+            {
+                HostEnvironment.DisposeContentRootFileProvider();
+            }
+            throw;
+        }
     }
 
     /// <param name="resolvePaths">Returns the execution paths once the site has settled them.</param>
@@ -329,8 +346,8 @@ public sealed class StaticSiteBuilder
         _services.MakeReadOnly();
 
         var assemblies = SiteServiceRegistration.CollectAssemblies(_services);
-        // ValidateOnBuild checks call sites without creating services, so a failed Build
-        // leaves nothing to dispose. Options are validated when the site starts running.
+        // ValidateOnBuild checks call sites without creating services.
+        // Options are validated when the site starts running.
         var provider = _services.BuildServiceProvider(new ServiceProviderOptions
         {
             ValidateScopes = true,

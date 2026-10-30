@@ -82,11 +82,14 @@ public sealed class StaticSite : IAsyncDisposable
     }
 
     /// <summary>Creates a builder for a site that discovers routed components in the entry assembly.</summary>
-    /// <param name="args">Arguments forwarded to ASP.NET Core configuration when serving.</param>
+    /// <param name="args">
+    /// While serving, <c>--environment</c> selects the environment, and the arguments go to ASP.NET Core
+    /// configuration, such as <c>--urls</c>. Publishing ignores them.
+    /// </param>
     public static StaticSiteBuilder CreateBuilder(string[] args)
     {
         ArgumentNullException.ThrowIfNull(args);
-        var settings = SiteRunSettings.FromEnvironment(Environment.GetEnvironmentVariable);
+        var settings = SiteRunSettings.FromEnvironment(Environment.GetEnvironmentVariable, args);
         var entryAssembly = Assembly.GetEntryAssembly() ?? throw new InvalidOperationException(
             "No entry assembly is available in this host. Run the site project as an application with dotnet run, dotnet watch or dotnet publish.");
 
@@ -97,7 +100,7 @@ public sealed class StaticSite : IAsyncDisposable
             settings);
     }
 
-    /// <param name="args">Arguments forwarded to ASP.NET Core configuration when serving.</param>
+    /// <param name="args">As in the public overload: read only while serving.</param>
     /// <param name="paths">The project and asset paths.</param>
     /// <param name="entryAssembly">The assembly whose routed components are discovered.</param>
     /// <param name="environment">
@@ -106,11 +109,14 @@ public sealed class StaticSite : IAsyncDisposable
     /// </param>
     internal static StaticSiteBuilder CreateBuilder(string[] args, SiteExecutionPaths paths, Assembly entryAssembly,
         Func<string, string?>? environment = null)
-        => new(args, paths, entryAssembly, SiteRunSettings.FromEnvironment(environment ?? (static _ => null)));
+        => new(args, paths, entryAssembly, SiteRunSettings.FromEnvironment(environment ?? (static _ => null), args));
 
     /// <summary>Publishes or serves the site according to the MSBuild execution context, then disposes the site.</summary>
     /// <remarks>Await this method in the entry point so <c>dotnet publish</c> generates the site.</remarks>
-    /// <returns>The process exit code.</returns>
+    /// <returns>
+    /// The process exit code: 1 when a publish is canceled, otherwise 0. Failures are rethrown, and a failed
+    /// publish is logged first.
+    /// </returns>
     public async Task<int> RunAsync(CancellationToken cancellationToken = default)
     {
         if (_hasRun)
@@ -149,7 +155,14 @@ public sealed class StaticSite : IAsyncDisposable
             {
                 // Stopping the dev server with Ctrl+C is a normal exit; an interrupted
                 // generation left partial output and is reported as failure.
-                return _settings.Publishing ? 1 : 0;
+                if (_settings.Publishing)
+                {
+                    // Logging providers must not change the cancellation exit code.
+                    try { BuildLogger.PublishCanceled(); }
+                    catch { }
+                    return 1;
+                }
+                return 0;
             }
         }
         catch (Exception exception) when (LogPublishFailure(exception))
@@ -178,7 +191,11 @@ public sealed class StaticSite : IAsyncDisposable
         return false;
     }
 
-    /// <summary>Releases the site's services. <see cref="RunAsync"/> disposes the site when it finishes.</summary>
+    /// <summary>Releases the site's services and configuration.</summary>
+    /// <remarks>
+    /// <see cref="RunAsync"/> disposes the site when it finishes, so dispose it yourself only when it never runs.
+    /// Later calls have no effect.
+    /// </remarks>
     public async ValueTask DisposeAsync()
     {
         if (_disposed)

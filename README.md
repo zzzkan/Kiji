@@ -11,9 +11,7 @@ together in plain HTML, ready for any static host.
 
 ### 🧰 Your .NET workflow
 
-Write pages, layouts, and models in Razor and C#. `Program.cs` uses the .NET host builder,
-with services, `appsettings.json`, and logging as in other .NET apps. Preview with
-`dotnet watch` and ship with `dotnet publish`.
+Build pages and layouts with Razor, and write your models in C#. Use the familiar .NET host builder in `Program.cs` to configure services, `appsettings.json`, and logging. Preview your site with `dotnet watch`, then publish it with `dotnet publish`.
 
 ### 📦 Publishing essentials included
 

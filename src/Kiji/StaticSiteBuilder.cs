@@ -128,7 +128,6 @@ public sealed class StaticSiteBuilder
     /// It reads <c>appsettings.json</c> and <c>appsettings.{Environment}.json</c> from the project directory. Add other
     /// sources, such as prefixed environment variables or user secrets, explicitly. Every value outside the <c>Logging</c>
     /// section is part of the publish fingerprint: changing one renders every page again. Files are read once per process.
-    /// Finish configuring the site before calling <see cref="StaticSite.RunAsync"/>.
     /// </remarks>
     public IConfigurationManager Configuration => HostConfiguration;
 

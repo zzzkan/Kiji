@@ -41,7 +41,7 @@ return await builder.Build().RunAsync();
 | `IHostEnvironment StaticSiteBuilder.Environment`                               | See [Environment](#environment).                                                                                                                                            |
 | `IConfigurationManager StaticSiteBuilder.Configuration`                        | See [Configuration](#configuration).                                                                                                                                        |
 | `ILoggingBuilder StaticSiteBuilder.Logging`                                    | See [Logging](#logging).                                                                                                                                                    |
-| `StaticSite StaticSiteBuilder.Build()`                                         | Validates the services and makes them read-only. It can be called only once, even after a validation failure.                                                               |
+| `StaticSite StaticSiteBuilder.Build()`                                         | Validates the services and makes them read-only. Call it once.                                                                                                              |
 | `Task<int> StaticSite.RunAsync(CancellationToken cancellationToken = default)` | Serves during `dotnet watch` or generates the site during `dotnet publish`, then disposes the site. Return its exit code.                                                   |
 
 ### Environment
@@ -60,8 +60,8 @@ if (builder.Environment.IsDevelopment())
 During `dotnet publish`, the name comes only from `DOTNET_ENVIRONMENT` and defaults to
 `Production`. While serving, `--environment` comes first, then `DOTNET_ENVIRONMENT`, then
 `ASPNETCORE_ENVIRONMENT`, and the default is `Development`. The name is read-only, and
-`ContentRootPath` is the project directory. Changing the
-name renders every page again on the next publish.
+`ContentRootPath` is the project directory. Changing the name renders every page again on
+the next publish.
 
 ### Configuration
 
@@ -80,11 +80,9 @@ builder.Services.Configure<ImageProcessorOptions>(builder.Configuration.GetSecti
 - Environment variables, command-line arguments, and user secrets are not read, because they
   differ between machines. Add a source explicitly when you need one:
   `builder.Configuration.AddEnvironmentVariables("MYSITE_")`.
-- Changing any value outside the `Logging` section, including setting a key to `null`,
-  renders every page again on the next publish.
+- Changing any value outside the `Logging` section renders every page again on the next
+  publish.
 - Files are read once. Restart `dotnet watch` after editing them.
-- Finish configuring the site before calling `RunAsync`. The publish fingerprint uses
-  the values enumerated at the start of each publish.
 - The development server reads its own settings, such as `urls`, through standard
   ASP.NET Core configuration, including the project's appsettings files, `--urls`, and
   `ASPNETCORE_URLS`.
@@ -105,10 +103,8 @@ message for each page and generated file:
 ```
 
 - Logs never fail a publish, whatever their level. A publish fails when an exception ends
-  `RunAsync`, or when the publish is canceled, which returns exit code 1.
-  For validation that must stop publication, throw an
-  exception that is not handled by an error boundary. Kiji propagates it and does not publish a new successful cache manifest.
-  Mark a component with `AlwaysRender` when its page logic must run on every publish.
+  `RunAsync`, or when it is canceled, which returns exit code 1. To stop a publish, throw
+  an exception that no error boundary catches.
 - During `dotnet publish`, log messages are MSBuild messages, not warnings or errors. CI logs
   and `--tl:off` show them. In a terminal, add `-v d`, also to see why a publish failed.
   `-v q` hides them.

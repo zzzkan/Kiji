@@ -32,10 +32,10 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   ASP.NET Core configuration owns the dev server address. Serving reads only the standard
   --environment host argument. Prefer conventions to flags.
 - All log output goes through the site's ILogger (Kiji's own under Kiji.Build), except the dev
-  server's watch-style status lines. RunAsync propagates failures after disposing the site.
-  Publish uses the standard console formatter; MSBuild receives every
-  line as a high-importance message and ignores its error/warning format. Only the exit code
-  fails a publish. Log levels come from the Logging section, not MSBuild properties.
+  server's watch-style status lines. Publish uses the standard console formatter; MSBuild
+  receives every line as a high-importance message and ignores its error/warning format.
+  Only the exit code fails a publish. Log levels come from the Logging section, not MSBuild
+  properties.
 - Dev and publish share StaticSite.RenderPageAsync. Never emit stale output;
   ambiguous incremental state requires rendering.
 - One type per file. Library components and library test components are hand-written ComponentBase classes;
@@ -62,11 +62,9 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   only from DOTNET_ENVIRONMENT; serving follows WebApplicationBuilder's order (--environment,
   DOTNET_ENVIRONMENT, ASPNETCORE_ENVIRONMENT). Default configuration sources stay
   project-local (no environment variables, command line or user secrets, which differ between
-  machines). Use the standard ConfigurationManager and finish configuration before execution.
-  The dev server uses standard ASP.NET Core configuration with the same project directory and
-  environment. The environment name and every enumerated configuration key and value, nulls
-  included, are in the publish options fingerprint because per-key reads are not tracked;
-  only the Logging section, which cannot change output, is left out.
+  machines). The dev server uses standard ASP.NET Core configuration with the same project
+  directory and environment. Per-key reads are not tracked, so the environment name and all
+  configuration outside the Logging section are in the publish options fingerprint.
 - The dev server enforces BaseUrl's path prefix and uses `.kiji/dev-site`.
   Only `.kiji/cache` is portable; planning creates no output directories.
 - StaticSiteBuilder.Services is standard DI; Build validates it, makes it read-only and
@@ -76,10 +74,9 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   Kiji-owned registrations in Build. Derived indexes use AddContentSource;
   content reload does not recreate singletons. Use AlwaysRender on components reading
   untracked external state. KijiForce refreshes all pages for a whole publish. Instantiating
-  any ErrorBoundaryBase component prevents HTML reuse for that page, even when healthy and
-  including custom boundaries, layouts and dynamic children. The default boundary logger
-  reports exceptions as warnings; logging filters and providers never control cacheability
-  or the publish result. Use an unhandled exception for a build gate.
+  any ErrorBoundaryBase component prevents HTML reuse for that page, even when healthy. The
+  default boundary logger reports exceptions as warnings; logging never controls
+  cacheability or the publish result. Use an unhandled exception for a build gate.
 - Use Blazor's PageTitle and HeadContent; KijiRoot supplies the single HeadOutlet.
   Each page gets a fresh renderer/dispatcher, isolating the framework's section state.
   HeadContent replaces earlier providers rather than appending; compose shared tags
@@ -90,13 +87,13 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   and encoder versions in cache identities; HTML reuse controls do not clear image caches.
   Every ImageProcessorOptions setting must stay in its CacheIdentity. Options are validated when
   the site starts running, never in Build.
-  Null Widths keeps configuration binding from appending to the defaults.
 
 Do not reintroduce evaluated alternatives: pooled HtmlRenderer (root/scope state cannot
 reset), RouteView (PageView owns Kiji's layout resolution), AOT/trimming (reflection),
 source-generated page discovery (cached scanning suffices), IBufferWriter rendering
 (HtmlRootComponent exposes TextWriter), content-addressed image URLs (break page bundles),
-or incremental RSS/sitemap (depend on all metadata and are cheap to regenerate).
+incremental RSS/sitemap (depend on all metadata and are cheap to regenerate), or a frozen
+configuration snapshot (default sources do not reload during a publish).
 
 ## Skills
 

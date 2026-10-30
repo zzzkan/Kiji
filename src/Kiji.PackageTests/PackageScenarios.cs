@@ -35,8 +35,11 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
 
         var output = await fixture.PublishAsync();
 
-        Assert.Contains("boundary-publish-warning", output, StringComparison.Ordinal);
+        Assert.Contains("Unhandled exception rendering component: boundary-publish-warning", output, StringComparison.Ordinal);
         Assert.DoesNotContain("boundary-publish-information", output, StringComparison.Ordinal);
+        // Logs are high-importance messages, which a redirected publish shows by default.
+        Assert.Matches(@"Generated \d+ pages \(\d+ unchanged, skipped", output);
+        Assert.DoesNotContain("Unchanged: ", output, StringComparison.Ordinal);
         Assert.Contains("Boundary fallback", Read("boundary/index.html"), StringComparison.Ordinal);
 
         var html = Read("index.html");
@@ -84,6 +87,27 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         using (var reader = new StreamReader(gzip))
         { Assert.Equal(Read("index.html"), await reader.ReadToEndAsync()); }
         Assert.True(File.Exists(PublicFile(AssetUrl(Read("index.html"), "library")) + ".gz"));
+
+        // An exception fails the publish through the exit code, and the output says why.
+        fixture.Write("Site/UnregisteredPage.razor", """
+            @page "/unregistered/{Slug}/"
+            @code { [Parameter] public string Slug { get; set; } = ""; }
+            """);
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.PublishAsync());
+        Assert.Matches(@"InvalidOperationException: Page component '[^']*UnregisteredPage'.*AddPageParameters<UnregisteredPage>", failure.Message);
+        File.Delete(Path.Combine(fixture.Site, "UnregisteredPage.razor"));
+
+        // Logs never fail a publish, even when a message reads like an MSBuild error:
+        // its HTML is cached, and a later publish would reuse it without the message.
+        fixture.Write("Site/LoggingPage.razor", """
+            @page "/logging/"
+            @using Microsoft.Extensions.Logging
+            @inject ILogger<LoggingPage> Logger
+            <p>Log-only result</p>
+            @code { protected override void OnInitialized() => Logger.LogError("error: logging-page-error"); }
+            """);
+        Assert.Contains("error: logging-page-error", await fixture.PublishAsync("-warnaserror"), StringComparison.Ordinal);
+        Assert.Contains("Log-only result", Read("logging/index.html"), StringComparison.Ordinal);
 
         var stagingDirectory = Assert.Single(Directory.GetDirectories(Path.Combine(fixture.Site, "obj"), "site", SearchOption.AllDirectories));
         await fixture.DotnetAsync("clean", "Site/PackageSite.csproj", "-c", "Release");

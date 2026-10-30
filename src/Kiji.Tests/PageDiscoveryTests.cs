@@ -27,8 +27,9 @@ public sealed class PageDiscoveryTests
     [Fact]
     public void Create_DiscoversFixedRoutesWithoutRegistration()
     {
-        var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory), typeof(HomePage), typeof(AboutPage));
-        app.Info = TestArticleContents.CreateSiteInfo();
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory), typeof(HomePage), typeof(AboutPage));
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        var app = builder.Build();
 
         Assert.Equal(["/", "/about/"], app.CreateSnapshot().Pages.Select(static page => page.RoutePath).Order(StringComparer.Ordinal));
     }
@@ -68,15 +69,16 @@ public sealed class PageDiscoveryTests
     [Fact]
     public void CreateSnapshot_UnregisteredParameterizedRoute_FailsWithPageAndRoute()
     {
-        var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory), typeof(TagsPage));
-        app.Info = TestArticleContents.CreateSiteInfo();
-        app.UseContentSource<Post>(static _ => []);
-        app.UseDefaultLayout<MainLayout>();
-        TestArticleContents.MapTestAssemblyPages(app);
-        app.AddNotFoundPage<NotFoundPage>();
-        app.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory), typeof(TagsPage));
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.AddContentSource<Post>(static _ => []);
+        builder.UseDefaultLayout<MainLayout>();
+        TestArticleContents.MapTestAssemblyPages(builder);
+        builder.UseNotFoundPage<NotFoundPage>();
+        builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
         // No mapping for the dynamic /tags/{TagSlug}/ template.
+        var app = builder.Build();
 
         var error = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());
         Assert.Contains(nameof(TagsPage), error.Message, StringComparison.Ordinal);
@@ -137,13 +139,14 @@ public sealed class PageDiscoveryTests
     }
 
     [Fact]
-    public void CreateSnapshot_AddNotFoundPageWithoutPageTemplate_ThrowsInformativeException()
+    public void CreateSnapshot_UseNotFoundPageWithoutPageTemplate_ThrowsInformativeException()
     {
-        var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory));
-        app.Info = TestArticleContents.CreateSiteInfo();
-        app.UseDefaultLayout<MainLayout>();
-        TestArticleContents.MapTestAssemblyPages(app);
-        app.AddNotFoundPage<PostListComponent>();
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.UseDefaultLayout<MainLayout>();
+        TestArticleContents.MapTestAssemblyPages(builder);
+        builder.UseNotFoundPage<PostListComponent>();
+        var app = builder.Build();
 
         var exception = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());
 
@@ -152,15 +155,16 @@ public sealed class PageDiscoveryTests
 
     private static (StaticSite App, ContentDictionary<Post> Posts) CreateAppWithTagRoutes(Func<IEnumerable<object>> tagRoutes)
     {
-        var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory));
-        app.Info = TestArticleContents.CreateSiteInfo();
-        app.UseContentSource<Post>(static _ => []);
-        app.UseDefaultLayout<MainLayout>();
-        TestArticleContents.MapTestAssemblyPages(app);
-        app.AddNotFoundPage<NotFoundPage>();
-        app.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.AddContentSource<Post>(static _ => []);
+        builder.UseDefaultLayout<MainLayout>();
+        TestArticleContents.MapTestAssemblyPages(builder);
+        builder.UseNotFoundPage<NotFoundPage>();
+        builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
             .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
-        app.AddPageParameters<TagsPage>(_ => tagRoutes());
+        builder.AddPageParameters<TagsPage>(_ => tagRoutes());
+        var app = builder.Build();
         return (app, app.ServiceProvider.GetRequiredService<ContentDictionary<Post>>());
     }
 }

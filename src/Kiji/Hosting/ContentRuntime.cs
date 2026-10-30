@@ -11,7 +11,11 @@ namespace Kiji.Hosting;
 internal sealed class ContentRuntime
 {
     internal Generation.DependencyCatalog Dependencies { get; } = new();
-    private readonly Dictionary<Type, Action<IServiceCollection>> _registrations = [];
+
+    /// <summary>Hashes of the content files read in the current snapshot.</summary>
+    internal Generation.ContentFileRegistry Files { get; } = new();
+
+    private readonly HashSet<Type> _registeredTypes = [];
     private readonly ConcurrentDictionary<object, object> _materialized = new();
     private readonly Lock _materializationLock = new();
     private IServiceProvider? _services;
@@ -22,26 +26,20 @@ internal sealed class ContentRuntime
     private readonly List<object> _materializing = [];
 
     /// <summary>
-    /// Registers a dictionary for injection. The element type is its identity —
-    /// resolving is by type, so a second one of the same type would silently
+    /// Creates the registration of a dictionary for injection. The element type is its
+    /// identity — resolving is by type, so a second one of the same type would silently
     /// displace the first rather than coexist with it.
     /// </summary>
-    internal void Register<T>(Func<ContentDictionary<T>> createDictionary)
+    internal ServiceDescriptor Register<T>(Func<ContentDictionary<T>> createDictionary)
         where T : class
     {
-        if (!_registrations.TryAdd(typeof(T), services => services.AddSingleton(createDictionary())))
+        if (!_registeredTypes.Add(typeof(T)))
         {
             throw new InvalidOperationException(
                 $"A content dictionary of type '{typeof(T).Name}' is already registered. Each one is identified by its element type, so declare a distinct model type per source.");
         }
-    }
 
-    internal void ApplyRegistrations(IServiceCollection services)
-    {
-        foreach (var registration in _registrations.Values)
-        {
-            registration(services);
-        }
+        return ServiceDescriptor.Singleton(createDictionary());
     }
 
     internal void Attach(IServiceProvider services)
@@ -55,6 +53,7 @@ internal sealed class ContentRuntime
         {
             _materialized.Clear();
             Dependencies.Invalidate();
+            Files.Invalidate();
         }
     }
 

@@ -36,8 +36,7 @@ public sealed class SiteCancellationTests : IDisposable
                 await release.Task.WaitAsync(token);
             },
         };
-        await using var app = CreateApp(processor);
-        var run = app.RunAsync(name => name == "KIJI_OUTPUT" ? output : null, cancellation.Token);
+        var run = CreateApp(processor, name => name == "KIJI_OUTPUT" ? output : null).RunAsync(cancellation.Token);
         try
         {
             await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
@@ -121,15 +120,16 @@ public sealed class SiteCancellationTests : IDisposable
         }
     }
 
-    private StaticSite CreateApp(TrackingImageProcessor processor)
+    private StaticSite CreateApp(TrackingImageProcessor processor, Func<string, string?>? environment = null)
     {
-        var app = TestSiteFactory.Create(new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")));
-        app.Info = new SiteInfo { Name = "Cancellation", BaseUrl = new Uri("https://example.test/") };
-        TestSite.TestSiteAssets.Bind(app, Path.Combine(_root, "wwwroot"));
-        app.UseServices(services => services.AddSingleton<IImageProcessor>(_ => processor)).UseMarkdownContent<FrontMatter>();
-        app.AddPageParameters<MarkdownPostTestPage>(provider => provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")), environment);
+        builder.SiteInfo = new SiteInfo { Name = "Cancellation", BaseUrl = new Uri("https://example.test/") };
+        TestSite.TestSiteAssets.Bind(builder.Paths, Path.Combine(_root, "wwwroot"));
+        builder.Services.AddSingleton<IImageProcessor>(_ => processor);
+        builder.AddMarkdownContent<FrontMatter>();
+        builder.AddPageParameters<MarkdownPostTestPage>(provider => provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
             .Select(post => new { Slug = "post", ContentKey = post.Key }));
-        return app;
+        return builder.Build();
     }
 
     private void WriteContent(string text)

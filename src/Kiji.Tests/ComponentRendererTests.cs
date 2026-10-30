@@ -2,7 +2,6 @@ using Kiji.Rendering;
 using Kiji.Tests.TestSite;
 using Kiji.Tests.TestSite.ErrorHandling;
 using Kiji.Tests.TestSite.Head;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xunit;
 
@@ -13,9 +12,10 @@ public sealed class ComponentRendererTests
     [Fact]
     public async Task RenderComponentAsync_ErrorBoundaryRendersAsyncFallbackWithoutLoggingProviders()
     {
-        await using var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory));
-        app.Info = TestArticleContents.CreateSiteInfo();
-        app.UseServices(services => services.AddLogging(logging => logging.ClearProviders()));
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.Logging.ClearProviders();
+        await using var app = builder.Build();
         app.UsePlanningOptions();
         var renderer = new ComponentRenderer(app.ServiceProvider);
 
@@ -30,26 +30,27 @@ public sealed class ComponentRendererTests
     [InlineData("https://example.com/日本/")]
     public async Task RenderPageAsync_IsolatesNavigationAndNavLinksAcrossRenders(string baseUrl)
     {
-        await using var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory));
-        app.Info = new SiteInfo { Name = "Navigation", BaseUrl = new Uri(baseUrl) };
-        app.AddPageParameters<NavigationTestPage>(_ => [new { Id = "first" }, new { Id = "日本 語" }]);
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
+        builder.SiteInfo = new SiteInfo { Name = "Navigation", BaseUrl = new Uri(baseUrl) };
+        builder.AddPageParameters<NavigationTestPage>(_ => [new { Id = "first" }, new { Id = "日本 語" }]);
+        await using var app = builder.Build();
         var pages = app.CreateSnapshot().Pages;
 
         var html = await Task.WhenAll(pages.Select(page => app.RenderPageAsync(page, CancellationToken.None)));
         for (var i = 0; i < pages.Count; i++)
         {
             var page = pages[i];
-            var url = app.Info.ResolveUrl(page.RoutePath);
+            var url = app.SiteInfo.ResolveUrl(page.RoutePath);
             Assert.Contains(
-                $"{app.Info.BaseUrl.AbsoluteUri}|{url.AbsoluteUri}|{url.AbsoluteUri[app.Info.BaseUrl.AbsoluteUri.Length..]}|"
-                + app.Info.ResolveUrl("about/").AbsoluteUri + "|about/",
+                $"{app.SiteInfo.BaseUrl.AbsoluteUri}|{url.AbsoluteUri}|{url.AbsoluteUri[app.SiteInfo.BaseUrl.AbsoluteUri.Length..]}|"
+                + app.SiteInfo.ResolveUrl("about/").AbsoluteUri + "|about/",
                 html[i], StringComparison.Ordinal);
             var active = page.RoutePath == "/navigation/first/" ? " class=\"selected\" aria-current=\"page\"" : "";
-            Assert.Contains($"href=\"{app.Info.ResolveUrl("navigation/first/").AbsolutePath}\"{active}>first</a>",
+            Assert.Contains($"href=\"{app.SiteInfo.ResolveUrl("navigation/first/").AbsolutePath}\"{active}>first</a>",
                 html[i], StringComparison.Ordinal);
-            Assert.Contains($"href=\"{app.Info.ResolveUrl("navigation/").AbsolutePath}\" class=\"selected\" aria-current=\"page\">parent</a>",
+            Assert.Contains($"href=\"{app.SiteInfo.ResolveUrl("navigation/").AbsolutePath}\" class=\"selected\" aria-current=\"page\">parent</a>",
                 html[i], StringComparison.Ordinal);
-            Assert.Contains($"href=\"{app.Info.ResolveUrl("navigation/").AbsolutePath}\">exact</a>",
+            Assert.Contains($"href=\"{app.SiteInfo.ResolveUrl("navigation/").AbsolutePath}\">exact</a>",
                 html[i], StringComparison.Ordinal);
 
             Assert.Equal(html[i], await app.RenderPageAsync(page, CancellationToken.None));
@@ -59,8 +60,9 @@ public sealed class ComponentRendererTests
     [Fact]
     public async Task RenderPageAsync_IsolatesHeadAcrossParallelAndSequentialRenders()
     {
-        await using var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory));
-        app.Info = TestArticleContents.CreateSiteInfo();
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        await using var app = builder.Build();
         string[] names = ["first", "second"];
 
         var html = await Task.WhenAll(names.Select(RenderAsync));

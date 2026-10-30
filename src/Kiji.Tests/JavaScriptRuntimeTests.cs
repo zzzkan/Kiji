@@ -94,9 +94,10 @@ public sealed class JavaScriptRuntimeTests
 
     private static StaticSite CreateApp()
     {
-        var app = TestSiteFactory.Create(new SiteExecutionPaths(AppContext.BaseDirectory));
-        app.Info = TestArticleContents.CreateSiteInfo();
-        return app.UseServices(services => services.AddScoped<JavaScriptRuntimeService>());
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.Services.AddScoped<JavaScriptRuntimeService>();
+        return builder.Build();
     }
 
     private static void AssertGuidance(InvalidOperationException exception)

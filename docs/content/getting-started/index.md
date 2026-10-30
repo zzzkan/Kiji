@@ -84,14 +84,14 @@ Replace `Program.cs` with the site definition:
 ```csharp
 using Kiji;
 
-var app = StaticSite.Create(args);
-app.Info = new SiteInfo
+var builder = StaticSite.CreateBuilder(args);
+builder.SiteInfo = new SiteInfo
 {
     BaseUrl = new Uri("https://example.com/"),
     Name = "My Site",
 };
 
-return await app.RunAsync();
+return await builder.Build().RunAsync();
 ```
 
 Create `Pages/Home.razor`:
@@ -180,16 +180,16 @@ Update `Program.cs` to import the layout namespace and register the layout:
 using Kiji;
 using MySite.Layout;
 
-var app = StaticSite.Create(args);
-app.Info = new SiteInfo
+var builder = StaticSite.CreateBuilder(args);
+builder.SiteInfo = new SiteInfo
 {
     BaseUrl = new Uri("https://example.com/"),
     Name = "My Site",
 };
 
-app.UseDefaultLayout<MainLayout>();
+builder.UseDefaultLayout<MainLayout>();
 
-return await app.RunAsync();
+return await builder.Build().RunAsync();
 ```
 
 Add `PageHead` to `Pages/Home.razor`:
@@ -321,24 +321,24 @@ using MySite.Layout;
 using MySite.Models;
 using MySite.Pages;
 
-var app = StaticSite.Create(args);
-app.Info = new SiteInfo
+var builder = StaticSite.CreateBuilder(args);
+builder.SiteInfo = new SiteInfo
 {
     BaseUrl = new Uri("https://example.com/"),
     Name = "My Site",
 };
 
-app.UseMarkdownContent<PostFrontMatter, BlogPost>(BlogPost.Create,
+builder.AddMarkdownContent<PostFrontMatter, BlogPost>(BlogPost.Create,
     options => options.Directory = "content/posts");
-app.UseDefaultLayout<MainLayout>();
-app.AddPageParameters<PostPage>(services => services
+builder.UseDefaultLayout<MainLayout>();
+builder.AddPageParameters<PostPage>(services => services
     .GetRequiredService<ContentDictionary<BlogPost>>()
     .Select(post => new { post.Value.Slug, ContentKey = post.Key }));
 
-return await app.RunAsync();
+return await builder.Build().RunAsync();
 ```
 
-`UseMarkdownContent` calls `BlogPost.Create` for each Markdown file and registers
+`AddMarkdownContent` calls `BlogPost.Create` for each Markdown file and registers
 `ContentDictionary<BlogPost>`. `AddPageParameters` gives each post's page its `Slug` for
 the URL and its dictionary key as `ContentKey`.
 

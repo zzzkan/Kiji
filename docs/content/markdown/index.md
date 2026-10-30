@@ -30,7 +30,7 @@ This is a Markdown-backed page.
 ```
 
 ```csharp
-app.UseMarkdownContent<FrontMatter>();
+builder.AddMarkdownContent<FrontMatter>();
 ```
 
 This registers `ContentDictionary<MarkdownContent<FrontMatter>>`. It creates no pages by
@@ -47,7 +47,7 @@ By default, Kiji loads `*.md` files recursively from `content/`. Set `Directory`
 another directory, absolute or relative to the project, and `FileFilter` to skip files:
 
 ```csharp
-app.UseMarkdownContent<FrontMatter>(options =>
+builder.AddMarkdownContent<FrontMatter>(options =>
 {
     options.Directory = "content/posts";
     options.FileFilter = file => !file.Name.StartsWith('_');
@@ -78,7 +78,7 @@ public sealed record Post(string Slug, string Title, MarkdownContent<FrontMatter
 ```
 
 ```csharp
-app.UseMarkdownContent<FrontMatter, Post>(content => new Post(
+builder.AddMarkdownContent<FrontMatter, Post>(content => new Post(
     Slug: content.FileInfo.Directory!.Name,
     Title: content.FrontMatter.Title ?? "Untitled",
     Content: content));
@@ -86,7 +86,7 @@ app.UseMarkdownContent<FrontMatter, Post>(content => new Post(
 
 This registers `ContentDictionary<Post>` instead. The projection sees one file at a time;
 build collection-wide results, such as tag counts, with
-[UseContentSource](../api-reference/#content-sources-and-contentdictionary).
+[AddContentSource](../api-reference/#content-sources-and-contentdictionary).
 
 ## Render a Markdown body
 
@@ -117,7 +117,7 @@ Kiji uses Markdig with its advanced extensions. Options add Markdig configuratio
 YamlDotNet configuration, and HTML post-processing, each run in registration order:
 
 ```csharp
-app.UseMarkdownContent<FrontMatter>(options =>
+builder.AddMarkdownContent<FrontMatter>(options =>
 {
     options.ConfigureMarkdown(pipeline => pipeline.UseEmojiAndSmiley());
     options.ConfigureYaml(yaml => yaml.WithCaseInsensitivePropertyMatching());
@@ -150,7 +150,8 @@ content/
 For `.jpg`, `.jpeg`, `.png`, `.gif`, and `.webp` files, Kiji writes WebP versions beside
 the page's `index.html`: 320, 640, 960, and 1280 pixels wide when the source is wider,
 plus one at the source width, up to 1920 pixels. The `<img>` gets a `srcset` and the source
-dimensions, and every image after the first loads lazily.
+dimensions, and every image after the first loads lazily. To change the widths or the
+quality, see [Image settings](../api-reference/#image-settings).
 
 The output is static: animated images keep only their first frame, metadata such as EXIF
 is removed, and colors are converted to sRGB. To keep an image as is, put it in `wwwroot/`

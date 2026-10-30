@@ -1,4 +1,6 @@
 using Kiji.Rendering;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Kiji.Generation;
 
@@ -9,14 +11,17 @@ internal static class StaticSiteGenerator
     /// Lets a page whose render produced the bytes already on disk skip the write.
     /// Null when nothing may be assumed about the output directory.
     /// </param>
+    /// <param name="logger">Receives a Debug message per page.</param>
     internal static async Task<IReadOnlyList<RenderedPage>> RenderPagesAsync(
         ResolvedSitePaths options,
         IReadOnlyList<PageRenderRequest> pageRequests,
         Func<PageRenderRequest, TextWriter, CancellationToken, Task> renderPageAsync,
         IReadOnlyDictionary<string, BuildManifestPage>? previousOutputs,
         CancellationToken cancellationToken,
-        bool outputStampsValid = false)
+        bool outputStampsValid = false,
+        ILogger? logger = null)
     {
+        var log = logger ?? NullLogger.Instance;
         // Resolve every output path once and create the directory set up front, so
         // the parallel render loop issues no per-page directory syscalls.
         var resolvedPages = new (PageRenderRequest Request, string FullPath)[pageRequests.Count];
@@ -54,7 +59,7 @@ internal static class StaticSiteGenerator
                     && previousOutputs.TryGetValue(request.OutputRelativePath, out var recorded)
                         ? recorded
                         : null;
-                rendered[index] = await WritePageAsync(request, fullPath, renderPageAsync, previous, outputStampsValid, ct);
+                rendered[index] = await WritePageAsync(request, fullPath, renderPageAsync, previous, outputStampsValid, log, ct);
             });
 
         return rendered;
@@ -66,6 +71,7 @@ internal static class StaticSiteGenerator
         Func<PageRenderRequest, TextWriter, CancellationToken, Task> renderPageAsync,
         BuildManifestPage? previous,
         bool outputStampsValid,
+        ILogger logger,
         CancellationToken cancellationToken)
     {
         // Render into a pooled UTF-8 buffer, then persist with one write:
@@ -88,7 +94,8 @@ internal static class StaticSiteGenerator
             writer.WriteToFile(fullPath);
         }
 
-        BuildOutput.Detail($"{(written ? "Generated" : "Unchanged")}: {fullPath}");
+        if (written) { logger.PageGenerated(fullPath); }
+        else { logger.PageUnchanged(fullPath); }
         return new RenderedPage(pageRequest, outputHash, written, writer.ToArray());
     }
 

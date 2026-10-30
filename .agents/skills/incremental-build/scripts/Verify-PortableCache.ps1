@@ -36,11 +36,11 @@ using Kiji;
 using Kiji.Markdown;
 using Microsoft.Extensions.DependencyInjection;
 using Portable;
-var site = StaticSite.Create(args);
-site.Info = new SiteInfo { Name = "Portable", BaseUrl = new Uri("https://example.test/") };
-site.UseMarkdownContent<FrontMatter>(options => options.AddHtmlPostProcessor(html => { Console.WriteLine("RENDER"); return html; }));
-site.AddPageParameters<Article>(services => services.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>().Select(entry => new { Key = entry.Key }));
-await site.RunAsync();
+var builder = StaticSite.CreateBuilder(args);
+builder.SiteInfo = new SiteInfo { Name = "Portable", BaseUrl = new Uri("https://example.test/") };
+builder.AddMarkdownContent<FrontMatter>(options => options.AddHtmlPostProcessor(html => { Console.WriteLine("RENDER"); return html; }));
+builder.AddPageParameters<Article>(services => services.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>().Select(entry => new { Key = entry.Key }));
+await builder.Build().RunAsync();
 namespace Portable { public sealed class FrontMatter { public string? Title { get; set; } } }
 '@ | Set-Content (Join-Path $root 'Program.cs')
     @'
@@ -68,7 +68,7 @@ namespace Portable { public sealed class FrontMatter { public string? Title { ge
 }
 
 function Publish-Fixture([string] $root, [string] $label, [int] $expectedRenders, [string[]] $extra = @()) {
-    $output = @(& dotnet publish $root -c Release -o (Join-Path $root 'dist') -p:KijiVerbose=true "-p:SourceRevisionId=$label" "-p:RestorePackagesPath=$runRoot/packages" @extra 2>&1)
+    $output = @(& dotnet publish $root -c Release -o (Join-Path $root 'dist') "-p:SourceRevisionId=$label" "-p:RestorePackagesPath=$runRoot/packages" @extra 2>&1)
     $output | Set-Content (Join-Path $runRoot ($label + '.log'))
     if ($LASTEXITCODE -ne 0) { throw "Publish failed: $label. See $runRoot." }
     $renders = @($output | Where-Object { "$_".Trim() -eq 'RENDER' }).Count

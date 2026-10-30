@@ -52,7 +52,7 @@ public sealed class ImageConcurrencyTests : IDisposable
         using var gate = new SemaphoreSlim(2);
         var count = 0;
         var both = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var processor = new ImageProcessor(gate)
+        var processor = new ImageProcessor(generationGate: gate)
         {
             BeforeEncodeAsync = async (_, ct) =>
             {

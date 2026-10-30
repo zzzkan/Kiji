@@ -4,8 +4,9 @@ description: The building blocks of a Kiji site.
 order: 20
 ---
 
-A Kiji site is a .NET project. Razor components define pages, and `Program.cs` creates
-the site with `StaticSite.Create`, registers content and settings, and calls `RunAsync`.
+A Kiji site is a .NET project. Razor components define pages, and `Program.cs` creates a
+builder with `StaticSite.CreateBuilder`, registers content and settings, builds the site,
+and calls `RunAsync`.
 
 ## Project structure
 

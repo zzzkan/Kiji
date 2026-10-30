@@ -3,11 +3,12 @@ using Kiji.Markdown;
 using Microsoft.Extensions.DependencyInjection;
 using PackageSite;
 
-var site = StaticSite.Create(args);
-site.Info = new() { Name = "Package consumer", BaseUrl = new Uri("https://example.test/kiji/") };
-site.UseServices(services => services.AddLocalization());
-site.UseMarkdownContent<Article>();
-site.AddPageParameters<ArticlePage>(services => services
+var builder = StaticSite.CreateBuilder(args);
+builder.SiteInfo = new() { Name = "Package consumer", BaseUrl = new Uri("https://example.test/kiji/") };
+builder.Services.AddLocalization();
+builder.AddMarkdownContent<Article>();
+builder.AddPageParameters<ArticlePage>(services => services
     .GetRequiredService<ContentDictionary<MarkdownContent<Article>>>()
     .Select(entry => new { Slug = Path.GetFileNameWithoutExtension(entry.Key), ContentKey = entry.Key }));
-return await site.RunAsync();
+
+return await builder.Build().RunAsync();

@@ -66,8 +66,8 @@ public static class BuildRunner
     /// </summary>
     public static async Task BuildSiteAsync(string root)
     {
-        await using var app = StaticSite.Create([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "synthetic")), typeof(BuildRunner).Assembly);
-        app.Info = new SiteInfo
+        var builder = StaticSite.CreateBuilder([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "synthetic")), typeof(BuildRunner).Assembly);
+        builder.SiteInfo = new SiteInfo
         {
             BaseUrl = new Uri("https://bench.example.com/"),
             Name = "Kiji Bench",
@@ -76,14 +76,14 @@ public static class BuildRunner
             Author = "bench",
         };
 
-        app.UseMarkdownContent<PostFrontMatter>(static options => options.Directory = "contents");
-        app.UseDefaultLayout<MainLayout>();
-        app.AddNotFoundPage<NotFoundPage>();
+        builder.AddMarkdownContent<PostFrontMatter>(static options => options.Directory = "contents");
+        builder.UseDefaultLayout<MainLayout>();
+        builder.UseNotFoundPage<NotFoundPage>();
 
-        app.AddPageParameters<PostPage>(static services => services
+        builder.AddPageParameters<PostPage>(static services => services
             .GetRequiredService<ContentDictionary<MarkdownContent<PostFrontMatter>>>()
             .Select(static post => new { Slug = PostSlug.From(post.Value.FileInfo), ContentKey = post.Key }));
-        app.AddRssFeed(static services => services
+        builder.AddRssFeed(static services => services
             .GetRequiredService<ContentDictionary<MarkdownContent<PostFrontMatter>>>()
             .OrderByDescending(static post => post.Value.FrontMatter.CreatedAt)
             .Select(static post => new FeedItem(
@@ -91,8 +91,9 @@ public static class BuildRunner
                 post.Value.FrontMatter.Description ?? string.Empty,
                 post.Value.FrontMatter.CreatedAt ?? DateTimeOffset.UnixEpoch,
                 RelativePath: $"blog/{PostSlug.From(post.Value.FileInfo)}/")));
-        app.AddSitemap();
+        builder.AddSitemap();
 
+        await using var app = builder.Build();
         await app.PublishAsync(Path.Combine(root, "dist"));
     }
 }

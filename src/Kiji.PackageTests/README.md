@@ -7,7 +7,7 @@ and HTTP on Windows and Linux.
 
 | Scenario | What it checks | Why a package test? |
 | --- | --- | --- |
-| Publish, edit, clean | Razor/Markdown/images, library assets, updated output, `KijiForce`, service-worker hashes, uncompressed default and opt-in compressed HTML, boundary warnings and cleanup | Exercises the shipped MSBuild targets, console output and native dependencies in a real consumer. |
+| Publish, edit, clean | Razor/Markdown/images, library assets, updated output, `KijiForce`, service-worker hashes, uncompressed default and opt-in compressed HTML, boundary warnings, logs that never fail a publish and cleanup | Exercises the shipped MSBuild targets, console output and native dependencies in a real consumer. |
 | Watch and reload (Razor/Web SDKs) | Markdown edits, additions and deletions under the documented `content/**` exclusion update article lists/routes; JS, Razor and scoped CSS edits reach the browser with one reload | Requires the SDK's `dotnet watch` integration and generated asset manifests; content outside the SDK's items must still reload exactly once. |
 | Windows cleanup | Cleanup waits for a held file lock to be released | Covers the workspace cleanup used after stopping the consumer's process tree. |
 

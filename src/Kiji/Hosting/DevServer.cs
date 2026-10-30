@@ -3,7 +3,9 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Kiji.Hosting;
@@ -46,8 +48,17 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
         // The slim host does not run hosting startups, so dotnet watch's browser
         // refresh middleware is not injected. Watch still applies code updates
         // and rebuilds scoped CSS; Kiji reloads after those outputs change.
-        var builder = WebApplication.CreateSlimBuilder(args);
-        builder.Logging.SetMinimumLevel(LogLevel.Warning);
+        var environment = app.ServiceProvider.GetRequiredService<IHostEnvironment>();
+        var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions
+        {
+            Args = args,
+            // Both hosts use the site's environment and project directory.
+            EnvironmentName = environment.EnvironmentName,
+            ContentRootPath = environment.ContentRootPath,
+        });
+        // The site's logging, so builder.Logging and the Logging section also apply to ASP.NET Core.
+        builder.Logging.ClearProviders();
+        builder.Services.AddSingleton(app.ServiceProvider.GetRequiredService<ILoggerFactory>());
         // This host always serves live source files, including outside Development.
         // Its own fallback renders pages and discovers new assets without stealing routes.
         builder.Configuration["ReloadStaticAssetsAtRuntime"] = "true";
@@ -71,7 +82,7 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
         // Must run before route matching, so the /_kiji/* endpoints below match a
         // prefixed request. WebApplication auto-inserts UseRouting ahead of all user
         // middleware when endpoints exist, unless the app calls UseRouting itself.
-        web.UseSiteBasePath(app.Info.BaseUrl.AbsolutePath);
+        web.UseSiteBasePath(app.SiteInfo.BaseUrl.AbsolutePath);
         web.UseRouting();
 
         web.UseWebSockets();
@@ -95,7 +106,7 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
         });
 
         var assets = options.AssetManifestPath is null ? null
-            : Assets.StaticAssetManifest.Load(options.AssetManifestPath, options.AssetEndpointsPath, app.Info.BaseUrl, includeIntegrity: false);
+            : Assets.StaticAssetManifest.Load(options.AssetManifestPath, options.AssetEndpointsPath, app.SiteInfo.BaseUrl, includeIntegrity: false);
         app.UseAssetResources(assets?.Resources ?? Assets.AssetResources.Empty);
         if (assets?.ContentRoots.Length > 0)
         {
@@ -161,7 +172,7 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
         await web.StartAsync(cancellationToken);
         ActiveServers.TryAdd(this, 0);
         _reporter.DevServerStarted(
-            new Uri(new Uri(web.Urls.First()), app.Info.BaseUrl.AbsolutePath),
+            new Uri(new Uri(web.Urls.First()), app.SiteInfo.BaseUrl.AbsolutePath),
             app.ContentRoots,
             assets?.ContentRoots.Length > 0);
 

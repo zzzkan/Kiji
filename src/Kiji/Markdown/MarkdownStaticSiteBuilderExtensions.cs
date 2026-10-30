@@ -1,37 +1,36 @@
 using Kiji.Assets;
-using Kiji.Generation;
 using Microsoft.Extensions.DependencyInjection;
 using YamlDotNet.Serialization;
 
 namespace Kiji.Markdown;
 
 /// <summary>
-/// Markdown content support for <see cref="StaticSite"/>.
+/// Markdown content support for <see cref="StaticSiteBuilder"/>.
 /// </summary>
-public static class MarkdownStaticSiteExtensions
+public static class MarkdownStaticSiteBuilderExtensions
 {
-    /// <summary>Uses Markdown files as a content dictionary with parsed front matter and lazily rendered bodies.</summary>
-    public static StaticSite UseMarkdownContent<TFrontMatter>(
-        this StaticSite app,
+    /// <summary>Adds Markdown files as a content dictionary with parsed front matter and lazily rendered bodies.</summary>
+    public static StaticSiteBuilder AddMarkdownContent<TFrontMatter>(
+        this StaticSiteBuilder builder,
         Action<MarkdownOptions>? configure = null)
         where TFrontMatter : class
     {
-        return app.UseMarkdownContent<TFrontMatter, MarkdownContent<TFrontMatter>>(
+        return builder.AddMarkdownContent<TFrontMatter, MarkdownContent<TFrontMatter>>(
             static content => content,
             configure);
     }
 
-    /// <summary>Uses Markdown files projected into a dictionary of custom models.</summary>
+    /// <summary>Adds Markdown files projected into a dictionary of custom models.</summary>
     /// <param name="select">Projects each parsed file independently; the result must not depend on other items.</param>
-    public static StaticSite UseMarkdownContent<TFrontMatter, TModel>(
-        this StaticSite app,
+    public static StaticSiteBuilder AddMarkdownContent<TFrontMatter, TModel>(
+        this StaticSiteBuilder builder,
         Func<MarkdownContent<TFrontMatter>, TModel> select,
         Action<MarkdownOptions>? configure = null)
         where TFrontMatter : class
         where TModel : class
     {
-        ArgumentNullException.ThrowIfNull(app);
-        app.EnsureConfigurable();
+        ArgumentNullException.ThrowIfNull(builder);
+        builder.EnsureConfigurable();
         ArgumentNullException.ThrowIfNull(select);
 
         var contentOptions = new MarkdownOptions();
@@ -50,13 +49,13 @@ public static class MarkdownStaticSiteExtensions
         // in the dev server; fresh hashes let it re-parse only changed files.
         var sourceCache = new MarkdownSourceCache<TFrontMatter>();
 
-        return app.RegisterContent(
+        return builder.RegisterContent(
             services =>
             {
                 var options = services.GetRequiredService<ResolvedSitePaths>();
                 var imageProcessor = services.GetRequiredService<IImageProcessor>();
                 var markdownProcessor = new MarkdownProcessor(options, imageProcessor, contentOptions);
-                var sourceDirectory = app.Paths.ResolveAgainstRoot(directory);
+                var sourceDirectory = builder.Paths.ResolveAgainstRoot(directory);
 
                 var sources = new MarkdownContentsBuilder<TFrontMatter>(
                     sourceDirectory,
@@ -66,7 +65,7 @@ public static class MarkdownStaticSiteExtensions
                         cancellationToken),
                     CreateFrontMatterDeserializer,
                     sourceCache,
-                    services.GetService<ContentFileRegistry>(),
+                    builder.Runtime.Files,
                     contentOptions.FileFilter)
                     .Build();
 

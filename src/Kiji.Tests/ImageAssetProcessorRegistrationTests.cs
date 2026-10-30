@@ -3,6 +3,7 @@ using Kiji.Markdown;
 using Kiji.Tests.TestSite.PageServices;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace Kiji.Tests;
@@ -20,18 +21,16 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
         File.WriteAllText(Path.Combine(_root, "content", "post.md"), "---\ntitle: Image\n---\n![custom](./source.png)");
         File.WriteAllText(Path.Combine(_root, "content", "source.png"), "custom processor input");
         var processor = new TrackingImageProcessor();
-        await using (var app = CreateApp())
+        var builder = CreateBuilder();
+        builder.Services.AddTransient<IImageProcessor>(_ => throw new InvalidOperationException("Superseded factory must not run."));
+        if (callerOwned) { builder.Services.AddSingleton<IImageProcessor>(processor); }
+        else { builder.Services.AddSingleton<IImageProcessor>(_ => processor); }
+        builder.Services.AddKeyedScoped<IImageProcessor>("other", (_, _) => throw new InvalidOperationException("Keyed factory must not run."));
+        builder.AddMarkdownContent<FrontMatter>();
+        builder.AddPageParameters<MarkdownPostTestPage>(provider => provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
+            .Select(post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
+        await using (var app = builder.Build())
         {
-            app.UseServices(services =>
-            {
-                services.AddTransient<IImageProcessor>(_ => throw new InvalidOperationException("Superseded factory must not run."));
-                if (callerOwned) { services.AddSingleton<IImageProcessor>(processor); }
-                else { services.AddSingleton<IImageProcessor>(_ => processor); }
-                services.AddKeyedScoped<IImageProcessor>("other", (_, _) => throw new InvalidOperationException("Keyed factory must not run."));
-            });
-            app.UseMarkdownContent<FrontMatter>();
-            app.AddPageParameters<MarkdownPostTestPage>(provider => provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
-                .Select(post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
             var output = Path.Combine(_root, "dist");
             await app.PublishAsync(output);
             Assert.Equal(1, processor.Calls);
@@ -50,36 +49,45 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
     [Theory]
     [InlineData(ServiceLifetime.Scoped)]
     [InlineData(ServiceLifetime.Transient)]
-    public async Task NonSingletonProcessor_FailsBeforeResolution(ServiceLifetime lifetime)
+    public void NonSingletonProcessor_FailsBeforeResolution(ServiceLifetime lifetime)
     {
-        await using var invalid = CreateApp();
-        invalid.UseServices(services => services.Add(new ServiceDescriptor(typeof(IImageProcessor),
-            _ => throw new InvalidOperationException("Factory must not run."), lifetime)));
-        var exception = Assert.Throws<InvalidOperationException>(() => invalid.CreateSnapshot());
+        var invalid = CreateBuilder();
+        invalid.Services.Add(new ServiceDescriptor(typeof(IImageProcessor),
+            _ => throw new InvalidOperationException("Factory must not run."), lifetime));
+        var exception = Assert.Throws<InvalidOperationException>(() => invalid.Build());
         Assert.Contains(nameof(IImageProcessor), exception.Message, StringComparison.Ordinal);
         Assert.Contains("Singleton", exception.Message, StringComparison.Ordinal);
         Assert.False(Directory.Exists(_root));
     }
 
     [Fact]
-    public async Task KeyedProcessor_CannotReplaceTheUnkeyedProcessor()
+    public void KeyedProcessor_CannotReplaceTheUnkeyedProcessor()
     {
-        await using var invalid = CreateApp();
-        invalid.UseServices(services =>
-        {
-            services.RemoveAll<IImageProcessor>();
-            services.AddKeyedSingleton<IImageProcessor, TrackingImageProcessor>("other");
-        });
-        var exception = Assert.Throws<InvalidOperationException>(() => invalid.CreateSnapshot());
+        var invalid = CreateBuilder();
+        invalid.Services.RemoveAll<IImageProcessor>();
+        invalid.Services.AddKeyedSingleton<IImageProcessor, TrackingImageProcessor>("other");
+        var exception = Assert.Throws<InvalidOperationException>(() => invalid.Build());
         Assert.Contains(nameof(IImageProcessor), exception.Message, StringComparison.Ordinal);
         Assert.Contains("unkeyed", exception.Message, StringComparison.Ordinal);
     }
 
-    private StaticSite CreateApp()
+    [Fact]
+    public async Task InvalidSettings_FailWhenTheSiteStartsBeforeAnyOutput()
     {
-        var app = TestSiteFactory.Create(new SiteExecutionPaths(_root));
-        app.Info = new SiteInfo { Name = "Images", BaseUrl = new Uri("https://example.test/") };
-        return app;
+        var builder = CreateBuilder(output: "dist");
+        builder.Services.Configure<ImageProcessorOptions>(static options => options.Quality = 101);
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() => builder.Build().RunAsync(CancellationToken.None));
+
+        Assert.Contains("ImageProcessorOptions.Quality", exception.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(Path.Combine(_root, "dist")));
+    }
+
+    private StaticSiteBuilder CreateBuilder(string? output = null)
+    {
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root),
+            name => name == "KIJI_OUTPUT" ? output : null);
+        builder.SiteInfo = new SiteInfo { Name = "Images", BaseUrl = new Uri("https://example.test/") };
+        return builder;
     }
 
     public void Dispose()

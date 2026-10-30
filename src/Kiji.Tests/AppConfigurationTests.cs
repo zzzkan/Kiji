@@ -11,43 +11,45 @@ public sealed class AppConfigurationTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"KijiConfiguration-{Guid.NewGuid():N}");
 
-    [Theory]
-    [InlineData("publish")]
-    [InlineData("dev")]
-    public async Task MissingSite_FailsBeforeCreatingOutput_AndCanBeCorrected(string entry)
+    [Fact]
+    public async Task Build_ResolvesLastAssignedSiteInfo()
     {
-        await using var app = TestSiteFactory.Create(new SiteExecutionPaths(_root));
-        var output = Path.Combine(_root, "output");
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        var finalInfo = TestArticleContents.CreateSiteInfo();
+        builder.SiteInfo = finalInfo;
+        await using var site = builder.Build();
+        Assert.Same(finalInfo, site.ServiceProvider.GetRequiredService<SiteInfo>());
+    }
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-        {
-            switch (entry)
-            {
-                case "publish": await app.PublishAsync(output); break;
-                case "dev": await app.ServeAsync(); break;
-            }
-        });
+    [Fact]
+    public async Task MissingSite_FailsBuildBeforeCreatingOutput_AndCanBeCorrected()
+    {
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
 
-        Assert.Contains("StaticSite.Info", exception.Message, StringComparison.Ordinal);
+        var exception = Assert.Throws<InvalidOperationException>(() => builder.Build());
+
+        Assert.Contains("StaticSiteBuilder.SiteInfo", exception.Message, StringComparison.Ordinal);
         Assert.False(Directory.Exists(_root));
-        Assert.Throws<InvalidOperationException>(() => app.Info);
-        app.Info = TestArticleContents.CreateSiteInfo();
-        app.UseServices(services => services.AddScoped<object>());
+        Assert.Throws<InvalidOperationException>(() => builder.SiteInfo);
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.Services.AddScoped<object>();
+        await using var site = builder.Build();
     }
 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Execution_FreezesConfiguration_AndLoadsContentOnlyAfterPathsSettle(bool serve)
+    public async Task Build_FreezesRegistrations_AndLoadsContentOnlyAfterPathsSettle(bool serve)
     {
-        await using var app = TestSiteFactory.Create(new SiteExecutionPaths(_root));
-        app.Info = TestArticleContents.CreateSiteInfo();
-        app.UseServices(services => services.AddScoped<object>());
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.Services.AddScoped<object>();
         var loads = 0;
         var routeCalls = 0;
         string? observedOutput = null;
         string? observedCache = null;
-        app.UseContentSource<Post>(provider =>
+        builder.AddContentSource<Post>(provider =>
         {
             loads++;
             observedOutput = provider.GetRequiredService<ResolvedSitePaths>().OutputDirectory;
@@ -55,14 +57,16 @@ public sealed class AppConfigurationTests : IDisposable
             Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<object>());
             return [];
         });
-        TestArticleContents.MapSite(app);
-        app.AddPageParameters<PostPage>(provider =>
+        TestArticleContents.MapSite(builder);
+        builder.AddPageParameters<PostPage>(provider =>
         {
             routeCalls++;
             _ = provider.GetRequiredService<ContentDictionary<Post>>().Count;
             return [];
         });
 
+        await using var app = builder.Build();
+        AssertFrozen();
         Assert.Equal(0, loads);
         Assert.Equal(0, routeCalls);
         Assert.False(Directory.Exists(_root));
@@ -75,14 +79,12 @@ public sealed class AppConfigurationTests : IDisposable
             {
                 using var client = new HttpClient();
                 await client.GetStringAsync(web.Urls.First());
-                AssertFrozen();
                 await web.StopAsync();
             }
         }
         else
         {
             await app.PublishAsync(output);
-            AssertFrozen();
             await app.PublishAsync(output);
             Assert.Equal(2, loads);
         }
@@ -95,16 +97,17 @@ public sealed class AppConfigurationTests : IDisposable
 
         void AssertFrozen()
         {
-            Assert.Throws<InvalidOperationException>(() => app.UseServices(services => services.AddScoped<object>()));
-            Assert.Throws<InvalidOperationException>(() => app.Info = TestArticleContents.CreateSiteInfo());
-            Assert.Throws<InvalidOperationException>(() => app.UseContentSource<object>(static _ => []));
-            Assert.Throws<InvalidOperationException>(() => app.UseMarkdownContent<FrontMatter>(
-                _ => throw new Xunit.Sdk.XunitException("Configuration callback must not run after execution starts.")));
-            Assert.Throws<InvalidOperationException>(() => app.AddPageAssembly(typeof(PostPage).Assembly));
-            Assert.Throws<InvalidOperationException>(() => app.UseDefaultLayout<MainLayout>());
-            Assert.Throws<InvalidOperationException>(() => app.AddNotFoundPage<NotFoundPage>());
-            Assert.Throws<InvalidOperationException>(() => app.AddPageParameters<PostPage>(static _ => []));
-            Assert.Throws<InvalidOperationException>(() => app.AddSitemap());
+            Assert.Throws<InvalidOperationException>(() => builder.Build());
+            Assert.Throws<InvalidOperationException>(() => builder.Services.AddScoped<object>());
+            Assert.Throws<InvalidOperationException>(() => builder.SiteInfo = TestArticleContents.CreateSiteInfo());
+            Assert.Throws<InvalidOperationException>(() => builder.AddContentSource<object>(static _ => []));
+            Assert.Throws<InvalidOperationException>(() => builder.AddMarkdownContent<FrontMatter>(
+                _ => throw new Xunit.Sdk.XunitException("Configuration callback must not run after the site is built.")));
+            Assert.Throws<InvalidOperationException>(() => builder.AddPageAssembly(typeof(PostPage).Assembly));
+            Assert.Throws<InvalidOperationException>(() => builder.UseDefaultLayout<MainLayout>());
+            Assert.Throws<InvalidOperationException>(() => builder.UseNotFoundPage<NotFoundPage>());
+            Assert.Throws<InvalidOperationException>(() => builder.AddPageParameters<PostPage>(static _ => []));
+            Assert.Throws<InvalidOperationException>(() => builder.AddSitemap());
         }
     }
 

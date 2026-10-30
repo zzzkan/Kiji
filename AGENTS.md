@@ -25,9 +25,17 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
 
 ## Design
 
-- Build with Create -> Add*/Use* -> RunAsync. Kiji parses no command line:
-  watch serves, publish generates, clean cleans. MSBuild owns KijiForce/KijiVerbose;
-  ASP.NET Core configuration owns the dev server address. Prefer conventions to flags.
+- Follow the .NET host builder shape: CreateBuilder -> builder.Services/Add*/Use* -> Build
+  -> RunAsync. Every registration lives on StaticSiteBuilder; StaticSite only runs. Add* adds,
+  Use* sets a single value. Kiji adds no command-line options:
+  watch serves, publish generates, clean cleans. MSBuild owns KijiForce;
+  ASP.NET Core configuration owns the dev server address. Serving reads only the standard
+  --environment host argument. Prefer conventions to flags.
+- All log output goes through the site's ILogger (Kiji's own under Kiji.Build), except the dev
+  server's watch-style status lines. Publish uses the standard console formatter; MSBuild
+  receives every line as a high-importance message and ignores its error/warning format.
+  Only the exit code fails a publish. Log levels come from the Logging section, not MSBuild
+  properties.
 - Dev and publish share StaticSite.RenderPageAsync. Never emit stale output;
   ambiguous incremental state requires rendering.
 - One type per file. Library components and library test components are hand-written ComponentBase classes;
@@ -45,33 +53,47 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   require AddPageParameters; an empty sequence generates no pages. Each entry is a whole
   parameter set rendered at every parameterized route; fixed routes beside them keep default
   rendering, while components with only fixed routes receive the sets. Supplied values must
-  name writable [Parameter] properties; do not enforce EditorRequired. AddNotFoundPage still
+  name writable [Parameter] properties; do not enforce EditorRequired. UseNotFoundPage still
   requires its own route and a registered page assembly.
 - MSBuild supplies the project directory through runtimeconfig; missing metadata is an error.
   Content becomes accessible through factories/loaders/artifacts only after execution
-  paths settle. Do not expose a provider or content dictionary on StaticSite.
+  paths settle. Do not expose a provider or content dictionary on StaticSite. IHostEnvironment
+  is read-only: its name selects the configuration files at creation. Publish takes the name
+  only from DOTNET_ENVIRONMENT; serving follows WebApplicationBuilder's order (--environment,
+  DOTNET_ENVIRONMENT, ASPNETCORE_ENVIRONMENT). Default configuration sources stay
+  project-local (no environment variables, command line or user secrets, which differ between
+  machines). The dev server uses standard ASP.NET Core configuration with the same project
+  directory and environment. Per-key reads are not tracked, so the environment name and all
+  configuration outside the Logging section are in the publish options fingerprint.
 - The dev server enforces BaseUrl's path prefix and uses `.kiji/dev-site`.
   Only `.kiji/cache` is portable; planning creates no output directories.
-- UseServices configures standard DI once before provider construction; then the
-  collection is read-only. Each render owns a scope. Loaders, page parameter/feed
+- StaticSiteBuilder.Services is standard DI; Build validates it, makes it read-only and
+  builds the provider. Kiji's defaults and managed services are registered when the builder
+  is created. Each render owns a scope. Loaders, page parameter/feed
   factories and artifacts use the root provider and cannot resolve scoped services. Validate
-  Kiji-owned registrations after callbacks. Derived indexes use UseContentSource;
+  Kiji-owned registrations in Build. Derived indexes use AddContentSource;
   content reload does not recreate singletons. Use AlwaysRender on components reading
-  untracked external state. KijiForce refreshes all pages for a whole publish.
+  untracked external state. KijiForce refreshes all pages for a whole publish. Instantiating
+  any ErrorBoundaryBase component prevents HTML reuse for that page, even when healthy. The
+  default boundary logger reports exceptions as warnings; logging never controls
+  cacheability or the publish result. Use an unhandled exception for a build gate.
 - Use Blazor's PageTitle and HeadContent; KijiRoot supplies the single HeadOutlet.
   Each page gets a fresh renderer/dispatcher, isolating the framework's section state.
   HeadContent replaces earlier providers rather than appending; compose shared tags
   inside the page's HeadContent. Await quiescence before serializing the document.
-- Customize IImageProcessor through UseServices. The last unkeyed registration must
+- Customize IImageProcessor through builder.Services. The last unkeyed registration must
   be a singleton; standard DI ownership applies. It must support concurrency and retain
   no page/content state. Reload does not recreate it. Include external configuration
   and encoder versions in cache identities; HTML reuse controls do not clear image caches.
+  Every ImageProcessorOptions setting must stay in its CacheIdentity. Options are validated when
+  the site starts running, never in Build.
 
 Do not reintroduce evaluated alternatives: pooled HtmlRenderer (root/scope state cannot
 reset), RouteView (PageView owns Kiji's layout resolution), AOT/trimming (reflection),
 source-generated page discovery (cached scanning suffices), IBufferWriter rendering
 (HtmlRootComponent exposes TextWriter), content-addressed image URLs (break page bundles),
-or incremental RSS/sitemap (depend on all metadata and are cheap to regenerate).
+incremental RSS/sitemap (depend on all metadata and are cheap to regenerate), or a frozen
+configuration snapshot (default sources do not reload during a publish).
 
 ## Skills
 

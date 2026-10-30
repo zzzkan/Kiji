@@ -10,13 +10,11 @@ namespace Kiji.Rendering;
 
 internal sealed class ComponentRenderer(IServiceProvider services)
 {
+    /// <summary>Registers what the renderer needs. Logging comes from the host.</summary>
     internal static void AddComponentRenderingServices(IServiceCollection services)
     {
-        // MSBuild suppresses ordinary stdout at publish's default verbosity.
-        services.AddLogging(logging => logging
-            .AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Warning)
-            .SetMinimumLevel(LogLevel.Warning));
         services.AddScoped<IErrorBoundaryLogger, StaticErrorBoundaryLogger>();
+        // HtmlRenderer resolves its encoder from services; the default one escapes all non-ASCII text.
         services.AddSingleton(_ => HtmlEncoder.Create(UnicodeRanges.All));
         services.AddScoped(static provider =>
         {

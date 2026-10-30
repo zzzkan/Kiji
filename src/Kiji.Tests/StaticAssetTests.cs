@@ -64,7 +64,7 @@ public sealed class StaticAssetTests : IDisposable
     {
         var log = new AssetRenderLog();
         await using var site = CreateSite(log);
-        TestSiteAssets.Bind(site, Path.Combine(_root, "wwwroot"));
+        TestSiteAssets.Bind(site.Paths, Path.Combine(_root, "wwwroot"));
         var output = Path.Combine(_root, "dist");
         await site.PublishAsync(output);
         await site.PublishAsync(output);
@@ -102,12 +102,12 @@ public sealed class StaticAssetTests : IDisposable
 
     private StaticSite CreateSite(AssetRenderLog log, string path = "app.js")
     {
-        var site = TestSiteFactory.Create(new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")));
-        site.Info = TestArticleContents.CreateSiteInfoWithBasePath();
-        site.UseContentSource<AssetRenderLog>("render-log", _ => [new("log", log, "stable")]);
-        site.AddPageParameters<AssetPage>(_ => PageKinds
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")));
+        builder.SiteInfo = TestArticleContents.CreateSiteInfoWithBasePath();
+        builder.AddContentSource<AssetRenderLog>("render-log", _ => [new("log", log, "stable")]);
+        builder.AddPageParameters<AssetPage>(_ => PageKinds
             .Select(kind => new { Kind = kind, Path = path }));
-        return site;
+        return builder.Build();
     }
 
     private void WriteAssets(StaticSite site, string path, string hashed)
@@ -116,7 +116,7 @@ public sealed class StaticAssetTests : IDisposable
         var source = Path.Combine(directory, path);
         Directory.CreateDirectory(Path.GetDirectoryName(source)!);
         File.WriteAllText(source, "asset bytes " + hashed);
-        TestSiteAssets.Bind(site, directory);
+        TestSiteAssets.Bind(site.Paths, directory);
         var endpointsPath = site.Paths.AssetManifestBasePath + ".staticwebassets.publish.endpoints.json";
         File.WriteAllText(endpointsPath, JsonSerializer.Serialize(new
         {

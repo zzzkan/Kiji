@@ -83,7 +83,7 @@ build command and `dist` as the output directory. The build environment needs th
 SDK; otherwise, publish in your own CI and upload `dist/`.
 
 Check that the host serves `about/index.html` for `/about/` and uses `404.html`, written by
-`AddNotFoundPage`, for unmatched paths.
+`UseNotFoundPage`, for unmatched paths.
 
 ## Compression
 

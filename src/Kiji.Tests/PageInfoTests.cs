@@ -16,8 +16,9 @@ public sealed class PageInfoTests : IDisposable
     public async Task RenderPage_ProvidesPublishedUrlForStandardUriConversions(
         string baseUrl, string key, string escapedBasePath, string escapedKey)
     {
-        await using var app = CreateApp(baseUrl);
-        app.AddPageParameters<PageInfoTestPage>(_ => [new { Key = key }]);
+        var builder = CreateBuilder(baseUrl);
+        builder.AddPageParameters<PageInfoTestPage>(_ => [new { Key = key }]);
+        await using var app = builder.Build();
         var request = Assert.Single(app.CreateSnapshot().Pages);
 
         var html = await app.RenderPageAsync(request, CancellationToken.None);
@@ -40,30 +41,30 @@ public sealed class PageInfoTests : IDisposable
     [InlineData("artifact")]
     public async Task PageInfo_CannotBeResolvedOutsidePage(string consumer)
     {
-        await using var app = CreateApp("https://example.com/");
+        var builder = CreateBuilder("https://example.com/");
         switch (consumer)
         {
             case "route":
-                app.AddPageParameters<PageInfoTestPage>(provider =>
+                builder.AddPageParameters<PageInfoTestPage>(provider =>
                 {
                     _ = provider.GetRequiredService<PageInfo>();
                     return [new { Key = "test" }];
                 });
                 break;
             case "content":
-                app.UseContentSource<PageInfo>(provider => [provider.GetRequiredService<PageInfo>()]);
-                app.AddPageParameters<PageInfoTestPage>(provider => provider.GetRequiredService<ContentDictionary<PageInfo>>()
+                builder.AddContentSource<PageInfo>(provider => [provider.GetRequiredService<PageInfo>()]);
+                builder.AddPageParameters<PageInfoTestPage>(provider => provider.GetRequiredService<ContentDictionary<PageInfo>>()
                     .Select(entry => new { Key = entry.Key }));
                 break;
             case "feed":
-                app.AddRssFeed(provider =>
+                builder.AddRssFeed(provider =>
                 {
                     _ = provider.GetRequiredService<PageInfo>();
                     return [];
                 });
                 break;
             case "artifact":
-                app.AddArtifact("page.txt", static (_, context, _) =>
+                builder.AddArtifact("page.txt", static (_, context, _) =>
                 {
                     _ = context.Services.GetRequiredService<PageInfo>();
                     return Task.CompletedTask;
@@ -71,16 +72,17 @@ public sealed class PageInfoTests : IDisposable
                 break;
         }
 
+        await using var app = builder.Build();
         var exception = await Assert.ThrowsAnyAsync<Exception>(() => app.PublishAsync(Path.Combine(_root, "dist")));
         Assert.Contains("scoped service", exception.ToString(), StringComparison.OrdinalIgnoreCase);
         Assert.Contains(nameof(PageInfo), exception.ToString(), StringComparison.Ordinal);
     }
 
-    private StaticSite CreateApp(string baseUrl)
+    private StaticSiteBuilder CreateBuilder(string baseUrl)
     {
-        var app = TestSiteFactory.Create(new SiteExecutionPaths(_root));
-        app.Info = new SiteInfo { BaseUrl = new Uri(baseUrl), Name = "Page info" };
-        return app;
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
+        builder.SiteInfo = new SiteInfo { BaseUrl = new Uri(baseUrl), Name = "Page info" };
+        return builder;
     }
 
     public void Dispose()

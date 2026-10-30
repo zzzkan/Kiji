@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Kiji.Rendering;
 
-// Match static SSR: boundaries handle the exception and log it as a warning.
+// Report boundary exceptions; component activation owns the page's reuse policy.
 internal sealed partial class StaticErrorBoundaryLogger(ILogger<ErrorBoundary> logger) : IErrorBoundaryLogger
 {
     public ValueTask LogErrorAsync(Exception exception)

@@ -83,14 +83,10 @@
   </PropertyGroup>
 
   <!-- ==============================================================
-       Where the site is staged, and the two execution-control knobs
+       Where the site is staged, and the execution-control knob
        ============================================================== -->
   <PropertyGroup Condition="'$(_KijiIsSiteApp)' == 'true'">
     <KijiForce Condition="'$(KijiForce)' == ''">false</KijiForce>
-    <KijiVerbose Condition="'$(KijiVerbose)' == ''">false</KijiVerbose>
-
-    <_KijiGeneratorOutputImportance>normal</_KijiGeneratorOutputImportance>
-    <_KijiGeneratorOutputImportance Condition="'$(KijiVerbose)' == 'true'">high</_KijiGeneratorOutputImportance>
 
     <_KijiDotNetHost>$(DOTNET_HOST_PATH)</_KijiDotNetHost>
     <_KijiDotNetHost Condition="'$(_KijiDotNetHost)' == ''">dotnet</_KijiDotNetHost>
@@ -189,11 +185,15 @@
     <MakeDir Directories="$(_KijiStagingDir)" />
 
     <!-- Run the build output with its runtimeconfig and static asset manifests.
-         The final publish directory contains only the generated site. -->
+         The final publish directory contains only the generated site.
+         The site's console logs are high-importance messages. Only the exit code fails the
+         publish: a log line that looks like an MSBuild error or warning stays a message,
+         because the HTML and cache it came from are already saved and would be reused. -->
     <Exec Command="&quot;$(_KijiDotNetHost)&quot; exec &quot;$(TargetPath)&quot;"
           WorkingDirectory="$(MSBuildProjectDirectory)"
-          EnvironmentVariables="KIJI_OUTPUT=$(_KijiStagingDir);KIJI_FORCE=$(KijiForce);KIJI_VERBOSE=$(KijiVerbose)"
-          StandardOutputImportance="$(_KijiGeneratorOutputImportance)"
+          EnvironmentVariables="KIJI_OUTPUT=$(_KijiStagingDir);KIJI_FORCE=$(KijiForce)"
+          IgnoreStandardErrorWarningFormat="true"
+          StandardOutputImportance="high"
           StandardErrorImportance="high" />
 
     <!-- Evaluated after the Exec above, because elements inside a target run in order and an

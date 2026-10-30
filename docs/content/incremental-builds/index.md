@@ -16,10 +16,16 @@ nothing it depends on has changed, and always produce a complete site.
 | Page parameters change | Render affected pages. |
 | A local image changes | Render pages that use it and update its variants. |
 | A static asset changes | Update the asset and pages that link it through `Assets` or `ImportMap`. |
-| Code, packages, the .NET runtime, or site settings change | Render all pages. |
+| Code, packages, the .NET runtime, `SiteInfo`, the environment name, or [configuration](../api-reference/#configuration) change | Render all pages. |
 | A page uses an `AlwaysRender` component | Render that page on every publish. |
+| A page renders an `ErrorBoundaryBase` component | Render that page on every publish, even when healthy. |
 
 Feeds, sitemaps, and custom artifacts are regenerated on every publish.
+
+A boundary in a shared layout makes every page using that layout render on every publish.
+
+Reusing HTML does not replay its log messages, and logs never fail a publish; see
+[Logging](../api-reference/#logging).
 
 ## Page dependencies
 
@@ -35,9 +41,10 @@ see the [reusable parameter types](../api-reference/#pages).
 ## Render pages that use external data
 
 Kiji tracks reads through `ContentDictionary<T>`. To track other data, load it with
-[UseContentSource](../api-reference/#content-sources-and-contentdictionary) and supply
-digests. Kiji cannot see other reads, such as files, HTTP, environment variables, the
-clock, or service state. Mark components that render such values:
+[AddContentSource](../api-reference/#content-sources-and-contentdictionary) and supply
+digests. Configuration changes already render every page. Kiji cannot see other reads,
+such as files, HTTP, environment variables, the clock, or service state. Mark components
+that render such values:
 
 ```razor
 @attribute [AlwaysRender]
@@ -50,7 +57,7 @@ publish. If external state decides whether a child component appears, mark the p
 
 `AlwaysRender` only re-renders HTML; it does not refresh data a service has cached, and
 content reloads do not recreate singletons. Build shared derived data with
-`UseContentSource` instead. During development, restart `dotnet watch` when external data
+`AddContentSource` instead. During development, restart `dotnet watch` when external data
 changes.
 
 ## Reset and inspect
@@ -59,12 +66,15 @@ changes.
 # Render every page once; later publishes reuse the results.
 dotnet publish -p:KijiForce=true
 
-# Show per-file details. --tl:off is needed because the default terminal display hides them.
-dotnet publish -p:KijiVerbose=true --tl:off
+# Show Kiji's summary in a terminal.
+dotnet publish -v d
 
 # Remove build output and the cache.
 dotnet clean
 ```
+
+For a message per page, set `Kiji.Build` to `Debug` in the
+[Logging](../api-reference/#logging) section. Changing that section keeps the cache.
 
 Kiji keeps its publish cache in `.kiji/cache` and development output in `.kiji/dev-site`.
 Saving the cache between CI runs often does not pay off, because transferring it takes time

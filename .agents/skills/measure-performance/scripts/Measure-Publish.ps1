@@ -77,6 +77,13 @@ function Get-FileStates([string] $path) {
     return $states
 }
 
+# Older packages compress under obj/.../compressed, current ones under obj/.../kiji/compressed.
+function Get-CompressedStates([string] $path) {
+    $states = Get-FileStates $path
+    foreach ($key in @($states.Keys)) { if ([IO.Path]::GetExtension($key) -notin @('.gz', '.br')) { $states.Remove($key) } }
+    return $states
+}
+
 function Get-WriteCount($before, $after) {
     $count = 0
     foreach ($key in $after.Keys) {
@@ -222,9 +229,9 @@ function Invoke-Publish([string] $variant, [string] $scenario, [int] $round) {
         [IO.File]::WriteAllText((Join-Path $site 'contents/post-00000/index.md'), $originalPost + "`n`nEdit $letter.`n")
     }
     $dist = Join-Path $site 'dist'
-    $compressionDir = Join-Path $site 'obj/Release/net10.0/compressed'
+    $compressionDir = Join-Path $site 'obj/Release/net10.0'
     $before = Get-FileStates $dist
-    $compressionBefore = Get-FileStates $compressionDir
+    $compressionBefore = Get-CompressedStates $compressionDir
     $prefix = Join-Path $root "$variant-$scenario-$round"
     $arguments = @('publish', $site, '-c', 'Release', '--no-restore', '-v:minimal', "-logger:Kiji.Performance.PublishTimingLogger,$loggerDll;$prefix.msbuild.json")
     $arguments += @(Get-Properties $variant)
@@ -238,7 +245,7 @@ function Invoke-Publish([string] $variant, [string] $scenario, [int] $round) {
     $categories = $msbuild.ExclusiveMilliseconds | ConvertTo-Json | ConvertFrom-Json -AsHashtable
     $categories['OtherPublish'] = $elapsed - $msbuild.AccountedMilliseconds
     $after = Get-FileStates $dist
-    $compressionAfter = Get-FileStates $compressionDir
+    $compressionAfter = Get-CompressedStates $compressionDir
     $outputKinds = foreach ($kind in @('plain', '.gz', '.br')) {
         $files = @($after.Keys | Where-Object { $ext=[IO.Path]::GetExtension($_); if ($kind -eq 'plain') { $ext -notin @('.gz','.br') } else { $ext -eq $kind } })
         $bytes = 0L

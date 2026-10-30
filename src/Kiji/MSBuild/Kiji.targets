@@ -1,46 +1,13 @@
-<!--
-  Kiji.targets — makes `dotnet publish` emit the generated site and nothing else.
-
-  A Kiji site is declared in C#, so generating it means running the site's own assembly.
-  That makes the app a build tool, not a deliverable: these targets run it, add its output
-  to the SDK static asset graph, and publish the resolved assets, so the directory holds the site alone —
-  no assemblies, no apphost, no deps.json.
-
-  Shipped in the Kiji package at build/Kiji.targets, so a direct PackageReference imports it.
-  Deliberately not buildTransitive: that would also flow into every project that merely
-  references a Kiji site, starting with the site's own test project, which is an Exe too and
-  would try to generate a site when published.
-
-  Projects that reference Kiji by ProjectReference get none of this automatically and import
-  the file by hand, as the last element of the project.
--->
 <Project>
-  <!-- ==============================================================
-       Does this project host a site?
-       ============================================================== -->
   <PropertyGroup>
-    <!-- Test projects are Exe too, and each test stack advertises itself differently:
-         Microsoft.NET.Test.Sdk sets IsTestProject, xunit.v3 sets TestProject, and the
-         Microsoft.Testing.Platform entry point sets IsTestingPlatformApplication. Check
-         all three; a false negative here would publish a test project as a site. -->
-    <_KijiIsTestProject Condition="'$(IsTestProject)' == 'true' or
-                                   '$(TestProject)' == 'true' or
-                                   '$(IsTestingPlatformApplication)' == 'true'">true</_KijiIsTestProject>
-
-    <!-- The outer pass of a cross-targeting build has no $(TargetPath) to run. The inner
-         builds do the work. -->
-    <_KijiIsOuterBuild Condition="'$(TargetFrameworks)' != '' and '$(TargetFramework)' == ''">true</_KijiIsOuterBuild>
-
-    <_KijiIsSiteApp>false</_KijiIsSiteApp>
+    <!-- Test projects advertise themselves through different SDK properties; only inner builds can run. -->
     <_KijiIsSiteApp Condition="'$(OutputType)' == 'Exe' and
-                               '$(_KijiIsTestProject)' != 'true' and
-                               '$(_KijiIsOuterBuild)' != 'true'">true</_KijiIsSiteApp>
-
+                               '$(IsTestProject)' != 'true' and '$(TestProject)' != 'true' and
+                               '$(IsTestingPlatformApplication)' != 'true' and
+                               ('$(TargetFrameworks)' == '' or '$(TargetFramework)' != '')">true</_KijiIsSiteApp>
   </PropertyGroup>
 
-  <!-- Release sites are build tools whose deliverable is HTML. Keep their MVIDs
-       stable across checkouts and content-only commits, including build followed
-       by a publish without building. Debug builds, libraries, and tests retain SDK defaults. -->
+  <!-- Stable Release site MVIDs allow cache reuse across checkouts. -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release' and '$(_KijiIsSiteApp)' == 'true'">
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
@@ -49,32 +16,16 @@
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <PathMap Condition="'$(PathMap)' != ''">$(PathMap),</PathMap>
     <PathMap>$(PathMap)$(MSBuildProjectDirectory)=/_/source</PathMap>
-  </PropertyGroup>
-
-  <!-- NuGet imports can follow Common.targets' PDB output calculation. Reconcile
-       that calculation with DebugType so CoreCompile does not wait for a PDB it
-       will never emit. Explicit project imports can precede Common.targets; in
-       that order the SDK derives the same values itself. Honor global DebugType. -->
-  <PropertyGroup Condition="'$(Configuration)' == 'Release' and '$(_KijiIsSiteApp)' == 'true' and '$(DebugType)' == 'none'">
-    <_DebugSymbolsProduced>false</_DebugSymbolsProduced>
+    <!-- NuGet imports may follow the SDK PDB output calculation; honor global DebugType. -->
+    <_DebugSymbolsProduced Condition="'$(DebugType)' == 'none'">false</_DebugSymbolsProduced>
   </PropertyGroup>
   <ItemGroup Condition="'$(Configuration)' == 'Release' and '$(_KijiIsSiteApp)' == 'true' and '$(DebugType)' == 'none'">
     <_DebugSymbolsIntermediatePath Remove="@(_DebugSymbolsIntermediatePath)" />
     <_DebugSymbolsOutputPath Remove="@(_DebugSymbolsOutputPath)" />
   </ItemGroup>
 
-  <!-- ==============================================================
-       Default publish output
-       ============================================================== -->
-  <PropertyGroup Condition="'$(_KijiIsSiteApp)' == 'true' and
-                            '$(UseArtifactsOutput)' != 'true' and
-                            '$(PublishDirName)' == 'publish'">
-    <!-- Package targets are imported after the project and after the SDK has computed its
-         ordinary publish directory. Change only that exact SDK default: an explicit
-         PublishDir in the project or through `dotnet publish -o` remains untouched, as does
-         the opt-in artifacts output layout. The RID is already part of OutputPath unless
-         AppendRuntimeIdentifierToOutputPath was disabled, which is the SDK's one special
-         case when it constructs PublishDir. -->
+  <PropertyGroup Condition="'$(_KijiIsSiteApp)' == 'true' and '$(UseArtifactsOutput)' != 'true' and '$(PublishDirName)' == 'publish'">
+    <!-- Replace only the SDK default; preserve explicit publish directories and artifacts layout. -->
     <_KijiSdkDefaultPublishDir Condition="'$(AppendRuntimeIdentifierToOutputPath)' != 'true' and
                                                '$(RuntimeIdentifier)' != '' and
                                                '$(_UsingDefaultRuntimeIdentifier)' != 'true'">$(OutputPath)$(RuntimeIdentifier)$([System.IO.Path]::DirectorySeparatorChar)$(PublishDirName)$([System.IO.Path]::DirectorySeparatorChar)</_KijiSdkDefaultPublishDir>
@@ -82,173 +33,130 @@
     <PublishDir Condition="'$(PublishDir)' == '$(_KijiSdkDefaultPublishDir)'">$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', 'dist'))</PublishDir>
   </PropertyGroup>
 
-  <!-- ==============================================================
-       Where the site is staged, and the execution-control knob
-       ============================================================== -->
   <PropertyGroup Condition="'$(_KijiIsSiteApp)' == 'true'">
-    <KijiForce Condition="'$(KijiForce)' == ''">false</KijiForce>
-
     <_KijiDotNetHost>$(DOTNET_HOST_PATH)</_KijiDotNetHost>
     <_KijiDotNetHost Condition="'$(_KijiDotNetHost)' == ''">dotnet</_KijiDotNetHost>
+    <StaticWebAssetsEnabled Condition="'$(StaticWebAssetsEnabled)' == ''">true</StaticWebAssetsEnabled>
+    <!-- Compression is opt-in. Kiji compresses the site itself, so the SDK's formats stay empty. -->
+    <CompressionEnabled Condition="'$(CompressionEnabled)' == ''">false</CompressionEnabled>
+    <EnableDefaultCompressionFormats Condition="'$(EnableDefaultCompressionFormats)' == ''">false</EnableDefaultCompressionFormats>
+    <_KijiConfiguredStaticWebAssetBasePath>$(StaticWebAssetBasePath)</_KijiConfiguredStaticWebAssetBasePath>
+    <!-- The site uses root paths; libraries retain their configured paths. -->
+    <StaticWebAssetBasePath>/</StaticWebAssetBasePath>
+    <CustomAfterStaticWebAssetsSdkTargets>$(MSBuildThisFileDirectory)Kiji.StaticWebAssets.targets</CustomAfterStaticWebAssetsSdkTargets>
+
+    <!-- Exclude project-local output, but keep nested input directories. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);dist/**</DefaultItemExcludes>
   </PropertyGroup>
 
-  <!-- Runtime-only metadata keeps checkout paths out of the compiler's code identity. -->
+  <!-- Runtime metadata keeps checkout paths out of code identity. -->
   <ItemGroup Condition="'$(_KijiIsSiteApp)' == 'true'">
     <RuntimeHostConfigurationOption Include="Kiji.ProjectDirectory" Value="$(MSBuildProjectDirectory)" />
   </ItemGroup>
 
-  <!-- ==============================================================
-       Hand static assets to Kiji
-       ============================================================== -->
-  <PropertyGroup Condition="'$(_KijiIsSiteApp)' == 'true'">
-    <StaticWebAssetsEnabled Condition="'$(StaticWebAssetsEnabled)' == ''">true</StaticWebAssetsEnabled>
-    <!-- Static hosts compress responses themselves, so .gz/.br copies are opt-in for
-         servers that send precompressed files. Build/watch skips compression.
-         A project or command-line setting remains authoritative. Set this before the
-         SDK, which otherwise enables compression. -->
-    <CompressionEnabled Condition="'$(CompressionEnabled)' == ''">false</CompressionEnabled>
-    <DisableBuildCompression Condition="'$(DisableBuildCompression)' == ''">true</DisableBuildCompression>
-    <_KijiConfiguredStaticWebAssetBasePath>$(StaticWebAssetBasePath)</_KijiConfiguredStaticWebAssetBasePath>
-    <!-- The site is published at its root, including SDK-generated service-worker
-         URLs. Referenced libraries retain their own base paths. -->
-    <StaticWebAssetBasePath>/</StaticWebAssetBasePath>
-    <CustomAfterStaticWebAssetsSdkTargets>$(MSBuildThisFileDirectory)Kiji.StaticWebAssets.targets</CustomAfterStaticWebAssetsSdkTargets>
-
-    <!-- The publish list is replaced wholesale below, so these only save the work of
-         staging files that are about to be dropped. Note that they do not cover the
-         apphost, which is one reason the replacement is wholesale. -->
-    <CopyBuildOutputToPublishDirectory Condition="'$(CopyBuildOutputToPublishDirectory)' == ''">false</CopyBuildOutputToPublishDirectory>
-    <CopyOutputSymbolsToPublishDirectory Condition="'$(CopyOutputSymbolsToPublishDirectory)' == ''">false</CopyOutputSymbolsToPublishDirectory>
-
-    <!-- Deliberately NOT set: GenerateDependencyFile and GenerateRuntimeConfigurationFiles.
-         The generator runs out of bin and needs both files to start. -->
-  </PropertyGroup>
-
-  <!-- ==============================================================
-       Keep published output out of SDK evaluation
-       ============================================================== -->
   <Target Name="KijiValidateAssetSdk" BeforeTargets="PrepareForBuild;KijiGenerateSite"
           Condition="'$(_KijiIsSiteApp)' == 'true'">
     <Error Condition="'$(UsingMicrosoftNETSdkRazor)' != 'true'" Code="KIJI1003"
            Text="Kiji sites require Microsoft.NET.Sdk.Razor (or Microsoft.NET.Sdk.Web) to resolve CSS isolation and static web assets." />
     <Error Condition="'$(StaticWebAssetsEnabled)' != 'true'" Code="KIJI1003"
            Text="Kiji sites require StaticWebAssetsEnabled=true." />
+    <Error Condition="'$(_KijiConfiguredStaticWebAssetBasePath)' != '' and '$(_KijiConfiguredStaticWebAssetBasePath)' != '/'"
+           Code="KIJI1004" Text="Set SiteInfo.BaseUrl to host a Kiji site under a path prefix. StaticWebAssetBasePath is supported on libraries, not on the site project." />
   </Target>
 
-  <PropertyGroup Condition="'$(_KijiIsSiteApp)' == 'true'">
-    <!-- dist is the documented project-local publish directory. Exclude it from
-         default items as well as dotnet watch: Watch=false alone still makes the
-         SDK enumerate and evaluate the generated site on every startup. Keep this
-         rooted at the project so nested dist directories such as wwwroot/dist remain inputs.
-         Explicit KijiSiteFile items below still publish the complete staged site.
-         Do not infer other output paths from PublishDir: a later watch invocation
-         does not retain a previous publish command's -o argument. The SDK already
-         excludes bin/obj and hidden directories, including .kiji.
-         Kiji excludes only what it generates. Content directories are chosen in C#
-         and authored by the site, so the site excludes them in its project file. -->
-    <DefaultItemExcludes>$(DefaultItemExcludes);dist/**</DefaultItemExcludes>
-  </PropertyGroup>
-
-  <!-- ==============================================================
-       Where the generated site is staged
-       ============================================================== -->
-  <Target Name="KijiResolveStagingDir">
-    <!-- Resolved in a target, not during evaluation: $(IntermediateOutputPath) is not final
-         until Microsoft.Common.CurrentVersion.targets has run, which is after this file is
-         imported. Reading it too early silently drops the obj segment and stages the site
-         into the project directory.
-
-         Staged under obj rather than written straight to $(PublishDir) because the publish
-         list is computed before anything is copied, so the site has to exist somewhere the
-         SDK is not still reconciling. Staging also pins the path Kiji fingerprints, so
-         publishing to a different -o directory no longer forces a full rebuild.
-         $(IntermediateOutputPath) already varies by configuration, framework, and RID; it is
-         relative, so anchor it on the project directory rather than the MSBuild working
-         directory. -->
-    <PropertyGroup>
-      <_KijiStagingDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'kiji', 'site'))</_KijiStagingDir>
-    </PropertyGroup>
-  </Target>
-
-  <!-- ==============================================================
-       Generate
-       ============================================================== -->
   <Target Name="KijiGenerateSite"
-          DependsOnTargets="KijiResolveStagingDir"
-          Condition="'$(_KijiIsSiteApp)' == 'true' and '$(DesignTimeBuild)' != 'true'"
-          Returns="@(KijiSiteFile)">
-
-    <Error Condition="!Exists('$(TargetPath)')"
-           Code="KIJI1001"
+          Condition="'$(_KijiIsSiteApp)' == 'true' and '$(DesignTimeBuild)' != 'true'" Returns="@(KijiSiteFile)">
+    <!-- Resolve after the SDK finalizes IntermediateOutputPath. Staging stays stable across publish destinations. -->
+    <PropertyGroup>
+      <_KijiDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'kiji'))</_KijiDir>
+      <_KijiStagingDir>$(_KijiDir)site$([System.IO.Path]::DirectorySeparatorChar)</_KijiStagingDir>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(TargetPath)')" Code="KIJI1001"
            Text="Kiji cannot generate the site: '$(TargetPath)' does not exist. Build the project before publishing." />
 
-    <MakeDir Directories="$(_KijiStagingDir)" />
-
-    <!-- Run the build output with its runtimeconfig and static asset manifests.
-         The final publish directory contains only the generated site.
-         The site's console logs are high-importance messages. Only the exit code fails the
-         publish: a log line that looks like an MSBuild error or warning stays a message,
-         because the HTML and cache it came from are already saved and would be reused. -->
+    <!-- Only the process exit code fails publish; log lines remain MSBuild messages. -->
     <Exec Command="&quot;$(_KijiDotNetHost)&quot; exec &quot;$(TargetPath)&quot;"
           WorkingDirectory="$(MSBuildProjectDirectory)"
           EnvironmentVariables="KIJI_OUTPUT=$(_KijiStagingDir);KIJI_FORCE=$(KijiForce)"
           IgnoreStandardErrorWarningFormat="true"
-          StandardOutputImportance="high"
-          StandardErrorImportance="high" />
+          StandardOutputImportance="high" StandardErrorImportance="high" />
 
-    <!-- Evaluated after the Exec above, because elements inside a target run in order and an
-         item glob written here expands at execution time rather than at project evaluation. -->
     <ItemGroup>
       <KijiSiteFile Include="$(_KijiStagingDir)**\*" />
+      <KijiSiteFile RelativePath="%(RecursiveDir)%(Filename)%(Extension)" />
     </ItemGroup>
 
-    <Error Condition="'@(KijiSiteFile)' == ''"
-           Code="KIJI1002"
+    <Error Condition="'@(KijiSiteFile)' == ''" Code="KIJI1002"
            Text="Kiji generated no files into '$(_KijiStagingDir)'. The site exited successfully without writing anything — check that its entry point awaits StaticSite.RunAsync." />
   </Target>
 
-  <!-- ==============================================================
-       Publish the site instead of the application
-       ============================================================== -->
-  <Target Name="KijiComputeFilesToPublish"
-          AfterTargets="ComputeFilesToPublish"
-          DependsOnTargets="KijiResolvePublicAssets"
-          Condition="'$(_KijiIsSiteApp)' == 'true' and '$(DesignTimeBuild)' != 'true'">
-
-    <!-- Run after the SDK finishes computing the ordinary application publish list,
-         and resolve the complete static asset graph before replacing that list.
-         This stays ahead of
-         CopyFilesToPublishDirectory, so the incremental cleanup sees the final list and
-         deletes anything a previous publish left behind. -->
+  <Target Name="KijiGenerateServiceWorker" Condition="'$(ServiceWorkerAssetsManifest)' != ''">
+    <PropertyGroup>
+      <_KijiWorkerDir>$(_KijiDir)service-worker$([System.IO.Path]::DirectorySeparatorChar)</_KijiWorkerDir>
+      <_KijiParentPath>..$([System.IO.Path]::DirectorySeparatorChar)</_KijiParentPath>
+      <_KijiWorkerSource>@(ServiceWorker->'%(FullPath)')</_KijiWorkerSource>
+      <_KijiWorkerPublishedSource>@(ServiceWorker->'%(PublishedContent)')</_KijiWorkerPublishedSource>
+      <!-- Publish where the SDK does: at the worker's path under wwwroot, otherwise under the project. -->
+      <_KijiWorkerPath></_KijiWorkerPath>
+      <_KijiWorkerPath Condition="'$(_KijiWorkerSource)' != ''">$([MSBuild]::MakeRelative($([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', 'wwwroot')), '$(_KijiWorkerSource)'))</_KijiWorkerPath>
+      <_KijiWorkerPath Condition="$(_KijiWorkerPath.StartsWith('$(_KijiParentPath)'))">$([MSBuild]::MakeRelative($([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)')), '$(_KijiWorkerSource)'))</_KijiWorkerPath>
+    </PropertyGroup>
+    <!-- A path outside the project would publish outside the publish directory, possibly over a source file. -->
+    <Error Condition="'$(_KijiWorkerPath)' != '' and ($(_KijiWorkerPath.StartsWith('$(_KijiParentPath)')) or $([System.IO.Path]::IsPathRooted('$(_KijiWorkerPath)')))"
+           Code="KIJI1006" Text="ServiceWorker '$(_KijiWorkerSource)' is outside the project directory. Move it into the project, normally under wwwroot." />
+    <Error Condition="'$(_KijiWorkerPath)' != '' and '$(_KijiWorkerPublishedSource)' == ''" Code="KIJI1006"
+           Text="ServiceWorker '$(_KijiWorkerSource)' has no PublishedContent. Set it to the worker to publish, such as wwwroot/service-worker.published.js." />
+    <GetFileHash Files="@(KijiSiteFile)" Algorithm="SHA256" HashEncoding="base64" MetadataName="Integrity">
+      <Output TaskParameter="Items" ItemName="_KijiWorkerAsset" />
+    </GetFileHash>
     <ItemGroup>
-      <!-- Assemblies, apphost, deps.json, runtimeconfig.json, content, package assets: all of
-           it. Removing only the known entries would let anything the SDK adds later leak into
-           a site, and there is no way to notice from the outside. -->
-      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" />
+      <_KijiWorkerAsset AssetUrl="$([System.String]::Copy('%(RelativePath)').Replace('\', '/'))" />
+      <KijiSiteFile Include="$(_KijiWorkerDir)$(ServiceWorkerAssetsManifest)" RelativePath="$(ServiceWorkerAssetsManifest)" />
+      <KijiSiteFile Include="$(_KijiWorkerDir)$(_KijiWorkerPath)" RelativePath="$(_KijiWorkerPath)" Condition="'$(_KijiWorkerPath)' != ''" />
+    </ItemGroup>
+    <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(_KijiWorkerDir)$(ServiceWorkerAssetsManifest)'));$([System.IO.Path]::GetDirectoryName('$(_KijiWorkerDir)$(_KijiWorkerPath)'))" />
 
-      <ResolvedFileToPublish Include="@(_KijiPublicFile->'%(PublishSource)')">
-        <!-- Switching optimizers can select an older cached source for the same
-             public URL (notably the finalized service worker). Compare either
-             direction so a newer destination never hides that replacement. -->
-        <CopyToPublishDirectory>IfDifferent</CopyToPublishDirectory>
-      </ResolvedFileToPublish>
+    <GenerateServiceWorkerAssetsManifest Version="$(ServiceWorkerAssetsManifestVersion)" Assets="@(_KijiWorkerAsset)"
+                                         OutputPath="$(_KijiWorkerDir)$(ServiceWorkerAssetsManifest)">
+      <Output TaskParameter="CalculatedVersion" PropertyName="_KijiWorkerVersion" />
+    </GenerateServiceWorkerAssetsManifest>
+    <UpdateServiceWorkerFileWithVersion Condition="'$(_KijiWorkerPath)' != ''"
+                                        ServiceWorkerSource="$(_KijiWorkerPublishedSource)"
+                                        ServiceWorkerDestination="$(_KijiWorkerDir)$(_KijiWorkerPath)"
+                                        ManifestVersion="$(_KijiWorkerVersion)" />
+  </Target>
+
+  <Target Name="KijiCompressSite" Condition="'$(CompressionEnabled)' == 'true'">
+    <ItemGroup>
+      <_KijiCompressible Include="@(KijiSiteFile)"
+                         Condition="'%(Extension)' == '.html' or '%(Extension)' == '.css' or '%(Extension)' == '.js' or
+                                    '%(Extension)' == '.mjs' or '%(Extension)' == '.json' or '%(Extension)' == '.xml' or
+                                    '%(Extension)' == '.svg' or '%(Extension)' == '.txt'" />
+      <_KijiCompressible RelatedAsset="%(FullPath)" />
+      <_KijiGzipFile Include="@(_KijiCompressible->'$(_KijiDir)compressed\%(RelativePath).gz')" />
+      <_KijiGzipFile RelativePath="%(RelativePath).gz" />
+      <_KijiBrotliFile Include="@(_KijiCompressible->'$(_KijiDir)compressed\%(RelativePath).br')" />
+      <_KijiBrotliFile RelativePath="%(RelativePath).br" />
+    </ItemGroup>
+    <GZipCompress Condition="'@(_KijiGzipFile)' != ''" FilesToCompress="@(_KijiGzipFile)" />
+    <BrotliCompress Condition="'@(_KijiBrotliFile)' != ''" FilesToCompress="@(_KijiBrotliFile)"
+                    CompressionLevel="$(BrotliCompressionLevel)" ToolAssembly="$(_StaticWebAssetsSdkToolAssembly)"
+                    ToolExe="$(_DotNetHostFileName)" ToolPath="$(_DotNetHostDirectory)" />
+  </Target>
+
+  <Target Name="KijiComputeFilesToPublish" AfterTargets="ComputeFilesToPublish"
+          DependsOnTargets="KijiGenerateSite;KijiGenerateServiceWorker;KijiCompressSite"
+          Condition="'$(_KijiIsSiteApp)' == 'true' and '$(DesignTimeBuild)' != 'true'">
+    <!-- Replace the SDK application list before incremental copy and cleanup. -->
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" />
+      <!-- Copy when size or time differs, so an older source from another configuration still replaces a newer copy. -->
+      <ResolvedFileToPublish Include="@(KijiSiteFile);@(_KijiGzipFile);@(_KijiBrotliFile)" CopyToPublishDirectory="IfDifferent" />
     </ItemGroup>
   </Target>
 
-  <!-- ==============================================================
-       Clean
-       ============================================================== -->
-  <Target Name="KijiClean"
-          AfterTargets="Clean"
-          DependsOnTargets="KijiResolveStagingDir"
-          Condition="'$(_KijiIsSiteApp)' == 'true'">
-    <!-- Plain directory removal rather than asking the app to clean up after itself: by the
-         time Clean has run there is no assembly left to invoke, and hooking BeforeTargets
-         instead would then need its own handling for a tree that was never built.
-         The staging directory sits under obj but is not tracked in @(FileWrites), so Clean
-         would otherwise leave it. -->
-    <RemoveDir Directories="$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '.kiji'));$(_KijiStagingDir)"
-               ContinueOnError="WarnAndContinue" />
+  <Target Name="KijiClean" AfterTargets="Clean" Condition="'$(_KijiIsSiteApp)' == 'true'">
+    <!-- The staged site is not tracked in FileWrites, and the assembly is gone after Clean. -->
+    <RemoveDir Directories="$(MSBuildProjectDirectory)/.kiji;$(IntermediateOutputPath)kiji" ContinueOnError="WarnAndContinue" />
   </Target>
-
 </Project>

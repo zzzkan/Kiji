@@ -14,6 +14,19 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
     [Fact]
     public Task Publish_Edit_AndClean() => fixture.ScenarioAsync(async () =>
     {
+        fixture.Write("Site/wwwroot/selected.txt", "All-kind fallback");
+        fixture.Write("Site/wwwroot/publish-variant.txt", "Publish-kind replacement");
+        fixture.Write("Site/Directory.Build.targets", """
+            <Project>
+              <Target Name="ConfigurePublishVariant" AfterTargets="ResolvePublishStaticWebAssets">
+                <ItemGroup>
+                  <StaticWebAsset Condition="'%(Filename)%(Extension)' == 'selected.txt'" RelativePath="selected.txt" />
+                  <StaticWebAsset Condition="'%(Filename)%(Extension)' == 'publish-variant.txt'"
+                                  RelativePath="selected.txt" AssetKind="Publish" CopyToPublishDirectory="Never" />
+                </ItemGroup>
+              </Target>
+            </Project>
+            """);
         fixture.Write("Site/BoundaryPage.razor", """
             @page "/boundary/"
             <ErrorBoundary>
@@ -47,6 +60,9 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         Assert.Contains("Original body.", html, StringComparison.Ordinal);
         Assert.Matches("<p b-[a-z0-9]+>Hello</p>", html);
         Assert.Contains("color: teal", Read("PackageSite.styles.css"), StringComparison.Ordinal);
+        Assert.Contains("Linked asset original.", Read("nested/linked.txt"), StringComparison.Ordinal);
+        // Never on the selected publish variant must not expose the All-kind fallback.
+        Assert.False(File.Exists(Path.Combine(fixture.Site, "dist", "selected.txt")));
         var rclCss = Regex.Match(Read("PackageSite.styles.css"), "@import '([^']+)'").Groups[1].Value;
         Assert.Contains("color: purple", Read(rclCss), StringComparison.Ordinal);
         Assert.Contains("export const library = true", File.ReadAllText(PublicFile(AssetUrl(html, "library"))), StringComparison.Ordinal);
@@ -60,11 +76,13 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         var oldUrl = AssetUrl(html);
         fixture.Replace("Site/content/article.md", "Original body.", "Edited body.");
         fixture.Replace("Site/wwwroot/app.js", "original", "modified");
+        fixture.Replace("Site/assets/linked.txt", "original", "modified");
         fixture.Replace("Library/Card.resx", "Hello", "Welcome");
         // Opt in before the next HTML change, so the compressed copy must be refreshed.
         await fixture.PublishAsync("-p:CompressionEnabled=true");
         html = Read("index.html");
         Assert.Contains("Edited body.", html, StringComparison.Ordinal);
+        Assert.Contains("Linked asset modified.", Read("nested/linked.txt"), StringComparison.Ordinal);
         Assert.Matches("<p b-[a-z0-9]+>Welcome</p>", html);
         Assert.NotEqual(oldUrl, AssetUrl(html));
         Assert.False(File.Exists(PublicFile(oldUrl)));
@@ -97,6 +115,11 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         Assert.Matches(@"InvalidOperationException: Page component '[^']*UnregisteredPage'.*AddPageParameters<UnregisteredPage>", failure.Message);
         File.Delete(Path.Combine(fixture.Site, "UnregisteredPage.razor"));
 
+        // A worker outside wwwroot keeps its project path, which must never resolve to its source.
+        fixture.Replace("Site/PackageSite.csproj", "wwwroot/service-worker.js", "worker/service-worker.js");
+        Directory.CreateDirectory(Path.Combine(fixture.Site, "worker"));
+        File.Move(Path.Combine(fixture.Site, "wwwroot", "service-worker.js"), Path.Combine(fixture.Site, "worker", "service-worker.js"));
+
         // Logs never fail a publish, even when a message reads like an MSBuild error:
         // its HTML is cached, and a later publish would reuse it without the message.
         fixture.Write("Site/LoggingPage.razor", """
@@ -108,6 +131,8 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
             """);
         Assert.Contains("error: logging-page-error", await fixture.PublishAsync("-warnaserror"), StringComparison.Ordinal);
         Assert.Contains("Log-only result", Read("logging/index.html"), StringComparison.Ordinal);
+        Assert.Contains("published worker", Read("worker/service-worker.js"), StringComparison.Ordinal);
+        Assert.DoesNotContain("published worker", File.ReadAllText(Path.Combine(fixture.Site, "worker", "service-worker.js")), StringComparison.Ordinal);
 
         var stagingDirectory = Assert.Single(Directory.GetDirectories(Path.Combine(fixture.Site, "obj"), "site", SearchOption.AllDirectories));
         await fixture.DotnetAsync("clean", "Site/PackageSite.csproj", "-c", "Release");
@@ -125,6 +150,7 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
             var html = await client.GetStringAsync("/kiji/");
             Assert.Contains("/kiji/_kiji/livereload.js", html, StringComparison.Ordinal);
             Assert.DoesNotContain("aspnetcore-browser-refresh.js", html, StringComparison.Ordinal);
+            Assert.Contains("Linked asset original.", await client.GetStringAsync("/kiji/nested/linked.txt"), StringComparison.Ordinal);
             await ReloadAsync(client, () => fixture.Replace("Site/content/article.md", "Original body.", "Edited body."));
             Assert.Contains("Edited body.", await client.GetStringAsync("/kiji/"), StringComparison.Ordinal);
             Assert.Contains("Edited body.", await client.GetStringAsync("/kiji/articles/article/"), StringComparison.Ordinal);

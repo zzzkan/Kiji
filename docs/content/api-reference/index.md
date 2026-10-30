@@ -33,16 +33,17 @@ builder.SiteInfo = new SiteInfo
 return await builder.Build().RunAsync();
 ```
 
-| Member                                                                         | Behavior                                                                                                                  |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| `static StaticSiteBuilder StaticSite.CreateBuilder(string[] args)`             | Creates a builder for the current project. While serving, `args` go to ASP.NET Core configuration, such as `--urls`.      |
-| `SiteInfo StaticSiteBuilder.SiteInfo`                                          | Required site metadata.                                                                                                   |
-| `IServiceCollection StaticSiteBuilder.Services`                                | See [Services](#services).                                                                                                |
-| `IHostEnvironment StaticSiteBuilder.Environment`                               | See [Environment](#environment).                                                                                          |
-| `IConfigurationManager StaticSiteBuilder.Configuration`                        | See [Configuration](#configuration).                                                                                      |
-| `ILoggingBuilder StaticSiteBuilder.Logging`                                    | See [Logging](#logging).                                                                                                  |
-| `StaticSite StaticSiteBuilder.Build()`                                         | Validates the services and makes them read-only. Call it once.                                                            |
-| `Task<int> StaticSite.RunAsync(CancellationToken cancellationToken = default)` | Serves during `dotnet watch` or generates the site during `dotnet publish`, then disposes the site. Return its exit code. |
+| Member                                                                         | Behavior                                                                                                                                                                    |
+| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `static StaticSiteBuilder StaticSite.CreateBuilder(string[] args)`             | Creates a builder for the current project. While serving, `--environment` in `args` selects the environment, and `args` go to ASP.NET Core configuration, such as `--urls`. |
+| `SiteInfo StaticSiteBuilder.SiteInfo`                                          | Required site metadata.                                                                                                                                                     |
+| `IServiceCollection StaticSiteBuilder.Services`                                | See [Services](#services).                                                                                                                                                  |
+| `IHostEnvironment StaticSiteBuilder.Environment`                               | See [Environment](#environment).                                                                                                                                            |
+| `IConfigurationManager StaticSiteBuilder.Configuration`                        | See [Configuration](#configuration).                                                                                                                                        |
+| `ILoggingBuilder StaticSiteBuilder.Logging`                                    | See [Logging](#logging).                                                                                                                                                    |
+| `StaticSite StaticSiteBuilder.Build()`                                         | Validates the services and makes them read-only. It can be called only once, even after a validation failure.                                                               |
+| `Task<int> StaticSite.RunAsync(CancellationToken cancellationToken = default)` | Serves during `dotnet watch` or generates the site during `dotnet publish`, then disposes the site. Return its exit code.                                                   |
+| `ValueTask StaticSite.DisposeAsync()`                                          | Releases the site. `RunAsync` already does, so call it only for a site that never runs.                                                                                     |
 
 ### Environment
 
@@ -57,31 +58,34 @@ if (builder.Environment.IsDevelopment())
 }
 ```
 
-The name comes from `DOTNET_ENVIRONMENT`, or is `Production` during `dotnet publish` and
-`Development` while serving. It is read-only, and `ContentRootPath` is the project
-directory. Changing the name renders every page again on the next publish.
+During `dotnet publish`, the name comes only from `DOTNET_ENVIRONMENT` and defaults to
+`Production`. While serving, `--environment` comes first, then `DOTNET_ENVIRONMENT`, then
+`ASPNETCORE_ENVIRONMENT`, and the default is `Development`. A blank variable counts as
+unset. The name is read-only, and `ContentRootPath` is the project directory. Changing the
+name renders every page again on the next publish.
 
 ### Configuration
 
 `builder.Configuration` is a standard
 [configuration](https://learn.microsoft.com/dotnet/core/extensions/configuration), also
-injectable as `IConfiguration`. It reads these files from the project directory, each
-overriding the ones before it:
+injectable as `IConfiguration`. It reads two files from the project directory, the second
+overriding the first:
 
 1. `appsettings.json`
 2. `appsettings.{Environment}.json`
-3. [User secrets](https://learn.microsoft.com/aspnet/core/security/app-secrets), in `Development` only
 
 ```csharp
 builder.Services.Configure<ImageProcessorOptions>(builder.Configuration.GetSection("Images"));
 ```
 
-- Environment variables and command-line arguments are not read. Add them with a prefix:
+- Environment variables, command-line arguments, and user secrets are not read, because they
+  differ between machines. Add a source explicitly when you need one:
   `builder.Configuration.AddEnvironmentVariables("MYSITE_")`.
 - Changing any value outside the `Logging` section, including setting a key to `null`,
   renders every page again on the next publish.
 - Files are read once. Restart `dotnet watch` after editing them.
 - Configuration is fixed when the site starts running; later changes and reloads do not apply.
+  A key that its provider does not enumerate stays readable only if it was read before then.
 - The development server reads its own settings, such as `urls`, from the site's
   configuration. `--urls` and `ASPNETCORE_URLS` still override them.
 
@@ -100,9 +104,10 @@ message for each page and generated file:
 { "Logging": { "LogLevel": { "Kiji.Build": "Debug" } } }
 ```
 
-- Logs never fail a publish, whatever their level; only an exception that ends `RunAsync`
-  does. For validation that must stop publication, throw an exception that is not handled by
-  an error boundary. Kiji propagates it and does not publish a new successful cache manifest.
+- Logs never fail a publish, whatever their level. A publish fails when an exception ends
+  `RunAsync`, which logs the exception first, or when the publish is canceled, which logs a
+  warning and returns exit code 1. For validation that must stop publication, throw an
+  exception that is not handled by an error boundary. Kiji propagates it and does not publish a new successful cache manifest.
   Mark a component with `AlwaysRender` when its page logic must run on every publish.
 - During `dotnet publish`, log messages are MSBuild messages, not warnings or errors. CI logs
   and `--tl:off` show them. In a terminal, add `-v d`, also to see why a publish failed.

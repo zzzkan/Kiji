@@ -37,7 +37,7 @@
     <Right>lib/net10.0/Kiji.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
-  <!-- Service registration is unified under UseServices and standard IServiceCollection. -->
+  <!-- Services are registered on StaticSiteBuilder.Services, a standard IServiceCollection. -->
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:Kiji.StaticSite.AddPageService``1</Target>

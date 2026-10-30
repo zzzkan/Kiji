@@ -27,9 +27,10 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
 
 - Follow the .NET host builder shape: CreateBuilder -> builder.Services/Add*/Use* -> Build
   -> RunAsync. Every registration lives on StaticSiteBuilder; StaticSite only runs. Add* adds,
-  Use* sets a single value. Kiji parses no command line:
+  Use* sets a single value. Kiji adds no command-line options:
   watch serves, publish generates, clean cleans. MSBuild owns KijiForce;
-  ASP.NET Core configuration owns the dev server address. Prefer conventions to flags.
+  ASP.NET Core configuration owns the dev server address. Serving reads only the standard
+  --environment host argument. Prefer conventions to flags.
 - All output goes through the site's ILogger (Kiji's own under Kiji.Build), except the dev
   server's watch-style status lines. RunAsync logs its own failures before disposing the site,
   as the generic host does. Publish uses the standard console formatter; MSBuild receives every
@@ -57,10 +58,13 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
 - MSBuild supplies the project directory through runtimeconfig; missing metadata is an error.
   Content becomes accessible through factories/loaders/artifacts only after execution
   paths settle. Do not expose a provider or content dictionary on StaticSite. IHostEnvironment
-  is read-only: its name selects the configuration files at creation. Default configuration
-  sources stay project-local (no environment variables or command line, which differ between
+  is read-only: its name selects the configuration files at creation. Publish takes the name
+  only from DOTNET_ENVIRONMENT; serving follows WebApplicationBuilder's order (--environment,
+  DOTNET_ENVIRONMENT, ASPNETCORE_ENVIRONMENT). Default configuration sources stay
+  project-local (no environment variables, command line or user secrets, which differ between
   machines). Execution freezes a read-only configuration snapshot shared by captured sections,
-  options binding and the fingerprint. The dev server inherits it below its standard
+  options binding and the fingerprint; keys read before execution stay in it even when their
+  provider cannot enumerate them. The dev server inherits it below its standard
   environment and command-line sources. The environment name and every configuration key and
   value, nulls included, are in the options fingerprint because per-key reads are not tracked;
   only the Logging section, which cannot change output, is left out.

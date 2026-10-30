@@ -30,13 +30,11 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   Use* sets a single value. Kiji parses no command line:
   watch serves, publish generates, clean cleans. MSBuild owns KijiForce;
   ASP.NET Core configuration owns the dev server address. Prefer conventions to flags.
-- All output goes through the site's ILogger (Kiji's own under Kiji.Build). The exceptions are
-  the dev server's watch-style status lines and a publish failure before the site's logging
-  exists, which goes to standard error in the same format. RunAsync logs its own failures
-  before disposing the site, as the generic host does. Log levels decide what is written and MSBuild
-  verbosity what is shown: publish writes warnings and errors in MSBuild's canonical format,
-  the only output the terminal logger shows by default, and everything else at high importance.
-  Log levels come from the Logging section, not MSBuild properties.
+- All output goes through the site's ILogger (Kiji's own under Kiji.Build), except the dev
+  server's watch-style status lines. RunAsync logs its own failures before disposing the site,
+  as the generic host does. Publish uses the standard console formatter; MSBuild receives every
+  line as a high-importance message and ignores its error/warning format. Only the exit code
+  fails a publish. Log levels come from the Logging section, not MSBuild properties.
 - Dev and publish share StaticSite.RenderPageAsync. Never emit stale output;
   ambiguous incremental state requires rendering.
 - One type per file. Library components and library test components are hand-written ComponentBase classes;
@@ -77,9 +75,8 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   untracked external state. KijiForce refreshes all pages for a whole publish. Instantiating
   any ErrorBoundaryBase component prevents HTML reuse for that page, even when healthy and
   including custom boundaries, layouts and dynamic children. The default boundary logger
-  reports exceptions as warnings; logging filters and providers never control cacheability.
-  Log messages alone do not prevent reuse or roll back caches: MSBuild can reject emitted
-  diagnostics after generation has saved them. Use an unhandled exception for a build gate.
+  reports exceptions as warnings; logging filters and providers never control cacheability
+  or the publish result. Use an unhandled exception for a build gate.
 - Use Blazor's PageTitle and HeadContent; KijiRoot supplies the single HeadOutlet.
   Each page gets a fresh renderer/dispatcher, isolating the framework's section state.
   HeadContent replaces earlier providers rather than appending; compose shared tags

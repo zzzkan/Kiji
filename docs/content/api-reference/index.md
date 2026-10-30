@@ -93,32 +93,26 @@ builder.Services.Configure<ImageProcessorOptions>(builder.Configuration.GetSecti
 and higher, and Kiji's summary in the `Kiji.Build` category. Kiji's default logger reports
 exceptions caught by
 [`ErrorBoundary`](https://learn.microsoft.com/aspnet/core/blazor/fundamentals/handle-errors?view=aspnetcore-10.0#error-boundaries)
-as warnings. This lets a deliberate fallback publish with its diagnostic visible;
-`-warnaserror` makes that warning fail the publish. `Debug` adds a message for each page and
-generated file:
+as warnings, so a deliberate fallback publishes with its message logged. `Debug` adds a
+message for each page and generated file:
 
 ```json
 { "Logging": { "LogLevel": { "Kiji.Build": "Debug" } } }
 ```
 
-- During `dotnet publish`, Kiji's default console formatter reports enabled warnings and
-  errors to MSBuild. An `Error` or `Critical` message reported this way fails that invocation;
-  `-warnaserror` also makes an emitted warning fail it.
-- Logging does not throw an exception or roll back generated output and caches. If a page
-  logs an error or a warning and renders normally, its HTML can be cached even when MSBuild
-  rejects that publish. A later publish can reuse the HTML, emit no message, and succeed
-  without a code or content change. Cached pages do not replay diagnostics.
-- Other messages appear in CI logs and with `--tl:off`. In a terminal, add `-v d`. `-v q`
-  hides them.
-- A page that renders an `ErrorBoundaryBase` component, including `ErrorBoundary` or a custom
-  boundary, is rendered on every publish even when healthy. This includes boundaries in layouts
-  and dynamic children, and applies regardless of logging settings or custom boundary loggers.
-- For validation that must stop publication, throw an exception that is not handled by an
-  error boundary. Kiji propagates it and does not publish a new successful cache manifest.
+- Logs never fail a publish, whatever their level; only an exception that ends `RunAsync`
+  does. For validation that must stop publication, throw an exception that is not handled by
+  an error boundary. Kiji propagates it and does not publish a new successful cache manifest.
   Mark a component with `AlwaysRender` when its page logic must run on every publish.
+- During `dotnet publish`, log messages are MSBuild messages, not warnings or errors. CI logs
+  and `--tl:off` show them. In a terminal, add `-v d`, also to see why a publish failed.
+  `-v q` hides them.
+- Cached pages do not replay their messages.
+- A page that renders an `ErrorBoundaryBase` component, including `ErrorBoundary` or a custom
+  boundary, is rendered on every publish even when healthy, so its warning is logged on every
+  publish. This includes boundaries in layouts and dynamic children, and applies regardless
+  of logging settings or custom boundary loggers.
 - The development server's ASP.NET Core messages use the same settings.
-- With another console formatter, such as `AddJsonConsole()`, MSBuild no longer recognizes
-  warnings and errors in log messages.
 
 ### SiteInfo
 

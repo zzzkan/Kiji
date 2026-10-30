@@ -8,7 +8,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Console;
 using Microsoft.Extensions.Options;
 
 namespace Kiji;
@@ -70,19 +69,7 @@ public sealed class StaticSiteBuilder
         Logging.SetMinimumLevel(LogLevel.Warning);
         Logging.AddFilter(BuildLoggerExtensions.CategoryName, LogLevel.Information);
         Logging.AddConfiguration(Configuration.GetSection("Logging"));
-        Logging.AddConsole(options =>
-        {
-            options.LogToStandardErrorThreshold = LogLevel.Warning;
-            if (settings.Publishing)
-            {
-                // dotnet publish runs the site through MSBuild, which reports only its own warnings.
-                options.FormatterName = MSBuildConsoleFormatter.FormatterName;
-            }
-        });
-        if (settings.Publishing)
-        {
-            Logging.AddConsoleFormatter<MSBuildConsoleFormatter, ConsoleFormatterOptions>();
-        }
+        Logging.AddConsole(static options => options.LogToStandardErrorThreshold = LogLevel.Warning);
 
         ComponentRenderer.AddComponentRenderingServices(_services);
 
@@ -147,7 +134,7 @@ public sealed class StaticSiteBuilder
     /// <summary>The logging configuration for components, services, Kiji, and the development server.</summary>
     /// <remarks>
     /// Kiji writes Warning and higher to the console, and its own progress messages under <c>Kiji.Build</c>.
-    /// During <c>dotnet publish</c>, warnings and errors become MSBuild warnings and errors.
+    /// During <c>dotnet publish</c>, they are MSBuild messages at any level; only an exception fails the publish.
     /// The <c>Logging</c> configuration section applies, as in other .NET hosts.
     /// </remarks>
     public ILoggingBuilder Logging { get; }

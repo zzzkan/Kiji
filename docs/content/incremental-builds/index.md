@@ -25,8 +25,8 @@ Feeds, sitemaps, and custom artifacts are regenerated on every publish.
 Boundaries in layouts and dynamic children count too. A boundary in a shared layout makes
 every page using that layout render on every publish. This policy does not clear image caches.
 
-Reusing HTML does not replay its log messages. A publish rejected by MSBuild because of a
-log diagnostic can still leave a reusable cache; see [Logging](../api-reference/#logging).
+Reusing HTML does not replay its log messages, and logs never fail a publish; see
+[Logging](../api-reference/#logging).
 
 ## Page dependencies
 

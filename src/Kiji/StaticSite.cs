@@ -87,11 +87,6 @@ public sealed class StaticSite : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(args);
         var settings = SiteRunSettings.FromEnvironment(Environment.GetEnvironmentVariable);
-        if (settings.Publishing)
-        {
-            // Before anything can fail, including in Program.cs after this call.
-            UnhandledPublishErrorReporter.Register();
-        }
         var entryAssembly = Assembly.GetEntryAssembly() ?? throw new InvalidOperationException(
             "No entry assembly is available in this host. Run the site project as an application with dotnet run, dotnet watch or dotnet publish.");
 
@@ -170,7 +165,7 @@ public sealed class StaticSite : IAsyncDisposable
 
     /// <summary>
     /// Logs a failed publish, as the generic host logs a failed start, so the site's logging
-    /// settings apply and MSBuild reports it. While serving, the failure reaches the terminal as is.
+    /// settings apply. While serving, the failure reaches the terminal as is.
     /// </summary>
     /// <returns>Always <see langword="false"/>, so the exception keeps propagating. A filter that
     /// throws also counts as false, so a logging failure cannot hide the original exception.</returns>
@@ -179,7 +174,6 @@ public sealed class StaticSite : IAsyncDisposable
         if (_settings.Publishing && !_disposed)
         {
             BuildLogger.PublishFailed(exception);
-            UnhandledPublishErrorReporter.MarkLogged(exception);
         }
         return false;
     }

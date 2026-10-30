@@ -186,11 +186,13 @@
 
     <!-- Run the build output with its runtimeconfig and static asset manifests.
          The final publish directory contains only the generated site.
-         Log levels decide what the site writes and the MSBuild verbosity what is shown:
-         warnings and errors arrive in MSBuild's format, the rest as high-importance messages. -->
+         The site's console logs are high-importance messages. Only the exit code fails the
+         publish: a log line that looks like an MSBuild error or warning stays a message,
+         because the HTML and cache it came from are already saved and would be reused. -->
     <Exec Command="&quot;$(_KijiDotNetHost)&quot; exec &quot;$(TargetPath)&quot;"
           WorkingDirectory="$(MSBuildProjectDirectory)"
           EnvironmentVariables="KIJI_OUTPUT=$(_KijiStagingDir);KIJI_FORCE=$(KijiForce)"
+          IgnoreStandardErrorWarningFormat="true"
           StandardOutputImportance="high"
           StandardErrorImportance="high" />
 

@@ -11,8 +11,6 @@ namespace Kiji.PackageTests;
 
 public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<PackageFixture>
 {
-    private static readonly string[] LogOnlyLevels = ["Error", "Warning"];
-
     [Fact]
     public Task Publish_Edit_AndClean() => fixture.ScenarioAsync(async () =>
     {
@@ -37,9 +35,9 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
 
         var output = await fixture.PublishAsync();
 
-        Assert.Matches(@"ErrorBoundary : warning : Unhandled exception rendering component: boundary-publish-warning \[[^\]]*PackageSite\.csproj\]", output);
+        Assert.Contains("Unhandled exception rendering component: boundary-publish-warning", output, StringComparison.Ordinal);
         Assert.DoesNotContain("boundary-publish-information", output, StringComparison.Ordinal);
-        // The summary is a high-importance message, which a redirected publish shows by default.
+        // Logs are high-importance messages, which a redirected publish shows by default.
         Assert.Matches(@"Generated \d+ pages \(\d+ unchanged, skipped", output);
         Assert.DoesNotContain("Unchanged: ", output, StringComparison.Ordinal);
         Assert.Contains("Boundary fallback", Read("boundary/index.html"), StringComparison.Ordinal);
@@ -90,25 +88,19 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         { Assert.Equal(Read("index.html"), await reader.ReadToEndAsync()); }
         Assert.True(File.Exists(PublicFile(AssetUrl(Read("index.html"), "library")) + ".gz"));
 
-        // A failure is an MSBuild error with its message, not only an exit code.
+        // An exception fails the publish through the exit code, and the output says why.
         fixture.Write("Site/UnregisteredPage.razor", """
             @page "/unregistered/{Slug}/"
             @code { [Parameter] public string Slug { get; set; } = ""; }
             """);
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.PublishAsync());
-        Assert.Matches(@"Kiji\.Build : error : Publishing failed\. InvalidOperationException: Page component '[^']*UnregisteredPage'.*AddPageParameters<UnregisteredPage>.*\[[^\]]*PackageSite\.csproj\]", failure.Message);
-        // The site's logging reported it, so the handler for failures before logging exists stays silent.
-        Assert.DoesNotContain("Kiji.Build : error : InvalidOperationException", failure.Message, StringComparison.Ordinal);
+        Assert.Matches(@"InvalidOperationException: Page component '[^']*UnregisteredPage'.*AddPageParameters<UnregisteredPage>", failure.Message);
         File.Delete(Path.Combine(fixture.Site, "UnregisteredPage.razor"));
 
-        // A caught exception allows the fallback to publish with a visible warning.
-        // The boundary is rendered again, so -warnaserror fails on every invocation.
+        // A caught exception lets the fallback publish. The boundary is rendered again,
+        // so its warning is logged on every publish until the child is fixed.
         await fixture.PublishAsync();
-        foreach (var _ in Enumerable.Range(0, 2))
-        {
-            var logged = await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.PublishAsync("-warnaserror"));
-            Assert.Matches(@"ErrorBoundary : error : Unhandled exception rendering component: boundary-publish-warning \[[^\]]*PackageSite\.csproj\]", logged.Message);
-        }
+        Assert.Contains("boundary-publish-warning", await fixture.PublishAsync(), StringComparison.Ordinal);
         // A custom boundary can bypass the default logger entirely. Its fallback
         // must still render on every publish, and healthy boundaries follow the same policy.
         fixture.Write("Site/CustomBoundary.razor", """
@@ -133,24 +125,17 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         Assert.Contains("Fixed child", Read("boundary/index.html"), StringComparison.Ordinal);
         Assert.Matches(@"Generated 0 pages \(\d+ unchanged, skipped, 1 re-rendered but unchanged\)", await fixture.PublishAsync());
 
-        // Logging does not turn a successful render into an exception. MSBuild can
-        // reject that invocation after Kiji has saved its reusable HTML and cache.
-        foreach (var level in LogOnlyLevels)
-        {
-            fixture.Write("Site/LoggingPage.razor", $$"""
-                @page "/logging/"
-                @using Microsoft.Extensions.Logging
-                @inject ILogger<LoggingPage> Logger
-                <p>Log-only result</p>
-                @code { protected override void OnInitialized() => Logger.Log{{level}}("logging-page-{{level}}"); }
-                """);
-            string[] publishOptions = level == "Warning" ? ["-warnaserror"] : [];
-            var logged = await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.PublishAsync(publishOptions));
-            Assert.Matches($@"LoggingPage : error : logging-page-{level} \[[^\]]*PackageSite\.csproj\]", logged.Message);
-            var reused = await fixture.PublishAsync(publishOptions);
-            Assert.DoesNotContain($"logging-page-{level}", reused, StringComparison.Ordinal);
-            Assert.Contains("Log-only result", Read("logging/index.html"), StringComparison.Ordinal);
-        }
+        // Logs never fail a publish, even when a message reads like an MSBuild error:
+        // its HTML is cached, and a later publish would reuse it without the message.
+        fixture.Write("Site/LoggingPage.razor", """
+            @page "/logging/"
+            @using Microsoft.Extensions.Logging
+            @inject ILogger<LoggingPage> Logger
+            <p>Log-only result</p>
+            @code { protected override void OnInitialized() => Logger.LogError("error: logging-page-error"); }
+            """);
+        Assert.Contains("error: logging-page-error", await fixture.PublishAsync("-warnaserror"), StringComparison.Ordinal);
+        Assert.Contains("Log-only result", Read("logging/index.html"), StringComparison.Ordinal);
 
         var stagingDirectory = Assert.Single(Directory.GetDirectories(Path.Combine(fixture.Site, "obj"), "site", SearchOption.AllDirectories));
         await fixture.DotnetAsync("clean", "Site/PackageSite.csproj", "-c", "Release");

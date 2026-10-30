@@ -48,7 +48,7 @@ public sealed class StaticSiteBuilder
         if (Directory.Exists(paths.ProjectDirectory))
         {
             // Relative paths in later AddJsonFile calls also resolve against the project.
-            Configuration.SetBasePath(paths.ProjectDirectory);
+            Configuration.SetFileProvider(HostEnvironment.ContentRootFileProvider);
             Configuration.AddJsonFile("appsettings.json", optional: true, reloadOnChange: false);
             Configuration.AddJsonFile($"appsettings.{HostEnvironment.EnvironmentName}.json", optional: true, reloadOnChange: false);
         }

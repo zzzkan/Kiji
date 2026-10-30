@@ -193,9 +193,21 @@ public sealed class StaticSite : IAsyncDisposable
         }
         _disposed = true;
 
-        await _services.DisposeAsync();
-        _environment.DisposeContentRootFileProvider();
-        _configuration.Dispose();
+        try
+        {
+            await _services.DisposeAsync();
+        }
+        finally
+        {
+            try
+            {
+                _configuration.Dispose();
+            }
+            finally
+            {
+                _environment.DisposeContentRootFileProvider();
+            }
+        }
     }
 
     /// <summary>Generates the site, reusing unchanged output from a previous publish.</summary>

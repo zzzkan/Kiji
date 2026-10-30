@@ -3,6 +3,7 @@ using Kiji.Assets;
 using Kiji.Generation;
 using Kiji.Tests.TestSite;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -22,6 +23,28 @@ public sealed class HostConfigurationTests : IDisposable
     public void Dispose()
     {
         if (Directory.Exists(_root)) { Directory.Delete(_root, recursive: true); }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RelativeJson_UsesTheOwnedContentRootProvider(bool publish)
+    {
+        WriteSettings("live.json", """{ "Value": "loaded" }""");
+        var builder = CreateBuilder(environmentName: null);
+        builder.Configuration.AddJsonFile("live.json", optional: false, reloadOnChange: true);
+        var provider = builder.Environment.ContentRootFileProvider;
+        var source = Assert.IsType<JsonConfigurationSource>(builder.Configuration.Sources.Last());
+
+        Assert.Same(provider, source.FileProvider);
+        Assert.Equal("loaded", builder.Configuration["Value"]);
+        await using var site = builder.Build();
+        if (publish)
+        {
+            await site.PublishAsync(Path.Combine(_root, "dist"));
+            Assert.Equal("loaded", builder.Configuration["Value"]);
+            Assert.Same(provider, builder.Environment.ContentRootFileProvider);
+        }
     }
 
     [Theory]

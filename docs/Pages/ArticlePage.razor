@@ -1,4 +1,4 @@
-@page "/docs/{Slug}/"
+﻿@page "/docs/{Slug}/"
 @inject SiteInfo Site
 
 <PageHead Title="@(Article.Title ?? string.Empty)" Description="@(Article.Description ?? string.Empty)" />
@@ -7,14 +7,14 @@
     <h1>@Article.Title</h1>
     <div class="doc-content">@((MarkupString)_html)</div>
 </article>
-<nav aria-label="Documentation pages">
+<nav class="article-navigation" aria-label="Documentation pages">
     @if (Previous is not null)
     {
-        <a href="@Site.ResolveUrl($"docs/{Previous.Slug}/").AbsolutePath" rel="prev">Previous: @Previous.Title</a>
+        <a class="previous" href="@Site.ResolveUrl($"docs/{Previous.Slug}/").AbsolutePath" rel="prev">@Previous.Title</a>
     }
     @if (Next is not null)
     {
-        <a href="@Site.ResolveUrl($"docs/{Next.Slug}/").AbsolutePath" rel="next">Next: @Next.Title</a>
+        <a class="next" href="@Site.ResolveUrl($"docs/{Next.Slug}/").AbsolutePath" rel="next">@Next.Title</a>
     }
 </nav>
 

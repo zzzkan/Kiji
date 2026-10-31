@@ -29,14 +29,22 @@ Reusing HTML does not replay its log messages, and logs never fail a publish; se
 
 ## Page dependencies
 
-`Posts[ContentKey]` depends on one item. Enumerating a collection, reading `Count`,
-or looking up a missing ID depends on the whole collection, even if you
-filter afterward. Reads in layouts and child components count too: a layout that lists
-every post makes every page depend on all posts.
+Pass collection items directly through `AddPageParameters`:
 
-Pass a content ID or another simple value through `AddPageParameters` and look the item
-up while rendering. Passing whole models or arrays works but disables reuse for that page;
+```csharp
+builder.AddPageParameters<PostPage>(services => services
+    .GetRequiredService<ContentCollection<Post>>()
+    .Select(post => new { post.Slug, Post = post }));
+```
+
+Each item parameter depends on that item, just like `Posts[id]`. Changing a `Previous`
+or `Next` item changes the parameter identity and renders the page again. Resolve items
+in the factory for each build; retaining an item from an earlier snapshot fails publishing.
+Objects created in the factory, record copies made with `with`, and arrays disable reuse;
 see the [reusable parameter types](../api-reference/#pages).
+
+Enumerating a collection, reading `Count`, or looking up a missing ID depends on the whole
+collection, even if you filter afterward. Reads in layouts and child components count too.
 
 ## Render pages that use external data
 

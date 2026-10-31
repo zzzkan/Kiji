@@ -31,6 +31,7 @@ not built with conflicting global properties.
   Independent per-item projections retain that hash.
 - Content ID lookup records the item digest. Enumeration, Count
   and missing IDs record the collection digest, computed once per materialization.
+- Collection item parameters hash source/ID identity and record item digests; reject stale snapshot items.
 - Images record source bytes, processor identity, repair requests and variants.
   Keep public image URLs in the page bundle and recipes sufficient for cache-only repair.
 - AlwaysRender marks pages, layouts or child components that read untracked external

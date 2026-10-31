@@ -32,6 +32,154 @@ public sealed class IncrementalBuildTests : IDisposable
     }
 
     [Fact]
+    public async Task CollectionItemParameters_ReuseAndTrackTheItemWithoutReadingItsSource()
+    {
+        var root = CreateSiteRoot("item-parameters");
+        var log = new ContentRenderLog();
+        await using var site = CreateArticleBuilder(root, log).Build();
+        await site.PublishAsync("dist");
+        await site.PublishAsync("dist");
+        Assert.Equal(1, log.Counts["stable"]);
+        Assert.Equal(1, log.Counts["changing"]);
+        await WritePostAsync(root, "changing", "Changed", "New body.");
+        await site.PublishAsync("dist");
+        Assert.Equal(1, log.Counts["stable"]);
+        Assert.Equal(2, log.Counts["changing"]);
+
+        var scratch = CreateSiteRoot("item-parameters-full");
+        await WritePostAsync(scratch, "changing", "Changed", "New body.");
+        await using var clean = CreateArticleBuilder(scratch, new ContentRenderLog()).Build();
+        await clean.PublishAsync("dist");
+        AssertDirectoriesIdentical(Path.Combine(scratch, "dist"), Path.Combine(root, "dist"));
+    }
+
+    [Fact]
+    public async Task CollectionItemNavigation_ChangingNeighborsRerendersThePage()
+    {
+        var root = CreateSiteRoot("item-navigation");
+        await WritePostAsync(root, "third", "Third", "Third body.");
+        var log = new ContentRenderLog();
+        await using var site = CreateArticleBuilder(root, log, navigation: true).Build();
+        await site.PublishAsync("dist");
+        await site.PublishAsync("dist");
+        Assert.Equal(1, log.Counts["stable"]);
+        await WritePostAsync(root, "third", "A Third", "Third body.");
+        await site.PublishAsync("dist");
+        Assert.Equal(2, log.Counts["stable"]);
+        var output = Path.Combine(root, "dist", "articles", "stable", "index.html");
+        Assert.Contains("previous:changing|next:|", await File.ReadAllTextAsync(output), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ItemParameterIdentity_DistinguishesServiceKeysWithTheSameDirectoryAndId()
+    {
+        var root = CreateSiteRoot("keyed-parameters");
+        var log = new ContentRenderLog();
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        TestSiteAssets.Bind(builder.Paths, Path.Combine(root, "static"));
+        builder.Services.AddSingleton(log);
+        builder.AddKeyedMarkdownContent<FrontMatter, ContentArticle>("first",
+            content => ContentArticle.Create(content) with { Title = "First source" });
+        builder.AddKeyedMarkdownContent<FrontMatter, ContentArticle>("second",
+            content => ContentArticle.Create(content) with { Title = "Second source" });
+        var key = "first";
+        builder.AddPageParameters<ContentArticlePage>(services =>
+        [new
+        {
+            Slug = "selected",
+            Article = services.GetRequiredKeyedService<ContentCollection<ContentArticle>>(key)["stable.md"],
+        }]);
+        await using var site = builder.Build();
+        await site.PublishAsync("dist");
+        await site.PublishAsync("dist");
+        Assert.Equal(1, log.Counts["selected"]);
+        key = "second";
+        await site.PublishAsync("dist");
+        Assert.Equal(2, log.Counts["selected"]);
+        Assert.Contains("Second source", await File.ReadAllTextAsync(Path.Combine(root, "dist", "articles", "selected", "index.html")), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CopiedModelsAndItemArrays_RenderOnEveryBuild(bool array)
+    {
+        var root = CreateSiteRoot("unregistered-parameters");
+        var log = new ContentRenderLog();
+        var builder = CreateArticleBuilder(root, log, mapPages: false);
+        builder.AddPageParameters<ContentArticlePage>(services => services.GetRequiredService<ContentCollection<ContentArticle>>()
+            .Select(article => new
+            {
+                article.Slug,
+                Article = array ? article : article with { },
+                Items = array ? new[] { article } : null,
+            }));
+        await using var site = builder.Build();
+        await site.PublishAsync("dist");
+        await site.PublishAsync("dist");
+        Assert.Equal(2, log.Counts["stable"]);
+        Assert.Equal(2, log.Counts["changing"]);
+    }
+
+    [Fact]
+    public async Task PreviousSnapshotItem_FailsTrackedRenderingAndPlanning_ButCanRenderInDevelopment()
+    {
+        var root = CreateSiteRoot("stale-parameters");
+        var builder = CreateArticleBuilder(root, new ContentRenderLog(), mapPages: false);
+        ContentArticle? retained = null;
+        builder.AddPageParameters<ContentArticlePage>(services =>
+        {
+            retained ??= services.GetRequiredService<ContentCollection<ContentArticle>>()["stable.md"];
+            return [new { retained.Slug, Article = retained }];
+        });
+        await using var site = builder.Build();
+        await using (var development = CreateArticleBuilder(root, new ContentRenderLog()).Build())
+        {
+            var developmentPage = development.CreateSnapshot().Pages[0];
+            development.InvalidateContent();
+            Assert.Contains("Post", await development.RenderPageAsync(developmentPage, CancellationToken.None), StringComparison.Ordinal);
+        }
+        await site.PublishAsync("dist");
+        // With no manifest the stale parameter must be caught before rendering.
+        File.Delete(Path.Combine(root, ".kiji", "cache", "manifest.json"));
+        var renderError = await Assert.ThrowsAnyAsync<Exception>(() => site.PublishAsync("dist"));
+        Assert.Contains("previous content snapshot", renderError.ToString(), StringComparison.Ordinal);
+
+        // Publish a valid snapshot, then retain its item into the next planning pass.
+        retained = null;
+        await site.PublishAsync("dist");
+        var planningError = await Assert.ThrowsAnyAsync<Exception>(() => site.PublishAsync("dist"));
+        Assert.Contains("previous content snapshot", planningError.ToString(), StringComparison.Ordinal);
+    }
+
+    private static StaticSiteBuilder CreateArticleBuilder(string root, ContentRenderLog log,
+        bool navigation = false, bool mapPages = true)
+    {
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        TestSiteAssets.Bind(builder.Paths, Path.Combine(root, "static"));
+        builder.Services.AddSingleton(log);
+        builder.AddMarkdownContent<FrontMatter, ContentArticle>(ContentArticle.Create);
+        if (mapPages)
+        {
+            builder.AddPageParameters<ContentArticlePage>(services =>
+            {
+                var articles = services.GetRequiredService<ContentCollection<ContentArticle>>()
+                    .OrderBy(article => article.Title, StringComparer.Ordinal).ToArray();
+                return articles.Select((article, index) => new
+                {
+                    article.Slug,
+                    Article = article,
+                    Previous = navigation && index > 0 ? articles[index - 1] : null,
+                    Next = navigation && index + 1 < articles.Length ? articles[index + 1] : null,
+                });
+            });
+        }
+        return builder;
+    }
+
+    [Fact]
     public async Task MappedStaticAssets_AreRetainedRepairedAndRetiredByPublicPath()
     {
         var source = Path.Combine(_testDir, "library.css");

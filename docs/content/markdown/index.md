@@ -101,21 +101,19 @@ A key identifies the DI service; each item's ID is still its `Path` relative to 
 
 ## Render a Markdown body
 
-Look up the item by the key passed through `AddPageParameters` and use `MarkdownBody`:
+Pass a collection item through `AddPageParameters` and use `MarkdownBody`:
 
 ```razor
-@inject ContentCollection<MarkdownContent<FrontMatter>> Posts
-
-<div class="prose"><MarkdownBody Content="@Posts[ContentKey]" /></div>
+<div class="prose"><MarkdownBody Content="@Post" /></div>
 
 @code {
-    [Parameter] public string ContentKey { get; set; } = string.Empty;
+    [Parameter] public MarkdownContent<FrontMatter> Post { get; set; } = default!;
 }
 ```
 
-With the `Post` model, use `Content="@Posts[ContentKey].Content"`. You can also call
-`RenderAsync()` and render the result as a `MarkupString`. These produce raw HTML,
-so render only trusted Markdown or sanitize it first.
+With the `Post` model, use `Content="@Post.Content"`. You can also call `RenderAsync()`
+and render the result as a `MarkupString`. These produce raw HTML, so render only trusted
+Markdown or sanitize it first.
 
 ## Customize parsing and HTML
 

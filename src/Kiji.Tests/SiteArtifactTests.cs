@@ -208,17 +208,16 @@ public sealed class SiteArtifactTests : IDisposable
         builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(builder.Paths, staticPath ?? TestSitePaths.StaticDirectory);
 
-        IReadOnlyList<Post> items =
+        builder.RegisterContent<Post>(static _ =>
         [
-            TestArticleContents.CreatePost(
+            ("hello-world.md", TestArticleContents.CreatePost(
                 "hello-world",
                 "Hello World",
                 "Hello world description",
                 new DateOnly(2026, 3, 18),
                 null,
-                "Testing"),
-        ];
-        builder.RegisterContent<Post>(_ => [.. items.Select(post => (post.Id, post, Digest: (string?)null))]);
+                "Testing"), null),
+        ]);
         TestArticleContents.MapSite(builder);
         foreach (var artifact in artifacts)
         {

@@ -6,13 +6,13 @@ namespace Kiji.Tests.TestSite;
 [Route("/assets/{Kind}/")]
 public sealed class AssetPage : ComponentBase
 {
-    [Inject] public ContentCollection<AssetRenderLog> Logs { get; set; } = default!;
+    [Inject] public AssetRenderLog Log { get; set; } = default!;
     [Parameter] public string Kind { get; set; } = "assets";
     [Parameter] public string Path { get; set; } = "app.js";
 
     protected override void BuildRenderTree(RenderTreeBuilder builder)
     {
-        Logs.Single().Counts.AddOrUpdate(Kind, 1, static (_, count) => count + 1);
+        Log.Counts.AddOrUpdate(Kind, 1, static (_, count) => count + 1);
         if (Kind is "importmap" or "custom")
         {
             builder.OpenComponent<ImportMap>(0);

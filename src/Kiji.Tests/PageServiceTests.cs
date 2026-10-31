@@ -101,7 +101,7 @@ public sealed class PageServiceTests : IDisposable
             case "open-generic": services.AddSingleton(typeof(ContentCollection<>), typeof(ContentCollection<>)); break;
             case "provider": services.AddSingleton<IServiceProvider>(_ => throw new NotSupportedException()); break;
             case "environment": services.Replace(ServiceDescriptor.Singleton(builder.Environment)); break;
-            case "content": services.RemoveAll<ContentCollection<ServiceProbe>>(); break;
+            case "content": services.RemoveAll<ContentCollection<object>>(); break;
             case "configuration": services.AddSingleton<Microsoft.Extensions.Configuration.IConfiguration>(new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build()); break;
             case "keyed-content-remove": services.Remove(services.Single(descriptor => descriptor.IsKeyedService)); break;
             case "keyed-content-replace":
@@ -232,10 +232,11 @@ public sealed class PageServiceTests : IDisposable
         builder.SiteInfo = new SiteInfo { Name = "Services", BaseUrl = new Uri("https://example.test/") };
         if (probe is not null)
         {
-            builder.RegisterContent<ServiceProbe>(_ => [("0", probe, "stable")], "probes");
+            builder.Services.AddSingleton(probe);
+            builder.RegisterContent<object>(_ => []);
             builder.Services.AddScoped<RenderDependency>();
             builder.Services.AddScoped<IRenderService>(provider => new RenderService(
-                provider.GetRequiredService<ContentCollection<ServiceProbe>>(),
+                provider.GetRequiredService<ServiceProbe>(),
                 provider.GetRequiredService<RenderDependency>(), provider.GetRequiredService<PageInfo>()));
             builder.UseDefaultLayout<ServiceLayout>();
         }

@@ -40,7 +40,7 @@ var builder = StaticSite.CreateBuilder(args);
 builder.SiteInfo = new SiteInfo { Name = "Portable", BaseUrl = new Uri("https://example.test/") };
 builder.Services.Configure<MarkdownOptions>(options => options.Pipeline.DocumentProcessed += _ => Console.WriteLine("RENDER"));
 builder.AddMarkdownContent<FrontMatter>();
-builder.AddPageParameters<Article>(services => services.GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>().Select(entry => new { Key = entry.Path }));
+builder.AddPageParameters<Article>(services => services.GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>().Select(entry => new { Key = entry.Path, Content = entry }));
 await builder.Build().RunAsync();
 namespace Portable { public sealed class FrontMatter { public string? Title { get; set; } } }
 '@ | Set-Content (Join-Path $root 'Program.cs')
@@ -48,13 +48,13 @@ namespace Portable { public sealed class FrontMatter { public string? Title { ge
 @page "/{Key}/"
 @using Kiji
 @using Kiji.Markdown
-@inject ContentCollection<MarkdownContent<FrontMatter>> Articles
 @((Microsoft.AspNetCore.Components.MarkupString)body)
 <small>@SourcePath()</small>
 @code {
     [Microsoft.AspNetCore.Components.Parameter] public string Key { get; set; } = "";
+    [Microsoft.AspNetCore.Components.Parameter] public MarkdownContent<FrontMatter> Content { get; set; } = default!;
     private string body = "";
-    protected override async Task OnInitializedAsync() { body = await Articles[Key].RenderAsync(); }
+    protected override async Task OnInitializedAsync() { body = await Content.RenderAsync(); }
     private static string SourcePath([System.Runtime.CompilerServices.CallerFilePath] string source = "") => source;
 }
 '@ | Set-Content (Join-Path $root 'Article.razor')

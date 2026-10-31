@@ -2,9 +2,9 @@ namespace Kiji.Tests.TestSite.PageServices;
 
 public sealed class RenderService : IRenderService, IAsyncDisposable
 {
-    public RenderService(ContentCollection<ServiceProbe> probes, RenderDependency dependency, PageInfo page)
+    public RenderService(ServiceProbe probe, RenderDependency dependency, PageInfo page)
     {
-        Probe = probes["0"];
+        Probe = probe;
         Dependency = dependency;
         Page = page;
         Probe.Created.Enqueue(this);

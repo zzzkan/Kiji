@@ -14,8 +14,6 @@ public sealed class Article
         Slug = slug;
     }
 
-    public string Id => _content.Path;
-
     public string Slug { get; }
 
     public string? Title => _content.FrontMatter.Title;

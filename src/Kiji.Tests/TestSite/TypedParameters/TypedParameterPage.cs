@@ -6,7 +6,7 @@ namespace Kiji.Tests.TestSite.TypedParameters;
 [Route("/typed/{Id}/")]
 public sealed class TypedParameterPage : ComponentBase
 {
-    [Inject] public ContentCollection<ParameterRenderLog> Logs { get; set; } = default!;
+    [Inject] public ParameterRenderLog Log { get; set; } = default!;
     [Parameter] public int Id { get; set; }
     [Parameter] public bool Featured { get; set; }
     [Parameter] public DayOfWeek Kind { get; set; }
@@ -18,7 +18,7 @@ public sealed class TypedParameterPage : ComponentBase
 
     protected override void BuildRenderTree(RenderTreeBuilder builder)
     {
-        Logs.Single().Record(this);
+        Log.Record(this);
         builder.OpenElement(0, "p");
         builder.AddContent(1, FormattableString.Invariant($"{Id}|{Featured}|{Kind}|{Count}|{Summary}|{string.Join(',', Tags ?? [])}|{(Model as ParameterModel)?.Title}"));
         builder.CloseElement();

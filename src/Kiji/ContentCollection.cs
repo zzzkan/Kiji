@@ -140,6 +140,7 @@ public sealed class ContentCollection<T> : IReadOnlyCollection<T>
                     $"The internal content loader for '{typeof(T).Name}' produced duplicate ID '{id}'.");
             }
 
+            _runtime.RegisterItem(item, _sourceId, id, digest);
             entries[i] = item;
         }
 

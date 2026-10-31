@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Kiji.Hosting;
@@ -18,6 +19,8 @@ internal sealed class ContentRuntime
     private readonly HashSet<(Type Type, string? ServiceKey)> _registrations = [];
     private readonly ConcurrentDictionary<object, object> _materialized = new();
     private readonly Lock _materializationLock = new();
+    private readonly ConditionalWeakTable<object, ContentItemIdentity> _items = [];
+    private long _generation;
     private IServiceProvider? _services;
 
     /// <summary>
@@ -47,10 +50,31 @@ internal sealed class ContentRuntime
     {
         lock (_materializationLock)
         {
+            _generation++;
             _materialized.Clear();
             Dependencies.Invalidate();
             Files.Invalidate();
         }
+    }
+
+    internal void RegisterItem(object item, string sourceId, string id, string? digest)
+    {
+        if (!_items.TryAdd(item, new ContentItemIdentity(sourceId, id, digest, _generation)))
+        {
+            throw new InvalidOperationException(
+                $"Content item '{id}' reuses an instance already registered by a content source. The select projection must return a new instance for each item.");
+        }
+    }
+
+    internal ContentItemIdentity? ResolveItem(object item)
+    {
+        if (!_items.TryGetValue(item, out var identity)) { return null; }
+        if (identity.Generation != Volatile.Read(ref _generation))
+        {
+            throw new InvalidOperationException(
+                $"Content item '{identity.Id}' belongs to a previous content snapshot. Resolve current collection items in the AddPageParameters factory for each build.");
+        }
+        return identity;
     }
 
     internal TMaterialized GetOrMaterialize<TMaterialized>(object handle, Func<IServiceProvider, TMaterialized> factory)

@@ -14,7 +14,7 @@ internal static class MarkdownFrontMatterParser
         IDeserializer deserializer,
         out string frontMatterText)
     {
-        var extracted = TryExtractFrontMatter(content, out var yaml, out var body);
+        var extracted = ExtractFrontMatter(content, out var yaml, out var body);
         frontMatterText = extracted ? content[yaml] : string.Empty;
         var frontMatter = deserializer.Deserialize<TFrontMatter>(extracted ? frontMatterText : "{}")
             ?? deserializer.Deserialize<TFrontMatter>("{}")
@@ -29,7 +29,7 @@ internal static class MarkdownFrontMatterParser
     /// Returns the payload and body as ranges into
     /// <paramref name="content"/>.
     /// </summary>
-    internal static bool TryExtractFrontMatter(ReadOnlySpan<char> content, out Range yaml, out Range body)
+    internal static bool ExtractFrontMatter(ReadOnlySpan<char> content, out Range yaml, out Range body)
     {
         yaml = default;
         body = default;

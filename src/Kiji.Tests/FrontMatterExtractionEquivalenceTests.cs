@@ -19,7 +19,7 @@ public sealed class FrontMatterExtractionEquivalenceTests
     [InlineData("---\ntitle: Test\n---", "title: Test", "")]
     public void ExtractsDelimitedYamlAndPreservesBody(string content, string? expectedYaml, string? expectedBody)
     {
-        var extracted = MarkdownFrontMatterParser.TryExtractFrontMatter(content, out var yaml, out var body);
+        var extracted = MarkdownFrontMatterParser.ExtractFrontMatter(content, out var yaml, out var body);
         Assert.Equal(expectedYaml is not null, extracted);
         if (extracted)
         {

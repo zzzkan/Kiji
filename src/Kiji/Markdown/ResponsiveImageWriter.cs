@@ -61,10 +61,13 @@ internal sealed class ResponsiveImageWriter
             var publicDirectory = context.OutputUrlDirectory + EncodeRelativePath(directory);
             var variants = imageInfo.Variants;
             var largest = variants[^1];
+            var width = TryGetAttribute(attributes, "width", out var explicitWidth)
+                ? explicitWidth
+                : GetDimension(attributes, "height", imageInfo.OriginalWidth, imageInfo.OriginalHeight);
 
             var srcset = string.Join(", ", variants.Select(variant => $"{CreateVariantUrl(publicDirectory, variant.FileName)} {variant.Width}w"));
             // Auto sizes requires lazy loading, including an explicit loading override.
-            var displayWidth = TryGetAttribute(attributes, "width", out var width) ? ParseDimension(width) : 0;
+            var displayWidth = ParseDimension(width);
             if (displayWidth == 0) { displayWidth = largest.Width; }
             var sizes = FormattableString.Invariant($"(max-width: {displayWidth}px) 100vw, {displayWidth}px");
             if (isLazy) { sizes = "auto, " + sizes; }
@@ -72,7 +75,7 @@ internal sealed class ResponsiveImageWriter
             WriteAttribute(renderer, attributes, "src", CreateVariantUrl(publicDirectory, largest.FileName), escapeUrl: true);
             WriteAttribute(renderer, attributes, "srcset", srcset);
             WriteAttribute(renderer, attributes, "sizes", sizes);
-            WriteAttribute(renderer, attributes, "width", GetDimension(attributes, "height", imageInfo.OriginalWidth, imageInfo.OriginalHeight));
+            WriteAttribute(renderer, attributes, "width", width);
             WriteAttribute(renderer, attributes, "height", GetDimension(attributes, "width", imageInfo.OriginalHeight, imageInfo.OriginalWidth));
         }
         else

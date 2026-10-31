@@ -41,6 +41,12 @@ public sealed class ResponsiveImageExtensionTests
     [InlineData("width=0", "1920")]
     [InlineData("width=50%", "1920")]
     [InlineData("width=auto", "1920")]
+    [InlineData("height=200", "356")]
+    [InlineData("HEIGHT=200", "356")]
+    [InlineData("height=0", "1920")]
+    [InlineData("height=50%", "1920")]
+    [InlineData("height=auto", "1920")]
+    [InlineData("width=auto height=200", "1920")]
     public void Process_EagerImageSizesUsesPositiveNumericWidth(string attributes, string expectedWidth)
     {
         var images = new Dictionary<string, ProcessedImageInfo> { ["photo.png"] = CreateImageInfo("photo.png") };
@@ -50,21 +56,25 @@ public sealed class ResponsiveImageExtensionTests
     }
 
     [Theory]
-    [InlineData("lazy", "auto, ")]
-    [InlineData("eager", "")]
-    public void Process_ExplicitLoadingControlsAutomaticSizes(string loading, string sizesPrefix)
+    [InlineData("lazy", "", "auto, ", "1920")]
+    [InlineData("eager", "", "", "1920")]
+    [InlineData("lazy", "height=200", "auto, ", "356")]
+    [InlineData("eager", "height=200", "", "356")]
+    public void Process_ExplicitLoadingControlsAutomaticSizes(string loading, string attributes, string sizesPrefix, string expectedWidth)
     {
         var images = new Dictionary<string, ProcessedImageInfo> { ["photo.png"] = CreateImageInfo("photo.png") };
-        var markdown = $"![Photo](photo.png){{loading={loading}}}";
+        var markdown = $"![Photo](photo.png){{loading={loading} {attributes}}}";
 
         var html = Render(markdown + "\n\n" + markdown, images);
 
-        Assert.Equal(2, Regex.Count(html, $"sizes=\"{Regex.Escape(sizesPrefix)}\\(max-width: 1920px\\) 100vw, 1920px\""));
+        Assert.Equal(2, Regex.Count(html, $"sizes=\"{Regex.Escape(sizesPrefix)}\\(max-width: {expectedWidth}px\\) 100vw, {expectedWidth}px\""));
     }
 
     [Theory]
     [InlineData("width=300", "300", "169")]
     [InlineData("height=300", "533", "300")]
+    [InlineData("height=200", "356", "200")]
+    [InlineData("height=1", "2", "1")]
     [InlineData("width=1", "1", "1")]
     public void Process_OneExplicitDimensionPreservesAspectRatio(string attributes, string width, string height)
     {
@@ -74,6 +84,7 @@ public sealed class ResponsiveImageExtensionTests
 
         Assert.Equal(width, values["width"]);
         Assert.Equal(height, values["height"]);
+        Assert.Equal($"(max-width: {width}px) 100vw, {width}px", values["sizes"]);
     }
 
     [Theory]

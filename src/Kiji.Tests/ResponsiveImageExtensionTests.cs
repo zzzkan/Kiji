@@ -32,6 +32,21 @@ public sealed class ResponsiveImageExtensionTests
         Assert.Equal("300", values["width"]);
         Assert.Equal("200", values["height"]);
         Assert.Equal("lazy", values["loading"]);
+        Assert.Equal("auto, (max-width: 300px) 100vw, 300px", values["sizes"]);
+    }
+
+    [Theory]
+    [InlineData("width=300", "300")]
+    [InlineData("WIDTH=300", "300")]
+    [InlineData("width=0", "1920")]
+    [InlineData("width=50%", "1920")]
+    [InlineData("width=auto", "1920")]
+    public void Process_EagerImageSizesUsesPositiveNumericWidth(string attributes, string expectedWidth)
+    {
+        var images = new Dictionary<string, ProcessedImageInfo> { ["photo.png"] = CreateImageInfo("photo.png") };
+        var values = ReadImageAttributes(Render($"![Photo](photo.png){{{attributes}}}", images));
+        Assert.Equal("eager", values["loading"]);
+        Assert.Equal($"(max-width: {expectedWidth}px) 100vw, {expectedWidth}px", values["sizes"]);
     }
 
     [Theory]

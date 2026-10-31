@@ -25,6 +25,47 @@ public sealed class MarkdownContentSourceTests : IDisposable
     }
 
     [Fact]
+    public async Task OptionsReadingTheirOwnContent_FailsClearlyAndCanRetry()
+    {
+        WriteMarkdown("post.md", "Post");
+        var builder = CreateBuilder();
+        var readContent = true;
+        builder.Services.AddOptions<MarkdownOptions>()
+            .Configure<ContentCollection<MarkdownContent<FrontMatter>>>((options, posts) =>
+            {
+                if (readContent) { _ = posts.Count; }
+            });
+        builder.AddMarkdownContent<FrontMatter>();
+        await using var site = builder.Build();
+        site.UsePlanningOptions();
+        var posts = site.ServiceProvider.GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>();
+
+        var error = Assert.Throws<InvalidOperationException>(() => posts.Count);
+        Assert.Contains("recursively", error.Message);
+        readContent = false;
+        Assert.Single(posts);
+    }
+
+    [Theory]
+    [InlineData("---\ntitle: Hello", "closing '---'")]
+    [InlineData("\n---\ntitle: Hello\n---\nBody", "first line")]
+    [InlineData("---\ncreatedAt: \"10:30\"\n---\nBody", "yyyy-MM-dd")]
+    public async Task InvalidFrontMatter_FailsLoadingWithSourcePath(string markdown, string reason)
+    {
+        var path = Path.Combine(_testDir, "content", "post.md");
+        await File.WriteAllTextAsync(path, markdown);
+        var builder = CreateBuilder();
+        builder.AddMarkdownContent<FrontMatter>();
+        await using var site = builder.Build();
+        site.UsePlanningOptions();
+
+        var error = Assert.Throws<InvalidOperationException>(() => site.ServiceProvider
+            .GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>().Count);
+        Assert.Contains(path, error.Message);
+        Assert.Contains(reason, error.ToString());
+    }
+
+    [Fact]
     public void Directory_LimitsTheSourceToThatSubtree()
     {
         WriteMarkdown("posts/first.md", "First");

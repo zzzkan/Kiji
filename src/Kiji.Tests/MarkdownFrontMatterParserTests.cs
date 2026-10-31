@@ -5,6 +5,56 @@ namespace Kiji.Tests;
 
 public sealed class MarkdownFrontMatterParserTests
 {
+    [Theory]
+    [InlineData("---")]
+    [InlineData("--- \t")]
+    [InlineData("---\ntitle: Hello")]
+    [InlineData("---\r\ntitle: Hello\r\n----\r\nBody")]
+    public void Parse_UnclosedFrontMatter_Fails(string markdown)
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            MarkdownFrontMatterParser.ParseContentAndBody<FrontMatter>(markdown, new MarkdownOptions().CreateDeserializer()));
+        Assert.Contains("closing '---'", error.Message);
+    }
+
+    [Theory]
+    [InlineData("\n---\ntitle: Hello\n---\nBody")]
+    [InlineData(" \t\r\n\r\n---\r\ntitle: Hello")]
+    public void Parse_FrontMatterAfterBlankLines_Fails(string markdown)
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            MarkdownFrontMatterParser.ParseContentAndBody<FrontMatter>(markdown, new MarkdownOptions().CreateDeserializer()));
+        Assert.Contains("first line", error.Message);
+    }
+
+    [Theory]
+    [InlineData("    ---\n    Code block")]
+    [InlineData("\n    ---\n    Code block")]
+    [InlineData("\n# Heading\n\n---\nBody")]
+    public void Parse_OrdinaryMarkdown_PreservesBody(string markdown)
+    {
+        var (frontMatter, body) = MarkdownFrontMatterParser.ParseContentAndBody<FrontMatter>(
+            markdown, new MarkdownOptions().CreateDeserializer());
+        Assert.Null(frontMatter.Title);
+        Assert.Equal(markdown, body);
+    }
+
+    [Theory]
+    [InlineData("10:30")]
+    [InlineData("10:30+09:00")]
+    [InlineData("January 15")]
+    [InlineData("2024-01")]
+    [InlineData("01-15")]
+    public void Parse_IncompleteDates_FailForBothDateTypes(string value)
+    {
+        var markdown = $"---\ndate: \"{value}\"\n---\n";
+        var deserializer = new MarkdownOptions().CreateDeserializer();
+        Assert.Throws<YamlDotNet.Core.YamlException>(() =>
+            MarkdownFrontMatterParser.ParseContentAndBody<Dictionary<string, DateTimeOffset>>(markdown, deserializer));
+        Assert.Throws<YamlDotNet.Core.YamlException>(() =>
+            MarkdownFrontMatterParser.ParseContentAndBody<Dictionary<string, DateTime?>>(markdown, deserializer));
+    }
+
     [Fact]
     public void Parse_RequestedFrontMatterType_ParsesYaml()
     {

@@ -353,6 +353,7 @@ Replace `Pages/Home.razor` with a list of posts, newest first:
 @using MySite.Components
 @using MySite.Models
 @inject SiteInfo Site
+@inject ContentCollection<BlogPost> Posts
 
 <PageHead Title="Home" />
 

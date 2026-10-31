@@ -157,6 +157,31 @@ public sealed class IncrementalBuildTests : IDisposable
         return builder;
     }
 
+    [Fact]
+    public async Task RetainedSharedItem_FailsTheNextPublish()
+    {
+        var root = CreateSiteRoot("stale-shared-item");
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        TestSiteAssets.Bind(builder.Paths, Path.Combine(root, "static"));
+        builder.Services.AddSingleton(new ContentRenderLog());
+        var shared = new FrontMatter { Title = "Shared" };
+        builder.AddMarkdownContent<FrontMatter, FrontMatter>(_ => shared);
+        FrontMatter? retained = null;
+        builder.AddPageParameters<ContentItemPage>(services =>
+        {
+            // Enumerate once so both source items register the same instance. Later
+            // builds mimic a singleton holding that item without reading the collection.
+            retained ??= services.GetRequiredService<ContentCollection<FrontMatter>>().First();
+            return [new { Slug = "shared", Item = retained }];
+        });
+        await using var site = builder.Build();
+        await site.PublishAsync("dist");
+
+        var error = await Assert.ThrowsAnyAsync<Exception>(() => site.PublishAsync("dist"));
+        Assert.Contains("previous content snapshot", error.ToString(), StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

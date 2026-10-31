@@ -126,9 +126,10 @@ public sealed class ContentCollection<T> : IReadOnlyCollection<T>
 
         var index = new Dictionary<string, (T Item, string? Digest, string? FrontMatterDigest)>(loaded.Count, StringComparer.OrdinalIgnoreCase);
         var entries = new T[loaded.Count];
+        var projections = new (string Id, string? Digest)[loaded.Count];
         for (var i = 0; i < loaded.Count; i++)
         {
-            var (id, item, digest, _, frontMatterDigest) = loaded[i];
+            var (id, item, digest, projectionDigest, frontMatterDigest) = loaded[i];
             if (string.IsNullOrWhiteSpace(id))
             {
                 throw new InvalidOperationException(
@@ -143,23 +144,24 @@ public sealed class ContentCollection<T> : IReadOnlyCollection<T>
 
             _runtime.RegisterItem(item, _sourceId, id, digest);
             entries[i] = item;
+            projections[i] = (id, projectionDigest);
         }
 
         return new MaterializedContent(
             entries,
             index.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase),
-            loaded);
+            projections);
     }
 
     private sealed class MaterializedContent(
         IReadOnlyList<T> entries,
         FrozenDictionary<string, (T Item, string? Digest, string? FrontMatterDigest)> index,
-        IReadOnlyList<(string Id, T Item, string? Digest, string? ProjectionDigest, string? FrontMatterDigest)> loaded)
+        IReadOnlyList<(string Id, string? Digest)> projections)
     {
         public Lazy<string?> CollectionDigest { get; } = new(() =>
         {
             var builder = new StringBuilder();
-            foreach (var (id, _, _, entryDigest, _) in loaded)
+            foreach (var (id, entryDigest) in projections)
             {
                 if (entryDigest is not { } digest) { return null; }
                 BuildFingerprint.AppendPart(builder, id);

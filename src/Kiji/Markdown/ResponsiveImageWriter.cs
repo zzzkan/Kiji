@@ -64,7 +64,9 @@ internal sealed class ResponsiveImageWriter
 
             var srcset = string.Join(", ", variants.Select(variant => $"{CreateVariantUrl(publicDirectory, variant.FileName)} {variant.Width}w"));
             // Auto sizes requires lazy loading, including an explicit loading override.
-            var sizes = $"(max-width: {largest.Width}px) 100vw, {largest.Width}px";
+            var displayWidth = TryGetAttribute(attributes, "width", out var width) ? ParseDimension(width) : 0;
+            if (displayWidth == 0) { displayWidth = largest.Width; }
+            var sizes = FormattableString.Invariant($"(max-width: {displayWidth}px) 100vw, {displayWidth}px");
             if (isLazy) { sizes = "auto, " + sizes; }
 
             WriteAttribute(renderer, attributes, "src", CreateVariantUrl(publicDirectory, largest.FileName), escapeUrl: true);

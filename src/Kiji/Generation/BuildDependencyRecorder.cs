@@ -7,7 +7,7 @@ internal sealed class BuildDependencyRecorder
     // Pages without images allocate no image collections.
     private readonly Lock _gate = new();
     private readonly Dictionary<string, string> _files = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, string> _values = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (string Digest, string Hash)> _values = new(StringComparer.Ordinal);
     private HashSet<BuildManifestImage>? _imageRequests;
     private HashSet<string>? _images;
     private HashSet<string>? _outputs;
@@ -47,7 +47,15 @@ internal sealed class BuildDependencyRecorder
         lock (_gate)
         {
             if (digest is null) { Cacheable = false; return; }
-            _values[key] = BuildFingerprint.HashText(digest);
+            if (_values.TryGetValue(key, out var previous))
+            {
+                if (previous.Digest != digest)
+                {
+                    throw new IOException("An input changed during rendering: " + key);
+                }
+                return;
+            }
+            _values.Add(key, (digest, BuildFingerprint.HashText(digest)));
         }
     }
 
@@ -68,7 +76,7 @@ internal sealed class BuildDependencyRecorder
 
     internal IEnumerable<KeyValuePair<string, string>> FileInputs => _files;
     internal IEnumerable<BuildManifestDependency> Values => _values.OrderBy(p => p.Key, StringComparer.Ordinal)
-        .Select(p => new BuildManifestDependency("value", p.Key, p.Value));
+        .Select(p => new BuildManifestDependency("value", p.Key, p.Value.Hash));
     internal IEnumerable<BuildManifestImage> ImageRequests => _imageRequests ?? [];
     internal string[] Images => _images is null ? [] : [.. _images.Order(StringComparer.Ordinal)];
     internal string[] AdditionalOutputs => _outputs is null ? [] : [.. _outputs.Order(StringComparer.OrdinalIgnoreCase)];

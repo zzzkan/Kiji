@@ -10,9 +10,11 @@ public static class PostSlug
     {
         ArgumentNullException.ThrowIfNull(path);
 
-        return string.Equals(Path.GetFileName(path), "index.md", StringComparison.OrdinalIgnoreCase)
+        var slug = string.Equals(Path.GetFileName(path), "index.md", StringComparison.OrdinalIgnoreCase)
             ? Path.GetFileName(Path.GetDirectoryName(path))
-                ?? throw new InvalidOperationException($"Cannot determine a slug for '{path}'.")
             : Path.GetFileNameWithoutExtension(Path.GetFileName(path));
+        return !string.IsNullOrWhiteSpace(slug)
+            ? slug
+            : throw new InvalidOperationException($"Cannot determine a slug for '{path}'.");
     }
 }

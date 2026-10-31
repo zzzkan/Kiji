@@ -16,7 +16,6 @@ public sealed class FrontMatterExtractionEquivalenceTests
     [InlineData("# Body", null, null)]
     [InlineData("----\ntitle: Test\n---\nBody", null, null)]
     [InlineData("---title: Test\n---\nBody", null, null)]
-    [InlineData("---\ntitle: Test", null, null)]
     [InlineData("---\ntitle: Test\n---", "title: Test", "")]
     public void ExtractsDelimitedYamlAndPreservesBody(string content, string? expectedYaml, string? expectedBody)
     {

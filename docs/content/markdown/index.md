@@ -39,7 +39,9 @@ itself; map items to pages with `AddPageParameters<TPage>` as in
 
 Keys are camel case, such as `publishedAt` for `PublishedAt`, and match case-insensitively.
 Unknown keys, malformed YAML, and values that do not fit your class fail the build.
-Dates without an offset are read as UTC.
+Dates must start with a complete `yyyy-MM-dd` date, optionally followed by a time and
+offset. Dates without an offset are read as UTC. Time-only and partial-date values
+fail the build. Front matter must start on the first line and have a closing `---` line.
 
 ## Choose the files
 

@@ -34,26 +34,25 @@ internal static class MarkdownFrontMatterParser
         yaml = default;
         body = default;
 
-        if (!content.StartsWith("---", StringComparison.Ordinal))
+        var index = OpeningDelimiterEnd(content);
+        if (index < 0)
         {
+            var afterBlankLines = content;
+            while (afterBlankLines.IndexOf('\n') is var newline && newline >= 0
+                && afterBlankLines[..newline].Trim().IsEmpty)
+            {
+                afterBlankLines = afterBlankLines[(newline + 1)..];
+            }
+            if (OpeningDelimiterEnd(afterBlankLines) >= 0)
+            {
+                throw new InvalidOperationException("YAML front matter must start on the first line, without leading blank lines.");
+            }
             return false;
         }
 
-        // Opening delimiter line: '---' plus optional spaces/tabs, ended by a line break.
-        var index = 3;
-        while (index < content.Length && content[index] is ' ' or '\t')
+        if (index == content.Length)
         {
-            index++;
-        }
-
-        if (index < content.Length && content[index] == '\r')
-        {
-            index++;
-        }
-
-        if (index >= content.Length || content[index] != '\n')
-        {
-            return false;
+            throw new InvalidOperationException("YAML front matter is missing its closing '---' delimiter.");
         }
 
         var yamlStart = index + 1;
@@ -65,7 +64,7 @@ internal static class MarkdownFrontMatterParser
             var offset = content[searchFrom..].IndexOf("\n---", StringComparison.Ordinal);
             if (offset < 0)
             {
-                return false;
+                throw new InvalidOperationException("YAML front matter is missing its closing '---' delimiter.");
             }
 
             var closerStart = searchFrom + offset + 1;
@@ -98,6 +97,15 @@ internal static class MarkdownFrontMatterParser
             body = (lastNewline < 0 ? content.Length : lastNewline + 1)..content.Length;
             return true;
         }
+    }
+
+    private static int OpeningDelimiterEnd(ReadOnlySpan<char> content)
+    {
+        if (!content.StartsWith("---", StringComparison.Ordinal)) { return -1; }
+        var index = 3;
+        while (index < content.Length && content[index] is ' ' or '\t') { index++; }
+        if (index < content.Length && content[index] == '\r') { index++; }
+        return index == content.Length || content[index] == '\n' ? index : -1;
     }
 
     private static bool IsDelimiterWhitespace(char value)

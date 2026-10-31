@@ -19,6 +19,7 @@ internal sealed class ContentRuntime
     private readonly HashSet<(Type Type, string? ServiceKey)> _registrations = [];
     private readonly ConcurrentDictionary<object, object> _materialized = new();
     private readonly Lock _materializationLock = new();
+    private readonly HashSet<object> _materializing = [];
     private readonly ConditionalWeakTable<object, ContentItemIdentity> _items = [];
     private long _generation;
     private IServiceProvider? _services;
@@ -78,13 +79,13 @@ internal sealed class ContentRuntime
 
     internal ContentItemIdentity? ResolveItem(object item)
     {
-        if (!_items.TryGetValue(item, out var identity) || identity.Shared) { return null; }
+        if (!_items.TryGetValue(item, out var identity)) { return null; }
         if (identity.Generation != Volatile.Read(ref _generation))
         {
             throw new InvalidOperationException(
                 $"Content item '{identity.Id}' belongs to a previous content snapshot. Resolve current collection items in the AddPageParameters factory for each build.");
         }
-        return identity;
+        return identity.Shared ? null : identity;
     }
 
     internal TMaterialized GetOrMaterialize<TMaterialized>(object handle, Func<IServiceProvider, TMaterialized> factory)
@@ -116,8 +117,17 @@ internal sealed class ContentRuntime
             ?? throw new InvalidOperationException(
                 "Content cannot be materialized before the site's services have been initialized.");
 
-        var materialized = factory(services);
-        _materialized[handle] = materialized;
-        return materialized;
+        if (!_materializing.Add(handle))
+        {
+            throw new InvalidOperationException(
+                "A content collection cannot be read recursively while it is being materialized. Check the collection's projection and services for circular content dependencies.");
+        }
+        try
+        {
+            var materialized = factory(services);
+            _materialized[handle] = materialized;
+            return materialized;
+        }
+        finally { _materializing.Remove(handle); }
     }
 }

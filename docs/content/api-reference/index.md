@@ -265,7 +265,10 @@ Rendering settings apply to every source. Configure them with
 | `MarkdownOptions` member           | Behavior                                                                                                                                                                                                                   |
 | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `MarkdownPipelineBuilder Pipeline` | Markdig builder. Defaults: GFM-style tables, task lists, autolinks and strikethrough; footnotes, GitHub heading IDs and generic attributes. Use `Extensions.Replace` to change a registered extension and `DocumentProcessed` to change the parsed document. |
-| `DeserializerBuilder Yaml`         | YamlDotNet builder. Defaults: camelCase matched case-insensitively, errors on unknown keys, and UTC for dates without an offset.                                                                                           |
+| `DeserializerBuilder Yaml`         | YamlDotNet builder. Defaults: camelCase matched case-insensitively, errors on unknown keys, and UTC for dates without an offset. Dates must start with a complete `yyyy-MM-dd` date, optionally followed by a time and offset. |
+
+Front matter is optional. When present, its opening `---` line must be the first line
+and must have a closing `---` line; leading blank lines or a missing closer fail loading.
 
 | `MarkdownContent<TFrontMatter>` member                                         | Behavior                                                                            |
 | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |

@@ -1,9 +1,9 @@
 @inject SiteInfo Site
-@inject ContentDictionary<Article> Articles
+@inject ContentCollection<Article> Articles
 
 <p class="nav-title">@KijiVersion</p>
 <ul>
-    @foreach (var doc in Articles.Values.OrderBy(doc => doc.Order))
+    @foreach (var doc in Articles.OrderBy(doc => doc.Order))
     {
         <li>
             <a href="@(Site.ResolveUrl($"docs/{doc.Slug}/").AbsolutePath)">

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Kiji.Markdown;
 using Kiji.Tests.TestSite;
 using Microsoft.Extensions.Logging;
@@ -121,7 +122,7 @@ public sealed class RunAsyncTests : IDisposable
         StaticSite CreateMeasuredApp(Func<string, string?> environment)
         {
             var builder = CreateBuilder(environment);
-            builder.AddContentSource<AssetRenderLog>("force-render-log", _ => [new("log", renders, "stable")]);
+            builder.Services.AddSingleton(renders);
             builder.AddPageParameters<AssetPage>(_ => [new { Kind = "first" }, new { Kind = "second" }]);
             return builder.Build();
         }
@@ -198,7 +199,7 @@ public sealed class RunAsyncTests : IDisposable
         builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(builder.Paths, Path.Combine(builder.Paths.ProjectDirectory, "static"));
 
-        builder.AddContentSource<Post>(static _ => []);
+        builder.RegisterContent<Post>(static _ => []);
         TestArticleContents.MapSite(builder);
         return builder;
     }

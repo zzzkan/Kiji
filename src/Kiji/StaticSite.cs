@@ -213,7 +213,8 @@ public sealed class StaticSite
             _environment.EnvironmentName,
             _configuration,
             _runtime.Files, _runtime.Dependencies,
-            _services.GetRequiredService<IImageProcessor>(), assetManifest.Resources, BuildLogger);
+            _services.GetRequiredService<IImageProcessor>(), assetManifest.Resources, BuildLogger,
+            _runtime.ResolveItem);
 
         // Snapshot planning already required every page type to come from a page assembly.
         // Helpers and custom encoder factories may live outside the page assemblies.
@@ -523,6 +524,17 @@ public sealed class StaticSite
         SharedRenderLifetime? sharedRenders = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
+
+        if (dependencies is not null)
+        {
+            foreach (var value in request.Parameters.Values)
+            {
+                if (value is not null && _runtime.ResolveItem(value) is { } identity)
+                {
+                    dependencies.AddValue(identity.DependencyKey, identity.Digest);
+                }
+            }
+        }
 
         PageRenderContext.SetCurrent(CreatePageRenderContext(request, dependencies, sharedRenders, cancellationToken));
         try

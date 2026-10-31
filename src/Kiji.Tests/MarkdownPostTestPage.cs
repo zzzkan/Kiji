@@ -12,7 +12,7 @@ namespace Kiji.Tests;
 public sealed class MarkdownPostTestPage : ComponentBase
 {
     [Inject]
-    public ContentDictionary<MarkdownContent<FrontMatter>> Posts { get; set; } = default!;
+    public ContentCollection<MarkdownContent<FrontMatter>> Posts { get; set; } = default!;
 
     [Parameter]
     public string Slug { get; set; } = string.Empty;

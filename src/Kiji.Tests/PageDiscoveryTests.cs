@@ -71,12 +71,12 @@ public sealed class PageDiscoveryTests
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory), typeof(TagsPage));
         builder.SiteInfo = TestArticleContents.CreateSiteInfo();
-        builder.AddContentSource<Post>(static _ => []);
+        builder.RegisterContent<Post>(static _ => []);
         builder.UseDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(builder);
         builder.UseNotFoundPage<NotFoundPage>();
-        builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
-            .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
+        builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentCollection<Post>>()
+            .Select(static post => new { post.Slug, ContentKey = post.Id }));
         // No mapping for the dynamic /tags/{TagSlug}/ template.
         var app = builder.Build();
 
@@ -153,18 +153,18 @@ public sealed class PageDiscoveryTests
         Assert.Contains("does not declare a '@page' route template", exception.Message, StringComparison.Ordinal);
     }
 
-    private static (StaticSite App, ContentDictionary<Post> Posts) CreateAppWithTagRoutes(Func<IEnumerable<object>> tagRoutes)
+    private static (StaticSite App, ContentCollection<Post> Posts) CreateAppWithTagRoutes(Func<IEnumerable<object>> tagRoutes)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
         builder.SiteInfo = TestArticleContents.CreateSiteInfo();
-        builder.AddContentSource<Post>(static _ => []);
+        builder.RegisterContent<Post>(static _ => []);
         builder.UseDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(builder);
         builder.UseNotFoundPage<NotFoundPage>();
-        builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
-            .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
+        builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentCollection<Post>>()
+            .Select(static post => new { post.Slug, ContentKey = post.Id }));
         builder.AddPageParameters<TagsPage>(_ => tagRoutes());
         var app = builder.Build();
-        return (app, app.ServiceProvider.GetRequiredService<ContentDictionary<Post>>());
+        return (app, app.ServiceProvider.GetRequiredService<ContentCollection<Post>>());
     }
 }

@@ -6,6 +6,7 @@ using Markdig.Syntax;
 namespace Kiji.Benchmarks;
 
 /// <summary>Compares constructing a Markdig renderer per body with reusing a renderer and writer.</summary>
+/// <remarks>Uses Kiji's current default pipeline. Results from different default pipelines are not comparable.</remarks>
 [MemoryDiagnoser]
 public class MarkdownRenderBenchmarks : IDisposable
 {
@@ -17,7 +18,7 @@ public class MarkdownRenderBenchmarks : IDisposable
     [GlobalSetup]
     public void Setup()
     {
-        _pipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
+        _pipeline = new Kiji.Markdown.MarkdownOptions().Pipeline.Build();
 
         var body = $"""
             # Synthetic Post 00042

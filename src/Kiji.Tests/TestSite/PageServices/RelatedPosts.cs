@@ -3,8 +3,8 @@ using Kiji.Markdown;
 namespace Kiji.Tests.TestSite.PageServices;
 
 public sealed class RelatedPosts(
-    ContentDictionary<MarkdownContent<FrontMatter>> posts,
-    ContentDictionary<RelatedTag> tags)
+    ContentCollection<MarkdownContent<FrontMatter>> posts,
+    IReadOnlyList<RelatedTag> tags)
 {
     public IReadOnlyList<string> GetKeys(string currentKey)
     {
@@ -15,18 +15,16 @@ public sealed class RelatedPosts(
             .GroupBy(key => key, StringComparer.OrdinalIgnoreCase)
             .OrderByDescending(group => group.Count())
             .ThenBy(group => group.Key, StringComparer.Ordinal)
-            .Select(group => Path.GetFileNameWithoutExtension(posts[group.Key].FileInfo.Name))];
+            .Select(group => Path.GetFileNameWithoutExtension(posts[group.Key].Path))];
     }
 
     private IReadOnlyList<string> GetTagKeys(string name)
     {
-        var tag = tags.Values.FirstOrDefault(tag => string.Equals(tag.Name, name, StringComparison.OrdinalIgnoreCase));
+        var tag = tags.FirstOrDefault(tag => string.Equals(tag.Name, name, StringComparison.OrdinalIgnoreCase));
         if (tag is null)
         {
             return [];
         }
-        // Observe actual use without reading another dictionary, which would mask
-        // a missing dependency on this cached derived dictionary in the tests.
         tag.Probe.Record();
         return tag.Keys;
     }

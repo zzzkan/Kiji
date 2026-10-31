@@ -1,10 +1,11 @@
 using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Kiji.Hosting;
 
 /// <summary>
-/// Owns the materialized state of all content dictionaries for the current site snapshot.
+/// Owns the materialized state of all content collections for the current site snapshot.
 /// Swapping snapshots (e.g. when content changes during development) simply clears the
 /// materialization cache; they re-materialize lazily on next access.
 /// </summary>
@@ -15,31 +16,30 @@ internal sealed class ContentRuntime
     /// <summary>Hashes of the content files read in the current snapshot.</summary>
     internal Generation.ContentFileRegistry Files { get; } = new();
 
-    private readonly HashSet<Type> _registeredTypes = [];
+    private readonly HashSet<(Type Type, string? ServiceKey)> _registrations = [];
     private readonly ConcurrentDictionary<object, object> _materialized = new();
     private readonly Lock _materializationLock = new();
+    private readonly HashSet<object> _materializing = [];
+    private readonly ConditionalWeakTable<object, ContentItemIdentity> _items = [];
+    private long _generation;
     private IServiceProvider? _services;
 
-    // A loader may resolve another dictionary (a tag list derived from posts, say),
-    // so materialization nests under the reentrant lock. Track dictionary instances
-    // within this site; display names need not be unique across types or sites.
-    private readonly List<object> _materializing = [];
-
     /// <summary>
-    /// Creates the registration of a dictionary for injection. The element type is its
-    /// identity — resolving is by type, so a second one of the same type would silently
-    /// displace the first rather than coexist with it.
+    /// Creates a registration identified by its element type and optional service key.
     /// </summary>
-    internal ServiceDescriptor Register<T>(Func<ContentDictionary<T>> createDictionary)
+    internal ServiceDescriptor Register<T>(string? serviceKey, Func<ContentCollection<T>> createCollection)
         where T : class
     {
-        if (!_registeredTypes.Add(typeof(T)))
+        if (!_registrations.Add((typeof(T), serviceKey)))
         {
             throw new InvalidOperationException(
-                $"A content dictionary of type '{typeof(T).Name}' is already registered. Each one is identified by its element type, so declare a distinct model type per source.");
+                $"A content collection of type '{typeof(T).Name}' with service key '{serviceKey ?? "(unkeyed)"}' is already registered. Use AddKeyedMarkdownContent with a different key, or project into a distinct model type per source.");
         }
 
-        return ServiceDescriptor.Singleton(createDictionary());
+        var collection = createCollection();
+        return serviceKey is null
+            ? ServiceDescriptor.Singleton(collection)
+            : ServiceDescriptor.KeyedSingleton(serviceKey, collection);
     }
 
     internal void Attach(IServiceProvider services)
@@ -51,10 +51,41 @@ internal sealed class ContentRuntime
     {
         lock (_materializationLock)
         {
+            _generation++;
             _materialized.Clear();
             Dependencies.Invalidate();
             Files.Invalidate();
         }
+    }
+
+    /// <remarks>Called during materialization, which holds the materialization lock.</remarks>
+    internal void RegisterItem(object item, string sourceId, string id, string? digest)
+    {
+        // Strings are fingerprinted by value, and equal strings may share an instance.
+        if (item is string) { return; }
+
+        if (_items.TryGetValue(item, out var existing) && existing.Generation == _generation
+            && !(existing.SourceId == sourceId && existing.Id == id))
+        {
+            // A parameter holding a shared instance cannot name its item: render it every time.
+            _items.AddOrUpdate(item, existing with { Shared = true });
+            return;
+        }
+
+        // Parsed sources are reused across snapshots, so an unchanged file's front matter can
+        // return as the same instance and replace its previous registration.
+        _items.AddOrUpdate(item, new ContentItemIdentity(sourceId, id, digest, _generation));
+    }
+
+    internal ContentItemIdentity? ResolveItem(object item)
+    {
+        if (!_items.TryGetValue(item, out var identity)) { return null; }
+        if (identity.Generation != Volatile.Read(ref _generation))
+        {
+            throw new InvalidOperationException(
+                $"Content item '{identity.Id}' belongs to a previous content snapshot. Resolve current collection items in the AddPageParameters factory for each build.");
+        }
+        return identity.Shared ? null : identity;
     }
 
     internal TMaterialized GetOrMaterialize<TMaterialized>(object handle, Func<IServiceProvider, TMaterialized> factory)
@@ -66,7 +97,7 @@ internal sealed class ContentRuntime
         }
 
         // GetOrAdd alone may invoke the factory multiple times. Serialize first
-        // materialization (including nested loaders) and invalidation, so an old
+        // materialization and invalidation, so an old
         // in-flight loader cannot repopulate the cache after a content change.
         lock (_materializationLock)
         {
@@ -86,33 +117,17 @@ internal sealed class ContentRuntime
             ?? throw new InvalidOperationException(
                 "Content cannot be materialized before the site's services have been initialized.");
 
-        if (_materializing.Contains(handle))
+        if (!_materializing.Add(handle))
         {
-            // Thrown before pushing, so the outer frames' finally blocks unwind the
-            // chain as this propagates. Clearing it here would leave them popping an
-            // empty list.
             throw new InvalidOperationException(
-                $"Content dictionaries form a cycle: {string.Join(" → ", _materializing.Append(handle).Select(DescribeHandle))}. A loader cannot depend, directly or indirectly, on the dictionary it is building.");
+                "A content collection cannot be read recursively while it is being materialized. Check the collection's projection and services for circular content dependencies.");
         }
-
-        _materializing.Add(handle);
         try
         {
             var materialized = factory(services);
             _materialized[handle] = materialized;
             return materialized;
         }
-        finally
-        {
-            _materializing.RemoveAt(_materializing.Count - 1);
-        }
-    }
-
-    private static string DescribeHandle(object handle)
-    {
-        var type = handle.GetType();
-        return type.IsGenericType
-            ? $"ContentDictionary<{type.GetGenericArguments()[0].Name}>"
-            : type.Name;
+        finally { _materializing.Remove(handle); }
     }
 }

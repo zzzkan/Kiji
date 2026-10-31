@@ -1,6 +1,7 @@
 using System.Reflection;
 using Kiji.Assets;
 using Kiji.Hosting;
+using Kiji.Markdown;
 using Kiji.Rendering;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Configuration;
@@ -77,6 +78,12 @@ public sealed class StaticSiteBuilder
         Services.AddSingleton<IImageProcessor>(static provider => new ImageProcessor(
             provider.GetRequiredService<IOptions<ImageProcessorOptions>>().Value,
             logger: provider.GetRequiredService<ILoggerFactory>().CreateLogger(BuildLoggerExtensions.CategoryName)));
+
+        _services.AddOptions<MarkdownOptions>();
+        _services.AddSingleton(static provider => new MarkdownProcessor(
+            provider.GetRequiredService<ResolvedSitePaths>(),
+            provider.GetRequiredService<IImageProcessor>(),
+            provider.GetRequiredService<IOptions<MarkdownOptions>>().Value));
 
         _managedServices = [.. _services.Where(static descriptor => SiteServiceRegistration.IsManaged(descriptor.ServiceType))];
     }
@@ -163,50 +170,31 @@ public sealed class StaticSiteBuilder
 
     internal Type? NotFoundComponentType { get; private set; }
 
-    /// <summary>Adds a content source resolved as <see cref="ContentDictionary{T}"/>.</summary>
-    /// <param name="loader">Loads items lazily once per snapshot, after execution paths are settled.</param>
-    public StaticSiteBuilder AddContentSource<T>(Func<IServiceProvider, IReadOnlyList<T>> loader)
+    internal StaticSiteBuilder RegisterContent<T>(
+        Func<IServiceProvider, IReadOnlyList<(string Id, T Item, string? Digest)>> loader,
+        string contentSetScope = "",
+        string? directory = null,
+        string? serviceKey = null)
         where T : class
-    {
-        EnsureConfigurable();
-        ArgumentNullException.ThrowIfNull(loader);
-
-        return RegisterContent(
-            services =>
-            {
-                var items = loader(services);
-                var keyed = new (string Key, T Item, string? Digest)[items.Count];
-                for (var i = 0; i < items.Count; i++)
-                {
-                    keyed[i] = (i.ToString(System.Globalization.CultureInfo.InvariantCulture), items[i], null);
-                }
-                return keyed;
-            });
-    }
-
-    /// <summary>Adds a content source with stable identities and explicit data digests.</summary>
-    public StaticSiteBuilder AddContentSource<T>(string sourceId, Func<IServiceProvider, IReadOnlyList<ContentEntry<T>>> loader)
-        where T : class
-    {
-        EnsureConfigurable();
-        ArgumentException.ThrowIfNullOrWhiteSpace(sourceId);
-        ArgumentNullException.ThrowIfNull(loader);
-        return RegisterContent<T>(services => [.. loader(services)
-            .Select(static entry => (entry.Id, entry.Value, entry.Digest))], sourceId);
-    }
+        => RegisterContent<T>((services, _) => [.. loader(services)
+            .Select(static entry => (entry.Id, entry.Item, entry.Digest, entry.Digest, (string?)null))],
+            contentSetScope, directory, serviceKey);
 
     internal StaticSiteBuilder RegisterContent<T>(
-        Func<IServiceProvider, IReadOnlyList<(string Key, T Item, string? Digest)>> loader,
+        Func<IServiceProvider, string, IReadOnlyList<(string Id, T Item, string? Digest, string? ProjectionDigest, string? FrontMatterDigest)>> loader,
         string contentSetScope = "",
-        string? directory = null)
+        string? directory = null,
+        string? serviceKey = null)
         where T : class
     {
         EnsureConfigurable();
         // Source identities use the project directory, including when a caller supplied
         // an absolute path inside the checkout, keeping those identities portable.
-        var descriptor = Runtime.Register(() => new ContentDictionary<T>(Runtime, loader, directory is null
+        var scope = directory is null
             ? contentSetScope
-            : Path.GetRelativePath(Path.GetFullPath(Paths.ProjectDirectory), Paths.ResolveAgainstRoot(directory)).Replace('\\', '/')));
+            : Path.GetRelativePath(Path.GetFullPath(Paths.ProjectDirectory), Paths.ResolveAgainstRoot(directory)).Replace('\\', '/');
+        if (serviceKey is not null) { scope = $"{serviceKey.Length}:{serviceKey}:{scope}"; }
+        var descriptor = Runtime.Register(serviceKey, () => new ContentCollection<T>(Runtime, loader, scope));
         Services.Add(descriptor);
         _managedServices.Add(descriptor);
         if (directory is not null) { _contentPaths.Add(directory); }

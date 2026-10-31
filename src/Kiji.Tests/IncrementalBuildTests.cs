@@ -32,6 +32,311 @@ public sealed class IncrementalBuildTests : IDisposable
     }
 
     [Fact]
+    public async Task CollectionItemParameters_ReuseAndTrackTheItemWithoutReadingItsSource()
+    {
+        var root = CreateSiteRoot("item-parameters");
+        var log = new ContentRenderLog();
+        await using var site = CreateArticleBuilder(root, log).Build();
+        await site.PublishAsync("dist");
+        await site.PublishAsync("dist");
+        Assert.Equal(1, log.Counts["stable"]);
+        Assert.Equal(1, log.Counts["changing"]);
+        await WritePostAsync(root, "changing", "Changed", "New body.");
+        await site.PublishAsync("dist");
+        Assert.Equal(1, log.Counts["stable"]);
+        Assert.Equal(2, log.Counts["changing"]);
+
+        var scratch = CreateSiteRoot("item-parameters-full");
+        await WritePostAsync(scratch, "changing", "Changed", "New body.");
+        await using var clean = CreateArticleBuilder(scratch, new ContentRenderLog()).Build();
+        await clean.PublishAsync("dist");
+        AssertDirectoriesIdentical(Path.Combine(scratch, "dist"), Path.Combine(root, "dist"));
+    }
+
+    [Fact]
+    public async Task CollectionItemNavigation_ChangingNeighborsRerendersThePage()
+    {
+        var root = CreateSiteRoot("item-navigation");
+        await WritePostAsync(root, "third", "Third", "Third body.");
+        var log = new ContentRenderLog();
+        await using var site = CreateArticleBuilder(root, log, navigation: true).Build();
+        await site.PublishAsync("dist");
+        await site.PublishAsync("dist");
+        Assert.Equal(1, log.Counts["stable"]);
+        await WritePostAsync(root, "third", "A Third", "Third body.");
+        await site.PublishAsync("dist");
+        Assert.Equal(2, log.Counts["stable"]);
+        var output = Path.Combine(root, "dist", "articles", "stable", "index.html");
+        Assert.Contains("previous:changing|next:|", await File.ReadAllTextAsync(output), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ItemParameterIdentity_DistinguishesServiceKeysWithTheSameDirectoryAndId()
+    {
+        var root = CreateSiteRoot("keyed-parameters");
+        var log = new ContentRenderLog();
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        TestSiteAssets.Bind(builder.Paths, Path.Combine(root, "static"));
+        builder.Services.AddSingleton(log);
+        builder.AddKeyedMarkdownContent<FrontMatter, ContentArticle>("first",
+            content => ContentArticle.Create(content) with { Title = "First source" });
+        builder.AddKeyedMarkdownContent<FrontMatter, ContentArticle>("second",
+            content => ContentArticle.Create(content) with { Title = "Second source" });
+        var key = "first";
+        builder.AddPageParameters<ContentArticlePage>(services =>
+        [new
+        {
+            Slug = "selected",
+            Article = services.GetRequiredKeyedService<ContentCollection<ContentArticle>>(key)["stable.md"],
+        }]);
+        await using var site = builder.Build();
+        await site.PublishAsync("dist");
+        await site.PublishAsync("dist");
+        Assert.Equal(1, log.Counts["selected"]);
+        key = "second";
+        await site.PublishAsync("dist");
+        Assert.Equal(2, log.Counts["selected"]);
+        Assert.Contains("Second source", await File.ReadAllTextAsync(Path.Combine(root, "dist", "articles", "selected", "index.html")), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CachedFrontMatterItems_StayIdentifiedAcrossSnapshots()
+    {
+        // Unchanged files reuse their parsed front matter, so the next snapshot
+        // registers the same instances again.
+        var root = CreateSiteRoot("front-matter-items");
+        var log = new ContentRenderLog();
+        await using var site = CreateItemBuilder(root, log, static content => content.FrontMatter).Build();
+        await site.PublishAsync("dist");
+        await site.PublishAsync("dist");
+        Assert.Equal(1, log.Counts["stable"]);
+        Assert.Equal(1, log.Counts["changing"]);
+        await WritePostAsync(root, "changing", "Changed Post", "Original body.");
+        await site.PublishAsync("dist");
+        Assert.Equal(1, log.Counts["stable"]);
+        Assert.Equal(2, log.Counts["changing"]);
+        Assert.Contains("Changed Post", await File.ReadAllTextAsync(
+            Path.Combine(root, "dist", "content-items", "changing", "index.html")), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task InstancesSharedByItems_LoadAndAreNotIdentifiedAsOneItem(bool strings)
+    {
+        var root = CreateSiteRoot("shared-items");
+        var log = new ContentRenderLog();
+        var shared = new FrontMatter { Title = "Shared" };
+        // Equal strings are fingerprinted by value; a shared object identifies neither item.
+        var builder = strings
+            ? CreateItemBuilder(root, log, static _ => "")
+            : CreateItemBuilder(root, log, _ => shared);
+        await using var site = builder.Build();
+        await site.PublishAsync("dist");
+        await site.PublishAsync("dist");
+        var renders = strings ? 1 : 2;
+        Assert.Equal(renders, log.Counts["stable"]);
+        Assert.Equal(renders, log.Counts["changing"]);
+    }
+
+    private static StaticSiteBuilder CreateItemBuilder<TModel>(string root, ContentRenderLog log,
+        Func<MarkdownContent<FrontMatter>, TModel> select)
+        where TModel : class
+    {
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        TestSiteAssets.Bind(builder.Paths, Path.Combine(root, "static"));
+        builder.Services.AddSingleton(log);
+        builder.AddMarkdownContent(select);
+        builder.AddPageParameters<ContentItemPage>(services =>
+        {
+            var items = services.GetRequiredService<ContentCollection<TModel>>();
+            return [new { Slug = "stable", Item = items["stable.md"] }, new { Slug = "changing", Item = items["changing.md"] }];
+        });
+        return builder;
+    }
+
+    [Fact]
+    public async Task RetainedSharedItem_FailsTheNextPublish()
+    {
+        var root = CreateSiteRoot("stale-shared-item");
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        TestSiteAssets.Bind(builder.Paths, Path.Combine(root, "static"));
+        builder.Services.AddSingleton(new ContentRenderLog());
+        var shared = new FrontMatter { Title = "Shared" };
+        builder.AddMarkdownContent<FrontMatter, FrontMatter>(_ => shared);
+        FrontMatter? retained = null;
+        builder.AddPageParameters<ContentItemPage>(services =>
+        {
+            // Enumerate once so both source items register the same instance. Later
+            // builds mimic a singleton holding that item without reading the collection.
+            retained ??= services.GetRequiredService<ContentCollection<FrontMatter>>().First();
+            return [new { Slug = "shared", Item = retained }];
+        });
+        await using var site = builder.Build();
+        await site.PublishAsync("dist");
+
+        var error = await Assert.ThrowsAnyAsync<Exception>(() => site.PublishAsync("dist"));
+        Assert.Contains("previous content snapshot", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CopiedModelsAndItemArrays_RenderOnEveryBuild(bool array)
+    {
+        var root = CreateSiteRoot("unregistered-parameters");
+        var log = new ContentRenderLog();
+        var builder = CreateArticleBuilder(root, log, mapPages: false);
+        builder.AddPageParameters<ContentArticlePage>(services => services.GetRequiredService<ContentCollection<ContentArticle>>()
+            .Select(article => new
+            {
+                article.Slug,
+                Article = array ? article : article with { },
+                Items = array ? new[] { article } : null,
+            }));
+        await using var site = builder.Build();
+        await site.PublishAsync("dist");
+        await site.PublishAsync("dist");
+        Assert.Equal(2, log.Counts["stable"]);
+        Assert.Equal(2, log.Counts["changing"]);
+    }
+
+    [Fact]
+    public async Task PreviousSnapshotItem_FailsTrackedRenderingAndPlanning_ButCanRenderInDevelopment()
+    {
+        var root = CreateSiteRoot("stale-parameters");
+        var builder = CreateArticleBuilder(root, new ContentRenderLog(), mapPages: false);
+        ContentArticle? retained = null;
+        builder.AddPageParameters<ContentArticlePage>(services =>
+        {
+            retained ??= services.GetRequiredService<ContentCollection<ContentArticle>>()["stable.md"];
+            return [new { retained.Slug, Article = retained }];
+        });
+        await using var site = builder.Build();
+        await using (var development = CreateArticleBuilder(root, new ContentRenderLog()).Build())
+        {
+            var developmentPage = development.CreateSnapshot().Pages[0];
+            development.InvalidateContent();
+            Assert.Contains("Post", await development.RenderPageAsync(developmentPage, CancellationToken.None), StringComparison.Ordinal);
+        }
+        await site.PublishAsync("dist");
+        // With no manifest the stale parameter must be caught before rendering.
+        File.Delete(Path.Combine(root, ".kiji", "cache", "manifest.json"));
+        var renderError = await Assert.ThrowsAnyAsync<Exception>(() => site.PublishAsync("dist"));
+        Assert.Contains("previous content snapshot", renderError.ToString(), StringComparison.Ordinal);
+
+        // Publish a valid snapshot, then retain its item into the next planning pass.
+        retained = null;
+        await site.PublishAsync("dist");
+        var planningError = await Assert.ThrowsAnyAsync<Exception>(() => site.PublishAsync("dist"));
+        Assert.Contains("previous content snapshot", planningError.ToString(), StringComparison.Ordinal);
+    }
+
+    private static StaticSiteBuilder CreateArticleBuilder(string root, ContentRenderLog log,
+        bool navigation = false, bool mapPages = true, bool renderBodies = false,
+        bool showNavigation = false, bool projectionRendersBody = false)
+    {
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        TestSiteAssets.Bind(builder.Paths, Path.Combine(root, "static"));
+        builder.Services.AddSingleton(log);
+        builder.AddMarkdownContent<FrontMatter, ContentArticle>(content =>
+        {
+            var article = ContentArticle.Create(content);
+            return projectionRendersBody
+                ? article with { Excerpt = content.RenderAsync().AsTask().GetAwaiter().GetResult() }
+                : article;
+        });
+        if (mapPages)
+        {
+            builder.AddPageParameters<ContentArticlePage>(services =>
+            {
+                var articles = services.GetRequiredService<ContentCollection<ContentArticle>>()
+                    .OrderBy(article => article.Title, StringComparer.Ordinal).ToArray();
+                return articles.Select((article, index) => new
+                {
+                    article.Slug,
+                    Article = article,
+                    RenderBody = renderBodies,
+                    ShowNavigation = showNavigation,
+                    Previous = navigation && index > 0 ? articles[index - 1] : null,
+                    Next = navigation && index + 1 < articles.Length ? articles[index + 1] : null,
+                });
+            });
+        }
+        return builder;
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MarkdownDigests_TrackMetadataSeparatelyFromTheBody(bool editFrontMatter)
+    {
+        var root = CreateSiteRoot("split-digests");
+        var log = new ContentRenderLog();
+        static StaticSiteBuilder Create(string directory, ContentRenderLog observer)
+        {
+            var builder = CreateArticleBuilder(directory, observer, renderBodies: true, showNavigation: true);
+            builder.AddPageParameters<ContentArticleListPage>(_ =>
+                [new { Kind = "metadata" }, new { Kind = "front-matter" }, new { Kind = "count" }]);
+            return builder;
+        }
+        await using var site = Create(root, log).Build();
+        await site.PublishAsync("dist");
+        await site.PublishAsync("dist");
+        Assert.All(log.Counts.Values, count => Assert.Equal(1, count));
+        var title = editFrontMatter ? "Changed Post" : "Changing Post";
+        await WritePostAsync(root, "changing", title, "Edited body.");
+        await site.PublishAsync("dist");
+        Assert.Equal(2, log.Counts["changing"]);
+        Assert.Equal(editFrontMatter ? 2 : 1, log.Counts["stable"]);
+        foreach (var kind in new[] { "metadata", "front-matter", "count" })
+        {
+            Assert.Equal(editFrontMatter ? 2 : 1, log.Counts["list-" + kind]);
+        }
+
+        var scratch = CreateSiteRoot("split-digests-full");
+        await WritePostAsync(scratch, "changing", title, "Edited body.");
+        await using var clean = Create(scratch, new ContentRenderLog()).Build();
+        await clean.PublishAsync("dist");
+        AssertDirectoriesIdentical(Path.Combine(scratch, "dist"), Path.Combine(root, "dist"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MarkdownBodyRead_ByProjectionOrList_InvalidatesTheListing(bool projection)
+    {
+        var root = CreateSiteRoot("body-listing");
+        var log = new ContentRenderLog();
+        StaticSiteBuilder Create(string directory, ContentRenderLog observer)
+        {
+            var builder = CreateArticleBuilder(directory, observer, projectionRendersBody: projection);
+            builder.AddPageParameters<ContentArticleListPage>(_ => [new { Kind = projection ? "metadata" : "render" }]);
+            return builder;
+        }
+        await using var site = Create(root, log).Build();
+        await site.PublishAsync("dist");
+        await site.PublishAsync("dist");
+        var listing = "list-" + (projection ? "metadata" : "render");
+        Assert.Equal(1, log.Counts[listing]);
+        await WritePostAsync(root, "changing", "Changing Post", "Edited body.");
+        await site.PublishAsync("dist");
+        Assert.Equal(2, log.Counts[listing]);
+        var output = Path.Combine(root, "dist", "article-list", projection ? "metadata" : "render", "index.html");
+        Assert.Contains("Edited body.", await File.ReadAllTextAsync(output), StringComparison.Ordinal);
+
+        var scratch = CreateSiteRoot("body-listing-full");
+        await WritePostAsync(scratch, "changing", "Changing Post", "Edited body.");
+        await using var clean = Create(scratch, new ContentRenderLog()).Build();
+        await clean.PublishAsync("dist");
+        AssertDirectoriesIdentical(Path.Combine(scratch, "dist"), Path.Combine(root, "dist"));
+    }
+
+    [Fact]
     public async Task MappedStaticAssets_AreRetainedRepairedAndRetiredByPublicPath()
     {
         var source = Path.Combine(_testDir, "library.css");
@@ -475,20 +780,20 @@ public sealed class IncrementalBuildTests : IDisposable
         TestSiteAssets.Bind(builder.Paths, Path.Combine(builder.Paths.ProjectDirectory, "static"));
 
         builder.AddMarkdownContent<FrontMatter>();
-        builder.AddContentSource<Post>(static _ => []);
+        builder.RegisterContent<Post>(static _ => []);
         builder.UseDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(builder);
         builder.UseNotFoundPage<NotFoundPage>();
 
-        builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
-            .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
+        builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentCollection<Post>>()
+            .Select(static post => new { post.Slug, ContentKey = post.Id }));
 
         builder.AddPageParameters<MarkdownPostTestPage>(static services => services
-            .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
-            .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
+            .GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>()
+            .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Path), ContentKey = post.Path }));
         builder.AddPageParameters<RelatedPostsTestPage>(static services => services
-            .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
-            .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
+            .GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>()
+            .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Path), ContentKey = post.Path }));
 
         await using var app = builder.Build();
         await app.PublishAsync(Path.Combine(root, "dist"));
@@ -504,15 +809,15 @@ public sealed class IncrementalBuildTests : IDisposable
         builder.AddMarkdownContent<FrontMatter, ScopedNote>(
             select: ScopedNote.Create,
             configure: options => options.Directory = Path.Combine("content", notesDirectory));
-        builder.AddContentSource<Post>(static _ => []);
+        builder.RegisterContent<Post>(static _ => []);
         builder.UseDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(builder);
         builder.UseNotFoundPage<NotFoundPage>();
-        builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
-            .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
+        builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentCollection<Post>>()
+            .Select(static post => new { post.Slug, ContentKey = post.Id }));
         builder.AddPageParameters<MarkdownPostTestPage>(static services => services
-            .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
-            .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
+            .GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>()
+            .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Path), ContentKey = post.Path }));
         builder.AddPageParameters<ScopedNotesIndexPage>(static _ => [new { Kind = "all" }]);
 
         await using var app = builder.Build();
@@ -893,16 +1198,13 @@ public sealed class IncrementalBuildTests : IDisposable
         builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(builder.Paths, Path.Combine(builder.Paths.ProjectDirectory, "static"));
 
-        builder.AddMarkdownContent<FrontMatter>(options =>
-        {
-            options.Directory = directory;
-            options.AddHtmlPostProcessor(html => { onRender?.Invoke(); return html; });
-        });
-        builder.AddContentSource<Post>(static _ => []);
+        builder.Services.Configure<MarkdownOptions>(options => options.Pipeline.DocumentProcessed += _ => onRender?.Invoke());
+        builder.AddMarkdownContent<FrontMatter>(options => options.Directory = directory);
+        builder.RegisterContent<Post>(static _ => []);
         TestArticleContents.MapSite(builder);
         builder.AddPageParameters<MarkdownPostTestPage>(static services => services
-            .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
-            .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
+            .GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>()
+            .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Path), ContentKey = post.Path }));
 
         return builder;
     }

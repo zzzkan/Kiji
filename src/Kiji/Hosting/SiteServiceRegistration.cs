@@ -18,7 +18,7 @@ internal static class SiteServiceRegistration
         || type == typeof(IJSRuntime) || type == typeof(IComponentActivator)
         || type == typeof(IServiceProvider) || type == typeof(IServiceScopeFactory)
         || type == typeof(IKeyedServiceProvider)
-        || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ContentDictionary<>));
+        || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ContentCollection<>));
 
     internal static void Validate(IServiceCollection services, IReadOnlyList<ServiceDescriptor> managed)
     {

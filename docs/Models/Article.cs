@@ -31,12 +31,12 @@ public sealed class Article
     {
         ArgumentNullException.ThrowIfNull(content);
 
-        var value = string.Equals(content.FileInfo.Name, "index.md", StringComparison.OrdinalIgnoreCase)
-            ? content.FileInfo.Directory?.Name
-            : Path.GetFileNameWithoutExtension(content.FileInfo.Name);
+        var value = string.Equals(Path.GetFileName(content.Path), "index.md", StringComparison.OrdinalIgnoreCase)
+            ? Path.GetFileName(Path.GetDirectoryName(content.Path))
+            : Path.GetFileNameWithoutExtension(content.Path);
         if (string.IsNullOrWhiteSpace(value))
         {
-            throw new InvalidOperationException($"Cannot determine a slug for '{content.FileInfo.FullName}'.");
+            throw new InvalidOperationException($"Cannot determine a slug for '{content.Path}'.");
         }
 
         return new Article(content, NormalizeSlug(value));

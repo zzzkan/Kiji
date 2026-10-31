@@ -1,26 +1,33 @@
 ﻿@page "/docs/{Slug}/"
-@inject ContentDictionary<Article> Articles
+@inject SiteInfo Site
 
-@if (_doc is not null)
-{
-    <PageHead Title="@(_doc.Title ?? string.Empty)" Description="@(_doc.Description ?? string.Empty)" />
+<PageHead Title="@(Article.Title ?? string.Empty)" Description="@(Article.Description ?? string.Empty)" />
 
-    <article class="doc">
-        <h1>@_doc.Title</h1>
-        <div class="doc-content">@((MarkupString)_html)</div>
-    </article>
-}
+<article class="doc">
+    <h1>@Article.Title</h1>
+    <div class="doc-content">@((MarkupString)_html)</div>
+</article>
+<nav class="article-navigation" aria-label="Documentation pages">
+    @if (Previous is not null)
+    {
+        <a class="previous" href="@Site.ResolveUrl($"docs/{Previous.Slug}/").AbsolutePath" rel="prev">@Previous.Title</a>
+    }
+    @if (Next is not null)
+    {
+        <a class="next" href="@Site.ResolveUrl($"docs/{Next.Slug}/").AbsolutePath" rel="next">@Next.Title</a>
+    }
+</nav>
 
 @code {
     [Parameter] public string Slug { get; set; } = string.Empty;
-    [Parameter] public string ContentKey { get; set; } = string.Empty;
+    [Parameter] public Article Article { get; set; } = default!;
+    [Parameter] public Article? Previous { get; set; }
+    [Parameter] public Article? Next { get; set; }
 
-    private Article? _doc;
     private string _html = string.Empty;
 
     protected override async Task OnParametersSetAsync()
     {
-        _doc = Articles[ContentKey];
-        _html = await _doc.RenderAsync();
+        _html = await Article.RenderAsync();
     }
 }

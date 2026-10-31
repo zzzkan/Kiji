@@ -18,8 +18,8 @@ public sealed class ContentCacheTests : IDisposable
         var secondRenders = 0;
         await using var site = CreateSite(() =>
         [
-            new("one", new(first, () => Interlocked.Increment(ref firstRenders)), first),
-            new("two", new(second, () => Interlocked.Increment(ref secondRenders)), second),
+            ("one", new(first, () => Interlocked.Increment(ref firstRenders)), first),
+            ("two", new(second, () => Interlocked.Increment(ref secondRenders)), second),
         ]);
         await site.PublishAsync("dist");
         await site.PublishAsync("dist");
@@ -39,8 +39,8 @@ public sealed class ContentCacheTests : IDisposable
         var cached = 0;
         await using var site = CreateSite(() =>
         [
-            new("one", new("first", () => Interlocked.Increment(ref uncached)), null),
-            new("two", new("second", () => Interlocked.Increment(ref cached)), "stable"),
+            ("one", new("first", () => Interlocked.Increment(ref uncached)), null),
+            ("two", new("second", () => Interlocked.Increment(ref cached)), "stable"),
         ]);
         await site.PublishAsync("dist");
         await site.PublishAsync("dist");
@@ -53,14 +53,14 @@ public sealed class ContentCacheTests : IDisposable
         Assert.True(manifest.Pages.Single(page => page.RoutePath == "/cache/two/").HtmlLength > 0);
     }
 
-    private StaticSite CreateSite(Func<IReadOnlyList<ContentEntry<CacheItem>>> load)
+    private StaticSite CreateSite(Func<IReadOnlyList<(string Id, CacheItem Item, string? Digest)>> load)
     {
         Directory.CreateDirectory(_root);
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
         builder.SiteInfo = TestArticleContents.CreateSiteInfo();
-        builder.AddContentSource<CacheItem>("data", _ => load());
-        builder.AddPageParameters<CacheItemPage>(services => services.GetRequiredService<ContentDictionary<CacheItem>>()
-            .Select(entry => new { Id = entry.Key }));
+        builder.RegisterContent<CacheItem>(_ => load(), "data");
+        builder.AddPageParameters<CacheItemPage>(services => services.GetRequiredService<ContentCollection<CacheItem>>()
+            .Select((_, index) => new { Id = index == 0 ? "one" : "two" }));
         return builder.Build();
     }
 

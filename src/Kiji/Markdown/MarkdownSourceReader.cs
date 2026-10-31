@@ -18,9 +18,10 @@ internal static class MarkdownSourceReader
         var content = DecodeText(bytes);
 
         (TFrontMatter FrontMatter, string Body) parsed;
+        string frontMatterText;
         try
         {
-            parsed = MarkdownFrontMatterParser.ParseContentAndBody<TFrontMatter>(content, deserializer);
+            parsed = MarkdownFrontMatterParser.ParseContentAndBody<TFrontMatter>(content, deserializer, out frontMatterText);
         }
         catch (Exception exception)
         {
@@ -32,7 +33,8 @@ internal static class MarkdownSourceReader
         return new MarkdownSource<TFrontMatter>(
             parsed.FrontMatter,
             parsed.Body,
-            contentHash);
+            contentHash,
+            BuildFingerprint.HashText(frontMatterText));
     }
 
     internal static string DecodeText(byte[] bytes)

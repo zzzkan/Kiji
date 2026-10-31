@@ -52,7 +52,7 @@ public sealed class PageServiceContentTests : IDisposable
     }
 
     [Fact]
-    public async Task DevServer_FileChangesRefreshDerivedDictionary()
+    public async Task DevServer_FileChangesRefreshScopedDerivedData()
     {
         WritePost("first", "shared");
         WritePost("second", "shared");
@@ -87,7 +87,7 @@ public sealed class PageServiceContentTests : IDisposable
     }
 
     [Fact]
-    public async Task DevServer_CodeUpdateReevaluatesDerivedLoader()
+    public async Task DevServer_CodeUpdateReevaluatesScopedData()
     {
         WritePost("first", "shared");
         WritePost("second", "shared");
@@ -114,15 +114,14 @@ public sealed class PageServiceContentTests : IDisposable
         builder.SiteInfo = new SiteInfo { Name = "Related", BaseUrl = new Uri("https://example.test/") };
         TestSite.TestSiteAssets.Bind(builder.Paths, Path.Combine(_root, "wwwroot"));
         builder.AddMarkdownContent<FrontMatter>();
-        builder.AddContentSource<RelatedTag>("tags", provider => includeTags?.Invoke() == false ? []
-            : [.. RelatedTag.Collect(provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>(), probe)
-                .Select(tag => new ContentEntry<RelatedTag>(tag.Name, tag, string.Join("|", tag.Keys)))]);
+        builder.Services.AddScoped<IReadOnlyList<RelatedTag>>(provider => includeTags?.Invoke() == false ? []
+            : RelatedTag.Collect(provider.GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>(), probe));
         builder.Services.AddScoped<RelatedPosts>();
-        builder.AddPageParameters<RelatedPage>(provider => provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
+        builder.AddPageParameters<RelatedPage>(provider => provider.GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>()
             .Select(post => new
             {
-                Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name),
-                ContentKey = post.Key,
+                Slug = Path.GetFileNameWithoutExtension(post.Path),
+                ContentKey = post.Path,
             }));
         return builder.Build();
     }

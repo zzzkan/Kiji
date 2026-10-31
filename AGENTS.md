@@ -57,7 +57,7 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   requires its own route and a registered page assembly.
 - MSBuild supplies the project directory through runtimeconfig; missing metadata is an error.
   Content becomes accessible through factories/loaders/artifacts only after execution
-  paths settle. Do not expose a provider or content dictionary on StaticSite. IHostEnvironment
+  paths settle. Do not expose a provider or content collection on StaticSite. IHostEnvironment
   is read-only: its name selects the configuration files at creation. Publish takes the name
   only from DOTNET_ENVIRONMENT; serving follows WebApplicationBuilder's order (--environment,
   DOTNET_ENVIRONMENT, ASPNETCORE_ENVIRONMENT). Default configuration sources stay
@@ -71,10 +71,12 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   builds the provider. Kiji's defaults and managed services are registered when the builder
   is created. Each render owns a scope. Loaders, page parameter/feed
   factories and artifacts use the root provider and cannot resolve scoped services. Validate
-  Kiji-owned registrations in Build. Derived indexes use AddContentSource;
+  Kiji-owned registrations in Build. Compute derived data during rendering or in scoped services;
   content reload does not recreate singletons. Use AlwaysRender on components reading
-  untracked external state. KijiForce refreshes all pages for a whole publish. Instantiating
-  any ErrorBoundaryBase component prevents HTML reuse for that page, even when healthy. The
+  untracked external state. Content items are tracked by source, ID and file; values assigned
+  to them after loading are untracked state, documented rather than detected. KijiForce
+  refreshes all pages for a whole publish. Instantiating any ErrorBoundaryBase component
+  prevents HTML reuse for that page, even when healthy. The
   default boundary logger reports exceptions as warnings; logging never controls
   cacheability or the publish result. Use an unhandled exception for a build gate.
 - Use Blazor's PageTitle and HeadContent; KijiRoot supplies the single HeadOutlet.

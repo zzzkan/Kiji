@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using System.Text.Json;
 using Kiji.Tests.TestSite;
 using Xunit;
@@ -104,7 +105,7 @@ public sealed class StaticAssetTests : IDisposable
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")));
         builder.SiteInfo = TestArticleContents.CreateSiteInfoWithBasePath();
-        builder.AddContentSource<AssetRenderLog>("render-log", _ => [new("log", log, "stable")]);
+        builder.Services.AddSingleton(log);
         builder.AddPageParameters<AssetPage>(_ => PageKinds
             .Select(kind => new { Kind = kind, Path = path }));
         return builder.Build();

@@ -7,7 +7,7 @@ namespace Kiji.Tests.TestSite.Pages;
 public sealed class CacheItemPage : ComponentBase
 {
     [Parameter] public string Id { get; set; } = string.Empty;
-    [Inject] public ContentDictionary<CacheItem> Items { get; set; } = default!;
+    [Inject] public ContentCollection<CacheItem> Items { get; set; } = default!;
 
     protected override void BuildRenderTree(RenderTreeBuilder builder)
     {

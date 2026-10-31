@@ -261,50 +261,47 @@ public sealed record BlogPost(
     {
         if (string.IsNullOrWhiteSpace(content.FrontMatter.Title) || content.FrontMatter.Date is null)
         {
-            throw new InvalidOperationException($"{content.FileInfo.FullName}: posts require a title and date.");
+            throw new InvalidOperationException($"{content.Path}: posts require a title and date.");
         }
 
-        return new BlogPost(content.FileInfo.Directory!.Name,
+        return new BlogPost(Path.GetFileName(Path.GetDirectoryName(content.Path))!,
             content.FrontMatter.Title, content.FrontMatter.Description,
             content.FrontMatter.Date.Value, content);
     }
 }
 ```
 
-Create `Pages/PostPage.razor`. `Slug` supplies the route value, and `ContentKey` tells the
-component which Markdown item to render:
+Create `Pages/PostPage.razor`. `Slug` supplies the route value, and `Post` carries the
+collection item to render:
 
 ```razor
 @page "/posts/{Slug}/"
 @using Kiji
 @using MySite.Components
 @using MySite.Models
-@inject ContentDictionary<BlogPost> Posts
 
-@if (_post is not null)
+@if (Post is not null)
 {
-    <PageHead Title="@_post.Title">
-        <meta name="description" content="@_post.Description" />
+    <PageHead Title="@Post.Title">
+        <meta name="description" content="@Post.Description" />
     </PageHead>
 
     <article>
-        <h1>@_post.Title</h1>
-        <time datetime="@_post.Date.ToString("yyyy-MM-dd")">@_post.Date.ToString("yyyy-MM-dd")</time>
+        <h1>@Post.Title</h1>
+        <time datetime="@Post.Date.ToString("yyyy-MM-dd")">@Post.Date.ToString("yyyy-MM-dd")</time>
         <div>@((MarkupString)_html)</div>
     </article>
 }
 
 @code {
     [Parameter] public string Slug { get; set; } = string.Empty;
-    [Parameter] public string ContentKey { get; set; } = string.Empty;
+    [Parameter] public BlogPost Post { get; set; } = default!;
 
-    private BlogPost? _post;
     private string _html = string.Empty;
 
     protected override async Task OnParametersSetAsync()
     {
-        _post = Posts[ContentKey];
-        _html = await _post.Content.RenderAsync();
+        _html = await Post.Content.RenderAsync();
     }
 }
 ```
@@ -332,15 +329,15 @@ builder.AddMarkdownContent<PostFrontMatter, BlogPost>(BlogPost.Create,
     options => options.Directory = "content/posts");
 builder.UseDefaultLayout<MainLayout>();
 builder.AddPageParameters<PostPage>(services => services
-    .GetRequiredService<ContentDictionary<BlogPost>>()
-    .Select(post => new { post.Value.Slug, ContentKey = post.Key }));
+    .GetRequiredService<ContentCollection<BlogPost>>()
+    .Select(post => new { post.Slug, Post = post }));
 
 return await builder.Build().RunAsync();
 ```
 
 `AddMarkdownContent` calls `BlogPost.Create` for each Markdown file and registers
-`ContentDictionary<BlogPost>`. `AddPageParameters` gives each post's page its `Slug` for
-the URL and its dictionary key as `ContentKey`.
+`ContentCollection<BlogPost>`. `AddPageParameters` gives each post's page its `Slug` for
+the URL and the same collection item as `Post`.
 
 Restart `dotnet watch` and open <http://localhost:8080/posts/hello-kiji/>:
 
@@ -356,13 +353,13 @@ Replace `Pages/Home.razor` with a list of posts, newest first:
 @using MySite.Components
 @using MySite.Models
 @inject SiteInfo Site
-@inject ContentDictionary<BlogPost> Posts
+@inject ContentCollection<BlogPost> Posts
 
 <PageHead Title="Home" />
 
 <h1>@Site.Name</h1>
 <ul>
-    @foreach (var post in Posts.Values.OrderByDescending(post => post.Date))
+    @foreach (var post in Posts.OrderByDescending(post => post.Date))
     {
         <li>
             <time datetime="@post.Date.ToString("yyyy-MM-dd")">@post.Date.ToString("yyyy-MM-dd")</time>

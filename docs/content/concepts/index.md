@@ -62,7 +62,7 @@ page-specific tags in one, for example through a shared component as in
 
 ## Content
 
-Pages inject `ContentDictionary<T>` to list content or look up an item by key. Markdown
+Pages inject `ContentCollection<T>` to list content or look up an item by ID. Markdown
 provides typed front matter and an HTML body, and images beside a Markdown file become
 responsive images. Content creates no pages by itself: page parameters choose which items get pages.
 See [Markdown and images](../markdown/).

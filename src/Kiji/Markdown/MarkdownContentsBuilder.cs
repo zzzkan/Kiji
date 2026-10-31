@@ -13,7 +13,7 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
     Func<FileInfo, bool>? filter = null)
 {
     private readonly Func<IDeserializer> _frontMatterDeserializerFactory =
-        frontMatterDeserializerFactory ?? (static () => MarkdownFrontMatterParser.CreateDeserializer(null));
+        frontMatterDeserializerFactory ?? (static () => new MarkdownOptions().CreateDeserializer());
 
     public IReadOnlyList<MarkdownContent<TFrontMatter>> Build()
     {
@@ -49,7 +49,8 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
                 var source = sourceCache is not null
                     ? sourceCache.GetOrRead(fileInfo, deserializers.Value!)
                     : MarkdownSourceReader.Read<TFrontMatter>(fileInfo, deserializers.Value!);
-                items[index] = new MarkdownContent<TFrontMatter>(fileInfo, source.FrontMatter, source.Body, renderAsync, source.ContentHash);
+                items[index] = new MarkdownContent<TFrontMatter>(fileInfo, source.FrontMatter, source.Body, renderAsync, source.ContentHash,
+                    Path.GetRelativePath(contentsDirectory, fileInfo.FullName).Replace('\\', '/'), source.FrontMatterDigest);
                 hashRegistry?.Record(fileInfo, source.ContentHash);
             }
             catch (Exception exception)

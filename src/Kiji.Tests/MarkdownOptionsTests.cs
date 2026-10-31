@@ -1,7 +1,7 @@
 using Kiji.Assets;
 using Kiji.Markdown;
+using Markdig;
 using Xunit;
-using YamlDotNet.Serialization.NamingConventions;
 
 namespace Kiji.Tests;
 
@@ -26,34 +26,24 @@ public sealed class MarkdownOptionsTests : IDisposable
     }
 
     [Fact]
-    public async Task ConfigureMarkdown_CanRemoveSecureLinkExtension()
+    public async Task Defaults_RenderUnicodeHeadingIdsAndStrikethrough()
     {
-        var mdPath = CreateMarkdownFile("insecure.md", "[External](https://example.com)");
-        var processor = CreateProcessor(static options =>
-            options.ConfigureMarkdown(static builder => builder.Extensions.TryRemove<SecureLinkExtension>()));
-
-        var html = await ProcessFileAsync(processor, mdPath);
-
-        Assert.DoesNotContain("target=\"_blank\"", html);
-        Assert.Contains("href=\"https://example.com\"", html);
-        var defaultHtml = await ProcessFileAsync(CreateProcessor(), mdPath);
-        Assert.Contains("target=\"_blank\"", defaultHtml);
-        Assert.Contains("rel=\"noopener noreferrer\"", defaultHtml);
+        var html = await CreateProcessor().ProcessBodyAsync("post.md", "# はじめに\n# はじめに\n\n~~gone~~");
+        Assert.Contains("id=\"はじめに\"", html);
+        Assert.Contains("id=\"はじめに-1\"", html);
+        Assert.Contains("<del>gone</del>", html);
     }
 
     [Fact]
-    public async Task AddHtmlPostProcessor_RunsInRegistrationOrder()
+    public async Task Pipeline_ExtensionsAddedAfterDefaultsStillParseAttributes()
     {
-        var mdPath = CreateMarkdownFile("order.md", "Body.");
-        var processor = CreateProcessor(static options =>
-        {
-            options.AddHtmlPostProcessor(static html => html + "<!--first-->");
-            options.AddHtmlPostProcessor(static html => html + "<!--second-->");
-        });
+        var options = new MarkdownOptions();
+        options.Pipeline.UseCustomContainers();
+        var processor = new MarkdownProcessor(new ResolvedSitePaths { OutputDirectory = _testDir }, new ImageProcessor(), options);
 
-        var html = await ProcessFileAsync(processor, mdPath);
+        var html = await processor.ProcessBodyAsync("post.md", "::: note {#tip}\nBody\n:::");
 
-        Assert.EndsWith("<!--first--><!--second-->", html.TrimEnd());
+        Assert.Contains("id=\"tip\"", html);
     }
 
     [Fact]
@@ -69,30 +59,6 @@ public sealed class MarkdownOptionsTests : IDisposable
         Assert.Contains("src=\"https://example.com/a.png\"", html);
         Assert.Contains("src=\"/icons/b.png\"", html);
         Assert.DoesNotContain("srcset", html);
-    }
-
-    [Fact]
-    public void ConfigureYaml_CustomNamingConvention_IsApplied()
-    {
-        var options = new MarkdownOptions();
-        options.ConfigureYaml(static builder => builder.WithNamingConvention(UnderscoredNamingConvention.Instance));
-        var deserializer = MarkdownFrontMatterParser.CreateDeserializer(options.FrontMatterConfigurations);
-        var mdPath = CreateMarkdownFile(
-            "underscored.md",
-            """
-            ---
-            title: Snake Case
-            created_at: 2024-03-01
-            ---
-
-            Body.
-            """);
-
-        var frontMatter = MarkdownSourceReader.Read<FrontMatter>(new FileInfo(mdPath), deserializer).FrontMatter;
-
-        Assert.Equal("Snake Case", frontMatter.Title);
-        Assert.True(frontMatter.CreatedAt.HasValue);
-        Assert.Equal(new DateTime(2024, 3, 1), frontMatter.CreatedAt.Value.DateTime);
     }
 
     [Fact]
@@ -128,7 +94,7 @@ public sealed class MarkdownOptionsTests : IDisposable
 
     private static Task<string> ProcessFileAsync(MarkdownProcessor processor, string path)
     {
-        var body = MarkdownSourceReader.Read<FrontMatter>(new FileInfo(path), MarkdownFrontMatterParser.CreateDeserializer(null)).Body;
+        var body = MarkdownSourceReader.Read<FrontMatter>(new FileInfo(path), new MarkdownOptions().CreateDeserializer()).Body;
         return processor.ProcessBodyAsync(path, body);
     }
 

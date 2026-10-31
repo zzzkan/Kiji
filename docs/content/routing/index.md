@@ -77,13 +77,16 @@ all of them and must supply all of their values.
 ## Passing values that are not in the URL
 
 Properties that match route parameters build the URL; the others are only passed to the
-component. Use this to look up content by key without putting the key in the URL:
+component. Pass the collection item directly without putting it in the URL:
 
 ```csharp
 builder.AddPageParameters<PostPage>(services => services
-    .GetRequiredService<ContentDictionary<Post>>()
-    .Select(post => new { post.Value.Slug, ContentKey = post.Key }));
+    .GetRequiredService<ContentCollection<Post>>()
+    .Select(post => new { post.Slug, Post = post }));
 ```
+
+Declare `[Parameter] public Post Post { get; set; } = default!;` on the page. Passing the
+same collection instance supports HTML reuse; a copy constructed in the factory does not.
 
 Every supplied name must match a component parameter. Omitted parameters keep their
 defaults, and `EditorRequired` is not enforced. A component with only fixed routes can

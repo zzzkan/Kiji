@@ -15,7 +15,7 @@ namespace Kiji.Tests;
 public sealed class ScopedNotesIndexPage : ComponentBase
 {
     [Inject]
-    public ContentDictionary<ScopedNote> Notes { get; set; } = default!;
+    public ContentCollection<ScopedNote> Notes { get; set; } = default!;
 
     [Parameter]
     public string Kind { get; set; } = string.Empty;
@@ -23,7 +23,7 @@ public sealed class ScopedNotesIndexPage : ComponentBase
     protected override void BuildRenderTree(RenderTreeBuilder builder)
     {
         builder.OpenElement(0, "ul");
-        foreach (var note in Notes.Values)
+        foreach (var note in Notes)
         {
             builder.OpenRegion(1);
             builder.OpenElement(0, "li");

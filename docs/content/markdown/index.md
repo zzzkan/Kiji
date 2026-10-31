@@ -6,7 +6,7 @@ order: 40
 
 ## Register Markdown content
 
-Each Markdown file starts with YAML front matter, whose fields you define in a class:
+Markdown files can start with YAML front matter, whose fields you define in a class:
 
 ```csharp
 public sealed class FrontMatter
@@ -33,13 +33,17 @@ This is a Markdown-backed page.
 builder.AddMarkdownContent<FrontMatter>();
 ```
 
-This registers `ContentDictionary<MarkdownContent<FrontMatter>>`. It creates no pages by
+This registers `ContentCollection<MarkdownContent<FrontMatter>>`. It creates no pages by
 itself; map items to pages with `AddPageParameters<TPage>` as in
 [Getting started](../getting-started/#add-a-markdown-page).
 
-Front matter keys are camel case, such as `publishedAt` for `PublishedAt`, and unknown keys
-are ignored. A missing or malformed front matter block, or a value that does not fit your
-class, fails the build.
+Keys are camel case, such as `publishedAt` for `PublishedAt`, and match case-insensitively.
+Unknown keys, malformed YAML, and values that do not fit your class fail the build.
+Dates must start with a complete `yyyy-MM-dd` date and can add a time and offset; dates
+without an offset are read as UTC.
+
+Front matter must start on the first line and end with a `---` line; otherwise the build
+fails. A file without front matter gets your class's default values.
 
 ## Choose the files
 
@@ -79,56 +83,75 @@ public sealed record Post(string Slug, string Title, MarkdownContent<FrontMatter
 
 ```csharp
 builder.AddMarkdownContent<FrontMatter, Post>(content => new Post(
-    Slug: content.FileInfo.Directory!.Name,
+    Slug: Path.GetFileName(Path.GetDirectoryName(content.Path))!,
     Title: content.FrontMatter.Title ?? "Untitled",
     Content: content));
 ```
 
-This registers `ContentDictionary<Post>` instead. The projection sees one file at a time;
-build collection-wide results, such as tag counts, with
-[AddContentSource](../api-reference/#content-sources-and-contentdictionary).
+This registers `ContentCollection<Post>` instead. The projection sees one file at a time;
+compute collection-wide results, such as tag counts, while rendering or in a scoped service.
+Return a new instance for each file and keep it read-only, as this record is. Kiji does not
+track values assigned to an item after loading, and pages that receive an instance shared
+by several items render on every publish; see
+[page dependencies](../incremental-builds/#page-dependencies).
+
+## Register several collections of the same type
+
+Use a service key for sources such as translations or documentation versions:
+
+```csharp
+builder.AddKeyedMarkdownContent<FrontMatter>("en", options => options.Directory = "content/en");
+builder.AddKeyedMarkdownContent<FrontMatter>("ja", options => options.Directory = "content/ja");
+var english = services.GetRequiredKeyedService<ContentCollection<MarkdownContent<FrontMatter>>>("en");
+```
+
+A key identifies the DI service; each item's ID is still its `Path` relative to that source.
 
 ## Render a Markdown body
 
-Look up the item by the key passed through `AddPageParameters` and call `RenderAsync()`:
+Pass a collection item through `AddPageParameters` and use `MarkdownBody`:
 
 ```razor
-@inject ContentDictionary<MarkdownContent<FrontMatter>> Posts
-
-<div>@((MarkupString)_html)</div>
+<div class="prose"><MarkdownBody Content="@Post" /></div>
 
 @code {
-    [Parameter] public string ContentKey { get; set; } = string.Empty;
-    private string _html = string.Empty;
-
-    protected override async Task OnParametersSetAsync()
-    {
-        _html = await Posts[ContentKey].RenderAsync();
-    }
+    [Parameter] public MarkdownContent<FrontMatter> Post { get; set; } = default!;
 }
 ```
 
-With the `Post` model, call `Posts[ContentKey].Content.RenderAsync()`. The result is
-raw HTML, so render only trusted Markdown or sanitize it first.
+With the `Post` model, use `Content="@Post.Content"`. You can also call `RenderAsync()`
+and render the result as a `MarkupString`. Both produce raw HTML, so render only trusted
+Markdown or sanitize it first. Do not reuse rendered HTML on another page, because local
+image URLs are relative to the page that rendered it.
 
 ## Customize parsing and HTML
 
-Kiji uses Markdig with its advanced extensions. Options add Markdig configuration,
-YamlDotNet configuration, and HTML post-processing, each run in registration order:
+`MarkdownOptions` applies to every source. Defaults include GFM-style tables, task lists,
+autolinks and strikethrough, footnotes, GitHub heading IDs, and `{.class}` attributes.
+Other Markdig extensions, such as math and diagrams, are opt-in:
 
 ```csharp
-builder.AddMarkdownContent<FrontMatter>(options =>
+using Markdig;
+using Markdig.Extensions.AutoIdentifiers;
+using Microsoft.Extensions.DependencyInjection;
+using YamlDotNet.Serialization.NamingConventions;
+
+builder.Services.Configure<MarkdownOptions>(options =>
 {
-    options.ConfigureMarkdown(pipeline => pipeline.UseEmojiAndSmiley());
-    options.ConfigureYaml(yaml => yaml.WithCaseInsensitivePropertyMatching());
-    options.AddHtmlPostProcessor(html => $"<div class=\"prose\">{html}</div>");
+    options.Pipeline.UseEmojiAndSmiley();
+    options.Pipeline.Extensions.Replace<AutoIdentifierExtension>(new AutoIdentifierExtension(AutoIdentifierOptions.Default));
+    options.Yaml.WithNamingConvention(UnderscoredNamingConvention.Instance);
 });
 ```
 
+`Use*` leaves an extension that is already registered unchanged, so use
+`Extensions.Replace` to change its settings. To transform the parsed document, attach
+`options.Pipeline.DocumentProcessed`; put HTML wrappers in Razor. To discard unknown
+front matter keys, call `options.Yaml.IgnoreUnmatchedProperties()`.
+
 ## Links and deployment paths
 
-External links get `target="_blank" rel="noopener noreferrer"`; other links are written
-as is. Kiji does not add the base path to links starting with `/`, so prefer
+Kiji does not add the base path to links starting with `/`, so prefer
 document-relative links when the site is published under a
 [subpath](../deployment/#publish-under-a-subpath).
 
@@ -152,6 +175,10 @@ the page's `index.html`: 320, 640, 960, and 1280 pixels wide when the source is 
 plus one at the source width, up to 1920 pixels. The `<img>` gets a `srcset` and the source
 dimensions, and every image after the first loads lazily. To change the widths or the
 quality, see [Image settings](../api-reference/#image-settings).
+
+Attributes such as `![Photo](photo.jpg){width=300 loading=eager}` replace the ones Kiji
+generates. When only `width` or `height` is a positive integer, Kiji computes the other from
+the source aspect ratio: for a 1920×1080 source, `width=300` gives `height="169"`.
 
 The output is static: animated images keep only their first frame, metadata such as EXIF
 is removed, and colors are converted to sRGB. To keep an image as is, put it in `wwwroot/`

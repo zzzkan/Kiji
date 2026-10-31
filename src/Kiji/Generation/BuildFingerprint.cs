@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using Kiji.Hosting;
 
 namespace Kiji.Generation;
 
@@ -64,7 +65,8 @@ internal static class BuildFingerprint
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { return false; }
     }
 
-    internal static string? HashParameters(IReadOnlyDictionary<string, object?> parameters)
+    internal static string? HashParameters(IReadOnlyDictionary<string, object?> parameters,
+        Func<object, ContentItemIdentity?>? resolveContentItem = null)
     {
         if (parameters.Count == 0)
         {
@@ -75,11 +77,19 @@ internal static class BuildFingerprint
         foreach (var pair in parameters.OrderBy(static pair => pair.Key, StringComparer.Ordinal))
         {
             var value = pair.Value;
+            AppendPart(builder, pair.Key);
+            if (value is not null && resolveContentItem?.Invoke(value) is { } identity)
+            {
+                AppendPart(builder, "content-item");
+                AppendPart(builder, identity.SourceId);
+                AppendPart(builder, identity.Id.ToUpperInvariant());
+                continue;
+            }
             if (value is not (null or string or bool or char or sbyte or byte or short or ushort or int or uint or long or ulong or Enum or Guid))
             {
                 return null;
             }
-            AppendPart(builder, pair.Key);
+            AppendPart(builder, "value");
             AppendPart(builder, value?.GetType().AssemblyQualifiedName);
             AppendPart(builder, value is Enum enumeration
                 ? enumeration.ToString("D")

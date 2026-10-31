@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using Kiji.Rendering;
+using Kiji.Hosting;
 using Kiji.Assets;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -28,7 +29,8 @@ internal sealed class IncrementalBuildPlanner(
     DependencyCatalog? catalog = null,
     IImageProcessor? imageProcessor = null,
     AssetResources? assets = null,
-    ILogger? logger = null)
+    ILogger? logger = null,
+    Func<object, ContentItemIdentity?>? resolveContentItem = null)
 {
     private readonly ILogger _logger = logger ?? NullLogger.Instance;
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Assembly, IReadOnlyList<string>> CodeDependencies = [];
@@ -102,7 +104,7 @@ internal sealed class IncrementalBuildPlanner(
 
     private async Task<bool> CanSkipAsync(PageRenderRequest request, BuildManifestPage oldPage, bool outputDirectoryExists, CancellationToken cancellationToken)
     {
-        var parametersHash = BuildFingerprint.HashParameters(request.Parameters);
+        var parametersHash = BuildFingerprint.HashParameters(request.Parameters, resolveContentItem);
         if (parametersHash is null || oldPage.ParametersHash is null
             || !string.Equals(oldPage.RoutePath, request.RoutePath, StringComparison.Ordinal)
             || !string.Equals(oldPage.ParametersHash, parametersHash, StringComparison.Ordinal))
@@ -201,7 +203,7 @@ internal sealed class IncrementalBuildPlanner(
         var additionalOutputs = recorder.AdditionalOutputs.Select(path => new BuildManifestOutput(
             Path.GetRelativePath(options.OutputDirectory, path),
             _cache.Store(path))).ToArray();
-        var parametersHash = recorder.Cacheable ? BuildFingerprint.HashParameters(request.Parameters) : null;
+        var parametersHash = recorder.Cacheable ? BuildFingerprint.HashParameters(request.Parameters, resolveContentItem) : null;
         return new BuildManifestPage(
             request.OutputRelativePath,
             request.RoutePath,

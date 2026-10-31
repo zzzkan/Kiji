@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using System.Collections.Frozen;
 using System.Collections.ObjectModel;
 using System.Text.Json.Nodes;
@@ -209,7 +210,7 @@ public sealed class TypedParameterTests : IDisposable
         builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         Directory.CreateDirectory(Path.Combine(builder.Paths.ProjectDirectory, "content"));
         Directory.CreateDirectory(Path.Combine(builder.Paths.ProjectDirectory, "wwwroot"));
-        builder.AddContentSource<ParameterRenderLog>("render-log", _ => [new("0", log, "observer")]);
+        builder.Services.AddSingleton(log);
         return builder;
     }
 }

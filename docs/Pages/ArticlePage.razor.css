@@ -1,3 +1,25 @@
 .doc-content ::deep h2:first-child {
     margin-top: 1.5rem;
 }
+
+.article-navigation {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.article-navigation a {
+    overflow-wrap: anywhere;
+    color: var(--ink-muted);
+}
+
+.previous {
+    grid-column: 1;
+    text-align: left;
+}
+
+.next {
+    grid-column: 2;
+    text-align: right;
+}

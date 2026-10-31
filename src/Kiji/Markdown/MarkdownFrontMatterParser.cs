@@ -1,5 +1,4 @@
 using YamlDotNet.Serialization;
-using YamlDotNet.Serialization.NamingConventions;
 
 namespace Kiji.Markdown;
 
@@ -8,32 +7,19 @@ internal static class MarkdownFrontMatterParser
     internal static (TFrontMatter FrontMatter, string Body) ParseContentAndBody<TFrontMatter>(
         string content,
         IDeserializer deserializer)
-    {
-        if (!TryExtractFrontMatter(content, out var yaml, out var body))
-        {
-            throw new InvalidOperationException("YAML front matter not found.");
-        }
+        => ParseContentAndBody<TFrontMatter>(content, deserializer, out _);
 
-        var frontMatter = deserializer.Deserialize<TFrontMatter>(content[yaml])
+    internal static (TFrontMatter FrontMatter, string Body) ParseContentAndBody<TFrontMatter>(
+        string content,
+        IDeserializer deserializer,
+        out string frontMatterText)
+    {
+        var extracted = ExtractFrontMatter(content, out var yaml, out var body);
+        frontMatterText = extracted ? content[yaml] : string.Empty;
+        var frontMatter = deserializer.Deserialize<TFrontMatter>(extracted ? frontMatterText : "{}")
+            ?? deserializer.Deserialize<TFrontMatter>("{}")
             ?? throw new InvalidOperationException("Failed to deserialize YAML front matter.");
-        return (frontMatter, content[body]);
-    }
-
-    internal static IDeserializer CreateDeserializer(IReadOnlyList<Action<DeserializerBuilder>>? configurations)
-    {
-        var builder = new DeserializerBuilder()
-            .WithNamingConvention(CamelCaseNamingConvention.Instance)
-            .IgnoreUnmatchedProperties();
-
-        if (configurations is not null)
-        {
-            foreach (var configure in configurations)
-            {
-                configure(builder);
-            }
-        }
-
-        return builder.Build();
+        return (frontMatter, extracted ? content[body] : content);
     }
 
     /// <summary>
@@ -43,45 +29,42 @@ internal static class MarkdownFrontMatterParser
     /// Returns the payload and body as ranges into
     /// <paramref name="content"/>.
     /// </summary>
-    internal static bool TryExtractFrontMatter(ReadOnlySpan<char> content, out Range yaml, out Range body)
+    internal static bool ExtractFrontMatter(ReadOnlySpan<char> content, out Range yaml, out Range body)
     {
         yaml = default;
         body = default;
 
-        if (!content.StartsWith("---", StringComparison.Ordinal))
+        var index = OpeningDelimiterEnd(content);
+        if (index < 0)
         {
+            var afterBlankLines = content;
+            while (afterBlankLines.IndexOf('\n') is var newline && newline >= 0
+                && afterBlankLines[..newline].Trim().IsEmpty)
+            {
+                afterBlankLines = afterBlankLines[(newline + 1)..];
+            }
+            if (OpeningDelimiterEnd(afterBlankLines) >= 0)
+            {
+                throw new InvalidOperationException("YAML front matter must start on the first line, without leading blank lines.");
+            }
             return false;
         }
 
-        // Opening delimiter line: '---' plus optional spaces/tabs, ended by a line break.
-        var index = 3;
-        while (index < content.Length && content[index] is ' ' or '\t')
+        if (index == content.Length)
         {
-            index++;
-        }
-
-        if (index < content.Length && content[index] == '\r')
-        {
-            index++;
-        }
-
-        if (index >= content.Length || content[index] != '\n')
-        {
-            return false;
+            throw new InvalidOperationException("YAML front matter is missing its closing '---' delimiter.");
         }
 
         var yamlStart = index + 1;
 
-        // Closing delimiter: the first line starting with '---' whose remainder is
-        // whitespace containing a newline. The block ends at the last newline of that
-        // whitespace run, including blank lines.
-        var searchFrom = yamlStart;
+        // Search from the opening line's newline so the closer can immediately follow it.
+        var searchFrom = index;
         while (true)
         {
             var offset = content[searchFrom..].IndexOf("\n---", StringComparison.Ordinal);
             if (offset < 0)
             {
-                return false;
+                throw new InvalidOperationException("YAML front matter is missing its closing '---' delimiter.");
             }
 
             var closerStart = searchFrom + offset + 1;
@@ -97,23 +80,32 @@ internal static class MarkdownFrontMatterParser
                 runIndex++;
             }
 
-            if (lastNewline < 0)
+            if (lastNewline < 0 && runIndex != content.Length)
             {
                 // Not a delimiter line (e.g. '----' or trailing text); keep scanning.
                 searchFrom = closerStart;
                 continue;
             }
 
-            var yamlEnd = closerStart - 1;
+            var yamlEnd = Math.Max(yamlStart, closerStart - 1);
             if (yamlEnd - 1 >= yamlStart && content[yamlEnd - 1] == '\r')
             {
                 yamlEnd--;
             }
 
             yaml = yamlStart..yamlEnd;
-            body = (lastNewline + 1)..content.Length;
+            body = (lastNewline < 0 ? content.Length : lastNewline + 1)..content.Length;
             return true;
         }
+    }
+
+    private static int OpeningDelimiterEnd(ReadOnlySpan<char> content)
+    {
+        if (!content.StartsWith("---", StringComparison.Ordinal)) { return -1; }
+        var index = 3;
+        while (index < content.Length && content[index] is ' ' or '\t') { index++; }
+        if (index < content.Length && content[index] == '\r') { index++; }
+        return index == content.Length || content[index] == '\n' ? index : -1;
     }
 
     private static bool IsDelimiterWhitespace(char value)

@@ -1,41 +1,36 @@
 using Markdig;
+using Markdig.Extensions.AutoIdentifiers;
+using Markdig.Extensions.EmphasisExtras;
 using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NamingConventions;
 
 namespace Kiji.Markdown;
 
-/// <summary>Configures Markdown file selection and rendering.</summary>
+/// <summary>Site-wide Markdown and YAML settings, configured through DI options.</summary>
 public sealed class MarkdownOptions
 {
-    internal List<Action<MarkdownPipelineBuilder>> PipelineConfigurations { get; } = [];
+    private readonly Lock _yamlLock = new();
 
-    internal List<Func<string, string>> HtmlPostProcessors { get; } = [];
+    /// <summary>The Markdig builder. Defaults to GFM-style tables, task lists, autolinks and strikethrough, footnotes, GitHub heading IDs, and generic attributes.</summary>
+    /// <remarks>Replace or remove existing extensions through <c>Pipeline.Extensions</c>.</remarks>
+    public MarkdownPipelineBuilder Pipeline { get; } = new MarkdownPipelineBuilder()
+        .UseAutoIdentifiers(AutoIdentifierOptions.GitHub)
+        .UsePipeTables()
+        .UseTaskLists()
+        .UseAutoLinks()
+        .UseEmphasisExtras(EmphasisExtraOptions.Strikethrough)
+        .UseFootnotes()
+        .UseGenericAttributes();
 
-    internal List<Action<DeserializerBuilder>> FrontMatterConfigurations { get; } = [];
+    /// <summary>The YAML builder. Defaults to camelCase, case-insensitive property matching, strict unknown keys, and UTC for dates without offsets.</summary>
+    public DeserializerBuilder Yaml { get; } = new DeserializerBuilder()
+        .WithNamingConvention(CamelCaseNamingConvention.Instance)
+        .WithCaseInsensitivePropertyMatching()
+        .WithTypeConverter(new MarkdownDateTimeConverter());
 
-    /// <summary>The directory to scan recursively for <c>*.md</c>. Absolute or relative to the site project directory; defaults to <c>content</c>.</summary>
-    public string Directory { get; set; } = "content";
-
-    /// <summary>An optional file filter applied before loading, defaulting to all Markdown files.</summary>
-    public Func<FileInfo, bool>? FileFilter { get; set; }
-
-    /// <summary>Registers a Markdig configuration applied after the default pipeline is configured.</summary>
-    public void ConfigureMarkdown(Action<MarkdownPipelineBuilder> configure)
+    internal IDeserializer CreateDeserializer()
     {
-        ArgumentNullException.ThrowIfNull(configure);
-        PipelineConfigurations.Add(configure);
-    }
-
-    /// <summary>Registers an HTML post-processor applied after Markdown rendering, in registration order.</summary>
-    public void AddHtmlPostProcessor(Func<string, string> postProcessor)
-    {
-        ArgumentNullException.ThrowIfNull(postProcessor);
-        HtmlPostProcessors.Add(postProcessor);
-    }
-
-    /// <summary>Registers a YAML deserializer configuration after the camelCase and ignore-unmatched-properties defaults.</summary>
-    public void ConfigureYaml(Action<DeserializerBuilder> configure)
-    {
-        ArgumentNullException.ThrowIfNull(configure);
-        FrontMatterConfigurations.Add(configure);
+        // Build serially; each parsing worker owns its own deserializer.
+        lock (_yamlLock) { return Yaml.Build(); }
     }
 }

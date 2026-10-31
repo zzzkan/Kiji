@@ -38,8 +38,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Portable;
 var builder = StaticSite.CreateBuilder(args);
 builder.SiteInfo = new SiteInfo { Name = "Portable", BaseUrl = new Uri("https://example.test/") };
-builder.AddMarkdownContent<FrontMatter>(options => options.AddHtmlPostProcessor(html => { Console.WriteLine("RENDER"); return html; }));
-builder.AddPageParameters<Article>(services => services.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>().Select(entry => new { Key = entry.Key }));
+builder.Services.Configure<MarkdownOptions>(options => options.Pipeline.DocumentProcessed += _ => Console.WriteLine("RENDER"));
+builder.AddKeyedMarkdownContent<FrontMatter>("articles");
+builder.AddPageParameters<Article>(services => services.GetRequiredKeyedService<ContentCollection<MarkdownContent<FrontMatter>>>("articles").Select(entry => new { Key = entry.Path, Content = entry }));
 await builder.Build().RunAsync();
 namespace Portable { public sealed class FrontMatter { public string? Title { get; set; } } }
 '@ | Set-Content (Join-Path $root 'Program.cs')
@@ -47,13 +48,14 @@ namespace Portable { public sealed class FrontMatter { public string? Title { ge
 @page "/{Key}/"
 @using Kiji
 @using Kiji.Markdown
-@inject ContentDictionary<MarkdownContent<FrontMatter>> Articles
+<strong>@Content.FrontMatter.Title</strong>
 @((Microsoft.AspNetCore.Components.MarkupString)body)
 <small>@SourcePath()</small>
 @code {
     [Microsoft.AspNetCore.Components.Parameter] public string Key { get; set; } = "";
+    [Microsoft.AspNetCore.Components.Parameter] public MarkdownContent<FrontMatter> Content { get; set; } = default!;
     private string body = "";
-    protected override async Task OnInitializedAsync() { body = await Articles[Key].RenderAsync(); }
+    protected override async Task OnInitializedAsync() { body = await Content.RenderAsync(); }
     private static string SourcePath([System.Runtime.CompilerServices.CallerFilePath] string source = "") => source;
 }
 '@ | Set-Content (Join-Path $root 'Article.razor')
@@ -134,7 +136,9 @@ Publish-Fixture $second 'content-only' 1
 
 $page = Join-Path $second 'Article.razor'
 # MSBuild owns source recompilation; unlike content inputs, source edits use normal timestamps.
-[IO.File]::WriteAllText($page, [IO.File]::ReadAllText($page).Replace('@((Microsoft.AspNetCore.Components.MarkupString)body)', '<p>Changed code</p>@((Microsoft.AspNetCore.Components.MarkupString)body)'))
+[IO.File]::WriteAllText($page, [IO.File]::ReadAllText($page).Replace('<strong>@Content.FrontMatter.Title</strong>
+@((Microsoft.AspNetCore.Components.MarkupString)body)', '<p>Changed code</p><strong>@Content.FrontMatter.Title</strong>
+@((Microsoft.AspNetCore.Components.MarkupString)body)'))
 Publish-Fixture $second 'code-change' 2
 
 $cache = Join-Path $second '.kiji/cache'

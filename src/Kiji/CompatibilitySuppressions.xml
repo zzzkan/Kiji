@@ -1,5 +1,56 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Suppressions>
+  <!-- Markdown rendering settings moved to DI options; selection moved to MarkdownContentOptions. -->
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Kiji.Markdown.MarkdownOptions.get_Directory</Target>
+    <Left>lib/net10.0/Kiji.dll</Left>
+    <Right>lib/net10.0/Kiji.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Kiji.Markdown.MarkdownOptions.set_Directory(System.String)</Target>
+    <Left>lib/net10.0/Kiji.dll</Left>
+    <Right>lib/net10.0/Kiji.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Kiji.Markdown.MarkdownOptions.get_FileFilter</Target>
+    <Left>lib/net10.0/Kiji.dll</Left>
+    <Right>lib/net10.0/Kiji.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Kiji.Markdown.MarkdownOptions.set_FileFilter(System.Func{System.IO.FileInfo,System.Boolean})</Target>
+    <Left>lib/net10.0/Kiji.dll</Left>
+    <Right>lib/net10.0/Kiji.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Kiji.Markdown.MarkdownOptions.ConfigureMarkdown(System.Action{Markdig.MarkdownPipelineBuilder})</Target>
+    <Left>lib/net10.0/Kiji.dll</Left>
+    <Right>lib/net10.0/Kiji.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Kiji.Markdown.MarkdownOptions.ConfigureYaml(System.Action{YamlDotNet.Serialization.DeserializerBuilder})</Target>
+    <Left>lib/net10.0/Kiji.dll</Left>
+    <Right>lib/net10.0/Kiji.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <!-- HTML post-processing is replaced by Razor composition and DocumentProcessed. -->
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Kiji.Markdown.MarkdownOptions.AddHtmlPostProcessor(System.Func{System.String,System.String})</Target>
+    <Left>lib/net10.0/Kiji.dll</Left>
+    <Right>lib/net10.0/Kiji.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
   <!-- Page discovery is automatic; parameter registration is now AddPageParameters. -->
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
@@ -163,6 +214,28 @@
   <Suppression>
     <DiagnosticId>CP0001</DiagnosticId>
     <Target>T:Kiji.Sitemaps.SitemapStaticSiteExtensions</Target>
+    <Left>lib/net10.0/Kiji.dll</Left>
+    <Right>lib/net10.0/Kiji.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <!-- ContentCollection replaces ContentDictionary; custom digests and public file metadata are removed. -->
+  <Suppression>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:Kiji.ContentDictionary`1</Target>
+    <Left>lib/net10.0/Kiji.dll</Left>
+    <Right>lib/net10.0/Kiji.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:Kiji.ContentEntry`1</Target>
+    <Left>lib/net10.0/Kiji.dll</Left>
+    <Right>lib/net10.0/Kiji.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Kiji.Markdown.MarkdownContent`1.get_FileInfo</Target>
     <Left>lib/net10.0/Kiji.dll</Left>
     <Right>lib/net10.0/Kiji.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>

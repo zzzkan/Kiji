@@ -12,20 +12,26 @@ public sealed class MarkdownContent<TFrontMatter>
     // belong to the rendering page's output directory, so each page that embeds this
     // content must run the pipeline once.
     private ConcurrentDictionary<string, Lazy<Task<string>>>? _renderTasksByRoute;
+    private string? _frontMatterDependencyKey;
+    private int _rendered;
 
     internal MarkdownContent(
         FileInfo fileInfo,
         TFrontMatter frontMatter,
         string body,
         Func<MarkdownContent<TFrontMatter>, CancellationToken, Task<string>> renderAsync,
-        string? contentHash = null)
+        string? contentHash = null,
+        string? path = null,
+        string? frontMatterDigest = null)
     {
         ArgumentNullException.ThrowIfNull(fileInfo);
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(renderAsync);
 
-        FileInfo = fileInfo;
+        SourcePath = fileInfo.FullName;
+        Path = path ?? fileInfo.Name;
         ContentHash = contentHash ?? Generation.BuildFingerprint.HashFile(fileInfo.FullName);
+        FrontMatterDigest = frontMatterDigest ?? ContentHash;
         FrontMatter = frontMatter;
         Body = body;
         _renderAsync = renderAsync;
@@ -33,8 +39,17 @@ public sealed class MarkdownContent<TFrontMatter>
 
     internal string ContentHash { get; }
 
-    /// <summary>The source file metadata.</summary>
-    public FileInfo FileInfo { get; }
+    internal string FrontMatterDigest { get; }
+
+    internal bool WasRendered => Volatile.Read(ref _rendered) != 0;
+
+    internal void TrackFrontMatter(string sourceId) =>
+        _frontMatterDependencyKey = sourceId + "#front-matter/" + Path.ToUpperInvariant();
+
+    /// <summary>The source path relative to the content directory, using <c>/</c> separators. Also the collection ID.</summary>
+    public string Path { get; }
+
+    internal string SourcePath { get; }
 
     /// <summary>
     /// The markdown body (front matter stripped) captured when the file was read for
@@ -47,9 +62,16 @@ public sealed class MarkdownContent<TFrontMatter>
     {
         get
         {
-            // Reading front matter during a tracked render makes the page depend on
-            // this file, so front-matter-only pages re-render when the file changes.
-            PageRenderContext.Current?.Dependencies?.AddFile(FileInfo.FullName, ContentHash);
+            var dependencies = PageRenderContext.Current?.Dependencies;
+            if (_frontMatterDependencyKey is { } key)
+            {
+                dependencies?.AddValue(key, FrontMatterDigest);
+            }
+            else
+            {
+                // Directly constructed internal content has no collection resolver.
+                dependencies?.AddFile(SourcePath, ContentHash);
+            }
             return field;
         }
     }
@@ -57,6 +79,7 @@ public sealed class MarkdownContent<TFrontMatter>
     /// <summary>Renders the Markdown body as HTML and writes referenced image variants beside the current page.</summary>
     public async ValueTask<string> RenderAsync(CancellationToken cancellationToken = default)
     {
+        Interlocked.Exchange(ref _rendered, 1);
         var context = PageRenderContext.Current;
         var pageToken = context?.CancellationToken ?? default;
         using var linked = cancellationToken.CanBeCanceled && pageToken.CanBeCanceled && cancellationToken != pageToken
@@ -64,7 +87,7 @@ public sealed class MarkdownContent<TFrontMatter>
             : null;
         cancellationToken = linked?.Token ?? (cancellationToken.CanBeCanceled ? cancellationToken : pageToken);
         cancellationToken.ThrowIfCancellationRequested();
-        context?.Dependencies?.AddFile(FileInfo.FullName, ContentHash);
+        context?.Dependencies?.AddFile(SourcePath, ContentHash);
         // A tracked render must observe all dependencies and materialize its outputs
         // again, even if the same content instance was rendered in an earlier build.
         if (context?.Dependencies is not null)

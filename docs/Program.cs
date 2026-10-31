@@ -20,9 +20,18 @@ builder.AddMarkdownContent<FrontMatter, Article>(
     select: static content => Article.Create(content));
 builder.UseDefaultLayout<MainLayout>();
 builder.UseNotFoundPage<NotFoundPage>();
-builder.AddPageParameters<ArticlePage>(static services => services
-    .GetRequiredService<ContentDictionary<Article>>()
-    .Select(static doc => new { doc.Value.Slug, ContentKey = doc.Key }));
+builder.AddPageParameters<ArticlePage>(static services =>
+{
+    var articles = services.GetRequiredService<ContentCollection<Article>>()
+        .OrderBy(static article => article.Order).ToArray();
+    return articles.Select((article, index) => new
+    {
+        article.Slug,
+        Article = article,
+        Previous = index > 0 ? articles[index - 1] : null,
+        Next = index + 1 < articles.Length ? articles[index + 1] : null,
+    });
+});
 builder.AddSitemap();
 
 return await builder.Build().RunAsync();

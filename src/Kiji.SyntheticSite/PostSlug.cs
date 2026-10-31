@@ -6,13 +6,15 @@ namespace Kiji.SyntheticSite;
 /// </summary>
 public static class PostSlug
 {
-    public static string From(FileInfo fileInfo)
+    public static string From(string path)
     {
-        ArgumentNullException.ThrowIfNull(fileInfo);
+        ArgumentNullException.ThrowIfNull(path);
 
-        return string.Equals(fileInfo.Name, "index.md", StringComparison.OrdinalIgnoreCase)
-            ? fileInfo.Directory?.Name
-                ?? throw new InvalidOperationException($"Cannot determine a slug for '{fileInfo.FullName}'.")
-            : Path.GetFileNameWithoutExtension(fileInfo.Name);
+        var slug = string.Equals(Path.GetFileName(path), "index.md", StringComparison.OrdinalIgnoreCase)
+            ? Path.GetFileName(Path.GetDirectoryName(path))
+            : Path.GetFileNameWithoutExtension(Path.GetFileName(path));
+        return !string.IsNullOrWhiteSpace(slug)
+            ? slug
+            : throw new InvalidOperationException($"Cannot determine a slug for '{path}'.");
     }
 }

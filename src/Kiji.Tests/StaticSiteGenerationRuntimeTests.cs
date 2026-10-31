@@ -86,10 +86,10 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
                 null,
                 "DotNet"),
         ];
-        builder.AddContentSource(_ => items);
+        builder.RegisterContent<Post>(_ => [.. items.Select(post => (post.Id, post, Digest: (string?)null))]);
         TestArticleContents.MapSite(builder);
 
-        builder.AddRssFeed(static services => services.GetRequiredService<ContentDictionary<Post>>().Values
+        builder.AddRssFeed(static services => services.GetRequiredService<ContentCollection<Post>>()
             .OrderByDescending(static post => post.CreatedAt)
             .Select(static post => new FeedItem(
                 post.Title, post.Description, post.CreatedAt, RelativePath: $"blog/{post.Slug}/")));
@@ -159,11 +159,11 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         TestSiteAssets.Bind(builder.Paths, GetStaticDirectory());
 
         builder.AddMarkdownContent<FrontMatter>();
-        builder.AddContentSource<Post>(static _ => []);
+        builder.RegisterContent<Post>(static _ => []);
         TestArticleContents.MapSite(builder);
         builder.AddPageParameters<MarkdownPostTestPage>(static services => services
-            .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
-            .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
+            .GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>()
+            .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Path), ContentKey = post.Path }));
 
         await using var app = builder.Build();
         await app.PublishAsync(_outputDir);
@@ -206,8 +206,8 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
             if (configure is not null) { builder.Services.Configure(configure); }
             builder.AddMarkdownContent<FrontMatter>();
             builder.AddPageParameters<MarkdownPostTestPage>(static services => services
-                .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
-                .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
+                .GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>()
+                .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Path), ContentKey = post.Path }));
             await using var app = builder.Build();
             await app.PublishAsync(_outputDir);
             return await File.ReadAllTextAsync(Path.Combine(pageDir, "index.html"));

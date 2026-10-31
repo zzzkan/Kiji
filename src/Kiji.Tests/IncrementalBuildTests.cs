@@ -100,6 +100,63 @@ public sealed class IncrementalBuildTests : IDisposable
         Assert.Contains("Second source", await File.ReadAllTextAsync(Path.Combine(root, "dist", "articles", "selected", "index.html")), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task CachedFrontMatterItems_StayIdentifiedAcrossSnapshots()
+    {
+        // Unchanged files reuse their parsed front matter, so the next snapshot
+        // registers the same instances again.
+        var root = CreateSiteRoot("front-matter-items");
+        var log = new ContentRenderLog();
+        await using var site = CreateItemBuilder(root, log, static content => content.FrontMatter).Build();
+        await site.PublishAsync("dist");
+        await site.PublishAsync("dist");
+        Assert.Equal(1, log.Counts["stable"]);
+        Assert.Equal(1, log.Counts["changing"]);
+        await WritePostAsync(root, "changing", "Changed Post", "Original body.");
+        await site.PublishAsync("dist");
+        Assert.Equal(1, log.Counts["stable"]);
+        Assert.Equal(2, log.Counts["changing"]);
+        Assert.Contains("Changed Post", await File.ReadAllTextAsync(
+            Path.Combine(root, "dist", "content-items", "changing", "index.html")), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task InstancesSharedByItems_LoadAndAreNotIdentifiedAsOneItem(bool strings)
+    {
+        var root = CreateSiteRoot("shared-items");
+        var log = new ContentRenderLog();
+        var shared = new FrontMatter { Title = "Shared" };
+        // Equal strings are fingerprinted by value; a shared object identifies neither item.
+        var builder = strings
+            ? CreateItemBuilder(root, log, static _ => "")
+            : CreateItemBuilder(root, log, _ => shared);
+        await using var site = builder.Build();
+        await site.PublishAsync("dist");
+        await site.PublishAsync("dist");
+        var renders = strings ? 1 : 2;
+        Assert.Equal(renders, log.Counts["stable"]);
+        Assert.Equal(renders, log.Counts["changing"]);
+    }
+
+    private static StaticSiteBuilder CreateItemBuilder<TModel>(string root, ContentRenderLog log,
+        Func<MarkdownContent<FrontMatter>, TModel> select)
+        where TModel : class
+    {
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        TestSiteAssets.Bind(builder.Paths, Path.Combine(root, "static"));
+        builder.Services.AddSingleton(log);
+        builder.AddMarkdownContent(select);
+        builder.AddPageParameters<ContentItemPage>(services =>
+        {
+            var items = services.GetRequiredService<ContentCollection<TModel>>();
+            return [new { Slug = "stable", Item = items["stable.md"] }, new { Slug = "changing", Item = items["changing.md"] }];
+        });
+        return builder;
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

@@ -86,8 +86,9 @@ builder.AddMarkdownContent<FrontMatter, Post>(content => new Post(
 
 This registers `ContentCollection<Post>` instead. The projection sees one file at a time;
 compute collection-wide results, such as tag counts, while rendering or in a scoped service.
-Return a new model instance for each item and treat the projection as a pure function of
-that file. Reusing one instance for multiple items or snapshots fails when content loads.
+Treat the projection as a pure function of that file and return a distinct instance for
+each item: an instance shared by several items identifies none of them, so pages that
+receive it as a parameter render on every publish.
 
 Metadata-only listings and navigation can reuse HTML after body edits. Collection
 membership/order and front matter changes invalidate them. If a projection calls

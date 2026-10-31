@@ -156,9 +156,9 @@ A page's HTML can be reused only when every parameter value is `null`, a `string
 `char`, an 8- to 64-bit integer, an enum, a `Guid`, or the same instance of an item
 obtained from a `ContentCollection<T>`. Item parameters observe that item's content,
 including when the component only reads projected model properties. Objects created
-in the parameter factory, including record copies made with `with`, and arrays of items
-are not reusable. Resolve current items inside the factory on every build; retaining an
-item from a previous snapshot fails publishing.
+in the parameter factory, including record copies made with `with`, arrays of items, and
+an instance shared by several items are not reusable. Resolve current items inside the
+factory on every build; retaining an item from a previous snapshot fails publishing.
 
 ### Layout
 

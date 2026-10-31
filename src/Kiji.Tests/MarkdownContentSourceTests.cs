@@ -131,21 +131,6 @@ public sealed class MarkdownContentSourceTests : IDisposable
     private sealed record ProjectedNote(string Key, string? Title);
 
     [Fact]
-    public async Task Projection_ReusingOneInstanceForTwoItems_FailsWhenLoaded()
-    {
-        WriteMarkdown("one.md", "One");
-        WriteMarkdown("two.md", "Two");
-        var builder = CreateBuilder();
-        var shared = new ProjectedNote("shared", "Shared");
-        builder.AddMarkdownContent<FrontMatter, ProjectedNote>(_ => shared);
-        await using var site = builder.Build();
-        site.UsePlanningOptions();
-        var collection = site.ServiceProvider.GetRequiredService<ContentCollection<ProjectedNote>>();
-        var error = Assert.Throws<InvalidOperationException>(() => collection.Count);
-        Assert.Contains("select projection must return a new instance for each item", error.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public async Task KeyedSources_WithTheSameElementType_ResolveSeparatelyAndReload()
     {
         WriteMarkdown("posts/one.md", "One");

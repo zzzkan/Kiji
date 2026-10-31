@@ -57,18 +57,28 @@ internal sealed class ContentRuntime
         }
     }
 
+    /// <remarks>Called during materialization, which holds the materialization lock.</remarks>
     internal void RegisterItem(object item, string sourceId, string id, string? digest)
     {
-        if (!_items.TryAdd(item, new ContentItemIdentity(sourceId, id, digest, _generation)))
+        // Strings are fingerprinted by value, and equal strings may share an instance.
+        if (item is string) { return; }
+
+        if (_items.TryGetValue(item, out var existing) && existing.Generation == _generation
+            && !(existing.SourceId == sourceId && existing.Id == id))
         {
-            throw new InvalidOperationException(
-                $"Content item '{id}' reuses an instance already registered by a content source. The select projection must return a new instance for each item.");
+            // A parameter holding a shared instance cannot name its item: render it every time.
+            _items.AddOrUpdate(item, existing with { Shared = true });
+            return;
         }
+
+        // Parsed sources are reused across snapshots, so an unchanged file's front matter can
+        // return as the same instance and replace its previous registration.
+        _items.AddOrUpdate(item, new ContentItemIdentity(sourceId, id, digest, _generation));
     }
 
     internal ContentItemIdentity? ResolveItem(object item)
     {
-        if (!_items.TryGetValue(item, out var identity)) { return null; }
+        if (!_items.TryGetValue(item, out var identity) || identity.Shared) { return null; }
         if (identity.Generation != Volatile.Read(ref _generation))
         {
             throw new InvalidOperationException(

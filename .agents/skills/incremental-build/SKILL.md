@@ -27,8 +27,10 @@ not built with conflicting global properties.
 
 ## Dependencies
 
-- Markdown front matter/body reads record the hash of the bytes actually parsed.
-  Independent per-item projections retain that hash.
+- Markdown body reads, ID lookups and item parameters record the whole-file hash.
+  FrontMatter reads record the YAML text digest against the owning collection source.
+  Enumeration/Count/missing IDs hash ordered IDs and projection digests: metadata only,
+  unless the projection called RenderAsync. Parsed-source reuse still checks the whole file.
 - Content ID lookup records the item digest. Enumeration, Count
   and missing IDs record the collection digest, computed once per materialization.
 - Collection item parameters hash source/ID identity and record item digests; reject stale snapshot items.

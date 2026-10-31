@@ -250,7 +250,10 @@ Keyed overloads register the same collection types under a string service key:
 Resolve them with `services.GetRequiredKeyedService<ContentCollection<T>>(serviceKey)`.
 The element type and service key identify a registration; duplicate pairs fail. An unkeyed
 collection can coexist with keyed collections of the same type. Service keys must not be
-empty or whitespace. Source options are evaluated immediately during registration.
+empty or whitespace. Source options are evaluated immediately during registration. Each projection must
+return a fresh instance per item and snapshot. Enumeration and `Count` observe membership,
+source order and projection metadata; a projection that calls `RenderAsync` also observes
+the body. ID lookups and item parameters always observe the whole file.
 
 | `MarkdownContentOptions` member   | Behavior                                                                     |
 | --------------------------------- | ---------------------------------------------------------------------------- |

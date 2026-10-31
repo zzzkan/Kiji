@@ -11,7 +11,8 @@ nothing it depends on has changed, and always produce a complete site.
 
 | Change | Work |
 | --- | --- |
-| Markdown changes | Render pages that read that item or its collection. |
+| Markdown body changes | Render pages that look up or receive the item, or render its body. Metadata-only listings and navigation can be reused. |
+| Markdown front matter changes | Also render pages that enumerate the collection or read its front matter. |
 | Content is added, removed, or reordered | Render pages that read the whole collection, and add or remove pages. |
 | Page parameters change | Render affected pages. |
 | A local image changes | Render pages that use it and update its variants. |
@@ -45,6 +46,16 @@ see the [reusable parameter types](../api-reference/#pages).
 
 Enumerating a collection, reading `Count`, or looking up a missing ID depends on the whole
 collection, even if you filter afterward. Reads in layouts and child components count too.
+
+Collection dependencies include source order, IDs, and each item's projection digest.
+Normally that digest covers only the front matter text. If a projection calls `RenderAsync`,
+its digest includes the entire file. Reading `FrontMatter` records its own metadata dependency;
+`RenderAsync` records the entire file. ID lookups and item parameters always observe the whole
+file, even if a model has hidden its source.
+
+Body-derived values cached in a model during another page's render are untracked service
+state when read without `RenderAsync`. Do not share cached Markdown HTML between pages:
+local image URLs depend on the current page's output directory.
 
 ## Render pages that use external data
 

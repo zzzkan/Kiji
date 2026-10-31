@@ -154,13 +154,20 @@ public sealed class IncrementalBuildTests : IDisposable
     }
 
     private static StaticSiteBuilder CreateArticleBuilder(string root, ContentRenderLog log,
-        bool navigation = false, bool mapPages = true)
+        bool navigation = false, bool mapPages = true, bool renderBodies = false,
+        bool showNavigation = false, bool projectionRendersBody = false)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
         builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(builder.Paths, Path.Combine(root, "static"));
         builder.Services.AddSingleton(log);
-        builder.AddMarkdownContent<FrontMatter, ContentArticle>(ContentArticle.Create);
+        builder.AddMarkdownContent<FrontMatter, ContentArticle>(content =>
+        {
+            var article = ContentArticle.Create(content);
+            return projectionRendersBody
+                ? article with { Excerpt = content.RenderAsync().AsTask().GetAwaiter().GetResult() }
+                : article;
+        });
         if (mapPages)
         {
             builder.AddPageParameters<ContentArticlePage>(services =>
@@ -171,12 +178,80 @@ public sealed class IncrementalBuildTests : IDisposable
                 {
                     article.Slug,
                     Article = article,
+                    RenderBody = renderBodies,
+                    ShowNavigation = showNavigation,
                     Previous = navigation && index > 0 ? articles[index - 1] : null,
                     Next = navigation && index + 1 < articles.Length ? articles[index + 1] : null,
                 });
             });
         }
         return builder;
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MarkdownDigests_TrackMetadataSeparatelyFromTheBody(bool editFrontMatter)
+    {
+        var root = CreateSiteRoot("split-digests");
+        var log = new ContentRenderLog();
+        static StaticSiteBuilder Create(string directory, ContentRenderLog observer)
+        {
+            var builder = CreateArticleBuilder(directory, observer, renderBodies: true, showNavigation: true);
+            builder.AddPageParameters<ContentArticleListPage>(_ =>
+                [new { Kind = "metadata" }, new { Kind = "front-matter" }, new { Kind = "count" }]);
+            return builder;
+        }
+        await using var site = Create(root, log).Build();
+        await site.PublishAsync("dist");
+        await site.PublishAsync("dist");
+        Assert.All(log.Counts.Values, count => Assert.Equal(1, count));
+        var title = editFrontMatter ? "Changed Post" : "Changing Post";
+        await WritePostAsync(root, "changing", title, "Edited body.");
+        await site.PublishAsync("dist");
+        Assert.Equal(2, log.Counts["changing"]);
+        Assert.Equal(editFrontMatter ? 2 : 1, log.Counts["stable"]);
+        foreach (var kind in new[] { "metadata", "front-matter", "count" })
+        {
+            Assert.Equal(editFrontMatter ? 2 : 1, log.Counts["list-" + kind]);
+        }
+
+        var scratch = CreateSiteRoot("split-digests-full");
+        await WritePostAsync(scratch, "changing", title, "Edited body.");
+        await using var clean = Create(scratch, new ContentRenderLog()).Build();
+        await clean.PublishAsync("dist");
+        AssertDirectoriesIdentical(Path.Combine(scratch, "dist"), Path.Combine(root, "dist"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MarkdownBodyRead_ByProjectionOrList_InvalidatesTheListing(bool projection)
+    {
+        var root = CreateSiteRoot("body-listing");
+        var log = new ContentRenderLog();
+        StaticSiteBuilder Create(string directory, ContentRenderLog observer)
+        {
+            var builder = CreateArticleBuilder(directory, observer, projectionRendersBody: projection);
+            builder.AddPageParameters<ContentArticleListPage>(_ => [new { Kind = projection ? "metadata" : "render" }]);
+            return builder;
+        }
+        await using var site = Create(root, log).Build();
+        await site.PublishAsync("dist");
+        await site.PublishAsync("dist");
+        var listing = "list-" + (projection ? "metadata" : "render");
+        Assert.Equal(1, log.Counts[listing]);
+        await WritePostAsync(root, "changing", "Changing Post", "Edited body.");
+        await site.PublishAsync("dist");
+        Assert.Equal(2, log.Counts[listing]);
+        var output = Path.Combine(root, "dist", "article-list", projection ? "metadata" : "render", "index.html");
+        Assert.Contains("Edited body.", await File.ReadAllTextAsync(output), StringComparison.Ordinal);
+
+        var scratch = CreateSiteRoot("body-listing-full");
+        await WritePostAsync(scratch, "changing", "Changing Post", "Edited body.");
+        await using var clean = Create(scratch, new ContentRenderLog()).Build();
+        await clean.PublishAsync("dist");
+        AssertDirectoriesIdentical(Path.Combine(scratch, "dist"), Path.Combine(root, "dist"));
     }
 
     [Fact]

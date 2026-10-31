@@ -86,6 +86,13 @@ builder.AddMarkdownContent<FrontMatter, Post>(content => new Post(
 
 This registers `ContentCollection<Post>` instead. The projection sees one file at a time;
 compute collection-wide results, such as tag counts, while rendering or in a scoped service.
+Return a new model instance for each item and treat the projection as a pure function of
+that file. Reusing one instance for multiple items or snapshots fails when content loads.
+
+Metadata-only listings and navigation can reuse HTML after body edits. Collection
+membership/order and front matter changes invalidate them. If a projection calls
+`RenderAsync`, body edits invalidate readers of the collection too. ID lookups and item
+parameters always observe the entire file.
 
 ## Register several collections of the same type
 
@@ -114,6 +121,11 @@ Pass a collection item through `AddPageParameters` and use `MarkdownBody`:
 With the `Post` model, use `Content="@Post.Content"`. You can also call `RenderAsync()`
 and render the result as a `MarkupString`. These produce raw HTML, so render only trusted
 Markdown or sanitize it first.
+
+A body-derived value cached in a model during another page's render is untracked state
+if read without `RenderAsync`. Avoid such shared caches, or use `[AlwaysRender]` for pages
+that consume them. Never share rendered Markdown HTML between pages: local image URLs
+are relative to the page being rendered.
 
 ## Customize parsing and HTML
 

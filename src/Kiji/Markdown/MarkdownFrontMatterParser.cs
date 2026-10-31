@@ -7,9 +7,16 @@ internal static class MarkdownFrontMatterParser
     internal static (TFrontMatter FrontMatter, string Body) ParseContentAndBody<TFrontMatter>(
         string content,
         IDeserializer deserializer)
+        => ParseContentAndBody<TFrontMatter>(content, deserializer, out _);
+
+    internal static (TFrontMatter FrontMatter, string Body) ParseContentAndBody<TFrontMatter>(
+        string content,
+        IDeserializer deserializer,
+        out string frontMatterText)
     {
         var extracted = TryExtractFrontMatter(content, out var yaml, out var body);
-        var frontMatter = deserializer.Deserialize<TFrontMatter>(extracted ? content[yaml] : "{}")
+        frontMatterText = extracted ? content[yaml] : string.Empty;
+        var frontMatter = deserializer.Deserialize<TFrontMatter>(extracted ? frontMatterText : "{}")
             ?? deserializer.Deserialize<TFrontMatter>("{}")
             ?? throw new InvalidOperationException("Failed to deserialize YAML front matter.");
         return (frontMatter, extracted ? content[body] : content);

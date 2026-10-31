@@ -12,6 +12,7 @@ public sealed class ContentArticlePage : ComponentBase
     [Parameter] public ContentArticle? Previous { get; set; }
     [Parameter] public ContentArticle? Next { get; set; }
     [Parameter] public bool RenderBody { get; set; }
+    [Parameter] public bool ShowNavigation { get; set; }
     [Parameter] public IReadOnlyList<ContentArticle>? Items { get; set; }
 
     private string _body = "";
@@ -27,5 +28,10 @@ public sealed class ContentArticlePage : ComponentBase
         builder.AddContent(0, Article.Title);
         builder.AddContent(1, $"|previous:{Previous?.Slug}|next:{Next?.Slug}|");
         builder.AddMarkupContent(2, _body);
+        if (ShowNavigation)
+        {
+            builder.OpenComponent<ContentNavigation>(3);
+            builder.CloseComponent();
+        }
     }
 }

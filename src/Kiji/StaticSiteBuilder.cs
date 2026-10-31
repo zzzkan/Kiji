@@ -176,6 +176,16 @@ public sealed class StaticSiteBuilder
         string? directory = null,
         string? serviceKey = null)
         where T : class
+        => RegisterContent<T>((services, _) => [.. loader(services)
+            .Select(static entry => (entry.Id, entry.Item, entry.Digest, entry.Digest, (string?)null))],
+            contentSetScope, directory, serviceKey);
+
+    internal StaticSiteBuilder RegisterContent<T>(
+        Func<IServiceProvider, string, IReadOnlyList<(string Id, T Item, string? Digest, string? ProjectionDigest, string? FrontMatterDigest)>> loader,
+        string contentSetScope = "",
+        string? directory = null,
+        string? serviceKey = null)
+        where T : class
     {
         EnsureConfigurable();
         // Source identities use the project directory, including when a caller supplied

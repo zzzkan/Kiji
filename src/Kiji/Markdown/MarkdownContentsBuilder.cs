@@ -50,7 +50,7 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
                     ? sourceCache.GetOrRead(fileInfo, deserializers.Value!)
                     : MarkdownSourceReader.Read<TFrontMatter>(fileInfo, deserializers.Value!);
                 items[index] = new MarkdownContent<TFrontMatter>(fileInfo, source.FrontMatter, source.Body, renderAsync, source.ContentHash,
-                    Path.GetRelativePath(contentsDirectory, fileInfo.FullName).Replace('\\', '/'));
+                    Path.GetRelativePath(contentsDirectory, fileInfo.FullName).Replace('\\', '/'), source.FrontMatterDigest);
                 hashRegistry?.Record(fileInfo, source.ContentHash);
             }
             catch (Exception exception)

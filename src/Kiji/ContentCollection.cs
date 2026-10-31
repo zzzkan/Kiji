@@ -18,11 +18,11 @@ public sealed class ContentCollection<T> : IReadOnlyCollection<T>
 {
     private readonly string _sourceId;
     private readonly ContentRuntime _runtime;
-    private readonly Func<IServiceProvider, IReadOnlyList<(string Id, T Item, string? Digest)>> _load;
+    private readonly Func<IServiceProvider, string, IReadOnlyList<(string Id, T Item, string? Digest, string? ProjectionDigest, string? FrontMatterDigest)>> _load;
 
     internal ContentCollection(
         ContentRuntime runtime,
-        Func<IServiceProvider, IReadOnlyList<(string Id, T Item, string? Digest)>> load,
+        Func<IServiceProvider, string, IReadOnlyList<(string Id, T Item, string? Digest, string? ProjectionDigest, string? FrontMatterDigest)>> load,
         string contentSetScope = "")
     {
         _runtime = runtime;
@@ -30,6 +30,7 @@ public sealed class ContentCollection<T> : IReadOnlyCollection<T>
         _sourceId = typeof(T).FullName + ":" + contentSetScope;
         runtime.Dependencies.Register(_sourceId, CollectionDigest);
         runtime.Dependencies.RegisterSource(_sourceId, key => Materialized.Index.GetValueOrDefault(key).Digest);
+        runtime.Dependencies.RegisterSource(_sourceId + "#front-matter", id => Materialized.Index.GetValueOrDefault(id).FrontMatterDigest);
     }
 
     /// <summary>
@@ -121,20 +122,20 @@ public sealed class ContentCollection<T> : IReadOnlyCollection<T>
 
     private MaterializedContent Materialize(IServiceProvider services)
     {
-        var loaded = _load(services);
+        var loaded = _load(services, _sourceId);
 
-        var index = new Dictionary<string, (T Item, string? Digest)>(loaded.Count, StringComparer.OrdinalIgnoreCase);
+        var index = new Dictionary<string, (T Item, string? Digest, string? FrontMatterDigest)>(loaded.Count, StringComparer.OrdinalIgnoreCase);
         var entries = new T[loaded.Count];
         for (var i = 0; i < loaded.Count; i++)
         {
-            var (id, item, digest) = loaded[i];
+            var (id, item, digest, _, frontMatterDigest) = loaded[i];
             if (string.IsNullOrWhiteSpace(id))
             {
                 throw new InvalidOperationException(
                     $"The internal content loader for '{typeof(T).Name}' produced an empty ID.");
             }
 
-            if (!index.TryAdd(id, (item, digest)))
+            if (!index.TryAdd(id, (item, digest, frontMatterDigest)))
             {
                 throw new InvalidOperationException(
                     $"The internal content loader for '{typeof(T).Name}' produced duplicate ID '{id}'.");
@@ -152,13 +153,13 @@ public sealed class ContentCollection<T> : IReadOnlyCollection<T>
 
     private sealed class MaterializedContent(
         IReadOnlyList<T> entries,
-        FrozenDictionary<string, (T Item, string? Digest)> index,
-        IReadOnlyList<(string Id, T Item, string? Digest)> loaded)
+        FrozenDictionary<string, (T Item, string? Digest, string? FrontMatterDigest)> index,
+        IReadOnlyList<(string Id, T Item, string? Digest, string? ProjectionDigest, string? FrontMatterDigest)> loaded)
     {
         public Lazy<string?> CollectionDigest { get; } = new(() =>
         {
             var builder = new StringBuilder();
-            foreach (var (id, _, entryDigest) in loaded)
+            foreach (var (id, _, _, entryDigest, _) in loaded)
             {
                 if (entryDigest is not { } digest) { return null; }
                 BuildFingerprint.AppendPart(builder, id);
@@ -168,7 +169,7 @@ public sealed class ContentCollection<T> : IReadOnlyCollection<T>
         });
         public IReadOnlyList<T> Entries { get; } = entries;
 
-        public FrozenDictionary<string, (T Item, string? Digest)> Index { get; } = index;
+        public FrozenDictionary<string, (T Item, string? Digest, string? FrontMatterDigest)> Index { get; } = index;
 
     }
 }

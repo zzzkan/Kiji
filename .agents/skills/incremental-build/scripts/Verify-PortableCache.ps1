@@ -39,8 +39,8 @@ using Portable;
 var builder = StaticSite.CreateBuilder(args);
 builder.SiteInfo = new SiteInfo { Name = "Portable", BaseUrl = new Uri("https://example.test/") };
 builder.Services.Configure<MarkdownOptions>(options => options.Pipeline.DocumentProcessed += _ => Console.WriteLine("RENDER"));
-builder.AddMarkdownContent<FrontMatter>();
-builder.AddPageParameters<Article>(services => services.GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>().Select(entry => new { Key = entry.Path, Content = entry }));
+builder.AddKeyedMarkdownContent<FrontMatter>("articles");
+builder.AddPageParameters<Article>(services => services.GetRequiredKeyedService<ContentCollection<MarkdownContent<FrontMatter>>>("articles").Select(entry => new { Key = entry.Path, Content = entry }));
 await builder.Build().RunAsync();
 namespace Portable { public sealed class FrontMatter { public string? Title { get; set; } } }
 '@ | Set-Content (Join-Path $root 'Program.cs')
@@ -48,6 +48,7 @@ namespace Portable { public sealed class FrontMatter { public string? Title { ge
 @page "/{Key}/"
 @using Kiji
 @using Kiji.Markdown
+<strong>@Content.FrontMatter.Title</strong>
 @((Microsoft.AspNetCore.Components.MarkupString)body)
 <small>@SourcePath()</small>
 @code {
@@ -135,7 +136,9 @@ Publish-Fixture $second 'content-only' 1
 
 $page = Join-Path $second 'Article.razor'
 # MSBuild owns source recompilation; unlike content inputs, source edits use normal timestamps.
-[IO.File]::WriteAllText($page, [IO.File]::ReadAllText($page).Replace('@((Microsoft.AspNetCore.Components.MarkupString)body)', '<p>Changed code</p>@((Microsoft.AspNetCore.Components.MarkupString)body)'))
+[IO.File]::WriteAllText($page, [IO.File]::ReadAllText($page).Replace('<strong>@Content.FrontMatter.Title</strong>
+@((Microsoft.AspNetCore.Components.MarkupString)body)', '<p>Changed code</p><strong>@Content.FrontMatter.Title</strong>
+@((Microsoft.AspNetCore.Components.MarkupString)body)'))
 Publish-Fixture $second 'code-change' 2
 
 $cache = Join-Path $second '.kiji/cache'

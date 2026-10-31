@@ -77,7 +77,7 @@ public static class MarkdownStaticSiteBuilderExtensions
         var sourceCache = new MarkdownSourceCache<TFrontMatter>();
 
         return builder.RegisterContent(
-            services =>
+            (services, sourceId) =>
             {
                 var options = services.GetRequiredService<IOptions<MarkdownOptions>>().Value;
                 var markdownProcessor = services.GetRequiredService<MarkdownProcessor>();
@@ -95,11 +95,16 @@ public static class MarkdownStaticSiteBuilderExtensions
                     contentOptions.FileFilter)
                     .Build();
 
-                // Keep the parsed-byte hash even when the projection hides its source.
-                var items = new (string Id, TModel Item, string? Digest)[sources.Count];
+                // Item lookups retain the parsed-byte hash even when the projection
+                // hides its source. Collection readers usually depend only on metadata.
+                var items = new (string Id, TModel Item, string? Digest, string? ProjectionDigest, string? FrontMatterDigest)[sources.Count];
                 for (var i = 0; i < sources.Count; i++)
                 {
-                    items[i] = (sources[i].Path, select(sources[i]), sources[i].ContentHash);
+                    var source = sources[i];
+                    source.TrackFrontMatter(sourceId);
+                    var item = select(source);
+                    items[i] = (source.Path, item, source.ContentHash,
+                        source.WasRendered ? source.ContentHash : source.FrontMatterDigest, source.FrontMatterDigest);
                 }
 
                 return items;

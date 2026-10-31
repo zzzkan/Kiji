@@ -1,4 +1,6 @@
 using Kiji.Markdown;
+using Markdig;
+using Markdig.Renderers;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -92,6 +94,57 @@ public sealed class MarkdownContentSourceTests : IDisposable
         var content = app.ServiceProvider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>();
 
         Assert.Equal("nested/post.md", Assert.Single(content.Keys));
+        Assert.Equal("nested/post.md", Assert.Single(content.Values).Path);
+    }
+
+    [Fact]
+    public async Task KeyedSources_ShareOneConfiguredPipelineAcrossReloads()
+    {
+        WriteMarkdown("posts/one.md", "One");
+        WriteMarkdown("notes/two.md", "Two");
+        var builder = CreateBuilder();
+        var pipelines = 0;
+        builder.Services.Configure<MarkdownOptions>(options =>
+        {
+            options.Pipeline.Use(new PipelineCounter(() => pipelines++));
+            options.Yaml.IgnoreUnmatchedProperties();
+        });
+        builder.AddKeyedMarkdownContent<FrontMatter>("posts", options => options.FileFilter = file => file.Directory!.Name == "posts");
+        builder.AddKeyedMarkdownContent<FrontMatter>("notes", options => options.FileFilter = file => file.Directory!.Name == "notes");
+        builder.AddKeyedMarkdownContent<FrontMatter, ProjectedNote>("notes",
+            content => new ProjectedNote(content.Path, content.FrontMatter.Title),
+            options => options.FileFilter = file => file.Directory!.Name == "notes");
+        await using var app = builder.Build();
+        app.UsePlanningOptions();
+        var posts = app.ServiceProvider.GetRequiredKeyedService<ContentDictionary<MarkdownContent<FrontMatter>>>("posts");
+        var notes = app.ServiceProvider.GetRequiredKeyedService<ContentDictionary<MarkdownContent<FrontMatter>>>("notes");
+        var summaries = app.ServiceProvider.GetRequiredKeyedService<ContentDictionary<ProjectedNote>>("notes");
+        Assert.Equal("One", posts["posts/one.md"].FrontMatter.Title);
+        Assert.Equal("Two", notes["notes/two.md"].FrontMatter.Title);
+        Assert.Equal("Two", summaries["notes/two.md"].Title);
+        await posts["posts/one.md"].RenderAsync();
+        await notes["notes/two.md"].RenderAsync();
+        app.InvalidateContent();
+        WriteMarkdown("posts/one.md", "Edited");
+        Assert.Equal("Edited", posts["posts/one.md"].FrontMatter.Title);
+        await posts["posts/one.md"].RenderAsync();
+        Assert.Null(app.ServiceProvider.GetService<ContentDictionary<MarkdownContent<FrontMatter>>>());
+        Assert.Equal(1, pipelines);
+    }
+
+    [Fact]
+    public void KeyedSources_RejectDuplicateKeysForTheSameModel()
+    {
+        var builder = CreateBuilder();
+        builder.AddKeyedMarkdownContent<FrontMatter>("posts");
+        var error = Assert.Throws<InvalidOperationException>(() => builder.AddKeyedMarkdownContent<FrontMatter>("posts"));
+        Assert.Contains("with key 'posts'", error.Message);
+    }
+
+    private sealed class PipelineCounter(Action onBuild) : IMarkdownExtension
+    {
+        public void Setup(MarkdownPipelineBuilder pipeline) => onBuild();
+        public void Setup(MarkdownPipeline pipeline, IMarkdownRenderer renderer) { }
     }
 
     private sealed record ProjectedNote(string Key, string? Title);
@@ -142,7 +195,7 @@ public sealed class MarkdownContentSourceTests : IDisposable
             $"""
             ---
             title: {title}
-            order: {order}
+            {(order == 0 ? string.Empty : $"order: {order}")}
             ---
 
             Body of {title}.
@@ -156,7 +209,7 @@ public sealed class MarkdownContentSourceTests : IDisposable
         return builder;
     }
 
-    private IReadOnlyList<string> LoadKeys(Action<MarkdownOptions> configure)
+    private IReadOnlyList<string> LoadKeys(Action<MarkdownContentOptions> configure)
     {
         var builder = CreateBuilder();
         builder.AddMarkdownContent<FrontMatter>(configure);

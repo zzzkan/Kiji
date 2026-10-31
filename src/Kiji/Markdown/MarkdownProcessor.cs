@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Markdig;
+using Markdig.Extensions.GenericAttributes;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
 using Kiji.Assets;
@@ -17,13 +18,12 @@ internal sealed class MarkdownProcessor
     private readonly MarkdownPipeline _pipeline;
     private readonly ConcurrentBag<PooledMarkdigRenderer> _rendererPool = [];
     private readonly IImageProcessor _imageProcessor;
-    private readonly IReadOnlyList<Func<string, string>> _htmlPostProcessors;
     private readonly string _outputPath;
     private readonly string? _imageCachePath;
 
     /// <param name="options">The resolved site paths.</param>
     /// <param name="imageProcessor">The image backend used to process referenced local images.</param>
-    /// <param name="contentOptions">Optional pipeline and post-processing configuration.</param>
+    /// <param name="contentOptions">Site-wide pipeline configuration.</param>
     public MarkdownProcessor(
         ResolvedSitePaths options,
         IImageProcessor imageProcessor,
@@ -35,7 +35,6 @@ internal sealed class MarkdownProcessor
         _imageProcessor = imageProcessor;
         _outputPath = options.OutputDirectory;
         _imageCachePath = options.ImageCacheDirectory;
-        _htmlPostProcessors = contentOptions is null ? [] : [.. contentOptions.HtmlPostProcessors];
         _pipeline = BuildPipeline(contentOptions);
     }
 
@@ -66,12 +65,6 @@ internal sealed class MarkdownProcessor
             PageRenderContext.Current?.OutputUrlDirectory ?? "/");
 
         var html = Render(document, imageContext);
-
-        foreach (var postProcess in _htmlPostProcessors)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            html = postProcess(html);
-        }
 
         cancellationToken.ThrowIfCancellationRequested();
         return html;
@@ -172,16 +165,12 @@ internal sealed class MarkdownProcessor
 
     private static MarkdownPipeline BuildPipeline(MarkdownOptions? contentOptions)
     {
-        var builder = new MarkdownPipelineBuilder()
-            .UseAdvancedExtensions()
-            .Use(new SecureLinkExtension());
-
-        if (contentOptions is not null)
+        var builder = (contentOptions ?? new MarkdownOptions()).Pipeline;
+        var attributes = builder.Extensions.Find<GenericAttributesExtension>();
+        if (attributes is not null)
         {
-            foreach (var configure in contentOptions.PipelineConfigurations)
-            {
-                configure(builder);
-            }
+            builder.Extensions.Remove(attributes);
+            builder.Extensions.Add(attributes);
         }
 
         return builder.Build();

@@ -6,7 +6,7 @@ order: 40
 
 ## Register Markdown content
 
-Each Markdown file starts with YAML front matter, whose fields you define in a class:
+Markdown files can start with YAML front matter, whose fields you define in a class:
 
 ```csharp
 public sealed class FrontMatter
@@ -37,9 +37,13 @@ This registers `ContentDictionary<MarkdownContent<FrontMatter>>`. It creates no 
 itself; map items to pages with `AddPageParameters<TPage>` as in
 [Getting started](../getting-started/#add-a-markdown-page).
 
-Front matter keys are camel case, such as `publishedAt` for `PublishedAt`, and unknown keys
-are ignored. A missing or malformed front matter block, or a value that does not fit your
-class, fails the build.
+Front matter is optional. A missing, empty or comment-only block creates your model with its defaults.
+Keys use camelCase, such as `publishedAt`, with case-insensitive matching (`Tags` also
+works). Unknown keys fail with a file and property name instead of silently losing data.
+For snake_case keys, configure the YAML naming convention below or use `[YamlMember(Alias = "published_at")]`.
+Malformed YAML and values that do not fit your class fail the build.
+Dates without an offset use UTC; explicit offsets are preserved for `DateTimeOffset`.
+`DateTime` values are normalized to UTC.
 
 ## Choose the files
 
@@ -79,7 +83,9 @@ public sealed record Post(string Slug, string Title, MarkdownContent<FrontMatter
 
 ```csharp
 builder.AddMarkdownContent<FrontMatter, Post>(content => new Post(
-    Slug: content.FileInfo.Directory!.Name,
+    Slug: content.Path.EndsWith("/index.md", StringComparison.OrdinalIgnoreCase)
+        ? content.Path[..^"/index.md".Length].Replace('/', '-')
+        : content.Path[..^".md".Length].Replace('/', '-'),
     Title: content.FrontMatter.Title ?? "Untitled",
     Content: content));
 ```
@@ -88,47 +94,86 @@ This registers `ContentDictionary<Post>` instead. The projection sees one file a
 build collection-wide results, such as tag counts, with
 [AddContentSource](../api-reference/#content-sources-and-contentdictionary).
 
+`content.Path` is relative to the registered content directory, includes `.md`, and uses
+`/` separators; it is also the dictionary key. Use the whole path when deriving your own
+slugs so repeated leaf directory names stay distinguishable. `FileInfo` is absolute and
+should be used only for file access, never to derive portable output identities.
+
+To register two sources with the same model, use keyed DI:
+
+```csharp
+builder.AddKeyedMarkdownContent<FrontMatter>("posts", options => options.Directory = "content/posts");
+builder.AddKeyedMarkdownContent<FrontMatter>("notes", options => options.Directory = "content/notes");
+var posts = services.GetRequiredKeyedService<ContentDictionary<MarkdownContent<FrontMatter>>>("posts");
+```
+
+In Razor, use the `Inject` attribute to specify the key:
+
+```razor
+@code {
+    [Inject(Key = "posts")]
+    public ContentDictionary<MarkdownContent<FrontMatter>> Posts { get; set; } = default!;
+}
+```
+
+The `@inject` directive does not support service keys. `AddContentSource` registers
+unkeyed dictionaries; its `sourceId` argument identifies dependencies, not a DI key.
+
 ## Render a Markdown body
 
-Look up the item by the key passed through `AddPageParameters` and call `RenderAsync()`:
+Look up the item by the key passed through `AddPageParameters` and use `MarkdownBody`:
 
 ```razor
 @inject ContentDictionary<MarkdownContent<FrontMatter>> Posts
 
-<div>@((MarkupString)_html)</div>
+<div class="prose"><MarkdownBody Content="@Posts[ContentKey]" /></div>
 
 @code {
     [Parameter] public string ContentKey { get; set; } = string.Empty;
-    private string _html = string.Empty;
-
-    protected override async Task OnParametersSetAsync()
-    {
-        _html = await Posts[ContentKey].RenderAsync();
-    }
 }
 ```
 
-With the `Post` model, call `Posts[ContentKey].Content.RenderAsync()`. The result is
-raw HTML, so render only trusted Markdown or sanitize it first.
+With the `Post` model, use `Content="@Posts[ContentKey].Content"`. You can also call
+`RenderAsync()` and render the result as a `MarkupString`. These produce raw HTML,
+so render only trusted Markdown or sanitize it first.
 
 ## Customize parsing and HTML
 
-Kiji uses Markdig with its advanced extensions. Options add Markdig configuration,
-YamlDotNet configuration, and HTML post-processing, each run in registration order:
+Configure `MarkdownOptions` through DI once for every source. The shared processor and
+renderer pool survive content reloads. Defaults include GFM-style tables, task lists,
+autolinks and strikethrough, footnotes, GitHub heading IDs (including Japanese), and `{.class}`
+attributes. Media embeds, diagrams, citations and subscript are opt-in:
 
 ```csharp
-builder.AddMarkdownContent<FrontMatter>(options =>
+using Markdig;
+using Markdig.Extensions.AutoIdentifiers;
+using Microsoft.Extensions.DependencyInjection;
+using YamlDotNet.Serialization.NamingConventions;
+
+builder.Services.Configure<MarkdownOptions>(options =>
 {
-    options.ConfigureMarkdown(pipeline => pipeline.UseEmojiAndSmiley());
-    options.ConfigureYaml(yaml => yaml.WithCaseInsensitivePropertyMatching());
-    options.AddHtmlPostProcessor(html => $"<div class=\"prose\">{html}</div>");
+    options.Pipeline.UseEmojiAndSmiley();
+    options.Pipeline.Extensions.Replace<AutoIdentifierExtension>(new AutoIdentifierExtension(AutoIdentifierOptions.Default));
+    options.Yaml.WithNamingConvention(UnderscoredNamingConvention.Instance);
 });
 ```
 
+`Pipeline` and `Yaml` expose Markdig and YamlDotNet builders; customization follows those
+packages' APIs and compatibility rules. `Use*` can leave an existing extension unchanged;
+use `Extensions.Replace` or remove it first to change its settings. Kiji moves an enabled
+GenericAttributes extension last before building. For AST transforms, attach
+`options.Pipeline.DocumentProcessed`. Put presentation wrappers in Razor as above.
+To intentionally discard unknown YAML keys, call `options.Yaml.IgnoreUnmatchedProperties()`.
+Restart `dotnet watch` after changing `MarkdownOptions` configuration; these settings
+are applied once and are not reapplied by Hot Reload or content reloads.
+
+When upgrading, see the [Markdown release notes and migration guide](../release-notes/)
+for optional syntax, strict YAML keys and changed heading anchors.
+
 ## Links and deployment paths
 
-External links get `target="_blank" rel="noopener noreferrer"`; other links are written
-as is. Kiji does not add the base path to links starting with `/`, so prefer
+Links retain Markdig's normal output and attributes; external links use the current tab.
+Kiji does not add the base path to links starting with `/`, so prefer
 document-relative links when the site is published under a
 [subpath](../deployment/#publish-under-a-subpath).
 
@@ -152,6 +197,17 @@ the page's `index.html`: 320, 640, 960, and 1280 pixels wide when the source is 
 plus one at the source width, up to 1920 pixels. The `<img>` gets a `srcset` and the source
 dimensions, and every image after the first loads lazily. To change the widths or the
 quality, see [Image settings](../api-reference/#image-settings).
+
+Explicit attributes such as `![Photo](photo.jpg){width=300 loading=eager}` override
+Kiji's generated attributes without duplicates. If only `width` or `height` is a
+positive integer, Kiji calculates the other dimension from the source aspect ratio,
+rounding to the nearest pixel (minimum 1). For a 1920×1080 source, `width=300` produces
+`width="300" height="169"`. Other values, such as `width=50%`, suppress Kiji's other
+dimension. When both dimensions are supplied, Kiji preserves them as written.
+
+A positive integer `width` also supplies a fixed `sizes` value, such as `sizes="300px"`,
+unless you specify `sizes` yourself. Otherwise, `sizes` uses `auto` only when the
+effective `loading` value is `lazy`.
 
 The output is static: animated images keep only their first frame, metadata such as EXIF
 is removed, and colors are converted to sRGB. To keep an image as is, put it in `wwwroot/`

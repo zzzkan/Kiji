@@ -107,13 +107,11 @@ public sealed class MarkdownCancellationTests
     }
 
     [Fact]
-    public async Task CancellationInPostProcessor_StopsRemainingMarkdownStages()
+    public async Task CancellationInDocumentProcessed_StopsRendering()
     {
         using var cancellation = new CancellationTokenSource();
         var options = new MarkdownOptions();
-        var secondCalled = false;
-        options.AddHtmlPostProcessor(html => { cancellation.Cancel(); return html; });
-        options.AddHtmlPostProcessor(html => { secondCalled = true; return html; });
+        options.Pipeline.DocumentProcessed += _ => cancellation.Cancel();
         var root = Path.GetTempPath();
         var processor = new MarkdownProcessor(new ResolvedSitePaths
         {
@@ -121,7 +119,6 @@ public sealed class MarkdownCancellationTests
         }, new ImageProcessor(), options);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => processor.ProcessBodyAsync(
             Path.Combine(root, "post.md"), "# heading", cancellation.Token));
-        Assert.False(secondCalled);
     }
 
     private static TaskCompletionSource Signal() => new(TaskCreationOptions.RunContinuationsAsynchronously);

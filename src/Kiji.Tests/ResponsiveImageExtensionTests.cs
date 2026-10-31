@@ -2,11 +2,135 @@ using Markdig;
 using Xunit;
 using Kiji.Markdown;
 using Kiji.Assets;
+using System.Text.RegularExpressions;
 
 namespace Kiji.Tests;
 
 public sealed class ResponsiveImageExtensionTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Process_LocalImage_PreservesAttributesAndCompleteAltText(bool processed)
+    {
+        var images = new Dictionary<string, ProcessedImageInfo>();
+        if (processed) { images["photo.png"] = CreateImageInfo("photo.png"); }
+        var html = Render("![Before **bold** and `code` & after](photo.png){#photo .rounded data-caption=example}", images);
+        Assert.Contains("alt=\"Before bold and code &amp; after\"", html);
+        Assert.Contains("id=\"photo\"", html);
+        Assert.Contains("class=\"rounded\"", html);
+        Assert.Contains("data-caption=\"example\"", html);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Process_ExplicitAttributesOverrideGeneratedAttributesWithoutDuplicates(bool processed)
+    {
+        var images = new Dictionary<string, ProcessedImageInfo>();
+        if (processed) { images["photo.png"] = CreateImageInfo("photo.png"); }
+        const string markdown = "![Photo](photo.png \"Original\"){WIDTH=300 height=200 loading=eager decoding=sync src=custom.png srcset=custom.webp sizes=300px alt=Custom title=Override}";
+
+        var html = Render(markdown + "\n\n" + markdown, images);
+
+        var tags = Regex.Matches(html, "<img[^>]*>");
+        Assert.Equal(2, tags.Count);
+        foreach (Match tag in tags)
+        {
+            var values = ReadImageAttributes(tag.Value);
+            Assert.Equal(9, values.Count);
+            Assert.Equal("300", values["width"]);
+            Assert.Equal("200", values["height"]);
+            Assert.Equal("eager", values["loading"]);
+            Assert.Equal("sync", values["decoding"]);
+            Assert.Equal("custom.png", values["src"]);
+            Assert.Equal("custom.webp", values["srcset"]);
+            Assert.Equal("300px", values["sizes"]);
+            Assert.Equal("Custom", values["alt"]);
+            Assert.Equal("Override", values["title"]);
+        }
+    }
+
+    [Theory]
+    [InlineData("lazy", "auto, ")]
+    [InlineData("eager", "")]
+    public void Process_ExplicitLoadingControlsAutomaticSizes(string loading, string sizesPrefix)
+    {
+        var images = new Dictionary<string, ProcessedImageInfo> { ["photo.png"] = CreateImageInfo("photo.png") };
+        var markdown = $"![Photo](photo.png){{loading={loading}}}";
+
+        var html = Render(markdown + "\n\n" + markdown, images);
+
+        Assert.Equal(2, Regex.Count(html, $"sizes=\"{Regex.Escape(sizesPrefix)}\\(max-width: 1920px\\) 100vw, 1920px\""));
+    }
+
+    [Theory]
+    [InlineData("width=300 loading=eager", "300", "169", "300px")]
+    [InlineData("width=300 loading=lazy", "300", "169", "300px")]
+    [InlineData("WIDTH=300", "300", "169", "300px")]
+    [InlineData("height=300", "533", "300", "(max-width: 1920px) 100vw, 1920px")]
+    [InlineData("width=8", "8", "5", "8px")]
+    [InlineData("width=1", "1", "1", "1px")]
+    public void Process_OneExplicitDimensionPreservesAspectRatio(string attributes, string width, string height, string sizes)
+    {
+        var images = new Dictionary<string, ProcessedImageInfo> { ["photo.png"] = CreateImageInfo("photo.png") };
+
+        var values = ReadImageAttributes(Render($"![Photo](photo.png){{{attributes}}}", images));
+
+        Assert.Equal(width, values["width"]);
+        Assert.Equal(height, values["height"]);
+        Assert.Equal(sizes, values["sizes"]);
+    }
+
+    [Theory]
+    [InlineData("width", "height", "auto")]
+    [InlineData("width", "height", "50%")]
+    [InlineData("width", "height", "300px")]
+    [InlineData("width", "height", "0")]
+    [InlineData("width", "height", "-300")]
+    [InlineData("width", "height", "300.5")]
+    [InlineData("width", "height", "2147483648")]
+    [InlineData("height", "width", "auto")]
+    public void Process_NonPositiveIntegerDimensionOmitsTheOtherDimension(string name, string otherName, string value)
+    {
+        var images = new Dictionary<string, ProcessedImageInfo> { ["photo.png"] = CreateImageInfo("photo.png") };
+
+        var values = ReadImageAttributes(Render($"![Photo](photo.png){{{name}={value}}}", images));
+
+        Assert.Equal(value, values[name]);
+        Assert.False(values.ContainsKey(otherName));
+    }
+
+    [Fact]
+    public void Process_ExplicitSizesOverrideTheExplicitWidth()
+    {
+        var images = new Dictionary<string, ProcessedImageInfo> { ["photo.png"] = CreateImageInfo("photo.png") };
+
+        var values = ReadImageAttributes(Render("![Photo](photo.png){width=300 sizes=50vw}", images));
+
+        Assert.Equal("300", values["width"]);
+        Assert.Equal("169", values["height"]);
+        Assert.Equal("50vw", values["sizes"]);
+    }
+
+    [Fact]
+    public void Process_UnprocessedImageDoesNotInventMissingDimensions()
+    {
+        var values = ReadImageAttributes(Render("![Photo](photo.png){width=300}", new Dictionary<string, ProcessedImageInfo>()));
+
+        Assert.Equal("300", values["width"]);
+        Assert.False(values.ContainsKey("height"));
+    }
+
+    private static Dictionary<string, string> ReadImageAttributes(string html)
+    {
+        var tag = Regex.Match(html, "<img[^>]*>").Value;
+        Assert.NotEmpty(tag);
+        // A duplicate attribute, including a case variant, fails ToDictionary.
+        return Regex.Matches(tag, "([a-zA-Z]+)=\"([^\"]*)\"")
+            .ToDictionary(match => match.Groups[1].Value, match => match.Groups[2].Value, StringComparer.OrdinalIgnoreCase);
+    }
+
     private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder()
         .UseAdvancedExtensions()
         .Build();

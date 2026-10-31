@@ -1,4 +1,6 @@
+using System.Globalization;
 using Markdig.Renderers;
+using Markdig.Renderers.Html;
 using Markdig.Renderers.Html.Inlines;
 using Markdig.Syntax.Inlines;
 
@@ -24,78 +26,75 @@ internal sealed class ResponsiveImageWriter
     {
         // Only handle images rendered with a current context (i.e. through the
         // markdown processor); otherwise fall back to Markdig's default writer.
-        if (context is null || !link.IsImage)
+        if (context is null || !link.IsImage || !renderer.EnableHtmlForInline)
         {
             return false;
         }
 
         var url = link.Url ?? string.Empty;
-        var alt = GetAltText(link);
         var title = link.Title ?? string.Empty;
 
         if (LocalImageUrl.IsLocalImage(url))
         {
-            WriteResponsiveImage(renderer, context, url, alt, title);
+            WriteResponsiveImage(renderer, context, link, url, title);
             return true;
         }
 
         return false;
     }
 
-    private static void WriteResponsiveImage(HtmlRenderer renderer, ResponsiveImageContext context, string url, string alt, string title)
+    private static void WriteResponsiveImage(HtmlRenderer renderer, ResponsiveImageContext context, LinkInline link, string url, string title)
     {
         var isLazy = context.ImageCount++ > 0;
         var referenceKey = ImageReferenceKey.FromMarkdownUrl(url);
-
-        if (!context.ImageInfoLookup.TryGetValue(referenceKey, out var imageInfo) || imageInfo.Variants.Count == 0)
+        var attributes = link.TryGetAttributes();
+        if (TryGetAttribute(attributes, "loading", out var loading))
         {
-            // Fallback: if no image info found, render as simple img
-            WriteSimpleImage(renderer, url, alt, title, isLazy);
-            return;
+            isLazy = string.Equals(loading, "lazy", StringComparison.OrdinalIgnoreCase);
         }
 
-        // Variants sit beside the page output, mirroring the reference's directory part.
-        var directory = GetDirectoryPrefix(referenceKey);
-        var publicDirectory = context.OutputUrlDirectory + EncodeRelativePath(directory);
-        var variants = imageInfo.Variants;
-        var largest = variants[^1];
-
-        var srcset = string.Join(", ", variants.Select(variant => $"{CreateVariantUrl(publicDirectory, variant.FileName)} {variant.Width}w"));
-        // Start the first image before layout; subsequent lazy images can use
-        // their rendered width. Auto sizes requires lazy loading.
-        var sizes = $"(max-width: {largest.Width}px) 100vw, {largest.Width}px";
-        if (isLazy)
+        renderer.Write("<img");
+        if (context.ImageInfoLookup.TryGetValue(referenceKey, out var imageInfo) && imageInfo.Variants.Count > 0)
         {
-            sizes = "auto, " + sizes;
+            // Variants sit beside the page output, mirroring the reference's directory part.
+            var directory = GetDirectoryPrefix(referenceKey);
+            var publicDirectory = context.OutputUrlDirectory + EncodeRelativePath(directory);
+            var variants = imageInfo.Variants;
+            var largest = variants[^1];
+
+            var srcset = string.Join(", ", variants.Select(variant => $"{CreateVariantUrl(publicDirectory, variant.FileName)} {variant.Width}w"));
+            // Auto sizes requires lazy loading, including an explicit loading override.
+            var sizes = $"(max-width: {largest.Width}px) 100vw, {largest.Width}px";
+            if (isLazy) { sizes = "auto, " + sizes; }
+            TryGetAttribute(attributes, "width", out var width);
+            var explicitWidth = ParseDimension(width);
+            if (explicitWidth > 0)
+            {
+                sizes = explicitWidth.ToString(CultureInfo.InvariantCulture) + "px";
+            }
+
+            WriteAttribute(renderer, attributes, "src", CreateVariantUrl(publicDirectory, largest.FileName), escapeUrl: true);
+            WriteAttribute(renderer, attributes, "srcset", srcset);
+            WriteAttribute(renderer, attributes, "sizes", sizes);
+            WriteAttribute(renderer, attributes, "width", GetDimension(attributes, "height", imageInfo.OriginalWidth, imageInfo.OriginalHeight));
+            WriteAttribute(renderer, attributes, "height", GetDimension(attributes, "width", imageInfo.OriginalHeight, imageInfo.OriginalWidth));
+        }
+        else
+        {
+            // Processing may have been skipped upstream.
+            WriteAttribute(renderer, attributes, "src", url, escapeUrl: true);
         }
 
-        renderer.Write("<img src=\"");
-        renderer.WriteEscapeUrl(CreateVariantUrl(publicDirectory, largest.FileName));
-        renderer.Write("\" srcset=\"");
-        renderer.WriteEscape(srcset);
-        renderer.Write("\" sizes=\"");
-        renderer.WriteEscape(sizes);
-        renderer.Write("\" alt=\"");
-        renderer.WriteEscape(alt);
-        renderer.Write("\"");
-        WriteCommonImageAttributes(renderer, isLazy);
-
-        // Add actual image dimensions based on original aspect ratio
-        renderer.Write($" width=\"{imageInfo.OriginalWidth}\" height=\"{imageInfo.OriginalHeight}\"");
-
-        WriteTitleAttribute(renderer, title);
-        renderer.Write(">");
-    }
-
-    private static void WriteSimpleImage(HtmlRenderer renderer, string url, string alt, string title, bool isLazy)
-    {
-        renderer.Write("<img src=\"");
-        renderer.WriteEscapeUrl(url);
-        renderer.Write("\" alt=\"");
-        renderer.WriteEscape(alt);
-        renderer.Write("\"");
-        WriteCommonImageAttributes(renderer, isLazy);
-        WriteTitleAttribute(renderer, title);
+        if (!TryGetAttribute(attributes, "alt", out _))
+        {
+            renderer.Write(" alt=\"");
+            WriteAltText(renderer, link);
+            renderer.Write('"');
+        }
+        WriteAttribute(renderer, attributes, "loading", isLazy ? "lazy" : "eager");
+        WriteAttribute(renderer, attributes, "decoding", "async");
+        if (!string.IsNullOrEmpty(title)) { WriteAttribute(renderer, attributes, "title", title); }
+        renderer.WriteAttributes(link);
         renderer.Write(">");
     }
 
@@ -117,29 +116,53 @@ internal sealed class ResponsiveImageWriter
         return string.Join('/', path.Split('/').Select(Uri.EscapeDataString));
     }
 
-    private static void WriteCommonImageAttributes(HtmlRenderer renderer, bool isLazy)
+    private static bool TryGetAttribute(HtmlAttributes? attributes, string name, out string? value)
     {
-        renderer.Write(isLazy ? " loading=\"lazy\"" : " loading=\"eager\"");
-        renderer.Write(" decoding=\"async\"");
+        if (attributes?.Properties is { } properties)
+        {
+            foreach (var property in properties)
+            {
+                if (string.Equals(property.Key, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = property.Value;
+                    return true;
+                }
+            }
+        }
+        value = null;
+        return false;
     }
 
-    private static void WriteTitleAttribute(HtmlRenderer renderer, string title)
+    private static int ParseDimension(string? value)
+        => int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var dimension) && dimension > 0 ? dimension : 0;
+
+    private static string? GetDimension(HtmlAttributes? attributes, string otherName, int original, int otherOriginal)
     {
-        if (!string.IsNullOrEmpty(title))
-        {
-            renderer.Write(" title=\"");
-            renderer.WriteEscape(title);
-            renderer.Write("\"");
-        }
+        if (!TryGetAttribute(attributes, otherName, out var value)) { return original.ToString(CultureInfo.InvariantCulture); }
+        var other = ParseDimension(value);
+        if (other == 0) { return null; }
+
+        // Round to the nearest pixel, keeping small positive dimensions visible.
+        return Math.Max(1, ((long)original * other + otherOriginal / 2) / otherOriginal).ToString(CultureInfo.InvariantCulture);
     }
 
-    private static string GetAltText(LinkInline link)
+    private static void WriteAttribute(HtmlRenderer renderer, HtmlAttributes? attributes, string name, string? value, bool escapeUrl = false)
     {
-        if (link.FirstChild is LiteralInline literal)
-        {
-            return literal.Content.ToString();
-        }
+        if (value is null || TryGetAttribute(attributes, name, out _)) { return; }
+        renderer.Write(' ').Write(name).Write("=\"");
+        if (escapeUrl) { renderer.WriteEscapeUrl(value); }
+        else { renderer.WriteEscape(value); }
+        renderer.Write('"');
+    }
 
-        return string.Empty;
+    private static void WriteAltText(HtmlRenderer renderer, LinkInline link)
+    {
+        var enabled = renderer.EnableHtmlForInline;
+        renderer.EnableHtmlForInline = false;
+        try
+        {
+            renderer.WriteChildren(link);
+        }
+        finally { renderer.EnableHtmlForInline = enabled; }
     }
 }

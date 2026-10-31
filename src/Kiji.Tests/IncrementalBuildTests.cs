@@ -893,11 +893,8 @@ public sealed class IncrementalBuildTests : IDisposable
         builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(builder.Paths, Path.Combine(builder.Paths.ProjectDirectory, "static"));
 
-        builder.AddMarkdownContent<FrontMatter>(options =>
-        {
-            options.Directory = directory;
-            options.AddHtmlPostProcessor(html => { onRender?.Invoke(); return html; });
-        });
+        builder.Services.Configure<MarkdownOptions>(options => options.Pipeline.DocumentProcessed += _ => onRender?.Invoke());
+        builder.AddMarkdownContent<FrontMatter>(options => options.Directory = directory);
         builder.AddContentSource<Post>(static _ => []);
         TestArticleContents.MapSite(builder);
         builder.AddPageParameters<MarkdownPostTestPage>(static services => services

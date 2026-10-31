@@ -8,7 +8,7 @@ namespace Kiji.Benchmarks;
 public class FrontMatterParserBenchmarks
 {
     private string _content = string.Empty;
-    private readonly YamlDotNet.Serialization.IDeserializer _deserializer = MarkdownFrontMatterParser.CreateDeserializer(null);
+    private readonly YamlDotNet.Serialization.IDeserializer _deserializer = new MarkdownOptions().CreateDeserializer();
 
     [GlobalSetup]
     public void Setup()

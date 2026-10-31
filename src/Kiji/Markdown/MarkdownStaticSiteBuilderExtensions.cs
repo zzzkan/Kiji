@@ -1,6 +1,5 @@
-using Kiji.Assets;
 using Microsoft.Extensions.DependencyInjection;
-using YamlDotNet.Serialization;
+using Microsoft.Extensions.Options;
 
 namespace Kiji.Markdown;
 
@@ -12,7 +11,7 @@ public static class MarkdownStaticSiteBuilderExtensions
     /// <summary>Adds Markdown files as a content dictionary with parsed front matter and lazily rendered bodies.</summary>
     public static StaticSiteBuilder AddMarkdownContent<TFrontMatter>(
         this StaticSiteBuilder builder,
-        Action<MarkdownOptions>? configure = null)
+        Action<MarkdownContentOptions>? configure = null)
         where TFrontMatter : class
     {
         return builder.AddMarkdownContent<TFrontMatter, MarkdownContent<TFrontMatter>>(
@@ -25,7 +24,37 @@ public static class MarkdownStaticSiteBuilderExtensions
     public static StaticSiteBuilder AddMarkdownContent<TFrontMatter, TModel>(
         this StaticSiteBuilder builder,
         Func<MarkdownContent<TFrontMatter>, TModel> select,
-        Action<MarkdownOptions>? configure = null)
+        Action<MarkdownContentOptions>? configure = null)
+        where TFrontMatter : class
+        where TModel : class
+        => AddMarkdownContentCore(builder, select, configure, null);
+
+    /// <summary>Adds a Markdown source resolved through keyed dependency injection.</summary>
+    public static StaticSiteBuilder AddKeyedMarkdownContent<TFrontMatter>(
+        this StaticSiteBuilder builder,
+        string key,
+        Action<MarkdownContentOptions>? configure = null)
+        where TFrontMatter : class
+        => builder.AddKeyedMarkdownContent<TFrontMatter, MarkdownContent<TFrontMatter>>(key, static content => content, configure);
+
+    /// <summary>Adds a Markdown source projected into models and resolved through keyed dependency injection.</summary>
+    public static StaticSiteBuilder AddKeyedMarkdownContent<TFrontMatter, TModel>(
+        this StaticSiteBuilder builder,
+        string key,
+        Func<MarkdownContent<TFrontMatter>, TModel> select,
+        Action<MarkdownContentOptions>? configure = null)
+        where TFrontMatter : class
+        where TModel : class
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        return AddMarkdownContentCore(builder, select, configure, key);
+    }
+
+    private static StaticSiteBuilder AddMarkdownContentCore<TFrontMatter, TModel>(
+        StaticSiteBuilder builder,
+        Func<MarkdownContent<TFrontMatter>, TModel> select,
+        Action<MarkdownContentOptions>? configure,
+        string? key)
         where TFrontMatter : class
         where TModel : class
     {
@@ -33,17 +62,10 @@ public static class MarkdownStaticSiteBuilderExtensions
         builder.EnsureConfigurable();
         ArgumentNullException.ThrowIfNull(select);
 
-        var contentOptions = new MarkdownOptions();
+        var contentOptions = new MarkdownContentOptions();
         configure?.Invoke(contentOptions);
         var directory = contentOptions.Directory;
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
-
-        // A factory rather than a shared instance: front matter parsing runs on
-        // multiple threads and YamlDotNet deserializers are not documented as thread-safe.
-        IDeserializer CreateFrontMatterDeserializer()
-        {
-            return MarkdownFrontMatterParser.CreateDeserializer(contentOptions.FrontMatterConfigurations);
-        }
 
         // Created once per registration so it survives content re-materializations
         // in the dev server; fresh hashes let it re-parse only changed files.
@@ -52,9 +74,8 @@ public static class MarkdownStaticSiteBuilderExtensions
         return builder.RegisterContent(
             services =>
             {
-                var options = services.GetRequiredService<ResolvedSitePaths>();
-                var imageProcessor = services.GetRequiredService<IImageProcessor>();
-                var markdownProcessor = new MarkdownProcessor(options, imageProcessor, contentOptions);
+                var options = services.GetRequiredService<IOptions<MarkdownOptions>>().Value;
+                var markdownProcessor = services.GetRequiredService<MarkdownProcessor>();
                 var sourceDirectory = builder.Paths.ResolveAgainstRoot(directory);
 
                 var sources = new MarkdownContentsBuilder<TFrontMatter>(
@@ -63,7 +84,7 @@ public static class MarkdownStaticSiteBuilderExtensions
                         content.FileInfo.FullName,
                         content.Body,
                         cancellationToken),
-                    CreateFrontMatterDeserializer,
+                    options.CreateDeserializer,
                     sourceCache,
                     builder.Runtime.Files,
                     contentOptions.FileFilter)
@@ -73,11 +94,12 @@ public static class MarkdownStaticSiteBuilderExtensions
                 var items = new (string Key, TModel Item, string? Digest)[sources.Count];
                 for (var i = 0; i < sources.Count; i++)
                 {
-                    items[i] = (Path.GetRelativePath(sourceDirectory, sources[i].FileInfo.FullName).Replace('\\', '/'), select(sources[i]), sources[i].ContentHash);
+                    items[i] = (sources[i].Path, select(sources[i]), sources[i].ContentHash);
                 }
 
                 return items;
             },
-            directory: directory);
+            directory: directory,
+            serviceKey: key);
     }
 }

@@ -101,7 +101,7 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
     {
         await File.WriteAllTextAsync(
             Path.Combine(_contentsDir, "aaa-broken.md"),
-            "no front matter at all");
+            "---\ntitle: [broken\n---\nbody");
         await File.WriteAllTextAsync(
             Path.Combine(_contentsDir, "bbb-valid.md"),
             CreateValidMarkdown("Valid", new DateTime(2024, 1, 15)));
@@ -125,7 +125,7 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
         var builder = new MarkdownContentsBuilder<FrontMatter>(
             _contentsDir,
             RenderAsync,
-            static () => MarkdownFrontMatterParser.CreateDeserializer(null),
+            static () => new MarkdownOptions().CreateDeserializer(),
             cache);
 
         var first = builder.Build();

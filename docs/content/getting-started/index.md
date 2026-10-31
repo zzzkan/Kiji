@@ -264,10 +264,7 @@ public sealed record BlogPost(
             throw new InvalidOperationException($"{content.FileInfo.FullName}: posts require a title and date.");
         }
 
-        var slug = content.Path.EndsWith("/index.md", StringComparison.OrdinalIgnoreCase)
-            ? content.Path[..^"/index.md".Length].Replace('/', '-')
-            : content.Path[..^".md".Length].Replace('/', '-');
-        return new BlogPost(slug,
+        return new BlogPost(content.FileInfo.Directory!.Name,
             content.FrontMatter.Title, content.FrontMatter.Description,
             content.FrontMatter.Date.Value, content);
     }

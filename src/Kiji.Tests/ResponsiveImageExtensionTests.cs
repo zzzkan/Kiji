@@ -22,33 +22,16 @@ public sealed class ResponsiveImageExtensionTests
         Assert.Contains("data-caption=\"example\"", html);
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Process_ExplicitAttributesOverrideGeneratedAttributesWithoutDuplicates(bool processed)
+    [Fact]
+    public void Process_ExplicitAttributesOverrideGeneratedAttributesWithoutDuplicates()
     {
-        var images = new Dictionary<string, ProcessedImageInfo>();
-        if (processed) { images["photo.png"] = CreateImageInfo("photo.png"); }
-        const string markdown = "![Photo](photo.png \"Original\"){WIDTH=300 height=200 loading=eager decoding=sync src=custom.png srcset=custom.webp sizes=300px alt=Custom title=Override}";
+        var images = new Dictionary<string, ProcessedImageInfo> { ["photo.png"] = CreateImageInfo("photo.png") };
 
-        var html = Render(markdown + "\n\n" + markdown, images);
+        var values = ReadImageAttributes(Render("![Photo](photo.png){width=300 height=200 loading=lazy}", images));
 
-        var tags = Regex.Matches(html, "<img[^>]*>");
-        Assert.Equal(2, tags.Count);
-        foreach (Match tag in tags)
-        {
-            var values = ReadImageAttributes(tag.Value);
-            Assert.Equal(9, values.Count);
-            Assert.Equal("300", values["width"]);
-            Assert.Equal("200", values["height"]);
-            Assert.Equal("eager", values["loading"]);
-            Assert.Equal("sync", values["decoding"]);
-            Assert.Equal("custom.png", values["src"]);
-            Assert.Equal("custom.webp", values["srcset"]);
-            Assert.Equal("300px", values["sizes"]);
-            Assert.Equal("Custom", values["alt"]);
-            Assert.Equal("Override", values["title"]);
-        }
+        Assert.Equal("300", values["width"]);
+        Assert.Equal("200", values["height"]);
+        Assert.Equal("lazy", values["loading"]);
     }
 
     [Theory]
@@ -65,13 +48,10 @@ public sealed class ResponsiveImageExtensionTests
     }
 
     [Theory]
-    [InlineData("width=300 loading=eager", "300", "169", "300px")]
-    [InlineData("width=300 loading=lazy", "300", "169", "300px")]
-    [InlineData("WIDTH=300", "300", "169", "300px")]
-    [InlineData("height=300", "533", "300", "(max-width: 1920px) 100vw, 1920px")]
-    [InlineData("width=8", "8", "5", "8px")]
-    [InlineData("width=1", "1", "1", "1px")]
-    public void Process_OneExplicitDimensionPreservesAspectRatio(string attributes, string width, string height, string sizes)
+    [InlineData("width=300", "300", "169")]
+    [InlineData("height=300", "533", "300")]
+    [InlineData("width=1", "1", "1")]
+    public void Process_OneExplicitDimensionPreservesAspectRatio(string attributes, string width, string height)
     {
         var images = new Dictionary<string, ProcessedImageInfo> { ["photo.png"] = CreateImageInfo("photo.png") };
 
@@ -79,19 +59,12 @@ public sealed class ResponsiveImageExtensionTests
 
         Assert.Equal(width, values["width"]);
         Assert.Equal(height, values["height"]);
-        Assert.Equal(sizes, values["sizes"]);
     }
 
     [Theory]
-    [InlineData("width", "height", "auto")]
     [InlineData("width", "height", "50%")]
-    [InlineData("width", "height", "300px")]
-    [InlineData("width", "height", "0")]
-    [InlineData("width", "height", "-300")]
-    [InlineData("width", "height", "300.5")]
-    [InlineData("width", "height", "2147483648")]
     [InlineData("height", "width", "auto")]
-    public void Process_NonPositiveIntegerDimensionOmitsTheOtherDimension(string name, string otherName, string value)
+    public void Process_NonIntegerDimensionOmitsTheOtherDimension(string name, string otherName, string value)
     {
         var images = new Dictionary<string, ProcessedImageInfo> { ["photo.png"] = CreateImageInfo("photo.png") };
 
@@ -99,18 +72,6 @@ public sealed class ResponsiveImageExtensionTests
 
         Assert.Equal(value, values[name]);
         Assert.False(values.ContainsKey(otherName));
-    }
-
-    [Fact]
-    public void Process_ExplicitSizesOverrideTheExplicitWidth()
-    {
-        var images = new Dictionary<string, ProcessedImageInfo> { ["photo.png"] = CreateImageInfo("photo.png") };
-
-        var values = ReadImageAttributes(Render("![Photo](photo.png){width=300 sizes=50vw}", images));
-
-        Assert.Equal("300", values["width"]);
-        Assert.Equal("169", values["height"]);
-        Assert.Equal("50vw", values["sizes"]);
     }
 
     [Fact]

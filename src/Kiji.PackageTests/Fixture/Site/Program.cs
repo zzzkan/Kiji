@@ -6,9 +6,9 @@ using PackageSite;
 var builder = StaticSite.CreateBuilder(args);
 builder.SiteInfo = new() { Name = "Package consumer", BaseUrl = new Uri("https://example.test/kiji/") };
 builder.Services.AddLocalization();
-builder.AddKeyedMarkdownContent<Article>("articles");
+builder.AddMarkdownContent<Article>();
 builder.AddPageParameters<ArticlePage>(services => services
-    .GetRequiredKeyedService<ContentDictionary<MarkdownContent<Article>>>("articles")
+    .GetRequiredService<ContentDictionary<MarkdownContent<Article>>>()
     .Select(entry => new { Slug = Path.GetFileNameWithoutExtension(entry.Key), ContentKey = entry.Key }));
 
 return await builder.Build().RunAsync();

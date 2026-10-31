@@ -15,7 +15,7 @@ internal sealed class ContentRuntime
     /// <summary>Hashes of the content files read in the current snapshot.</summary>
     internal Generation.ContentFileRegistry Files { get; } = new();
 
-    private readonly HashSet<(Type Type, string? Key)> _registeredTypes = [];
+    private readonly HashSet<Type> _registeredTypes = [];
     private readonly ConcurrentDictionary<object, object> _materialized = new();
     private readonly Lock _materializationLock = new();
     private IServiceProvider? _services;
@@ -26,21 +26,20 @@ internal sealed class ContentRuntime
     private readonly List<object> _materializing = [];
 
     /// <summary>
-    /// Creates a dictionary registration identified by its element type and optional key.
+    /// Creates the registration of a dictionary for injection. The element type is its
+    /// identity — resolving is by type, so a second one of the same type would silently
+    /// displace the first rather than coexist with it.
     /// </summary>
-    internal ServiceDescriptor Register<T>(Func<ContentDictionary<T>> createDictionary, string? serviceKey = null)
+    internal ServiceDescriptor Register<T>(Func<ContentDictionary<T>> createDictionary)
         where T : class
     {
-        if (!_registeredTypes.Add((typeof(T), serviceKey)))
+        if (!_registeredTypes.Add(typeof(T)))
         {
-            var keyDescription = serviceKey is null ? string.Empty : $" with key '{serviceKey}'";
             throw new InvalidOperationException(
-                $"A content dictionary of type '{typeof(T).Name}'{keyDescription} is already registered. Use a distinct key or model type per source.");
+                $"A content dictionary of type '{typeof(T).Name}' is already registered. Each one is identified by its element type, so declare a distinct model type per source.");
         }
 
-        return serviceKey is null
-            ? ServiceDescriptor.Singleton(createDictionary())
-            : ServiceDescriptor.KeyedSingleton(serviceKey, createDictionary());
+        return ServiceDescriptor.Singleton(createDictionary());
     }
 
     internal void Attach(IServiceProvider services)

@@ -217,8 +217,6 @@ tracked as [page dependencies](../incremental-builds/#page-dependencies).
 `AddContentSource` registers custom data, such as JSON, or an index derived from other
 content, such as tag counts. The loader runs when the content is first read, and again
 after content changes during development. Treat loaded values as immutable.
-Both overloads register unkeyed dictionaries. `sourceId` is a dependency identity,
-not a DI key; use distinct model types for custom sources with different roles.
 
 #### `AddContentSource<T>(Func<IServiceProvider, IReadOnlyList<T>> loader)`
 
@@ -263,64 +261,33 @@ no reliable digest exists; pages that read the item or its collection then alway
 
 Import `Kiji.Markdown`. See [Markdown and images](../markdown/) for examples.
 
-| Method                                                                                                                                  | Behavior                                                                             |
-| --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `AddMarkdownContent<TFrontMatter>(Action<MarkdownContentOptions>? configure = null)` | Loads `*.md` files and registers `ContentDictionary<MarkdownContent<TFrontMatter>>`. |
-| `AddMarkdownContent<TFrontMatter,TModel>(Func<MarkdownContent<TFrontMatter>,TModel> select, Action<MarkdownContentOptions>? configure = null)` | Converts each file with `select` and registers `ContentDictionary<TModel>`. |
-| `AddKeyedMarkdownContent<TFrontMatter>(string key, Action<MarkdownContentOptions>? configure = null)` | Registers a dictionary using keyed DI. |
-| `AddKeyedMarkdownContent<TFrontMatter,TModel>(string key, Func<MarkdownContent<TFrontMatter>,TModel> select, Action<MarkdownContentOptions>? configure = null)` | Registers a projected dictionary using keyed DI. |
+| Method                                                                                                                                                | Behavior                                                                             |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `AddMarkdownContent<TFrontMatter>(Action<MarkdownContentOptions>? configure = null)`                                                                  | Loads `*.md` files and registers `ContentDictionary<MarkdownContent<TFrontMatter>>`. |
+| `AddMarkdownContent<TFrontMatter,TModel>(Func<MarkdownContent<TFrontMatter>,TModel> select, Action<MarkdownContentOptions>? configure = null)`        | Converts each file with `select` and registers `ContentDictionary<TModel>`.          |
 
-| `MarkdownContentOptions` member                      | Behavior                                                                     |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `string Directory`                                   | Directory to load, absolute or relative to the project. Default `"content"`. |
-| `Func<FileInfo,bool>? FileFilter`                    | Returns `false` to skip a file. Default: load every `*.md` file.             |
+| `MarkdownContentOptions` member   | Behavior                                                                     |
+| --------------------------------- | ---------------------------------------------------------------------------- |
+| `string Directory`                | Directory to load, absolute or relative to the project. Default `"content"`. |
+| `Func<FileInfo,bool>? FileFilter` | Returns `false` to skip a file. Default: load every `*.md` file.             |
 
-Site-wide rendering settings use `builder.Services.Configure<MarkdownOptions>(options => ...)`,
-as with image settings. The processor and renderer pool are singletons shared by all sources
-and retained on content reload. Restart `dotnet watch` after changing these settings;
-Hot Reload does not rerun their configuration.
+Rendering settings apply to every source. Configure them with
+`builder.Services.Configure<MarkdownOptions>(options => ...)`.
 
-| `MarkdownOptions` member | Behavior |
-| --- | --- |
-| `MarkdownPipelineBuilder Pipeline` | Mutable Markdig builder. Defaults: GFM-style tables, task lists, autolinks and strikethrough; footnotes, GitHub heading IDs and generic attributes. Use `Extensions.Replace` to change registered extensions. GenericAttributes is moved last before building. |
-| `DeserializerBuilder Yaml` | Mutable YamlDotNet builder. Defaults: camelCase with case-insensitive matching, errors on unknown keys, UTC for dates without an offset. Explicit `DateTimeOffset` offsets survive; `DateTime` is normalized to UTC. |
+| `MarkdownOptions` member           | Behavior                                                                                                                                                                                                                   |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MarkdownPipelineBuilder Pipeline` | Markdig builder. Defaults: GFM-style tables, task lists, autolinks and strikethrough; footnotes, GitHub heading IDs and generic attributes. Use `Extensions.Replace` to change a registered extension and `DocumentProcessed` to change the parsed document. |
+| `DeserializerBuilder Yaml`         | YamlDotNet builder. Defaults: camelCase matched case-insensitively, errors on unknown keys, and UTC for dates without an offset.                                                                                           |
 
-These are the only options exposing third-party builders; their APIs follow Markdig and
-YamlDotNet's compatibility rules. Configure them before execution. Advanced extensions
-are opt-in, and external links retain normal Markdig output. Use `Pipeline.DocumentProcessed`
-for AST changes and Razor for HTML wrappers; `AddHtmlPostProcessor` has been removed.
-Front matter is optional; missing, empty or comment-only blocks create a model with its defaults.
-Unknown keys fail with the source file and property name. Choose a different naming
-convention, add `[YamlMember(Alias = "...")]`, or explicitly opt into `IgnoreUnmatchedProperties()`.
-Settings from code and site configuration participate in build invalidation; use
-`AlwaysRender` for customization that reads untracked external state.
-See the [Markdown migration guide](../release-notes/) for enabling previously default
-syntax and preserving heading anchors.
-
-| `MarkdownContent<TFrontMatter>` member                                         | Behavior                                                                      |
-| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| `FileInfo FileInfo`                                                            | The source Markdown file.                                                     |
-| `string Path` | Content-directory-relative path, using `/`, including `.md`. Also the dictionary key; safe for deriving portable model identities. |
-| `TFrontMatter FrontMatter`                                                     | The parsed front matter.                                                      |
-| `ValueTask<string> RenderAsync(CancellationToken cancellationToken = default)` | Renders the body to HTML and writes its local images beside the current page. |
+| `MarkdownContent<TFrontMatter>` member                                         | Behavior                                                                            |
+| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| `FileInfo FileInfo`                                                            | The source Markdown file.                                                           |
+| `string Path`                                                                  | The path relative to the content directory, using `/`. Also the dictionary key.     |
+| `TFrontMatter FrontMatter`                                                     | The parsed front matter.                                                            |
+| `ValueTask<string> RenderAsync(CancellationToken cancellationToken = default)` | Renders the body to HTML and writes its local images beside the current page.       |
 
 Call `RenderAsync` while rendering a page, because local images are written beside that
-page.
-For [local images](../markdown/#local-images), a single positive integer dimension
-preserves the source aspect ratio; other values suppress the generated opposite
-dimension. A positive integer `width` sets `sizes` unless explicitly supplied.
-
-`<MarkdownBody Content="@content" />` renders a `MarkdownContent<TFrontMatter>` with no
-wrapper element. Put classes and presentation wrappers around it in Razor.
-For component tests, construct `new MarkdownContent<FrontMatter>("posts/example.md", metadata, "<p>Body</p>")`
-and `new ContentDictionary<MarkdownContent<FrontMatter>>(items)` with key/value pairs.
-These in-memory snapshots read no files and disable HTML reuse when read during a publish.
-The in-memory `MarkdownContent` constructor resolves `FileInfo` against the process's
-current directory; the file need not exist. `ContentDictionary(items)` rejects empty
-or duplicate keys and null values.
-Keyed sources resolve through `GetRequiredKeyedService<ContentDictionary<T>>(key)` or
-`[Inject(Key = "posts")]` on a Razor component property inside `@code`;
-service keys are case-sensitive, while dictionary keys are case-insensitive.
+page. `<MarkdownBody Content="@content" />` renders the body with no wrapper element.
 
 ### Image settings
 

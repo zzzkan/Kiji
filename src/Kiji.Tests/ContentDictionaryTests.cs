@@ -10,35 +10,6 @@ public sealed class ContentDictionaryTests
     private sealed record Derived(string Slug);
 
     [Fact]
-    public void Snapshot_RejectsDuplicateKeysWithAPublicDiagnostic()
-    {
-        var error = Assert.Throws<InvalidOperationException>(() => new ContentDictionary<Item>(
-            [new("same", new("first", 1)), new("SAME", new("second", 2))]));
-        Assert.Contains("duplicate key 'SAME'", error.Message);
-        Assert.DoesNotContain("internal content loader", error.Message);
-    }
-
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Dictionary_RejectsNullValues(bool snapshot)
-    {
-        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
-        builder.AddContentSource<Item>(static _ => [null!]);
-        await using var app = builder.Build();
-
-        var error = Assert.Throws<InvalidOperationException>(() =>
-        {
-            var dictionary = snapshot
-                ? new ContentDictionary<Item>([new("0", null!)])
-                : app.ServiceProvider.GetRequiredService<ContentDictionary<Item>>();
-            _ = dictionary.Count;
-        });
-        Assert.Contains("null value for key '0'", error.Message);
-    }
-
-    [Fact]
     public async Task ConcurrentReaders_MaterializeContentOnlyOnce()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
@@ -150,7 +121,6 @@ public sealed class ContentDictionaryTests
 
         Assert.Contains("already registered", exception.Message, StringComparison.Ordinal);
         Assert.Contains(nameof(Item), exception.Message, StringComparison.Ordinal);
-        Assert.DoesNotContain("with key", exception.Message, StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -1,4 +1,5 @@
 @page "/"
+@inject ContentDictionary<MarkdownContent<Article>> Articles
 <PageTitle>@title</PageTitle>
 <h1>Package consumer</h1>
 <ul>
@@ -14,9 +15,6 @@
 <link id="scoped" href="@Assets["PackageSite.styles.css"]" rel="stylesheet" />
 @((MarkupString)body)
 @code {
-    [Inject(Key = "articles")]
-    public ContentDictionary<MarkdownContent<Article>> Articles { get; set; } = default!;
-
     private string title = "";
     private string body = "";
     protected override async Task OnInitializedAsync()

@@ -17,19 +17,9 @@ namespace Kiji;
 public sealed class ContentDictionary<T> : IReadOnlyDictionary<string, T>
     where T : class
 {
-    private readonly string _sourceId = string.Empty;
-    private readonly ContentRuntime? _runtime;
-    private readonly Func<IServiceProvider, IReadOnlyList<(string Key, T Item, string? Digest)>>? _load;
-    private MaterializedContent? Snapshot { get; }
-
-    /// <summary>Creates an in-memory snapshot, for example for component tests. Keys are case-insensitive and enumeration preserves input order.</summary>
-    /// <remarks>This snapshot has no tracked source; pages that read it cannot reuse HTML across publishes.</remarks>
-    /// <exception cref="InvalidOperationException">An item has an empty or duplicate key, or a null value.</exception>
-    public ContentDictionary(IEnumerable<KeyValuePair<string, T>> items)
-    {
-        ArgumentNullException.ThrowIfNull(items);
-        Snapshot = CreateMaterialized([.. items.Select(static item => (item.Key, item.Value, (string?)null))]);
-    }
+    private readonly string _sourceId;
+    private readonly ContentRuntime _runtime;
+    private readonly Func<IServiceProvider, IReadOnlyList<(string Key, T Item, string? Digest)>> _load;
 
     internal ContentDictionary(
         ContentRuntime runtime,
@@ -113,7 +103,7 @@ public sealed class ContentDictionary<T> : IReadOnlyDictionary<string, T>
         return GetEnumerator();
     }
 
-    private MaterializedContent Materialized => Snapshot ?? _runtime!.GetOrMaterialize(this, Materialize);
+    private MaterializedContent Materialized => _runtime.GetOrMaterialize(this, Materialize);
 
     /// <summary>
     /// The dictionary as seen by a member that exposes its shape (count, keys, values,
@@ -142,11 +132,8 @@ public sealed class ContentDictionary<T> : IReadOnlyDictionary<string, T>
 
     private MaterializedContent Materialize(IServiceProvider services)
     {
-        return CreateMaterialized(_load!(services));
-    }
+        var loaded = _load(services);
 
-    private static MaterializedContent CreateMaterialized(IReadOnlyList<(string Key, T Item, string? Digest)> loaded)
-    {
         var index = new Dictionary<string, (T Item, string? Digest)>(loaded.Count, StringComparer.OrdinalIgnoreCase);
         var entries = new KeyValuePair<string, T>[loaded.Count];
         for (var i = 0; i < loaded.Count; i++)
@@ -155,19 +142,13 @@ public sealed class ContentDictionary<T> : IReadOnlyDictionary<string, T>
             if (string.IsNullOrWhiteSpace(key))
             {
                 throw new InvalidOperationException(
-                    $"Content dictionary of type '{typeof(T).Name}' contains an empty key.");
-            }
-
-            if (item is null)
-            {
-                throw new InvalidOperationException(
-                    $"Content dictionary of type '{typeof(T).Name}' contains a null value for key '{key}'.");
+                    $"The internal content loader for '{typeof(T).Name}' produced an empty key.");
             }
 
             if (!index.TryAdd(key, (item, digest)))
             {
                 throw new InvalidOperationException(
-                    $"Content dictionary of type '{typeof(T).Name}' contains duplicate key '{key}'.");
+                    $"The internal content loader for '{typeof(T).Name}' produced duplicate key '{key}'.");
             }
 
             entries[i] = new KeyValuePair<string, T>(key, item);

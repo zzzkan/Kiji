@@ -51,20 +51,17 @@ internal static class MarkdownFrontMatterParser
 
         var yamlStart = index + 1;
 
-        // The first possible closer can immediately follow the opening line.
-        var searchFrom = yamlStart;
-        var firstLine = true;
+        // Search from the opening line's newline so the closer can immediately follow it.
+        var searchFrom = index;
         while (true)
         {
-            var immediatelyClosed = firstLine && content[searchFrom..].StartsWith("---", StringComparison.Ordinal);
-            firstLine = false;
-            var offset = immediatelyClosed ? 0 : content[searchFrom..].IndexOf("\n---", StringComparison.Ordinal);
+            var offset = content[searchFrom..].IndexOf("\n---", StringComparison.Ordinal);
             if (offset < 0)
             {
                 return false;
             }
 
-            var closerStart = immediatelyClosed ? yamlStart : searchFrom + offset + 1;
+            var closerStart = searchFrom + offset + 1;
             var runIndex = closerStart + 3;
             var lastNewline = -1;
             while (runIndex < content.Length && IsDelimiterWhitespace(content[runIndex]))

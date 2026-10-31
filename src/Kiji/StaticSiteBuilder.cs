@@ -205,18 +205,15 @@ public sealed class StaticSiteBuilder
     internal StaticSiteBuilder RegisterContent<T>(
         Func<IServiceProvider, IReadOnlyList<(string Key, T Item, string? Digest)>> loader,
         string contentSetScope = "",
-        string? directory = null,
-        string? serviceKey = null)
+        string? directory = null)
         where T : class
     {
         EnsureConfigurable();
         // Source identities use the project directory, including when a caller supplied
         // an absolute path inside the checkout, keeping those identities portable.
-        var scope = directory is null
+        var descriptor = Runtime.Register(() => new ContentDictionary<T>(Runtime, loader, directory is null
             ? contentSetScope
-            : Path.GetRelativePath(Path.GetFullPath(Paths.ProjectDirectory), Paths.ResolveAgainstRoot(directory)).Replace('\\', '/');
-        if (serviceKey is not null) { scope = $"{serviceKey.Length}:{serviceKey}:{scope}"; }
-        var descriptor = Runtime.Register(() => new ContentDictionary<T>(Runtime, loader, scope), serviceKey);
+            : Path.GetRelativePath(Path.GetFullPath(Paths.ProjectDirectory), Paths.ResolveAgainstRoot(directory)).Replace('\\', '/')));
         Services.Add(descriptor);
         _managedServices.Add(descriptor);
         if (directory is not null) { _contentPaths.Add(directory); }

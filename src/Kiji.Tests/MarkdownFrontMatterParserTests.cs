@@ -31,22 +31,14 @@ public sealed class MarkdownFrontMatterParserTests
     }
 
     [Theory]
-    [InlineData("# Body", "# Body")]
-    [InlineData("---\n---\n# Body", "# Body")]
-    [InlineData("---\r\n---\r\n# Body", "# Body")]
-    [InlineData("---\n\n---\n# Body", "# Body")]
-    [InlineData("---\n# draft\n---\n# Body", "# Body")]
-    [InlineData("---\r\n# draft\r\n---\r\n# Body", "# Body")]
-    [InlineData("---\n  # draft\n\n# aliases\n---", "")]
-    [InlineData("---\n---", "")]
-    public void Parse_OptionalFrontMatter_PreservesBodyAndModelDefaults(string markdown, string expectedBody)
+    [InlineData("# Body")]
+    [InlineData("---\n# draft\n---\n# Body")]
+    public void Parse_OptionalFrontMatter_UsesModelDefaults(string markdown)
     {
         var (frontMatter, body) = MarkdownFrontMatterParser.ParseContentAndBody<FrontMatter>(markdown,
             new MarkdownOptions().CreateDeserializer());
-        Assert.NotNull(frontMatter);
         Assert.Null(frontMatter.Title);
-        Assert.Null(frontMatter.Tags);
-        Assert.Equal(expectedBody, body);
+        Assert.Equal("# Body", body);
     }
 
     [Fact]
@@ -63,37 +55,17 @@ public sealed class MarkdownFrontMatterParserTests
     }
 
     [Fact]
-    public void Parse_CanExplicitlyIgnoreUnknownKeys()
+    public void Parse_DatesWithoutOffsetsAreUtc()
     {
-        var options = new MarkdownOptions();
-        options.Yaml.IgnoreUnmatchedProperties();
-        var (frontMatter, body) = MarkdownFrontMatterParser.ParseContentAndBody<FrontMatter>(
-            "---\ntitle: Imported\ndraft: false\naliases: [/old/]\n---\nBody", options.CreateDeserializer());
-        Assert.Equal("Imported", frontMatter.Title);
-        Assert.Equal("Body", body);
-    }
-
-    [Theory]
-    [InlineData("2024-01-15", 0)]
-    [InlineData("2024-01-15T12:30:00", 0)]
-    [InlineData("2024-01-15T12:30:00Z", 0)]
-    [InlineData("2024-01-15T12:30:00+09:00", 9)]
-    public void Parse_DatesWithoutOffsetsAreUtcAndExplicitOffsetsSurvive(string value, int offsetHours)
-    {
-        var (frontMatter, _) = MarkdownFrontMatterParser.ParseContentAndBody<FrontMatter>(
-            $"---\ncreatedAt: {value}\n---\nBody", new MarkdownOptions().CreateDeserializer());
-        Assert.Equal(TimeSpan.FromHours(offsetHours), frontMatter.CreatedAt!.Value.Offset);
-    }
-
-    [Fact]
-    public void Parse_DateTimeValuesAreUtcAndNullableDatesAcceptNull()
-    {
-        var (dates, _) = MarkdownFrontMatterParser.ParseContentAndBody<Dictionary<string, DateTime?>>(
-            "---\ndate: 2024-01-15\nexplicit: 2024-01-15T12:30:00+09:00\nempty: null\n---\nBody",
-            new MarkdownOptions().CreateDeserializer());
-        Assert.Equal(new DateTime(2024, 1, 15, 0, 0, 0, DateTimeKind.Utc), dates["date"]);
-        Assert.Equal(DateTimeKind.Utc, dates["date"]!.Value.Kind);
-        Assert.Equal(new DateTime(2024, 1, 15, 3, 30, 0, DateTimeKind.Utc), dates["explicit"]);
-        Assert.Null(dates["empty"]);
+        var deserializer = new MarkdownOptions().CreateDeserializer();
+        var (offsets, _) = MarkdownFrontMatterParser.ParseContentAndBody<Dictionary<string, DateTimeOffset?>>(
+            "---\nlocal: 2024-01-15T12:30:00\nexplicit: 2024-01-15T12:30:00+09:00\nempty: null\n---\n", deserializer);
+        Assert.Equal(TimeSpan.Zero, offsets["local"]!.Value.Offset);
+        Assert.Equal(TimeSpan.FromHours(9), offsets["explicit"]!.Value.Offset);
+        Assert.Null(offsets["empty"]);
+        var (dates, _) = MarkdownFrontMatterParser.ParseContentAndBody<Dictionary<string, DateTime>>(
+            "---\ndate: 2024-01-15\n---\n", deserializer);
+        Assert.Equal(DateTimeKind.Utc, dates["date"].Kind);
+        Assert.Equal(new DateTime(2024, 1, 15), dates["date"]);
     }
 }

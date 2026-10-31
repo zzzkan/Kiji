@@ -66,12 +66,6 @@ internal sealed class ResponsiveImageWriter
             // Auto sizes requires lazy loading, including an explicit loading override.
             var sizes = $"(max-width: {largest.Width}px) 100vw, {largest.Width}px";
             if (isLazy) { sizes = "auto, " + sizes; }
-            TryGetAttribute(attributes, "width", out var width);
-            var explicitWidth = ParseDimension(width);
-            if (explicitWidth > 0)
-            {
-                sizes = explicitWidth.ToString(CultureInfo.InvariantCulture) + "px";
-            }
 
             WriteAttribute(renderer, attributes, "src", CreateVariantUrl(publicDirectory, largest.FileName), escapeUrl: true);
             WriteAttribute(renderer, attributes, "srcset", srcset);

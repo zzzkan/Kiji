@@ -31,15 +31,15 @@ public sealed class Article
     {
         ArgumentNullException.ThrowIfNull(content);
 
-        var value = content.Path.EndsWith("/index.md", StringComparison.OrdinalIgnoreCase)
-            ? content.Path[..^"/index.md".Length]
-            : content.Path[..^".md".Length];
+        var value = string.Equals(content.FileInfo.Name, "index.md", StringComparison.OrdinalIgnoreCase)
+            ? content.FileInfo.Directory?.Name
+            : Path.GetFileNameWithoutExtension(content.FileInfo.Name);
         if (string.IsNullOrWhiteSpace(value))
         {
             throw new InvalidOperationException($"Cannot determine a slug for '{content.FileInfo.FullName}'.");
         }
 
-        return new Article(content, NormalizeSlug(value.Replace('/', '-')));
+        return new Article(content, NormalizeSlug(value));
     }
 
     private static string NormalizeSlug(string value)

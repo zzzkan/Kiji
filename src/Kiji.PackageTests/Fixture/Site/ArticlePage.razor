@@ -1,10 +1,8 @@
 @page "/articles/{Slug}/"
+@inject ContentDictionary<MarkdownContent<Article>> Articles
 <PageTitle>@title</PageTitle>
 <MarkdownBody Content="@Articles[ContentKey]" />
 @code {
-    [Inject(Key = "articles")]
-    public ContentDictionary<MarkdownContent<Article>> Articles { get; set; } = default!;
-
     [Parameter] public string Slug { get; set; } = "";
     [Parameter] public string ContentKey { get; set; } = "";
     private string title = "";

@@ -7,7 +7,6 @@ namespace Kiji.Markdown;
 public sealed class MarkdownContent<TFrontMatter>
 {
     private readonly Func<MarkdownContent<TFrontMatter>, CancellationToken, Task<string>> _renderAsync;
-    private readonly bool _hasSource = true;
 
     // Rendered HTML is cached per page route: local-image URLs and materialized variants
     // belong to the rendering page's output directory, so each page that embeds this
@@ -36,32 +35,10 @@ public sealed class MarkdownContent<TFrontMatter>
 
     internal string ContentHash { get; }
 
-    /// <summary>Creates in-memory content with pre-rendered HTML, for example for component tests.</summary>
-    /// <remarks>
-    /// It reads no source file. FileInfo resolves path against the process's current directory;
-    /// that file need not exist. Pages reading this content cannot reuse HTML across publishes.
-    /// </remarks>
-    public MarkdownContent(string path, TFrontMatter frontMatter, string html)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        ArgumentNullException.ThrowIfNull(html);
-        Path = path.Replace('\\', '/');
-        if (System.IO.Path.IsPathRooted(Path) || Path.Split('/').Any(static segment => segment is "" or "." or ".."))
-        {
-            throw new ArgumentException("The content path must be relative to its content directory.", nameof(path));
-        }
-        FileInfo = new FileInfo(Path);
-        FrontMatter = frontMatter;
-        Body = string.Empty;
-        ContentHash = Generation.BuildFingerprint.Missing;
-        _renderAsync = (_, _) => Task.FromResult(html);
-        _hasSource = false;
-    }
-
     /// <summary>The source path relative to the content directory, using <c>/</c> separators. Also the dictionary key.</summary>
     public string Path { get; }
 
-    /// <summary>The source file metadata. For in-memory content, the path is relative to the process's current directory and need not exist.</summary>
+    /// <summary>The source file metadata.</summary>
     public FileInfo FileInfo { get; }
 
     /// <summary>
@@ -77,7 +54,7 @@ public sealed class MarkdownContent<TFrontMatter>
         {
             // Reading front matter during a tracked render makes the page depend on
             // this file, so front-matter-only pages re-render when the file changes.
-            ObserveSource();
+            PageRenderContext.Current?.Dependencies?.AddFile(FileInfo.FullName, ContentHash);
             return field;
         }
     }
@@ -92,7 +69,7 @@ public sealed class MarkdownContent<TFrontMatter>
             : null;
         cancellationToken = linked?.Token ?? (cancellationToken.CanBeCanceled ? cancellationToken : pageToken);
         cancellationToken.ThrowIfCancellationRequested();
-        ObserveSource();
+        context?.Dependencies?.AddFile(FileInfo.FullName, ContentHash);
         // A tracked render must observe all dependencies and materialize its outputs
         // again, even if the same content instance was rendered in an earlier build.
         if (context?.Dependencies is not null)
@@ -144,13 +121,6 @@ public sealed class MarkdownContent<TFrontMatter>
             return task;
         });
         return cached;
-    }
-
-    private void ObserveSource()
-    {
-        var dependencies = PageRenderContext.Current?.Dependencies;
-        if (_hasSource) { dependencies?.AddFile(FileInfo.FullName, ContentHash); }
-        else { dependencies?.DisableCache(); }
     }
 
     private static async Task EvictFailedRenderAsync(Task<string> render,

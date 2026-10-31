@@ -27,36 +27,6 @@ public static class MarkdownStaticSiteBuilderExtensions
         Action<MarkdownContentOptions>? configure = null)
         where TFrontMatter : class
         where TModel : class
-        => AddMarkdownContentCore(builder, select, configure, null);
-
-    /// <summary>Adds a Markdown source resolved through keyed dependency injection.</summary>
-    public static StaticSiteBuilder AddKeyedMarkdownContent<TFrontMatter>(
-        this StaticSiteBuilder builder,
-        string key,
-        Action<MarkdownContentOptions>? configure = null)
-        where TFrontMatter : class
-        => builder.AddKeyedMarkdownContent<TFrontMatter, MarkdownContent<TFrontMatter>>(key, static content => content, configure);
-
-    /// <summary>Adds a Markdown source projected into models and resolved through keyed dependency injection.</summary>
-    public static StaticSiteBuilder AddKeyedMarkdownContent<TFrontMatter, TModel>(
-        this StaticSiteBuilder builder,
-        string key,
-        Func<MarkdownContent<TFrontMatter>, TModel> select,
-        Action<MarkdownContentOptions>? configure = null)
-        where TFrontMatter : class
-        where TModel : class
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(key);
-        return AddMarkdownContentCore(builder, select, configure, key);
-    }
-
-    private static StaticSiteBuilder AddMarkdownContentCore<TFrontMatter, TModel>(
-        StaticSiteBuilder builder,
-        Func<MarkdownContent<TFrontMatter>, TModel> select,
-        Action<MarkdownContentOptions>? configure,
-        string? key)
-        where TFrontMatter : class
-        where TModel : class
     {
         ArgumentNullException.ThrowIfNull(builder);
         builder.EnsureConfigurable();
@@ -99,7 +69,6 @@ public static class MarkdownStaticSiteBuilderExtensions
 
                 return items;
             },
-            directory: directory,
-            serviceKey: key);
+            directory: directory);
     }
 }

@@ -88,9 +88,11 @@ builder.AddMarkdownContent<FrontMatter, Post>(content => new Post(
 
 This registers `ContentCollection<Post>` instead. The projection sees one file at a time;
 compute collection-wide results, such as tag counts, while rendering or in a scoped service.
-Treat the projection as a pure function of that file and return a distinct instance for
-each item: an instance shared by several items identifies none of them, so pages that
-receive it as a parameter render on every publish.
+Keep the model read-only, as this record is: Kiji does not track values assigned to an item
+after loading (see [page dependencies](../incremental-builds/#page-dependencies)). Treat the
+projection as a pure function of that file and return a distinct instance for each item: an
+instance shared by several items identifies none of them, so pages that receive it as a
+parameter render on every publish.
 
 Metadata-only listings and navigation can reuse HTML after body edits. Collection
 membership/order and front matter changes invalidate them. If a projection calls

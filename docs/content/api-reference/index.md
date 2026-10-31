@@ -215,9 +215,10 @@ Its `ImportMapDefinition` parameter accepts a custom map. See the
 ### Content collections
 
 `ContentCollection<T>` is an `IReadOnlyCollection<T>` resolved through dependency injection.
-Enumeration returns items in source order. Treat items as immutable. Markdown IDs are paths
-relative to the content directory, using `/` and including `.md`; they do not determine URLs.
-IDs ignore case. Reads are tracked as [page dependencies](../incremental-builds/#page-dependencies).
+Enumeration returns items in source order. Markdown IDs are paths relative to the content
+directory, using `/` and including `.md`; they do not determine URLs. IDs ignore case.
+Reads are tracked as [page dependencies](../incremental-builds/#page-dependencies); values
+assigned to items after loading are not.
 
 | Member | Behavior |
 | --- | --- |

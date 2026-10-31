@@ -30,19 +30,35 @@ Reusing HTML does not replay its log messages, and logs never fail a publish; se
 
 ## Page dependencies
 
-Pass collection items directly through `AddPageParameters`:
+Pass collection items directly through `AddPageParameters`, including related items such
+as the previous and next post:
 
 ```csharp
-builder.AddPageParameters<PostPage>(services => services
-    .GetRequiredService<ContentCollection<Post>>()
-    .Select(post => new { post.Slug, Post = post }));
+builder.AddPageParameters<PostPage>(services =>
+{
+    var posts = services.GetRequiredService<ContentCollection<Post>>().ToArray();
+    return posts.Select((post, index) => new
+    {
+        post.Slug,
+        Post = post,
+        Previous = index > 0 ? posts[index - 1] : null,
+        Next = index + 1 < posts.Length ? posts[index + 1] : null,
+    });
+});
 ```
 
-Each item parameter depends on that item, just like `Posts[id]`. Changing a `Previous`
-or `Next` item changes the parameter identity and renders the page again. Resolve items
-in the factory for each build; retaining an item from an earlier snapshot fails publishing.
-Objects created in the factory, record copies made with `with`, and arrays disable reuse;
-see the [reusable parameter types](../api-reference/#pages).
+Each item parameter depends on that item, just like `Posts[id]`, so the page renders again
+when its post or a neighboring post changes. Resolve items in the factory for each build;
+retaining an item from an earlier snapshot fails publishing. Objects created in the factory,
+record copies made with `with`, and arrays disable reuse; see the
+[reusable parameter types](../api-reference/#pages).
+
+Kiji tracks an item through the file it was loaded from. Values you assign to an item or
+its front matter afterward, in the factory or during rendering, are not tracked, and a page
+that shows them can be reused with old values. If the factory sets `post.Next`, for example,
+adding a post between two existing ones leaves the first one's page linking to the wrong
+post. Pass related items as parameters, as above. If a component has to read values
+assigned after loading, mark it with [`AlwaysRender`](#render-pages-that-use-external-data).
 
 Enumerating a collection, reading `Count`, or looking up a missing ID depends on the whole
 collection, even if you filter afterward. Reads in layouts and child components count too.
@@ -53,9 +69,8 @@ its digest includes the entire file. Reading `FrontMatter` records its own metad
 `RenderAsync` records the entire file. ID lookups and item parameters always observe the whole
 file, even if a model has hidden its source.
 
-Body-derived values cached in a model during another page's render are untracked service
-state when read without `RenderAsync`. Do not share cached Markdown HTML between pages:
-local image URLs depend on the current page's output directory.
+Do not share cached Markdown HTML between pages: local image URLs depend on the current
+page's output directory.
 
 ## Render pages that use external data
 

@@ -73,8 +73,10 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   factories and artifacts use the root provider and cannot resolve scoped services. Validate
   Kiji-owned registrations in Build. Compute derived data during rendering or in scoped services;
   content reload does not recreate singletons. Use AlwaysRender on components reading
-  untracked external state. KijiForce refreshes all pages for a whole publish. Instantiating
-  any ErrorBoundaryBase component prevents HTML reuse for that page, even when healthy. The
+  untracked external state. Content items are tracked by source, ID and file; values assigned
+  to them after loading are untracked state, documented rather than detected. KijiForce
+  refreshes all pages for a whole publish. Instantiating any ErrorBoundaryBase component
+  prevents HTML reuse for that page, even when healthy. The
   default boundary logger reports exceptions as warnings; logging never controls
   cacheability or the publish result. Use an unhandled exception for a build gate.
 - Use Blazor's PageTitle and HeadContent; KijiRoot supplies the single HeadOutlet.

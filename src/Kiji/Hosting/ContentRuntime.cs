@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Kiji.Hosting;
 
 /// <summary>
-/// Owns the materialized state of all content dictionaries for the current site snapshot.
+/// Owns the materialized state of all content collections for the current site snapshot.
 /// Swapping snapshots (e.g. when content changes during development) simply clears the
 /// materialization cache; they re-materialize lazily on next access.
 /// </summary>
@@ -15,31 +15,27 @@ internal sealed class ContentRuntime
     /// <summary>Hashes of the content files read in the current snapshot.</summary>
     internal Generation.ContentFileRegistry Files { get; } = new();
 
-    private readonly HashSet<Type> _registeredTypes = [];
+    private readonly HashSet<(Type Type, string? ServiceKey)> _registrations = [];
     private readonly ConcurrentDictionary<object, object> _materialized = new();
     private readonly Lock _materializationLock = new();
     private IServiceProvider? _services;
 
-    // A loader may resolve another dictionary (a tag list derived from posts, say),
-    // so materialization nests under the reentrant lock. Track dictionary instances
-    // within this site; display names need not be unique across types or sites.
-    private readonly List<object> _materializing = [];
-
     /// <summary>
-    /// Creates the registration of a dictionary for injection. The element type is its
-    /// identity — resolving is by type, so a second one of the same type would silently
-    /// displace the first rather than coexist with it.
+    /// Creates a registration identified by its element type and optional service key.
     /// </summary>
-    internal ServiceDescriptor Register<T>(Func<ContentDictionary<T>> createDictionary)
+    internal ServiceDescriptor Register<T>(string? serviceKey, Func<ContentCollection<T>> createCollection)
         where T : class
     {
-        if (!_registeredTypes.Add(typeof(T)))
+        if (!_registrations.Add((typeof(T), serviceKey)))
         {
             throw new InvalidOperationException(
-                $"A content dictionary of type '{typeof(T).Name}' is already registered. Each one is identified by its element type, so declare a distinct model type per source.");
+                $"A content collection of type '{typeof(T).Name}' with service key '{serviceKey ?? "(unkeyed)"}' is already registered. Use AddKeyedMarkdownContent with a different key, or project into a distinct model type per source.");
         }
 
-        return ServiceDescriptor.Singleton(createDictionary());
+        var collection = createCollection();
+        return serviceKey is null
+            ? ServiceDescriptor.Singleton(collection)
+            : ServiceDescriptor.KeyedSingleton(serviceKey, collection);
     }
 
     internal void Attach(IServiceProvider services)
@@ -66,7 +62,7 @@ internal sealed class ContentRuntime
         }
 
         // GetOrAdd alone may invoke the factory multiple times. Serialize first
-        // materialization (including nested loaders) and invalidation, so an old
+        // materialization and invalidation, so an old
         // in-flight loader cannot repopulate the cache after a content change.
         lock (_materializationLock)
         {
@@ -86,33 +82,8 @@ internal sealed class ContentRuntime
             ?? throw new InvalidOperationException(
                 "Content cannot be materialized before the site's services have been initialized.");
 
-        if (_materializing.Contains(handle))
-        {
-            // Thrown before pushing, so the outer frames' finally blocks unwind the
-            // chain as this propagates. Clearing it here would leave them popping an
-            // empty list.
-            throw new InvalidOperationException(
-                $"Content dictionaries form a cycle: {string.Join(" → ", _materializing.Append(handle).Select(DescribeHandle))}. A loader cannot depend, directly or indirectly, on the dictionary it is building.");
-        }
-
-        _materializing.Add(handle);
-        try
-        {
-            var materialized = factory(services);
-            _materialized[handle] = materialized;
-            return materialized;
-        }
-        finally
-        {
-            _materializing.RemoveAt(_materializing.Count - 1);
-        }
-    }
-
-    private static string DescribeHandle(object handle)
-    {
-        var type = handle.GetType();
-        return type.IsGenericType
-            ? $"ContentDictionary<{type.GetGenericArguments()[0].Name}>"
-            : type.Name;
+        var materialized = factory(services);
+        _materialized[handle] = materialized;
+        return materialized;
     }
 }

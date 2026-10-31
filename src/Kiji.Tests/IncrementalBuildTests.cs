@@ -475,20 +475,20 @@ public sealed class IncrementalBuildTests : IDisposable
         TestSiteAssets.Bind(builder.Paths, Path.Combine(builder.Paths.ProjectDirectory, "static"));
 
         builder.AddMarkdownContent<FrontMatter>();
-        builder.AddContentSource<Post>(static _ => []);
+        builder.RegisterContent<Post>(static _ => []);
         builder.UseDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(builder);
         builder.UseNotFoundPage<NotFoundPage>();
 
-        builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
-            .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
+        builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentCollection<Post>>()
+            .Select(static post => new { post.Slug, ContentKey = post.Id }));
 
         builder.AddPageParameters<MarkdownPostTestPage>(static services => services
-            .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
-            .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
+            .GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>()
+            .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Path), ContentKey = post.Path }));
         builder.AddPageParameters<RelatedPostsTestPage>(static services => services
-            .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
-            .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
+            .GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>()
+            .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Path), ContentKey = post.Path }));
 
         await using var app = builder.Build();
         await app.PublishAsync(Path.Combine(root, "dist"));
@@ -504,15 +504,15 @@ public sealed class IncrementalBuildTests : IDisposable
         builder.AddMarkdownContent<FrontMatter, ScopedNote>(
             select: ScopedNote.Create,
             configure: options => options.Directory = Path.Combine("content", notesDirectory));
-        builder.AddContentSource<Post>(static _ => []);
+        builder.RegisterContent<Post>(static _ => []);
         builder.UseDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(builder);
         builder.UseNotFoundPage<NotFoundPage>();
-        builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
-            .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
+        builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentCollection<Post>>()
+            .Select(static post => new { post.Slug, ContentKey = post.Id }));
         builder.AddPageParameters<MarkdownPostTestPage>(static services => services
-            .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
-            .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
+            .GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>()
+            .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Path), ContentKey = post.Path }));
         builder.AddPageParameters<ScopedNotesIndexPage>(static _ => [new { Kind = "all" }]);
 
         await using var app = builder.Build();
@@ -895,11 +895,11 @@ public sealed class IncrementalBuildTests : IDisposable
 
         builder.Services.Configure<MarkdownOptions>(options => options.Pipeline.DocumentProcessed += _ => onRender?.Invoke());
         builder.AddMarkdownContent<FrontMatter>(options => options.Directory = directory);
-        builder.AddContentSource<Post>(static _ => []);
+        builder.RegisterContent<Post>(static _ => []);
         TestArticleContents.MapSite(builder);
         builder.AddPageParameters<MarkdownPostTestPage>(static services => services
-            .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
-            .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
+            .GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>()
+            .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Path), ContentKey = post.Path }));
 
         return builder;
     }

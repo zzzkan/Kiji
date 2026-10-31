@@ -8,7 +8,7 @@ namespace Kiji.SyntheticSite.Pages;
 public sealed class BlogIndexPage : ComponentBase
 {
     [Inject]
-    public ContentDictionary<MarkdownContent<PostFrontMatter>> Posts { get; set; } = default!;
+    public ContentCollection<MarkdownContent<PostFrontMatter>> Posts { get; set; } = default!;
 
     protected override void BuildRenderTree(RenderTreeBuilder builder)
     {
@@ -22,9 +22,9 @@ public sealed class BlogIndexPage : ComponentBase
         builder.CloseElement();
 
         builder.OpenElement(5, "ul");
-        foreach (var post in Posts.Values)
+        foreach (var post in Posts)
         {
-            var slug = PostSlug.From(post.FileInfo);
+            var slug = PostSlug.From(post.Path);
             builder.OpenRegion(6);
             builder.OpenElement(0, "li");
             builder.OpenElement(1, "a");

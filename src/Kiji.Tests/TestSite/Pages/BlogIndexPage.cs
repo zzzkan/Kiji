@@ -7,13 +7,13 @@ namespace Kiji.Tests.TestSite.Pages;
 public sealed class BlogIndexPage : ComponentBase
 {
     [Inject]
-    public ContentDictionary<Post> AllPosts { get; set; } = default!;
+    public ContentCollection<Post> AllPosts { get; set; } = default!;
 
     private List<Post> _posts = [];
 
     protected override void OnInitialized()
     {
-        _posts = [.. AllPosts.Values.OrderByDescending(static post => post.CreatedAt)];
+        _posts = [.. AllPosts.OrderByDescending(static post => post.CreatedAt)];
     }
 
     protected override void BuildRenderTree(RenderTreeBuilder builder)

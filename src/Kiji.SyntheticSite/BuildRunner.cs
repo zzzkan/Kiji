@@ -81,16 +81,16 @@ public static class BuildRunner
         builder.UseNotFoundPage<NotFoundPage>();
 
         builder.AddPageParameters<PostPage>(static services => services
-            .GetRequiredService<ContentDictionary<MarkdownContent<PostFrontMatter>>>()
-            .Select(static post => new { Slug = PostSlug.From(post.Value.FileInfo), ContentKey = post.Key }));
+            .GetRequiredService<ContentCollection<MarkdownContent<PostFrontMatter>>>()
+            .Select(static post => new { Slug = PostSlug.From(post.Path), ContentKey = post.Path }));
         builder.AddRssFeed(static services => services
-            .GetRequiredService<ContentDictionary<MarkdownContent<PostFrontMatter>>>()
-            .OrderByDescending(static post => post.Value.FrontMatter.CreatedAt)
+            .GetRequiredService<ContentCollection<MarkdownContent<PostFrontMatter>>>()
+            .OrderByDescending(static post => post.FrontMatter.CreatedAt)
             .Select(static post => new FeedItem(
-                post.Value.FrontMatter.Title ?? string.Empty,
-                post.Value.FrontMatter.Description ?? string.Empty,
-                post.Value.FrontMatter.CreatedAt ?? DateTimeOffset.UnixEpoch,
-                RelativePath: $"blog/{PostSlug.From(post.Value.FileInfo)}/")));
+                post.FrontMatter.Title ?? string.Empty,
+                post.FrontMatter.Description ?? string.Empty,
+                post.FrontMatter.CreatedAt ?? DateTimeOffset.UnixEpoch,
+                RelativePath: $"blog/{PostSlug.From(post.Path)}/")));
         builder.AddSitemap();
 
         await using var app = builder.Build();

@@ -7,7 +7,7 @@ namespace Kiji.Tests.TestSite.Pages;
 public sealed class PostPage : ComponentBase
 {
     [Inject]
-    public ContentDictionary<Post> Posts { get; set; } = default!;
+    public ContentCollection<Post> Posts { get; set; } = default!;
 
     [Parameter]
     public string Slug { get; set; } = string.Empty;

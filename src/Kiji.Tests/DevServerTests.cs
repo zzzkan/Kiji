@@ -491,8 +491,8 @@ public sealed class DevServerTests : IAsyncDisposable
         builder.AddMarkdownContent<FrontMatter, ScopedNote>(ScopedNote.Create,
             options => options.Directory = SourcePath(notes));
         builder.AddPageParameters<MarkdownPostTestPage>(services => services
-            .GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
-            .Select(post => new { Slug = "post", ContentKey = post.Key }));
+            .GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>()
+            .Select(post => new { Slug = "post", ContentKey = post.Path }));
         builder.AddPageParameters<ScopedNotesIndexPage>(_ => [new { Kind = "all" }]);
         _app = builder.Build();
         using var logs = new StringWriter();
@@ -564,7 +564,7 @@ public sealed class DevServerTests : IAsyncDisposable
             {
                 Interlocked.Increment(ref _contentLoads);
                 return TestArticleContents.CreatePost(
-                        Path.GetFileNameWithoutExtension(content.FileInfo.Name),
+                        Path.GetFileNameWithoutExtension(content.Path),
                         content.FrontMatter.Title!,
                         "desc",
                         new DateOnly(2026, 1, 1),

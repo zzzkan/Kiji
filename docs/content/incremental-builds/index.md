@@ -29,22 +29,25 @@ Reusing HTML does not replay its log messages, and logs never fail a publish; se
 
 ## Page dependencies
 
-`Posts[ContentKey]` depends on one item. Enumerating a dictionary, reading `Count`, `Keys`,
-or `Values`, or looking up a missing key depends on the whole collection, even if you
+`Posts[ContentKey]` depends on one item. Enumerating a collection, reading `Count`,
+or looking up a missing ID depends on the whole collection, even if you
 filter afterward. Reads in layouts and child components count too: a layout that lists
 every post makes every page depend on all posts.
 
-Pass a content key or another simple value through `AddPageParameters` and look the item
+Pass a content ID or another simple value through `AddPageParameters` and look the item
 up while rendering. Passing whole models or arrays works but disables reuse for that page;
 see the [reusable parameter types](../api-reference/#pages).
 
 ## Render pages that use external data
 
-Kiji tracks reads through `ContentDictionary<T>`. To track other data, load it with
-[AddContentSource](../api-reference/#content-sources-and-contentdictionary) and supply
-digests. Configuration changes already render every page. Kiji cannot see other reads,
-such as files, HTTP, environment variables, the clock, or service state. Mark components
-that render such values:
+Kiji tracks reads through `ContentCollection<T>`. Compute derived data while rendering,
+or share the calculation through `builder.Services.AddScoped<T>()`. For per-item data,
+use Markdown files with front matter and no body. For small datasets, add a project-local
+JSON file with `builder.Configuration.AddJsonFile`; configuration changes render every page.
+For data fetched externally, use `[AlwaysRender]` on components that display it.
+
+Kiji cannot see other reads, such as files, HTTP, environment variables, the clock, or
+service state. Mark components that render such values:
 
 ```razor
 @attribute [AlwaysRender]
@@ -56,8 +59,7 @@ Every page that renders the component, including through a layout, is rendered o
 publish. If external state decides whether a child component appears, mark the parent.
 
 `AlwaysRender` only re-renders HTML; it does not refresh data a service has cached, and
-content reloads do not recreate singletons. Build shared derived data with
-`AddContentSource` instead. During development, restart `dotnet watch` when external data
+content reloads do not recreate singletons. Compute shared derived data during rendering or in scoped services. During development, restart `dotnet watch` when external data
 changes.
 
 ## Reset and inspect

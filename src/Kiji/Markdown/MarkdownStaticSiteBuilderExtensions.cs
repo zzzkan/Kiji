@@ -8,7 +8,7 @@ namespace Kiji.Markdown;
 /// </summary>
 public static class MarkdownStaticSiteBuilderExtensions
 {
-    /// <summary>Adds Markdown files as a content dictionary with parsed front matter and lazily rendered bodies.</summary>
+    /// <summary>Adds Markdown files as a content collection with parsed front matter and lazily rendered bodies.</summary>
     public static StaticSiteBuilder AddMarkdownContent<TFrontMatter>(
         this StaticSiteBuilder builder,
         Action<MarkdownContentOptions>? configure = null)
@@ -19,12 +19,47 @@ public static class MarkdownStaticSiteBuilderExtensions
             configure);
     }
 
-    /// <summary>Adds Markdown files projected into a dictionary of custom models.</summary>
+    /// <summary>Adds Markdown files projected into a collection of custom models.</summary>
     /// <param name="select">Projects each parsed file independently; the result must not depend on other items.</param>
     public static StaticSiteBuilder AddMarkdownContent<TFrontMatter, TModel>(
         this StaticSiteBuilder builder,
         Func<MarkdownContent<TFrontMatter>, TModel> select,
         Action<MarkdownContentOptions>? configure = null)
+        where TFrontMatter : class
+        where TModel : class
+        => AddMarkdownContentCore(builder, null, select, configure);
+
+    /// <summary>Adds a keyed collection of Markdown files with parsed front matter and lazily rendered bodies.</summary>
+    public static StaticSiteBuilder AddKeyedMarkdownContent<TFrontMatter>(
+        this StaticSiteBuilder builder,
+        string serviceKey,
+        Action<MarkdownContentOptions>? configure = null)
+        where TFrontMatter : class
+        => builder.AddKeyedMarkdownContent<TFrontMatter, MarkdownContent<TFrontMatter>>(
+            serviceKey, static content => content, configure);
+
+    /// <summary>Adds Markdown files projected into a keyed collection of custom models.</summary>
+    /// <param name="builder">The site builder.</param>
+    /// <param name="serviceKey">A non-empty service key identifying this collection.</param>
+    /// <param name="select">Projects each parsed file independently; the result must not depend on other items.</param>
+    /// <param name="configure">Selects the source directory and files.</param>
+    public static StaticSiteBuilder AddKeyedMarkdownContent<TFrontMatter, TModel>(
+        this StaticSiteBuilder builder,
+        string serviceKey,
+        Func<MarkdownContent<TFrontMatter>, TModel> select,
+        Action<MarkdownContentOptions>? configure = null)
+        where TFrontMatter : class
+        where TModel : class
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(serviceKey);
+        return AddMarkdownContentCore(builder, serviceKey, select, configure);
+    }
+
+    private static StaticSiteBuilder AddMarkdownContentCore<TFrontMatter, TModel>(
+        StaticSiteBuilder builder,
+        string? serviceKey,
+        Func<MarkdownContent<TFrontMatter>, TModel> select,
+        Action<MarkdownContentOptions>? configure)
         where TFrontMatter : class
         where TModel : class
     {
@@ -51,7 +86,7 @@ public static class MarkdownStaticSiteBuilderExtensions
                 var sources = new MarkdownContentsBuilder<TFrontMatter>(
                     sourceDirectory,
                     (content, cancellationToken) => markdownProcessor.ProcessBodyAsync(
-                        content.FileInfo.FullName,
+                        content.SourcePath,
                         content.Body,
                         cancellationToken),
                     options.CreateDeserializer,
@@ -61,7 +96,7 @@ public static class MarkdownStaticSiteBuilderExtensions
                     .Build();
 
                 // Keep the parsed-byte hash even when the projection hides its source.
-                var items = new (string Key, TModel Item, string? Digest)[sources.Count];
+                var items = new (string Id, TModel Item, string? Digest)[sources.Count];
                 for (var i = 0; i < sources.Count; i++)
                 {
                     items[i] = (sources[i].Path, select(sources[i]), sources[i].ContentHash);
@@ -69,6 +104,7 @@ public static class MarkdownStaticSiteBuilderExtensions
 
                 return items;
             },
-            directory: directory);
+            directory: directory,
+            serviceKey: serviceKey);
     }
 }

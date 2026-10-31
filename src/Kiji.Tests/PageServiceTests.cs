@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Reflection.Emit;
 using Kiji.Feeds;
+using Kiji.Markdown;
 using Kiji.Tests.TestSite.PageServices;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -82,9 +83,12 @@ public sealed class PageServiceTests : IDisposable
     [InlineData("environment")]
     [InlineData("content")]
     [InlineData("configuration")]
+    [InlineData("keyed-content-remove")]
+    [InlineData("keyed-content-replace")]
     public void Build_ValidatesTheFinalManagedRegistrations(string operation)
     {
         var builder = CreateBuilder(new ServiceProbe());
+        builder.AddKeyedMarkdownContent<Kiji.Tests.FrontMatter>("posts");
         var services = builder.Services;
         switch (operation)
         {
@@ -94,11 +98,17 @@ public sealed class PageServiceTests : IDisposable
             case "remove-site": services.RemoveAll<SiteInfo>(); break;
             case "duplicate-site": services.AddSingleton(builder.SiteInfo); break;
             case "keyed": services.AddKeyedSingleton("alternate", builder.SiteInfo); break;
-            case "open-generic": services.AddSingleton(typeof(ContentDictionary<>), typeof(ContentDictionary<>)); break;
+            case "open-generic": services.AddSingleton(typeof(ContentCollection<>), typeof(ContentCollection<>)); break;
             case "provider": services.AddSingleton<IServiceProvider>(_ => throw new NotSupportedException()); break;
             case "environment": services.Replace(ServiceDescriptor.Singleton(builder.Environment)); break;
-            case "content": services.RemoveAll<ContentDictionary<ServiceProbe>>(); break;
+            case "content": services.RemoveAll<ContentCollection<ServiceProbe>>(); break;
             case "configuration": services.AddSingleton<Microsoft.Extensions.Configuration.IConfiguration>(new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build()); break;
+            case "keyed-content-remove": services.Remove(services.Single(descriptor => descriptor.IsKeyedService)); break;
+            case "keyed-content-replace":
+                var keyed = services.Single(descriptor => descriptor.IsKeyedService);
+                services.Remove(keyed);
+                services.Add(ServiceDescriptor.KeyedSingleton(keyed.ServiceType, "replacement", keyed.KeyedImplementationInstance!));
+                break;
         }
         var exception = Assert.Throws<InvalidOperationException>(() => builder.Build());
         Assert.Contains("managed by Kiji", exception.Message, StringComparison.Ordinal);
@@ -182,7 +192,6 @@ public sealed class PageServiceTests : IDisposable
     [InlineData("route")]
     [InlineData("feed")]
     [InlineData("artifact")]
-    [InlineData("loader")]
     public async Task PageServices_CannotBeResolvedOutsidePage(string consumer)
     {
         var builder = CreateBuilder();
@@ -210,18 +219,6 @@ public sealed class PageServiceTests : IDisposable
                     return Task.CompletedTask;
                 });
                 break;
-            case "loader":
-                builder.AddContentSource<ServiceProbe>(provider =>
-                {
-                    _ = provider.GetRequiredService<IDisposable>();
-                    return [];
-                });
-                builder.AddPageParameters<ServicePage>(provider =>
-                {
-                    _ = provider.GetRequiredService<ContentDictionary<ServiceProbe>>().Count;
-                    return [];
-                });
-                break;
         }
         await using var app = builder.Build();
         var exception = await Assert.ThrowsAnyAsync<Exception>(() => app.PublishAsync(Path.Combine(_root, "dist")));
@@ -235,10 +232,10 @@ public sealed class PageServiceTests : IDisposable
         builder.SiteInfo = new SiteInfo { Name = "Services", BaseUrl = new Uri("https://example.test/") };
         if (probe is not null)
         {
-            builder.AddContentSource<ServiceProbe>("probes", _ => [new ContentEntry<ServiceProbe>("0", probe, "stable")]);
+            builder.RegisterContent<ServiceProbe>(_ => [("0", probe, "stable")], "probes");
             builder.Services.AddScoped<RenderDependency>();
             builder.Services.AddScoped<IRenderService>(provider => new RenderService(
-                provider.GetRequiredService<ContentDictionary<ServiceProbe>>(),
+                provider.GetRequiredService<ContentCollection<ServiceProbe>>(),
                 provider.GetRequiredService<RenderDependency>(), provider.GetRequiredService<PageInfo>()));
             builder.UseDefaultLayout<ServiceLayout>();
         }

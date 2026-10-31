@@ -8,7 +8,7 @@ builder.SiteInfo = new() { Name = "Package consumer", BaseUrl = new Uri("https:/
 builder.Services.AddLocalization();
 builder.AddMarkdownContent<Article>();
 builder.AddPageParameters<ArticlePage>(services => services
-    .GetRequiredService<ContentDictionary<MarkdownContent<Article>>>()
-    .Select(entry => new { Slug = Path.GetFileNameWithoutExtension(entry.Key), ContentKey = entry.Key }));
+    .GetRequiredService<ContentCollection<MarkdownContent<Article>>>()
+    .Select(entry => new { Slug = Path.GetFileNameWithoutExtension(entry.Path), ContentKey = entry.Path }));
 
 return await builder.Build().RunAsync();

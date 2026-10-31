@@ -14,7 +14,7 @@ namespace Kiji.Tests;
 public sealed class RelatedPostsTestPage : ComponentBase
 {
     [Inject]
-    public ContentDictionary<MarkdownContent<FrontMatter>> Posts { get; set; } = default!;
+    public ContentCollection<MarkdownContent<FrontMatter>> Posts { get; set; } = default!;
 
     [Parameter]
     public string Slug { get; set; } = string.Empty;
@@ -29,9 +29,9 @@ public sealed class RelatedPostsTestPage : ComponentBase
         builder.CloseElement();
 
         builder.OpenElement(2, "ul");
-        foreach (var (key, post) in Posts)
+        foreach (var post in Posts)
         {
-            if (string.Equals(key, ContentKey, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(post.Path, ContentKey, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }

@@ -2,7 +2,7 @@ namespace Kiji.Tests.TestSite.PageServices;
 
 public sealed class RenderService : IRenderService, IAsyncDisposable
 {
-    public RenderService(ContentDictionary<ServiceProbe> probes, RenderDependency dependency, PageInfo page)
+    public RenderService(ContentCollection<ServiceProbe> probes, RenderDependency dependency, PageInfo page)
     {
         Probe = probes["0"];
         Dependency = dependency;

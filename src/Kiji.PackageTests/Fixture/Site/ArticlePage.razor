@@ -1,5 +1,5 @@
 @page "/articles/{Slug}/"
-@inject ContentDictionary<MarkdownContent<Article>> Articles
+@inject ContentCollection<MarkdownContent<Article>> Articles
 <PageTitle>@title</PageTitle>
 <MarkdownBody Content="@Articles[ContentKey]" />
 @code {

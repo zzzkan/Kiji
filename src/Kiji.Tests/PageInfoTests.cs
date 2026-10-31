@@ -36,7 +36,6 @@ public sealed class PageInfoTests : IDisposable
 
     [Theory]
     [InlineData("route")]
-    [InlineData("content")]
     [InlineData("feed")]
     [InlineData("artifact")]
     public async Task PageInfo_CannotBeResolvedOutsidePage(string consumer)
@@ -50,11 +49,6 @@ public sealed class PageInfoTests : IDisposable
                     _ = provider.GetRequiredService<PageInfo>();
                     return [new { Key = "test" }];
                 });
-                break;
-            case "content":
-                builder.AddContentSource<PageInfo>(provider => [provider.GetRequiredService<PageInfo>()]);
-                builder.AddPageParameters<PageInfoTestPage>(provider => provider.GetRequiredService<ContentDictionary<PageInfo>>()
-                    .Select(entry => new { Key = entry.Key }));
                 break;
             case "feed":
                 builder.AddRssFeed(provider =>

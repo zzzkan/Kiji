@@ -261,10 +261,10 @@ public sealed record BlogPost(
     {
         if (string.IsNullOrWhiteSpace(content.FrontMatter.Title) || content.FrontMatter.Date is null)
         {
-            throw new InvalidOperationException($"{content.FileInfo.FullName}: posts require a title and date.");
+            throw new InvalidOperationException($"{content.Path}: posts require a title and date.");
         }
 
-        return new BlogPost(content.FileInfo.Directory!.Name,
+        return new BlogPost(Path.GetFileName(Path.GetDirectoryName(content.Path))!,
             content.FrontMatter.Title, content.FrontMatter.Description,
             content.FrontMatter.Date.Value, content);
     }
@@ -279,7 +279,7 @@ component which Markdown item to render:
 @using Kiji
 @using MySite.Components
 @using MySite.Models
-@inject ContentDictionary<BlogPost> Posts
+@inject ContentCollection<BlogPost> Posts
 
 @if (_post is not null)
 {
@@ -332,15 +332,15 @@ builder.AddMarkdownContent<PostFrontMatter, BlogPost>(BlogPost.Create,
     options => options.Directory = "content/posts");
 builder.UseDefaultLayout<MainLayout>();
 builder.AddPageParameters<PostPage>(services => services
-    .GetRequiredService<ContentDictionary<BlogPost>>()
-    .Select(post => new { post.Value.Slug, ContentKey = post.Key }));
+    .GetRequiredService<ContentCollection<BlogPost>>()
+    .Select(post => new { post.Slug, ContentKey = post.Content.Path }));
 
 return await builder.Build().RunAsync();
 ```
 
 `AddMarkdownContent` calls `BlogPost.Create` for each Markdown file and registers
-`ContentDictionary<BlogPost>`. `AddPageParameters` gives each post's page its `Slug` for
-the URL and its dictionary key as `ContentKey`.
+`ContentCollection<BlogPost>`. `AddPageParameters` gives each post's page its `Slug` for
+the URL and its collection ID as `ContentKey`.
 
 Restart `dotnet watch` and open <http://localhost:8080/posts/hello-kiji/>:
 
@@ -356,13 +356,13 @@ Replace `Pages/Home.razor` with a list of posts, newest first:
 @using MySite.Components
 @using MySite.Models
 @inject SiteInfo Site
-@inject ContentDictionary<BlogPost> Posts
+@inject ContentCollection<BlogPost> Posts
 
 <PageHead Title="Home" />
 
 <h1>@Site.Name</h1>
 <ul>
-    @foreach (var post in Posts.Values.OrderByDescending(post => post.Date))
+    @foreach (var post in Posts.OrderByDescending(post => post.Date))
     {
         <li>
             <time datetime="@post.Date.ToString("yyyy-MM-dd")">@post.Date.ToString("yyyy-MM-dd")</time>

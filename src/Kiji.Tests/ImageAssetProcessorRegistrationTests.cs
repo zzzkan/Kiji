@@ -27,8 +27,8 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
         else { builder.Services.AddSingleton<IImageProcessor>(_ => processor); }
         builder.Services.AddKeyedScoped<IImageProcessor>("other", (_, _) => throw new InvalidOperationException("Keyed factory must not run."));
         builder.AddMarkdownContent<FrontMatter>();
-        builder.AddPageParameters<MarkdownPostTestPage>(provider => provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
-            .Select(post => new { Slug = Path.GetFileNameWithoutExtension(post.Value.FileInfo.Name), ContentKey = post.Key }));
+        builder.AddPageParameters<MarkdownPostTestPage>(provider => provider.GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>()
+            .Select(post => new { Slug = Path.GetFileNameWithoutExtension(post.Path), ContentKey = post.Path }));
         await using (var app = builder.Build())
         {
             var output = Path.Combine(_root, "dist");

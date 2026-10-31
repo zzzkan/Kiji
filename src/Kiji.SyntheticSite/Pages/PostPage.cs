@@ -8,7 +8,7 @@ namespace Kiji.SyntheticSite.Pages;
 public sealed class PostPage : ComponentBase
 {
     [Inject]
-    public ContentDictionary<MarkdownContent<PostFrontMatter>> Posts { get; set; } = default!;
+    public ContentCollection<MarkdownContent<PostFrontMatter>> Posts { get; set; } = default!;
 
     [Parameter]
     public string Slug { get; set; } = string.Empty;

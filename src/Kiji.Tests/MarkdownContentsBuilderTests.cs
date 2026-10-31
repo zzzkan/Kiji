@@ -49,7 +49,7 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
         Assert.Equal(0, renders);
 
         var item = Assert.Single(contents);
-        Assert.Equal("test-post", Path.GetFileNameWithoutExtension(item.FileInfo.Name));
+        Assert.Equal("test-post", Path.GetFileNameWithoutExtension(item.Path));
         Assert.Equal("Test Post", item.FrontMatter.Title);
         var html = await item.RenderAsync();
         Assert.Contains("<h1", html, StringComparison.Ordinal);
@@ -65,13 +65,13 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
         await File.WriteAllTextAsync(markdownPath, CreateValidMarkdown("Update Test", new DateTime(2024, 1, 15), "Original content."));
 
         var firstContents = CreateBuilder().Build();
-        var firstItem = Assert.Single(firstContents, static item => Path.GetFileNameWithoutExtension(item.FileInfo.Name) == "update-test");
+        var firstItem = Assert.Single(firstContents, static item => Path.GetFileNameWithoutExtension(item.Path) == "update-test");
         Assert.Contains("Original content.", await firstItem.RenderAsync(), StringComparison.Ordinal);
 
         await File.WriteAllTextAsync(markdownPath, CreateValidMarkdown("Update Test", new DateTime(2024, 1, 15), "Updated content."));
 
         var secondContents = CreateBuilder().Build();
-        var secondItem = Assert.Single(secondContents, static item => Path.GetFileNameWithoutExtension(item.FileInfo.Name) == "update-test");
+        var secondItem = Assert.Single(secondContents, static item => Path.GetFileNameWithoutExtension(item.Path) == "update-test");
 
         Assert.Contains("Original content.", await firstItem.RenderAsync(), StringComparison.Ordinal);
         Assert.Contains("Updated content.", await secondItem.RenderAsync(), StringComparison.Ordinal);
@@ -92,7 +92,7 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
 
         var contents = CreateBuilder().Build();
 
-        Assert.Equal(expected, contents.Select(static item => Path.GetFileNameWithoutExtension(item.FileInfo.Name)));
+        Assert.Equal(expected, contents.Select(static item => Path.GetFileNameWithoutExtension(item.Path)));
         Assert.All(contents, static item => Assert.NotNull(item.FrontMatter.Title));
     }
 
@@ -132,8 +132,8 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
         var second = builder.Build();
 
         Assert.Same(
-            Assert.Single(first, static item => Path.GetFileNameWithoutExtension(item.FileInfo.Name) == "changing").FrontMatter,
-            Assert.Single(second, static item => Path.GetFileNameWithoutExtension(item.FileInfo.Name) == "changing").FrontMatter);
+            Assert.Single(first, static item => Path.GetFileNameWithoutExtension(item.Path) == "changing").FrontMatter,
+            Assert.Single(second, static item => Path.GetFileNameWithoutExtension(item.Path) == "changing").FrontMatter);
 
         await File.WriteAllTextAsync(
             Path.Combine(_contentsDir, "changing.md"),
@@ -143,10 +143,10 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
 
         Assert.Equal(
             "Changing Updated Title",
-            Assert.Single(third, static item => Path.GetFileNameWithoutExtension(item.FileInfo.Name) == "changing").FrontMatter.Title);
+            Assert.Single(third, static item => Path.GetFileNameWithoutExtension(item.Path) == "changing").FrontMatter.Title);
         Assert.Same(
-            Assert.Single(first, static item => Path.GetFileNameWithoutExtension(item.FileInfo.Name) == "stable").FrontMatter,
-            Assert.Single(third, static item => Path.GetFileNameWithoutExtension(item.FileInfo.Name) == "stable").FrontMatter);
+            Assert.Single(first, static item => Path.GetFileNameWithoutExtension(item.Path) == "stable").FrontMatter,
+            Assert.Single(third, static item => Path.GetFileNameWithoutExtension(item.Path) == "stable").FrontMatter);
     }
 
     private MarkdownContentsBuilder<FrontMatter> CreateBuilder()
@@ -158,7 +158,7 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
     {
         ArgumentNullException.ThrowIfNull(content);
 
-        return _markdownProcessor.ProcessBodyAsync(content.FileInfo.FullName, content.Body, cancellationToken);
+        return _markdownProcessor.ProcessBodyAsync(content.SourcePath, content.Body, cancellationToken);
     }
 
     private static string CreateValidMarkdown(string title, DateTime createdAt, string content = "Test content.")

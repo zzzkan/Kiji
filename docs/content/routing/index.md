@@ -81,8 +81,8 @@ component. Use this to look up content by key without putting the key in the URL
 
 ```csharp
 builder.AddPageParameters<PostPage>(services => services
-    .GetRequiredService<ContentDictionary<Post>>()
-    .Select(post => new { post.Value.Slug, ContentKey = post.Key }));
+    .GetRequiredService<ContentCollection<Post>>()
+    .Select(post => new { post.Slug, ContentKey = post.Content.Path }));
 ```
 
 Every supplied name must match a component parameter. Omitted parameters keep their

@@ -33,7 +33,7 @@ This is a Markdown-backed page.
 builder.AddMarkdownContent<FrontMatter>();
 ```
 
-This registers `ContentDictionary<MarkdownContent<FrontMatter>>`. It creates no pages by
+This registers `ContentCollection<MarkdownContent<FrontMatter>>`. It creates no pages by
 itself; map items to pages with `AddPageParameters<TPage>` as in
 [Getting started](../getting-started/#add-a-markdown-page).
 
@@ -79,21 +79,32 @@ public sealed record Post(string Slug, string Title, MarkdownContent<FrontMatter
 
 ```csharp
 builder.AddMarkdownContent<FrontMatter, Post>(content => new Post(
-    Slug: content.FileInfo.Directory!.Name,
+    Slug: Path.GetFileName(Path.GetDirectoryName(content.Path))!,
     Title: content.FrontMatter.Title ?? "Untitled",
     Content: content));
 ```
 
-This registers `ContentDictionary<Post>` instead. The projection sees one file at a time;
-build collection-wide results, such as tag counts, with
-[AddContentSource](../api-reference/#content-sources-and-contentdictionary).
+This registers `ContentCollection<Post>` instead. The projection sees one file at a time;
+compute collection-wide results, such as tag counts, while rendering or in a scoped service.
+
+## Register several collections of the same type
+
+Use a service key for sources such as translations or documentation versions:
+
+```csharp
+builder.AddKeyedMarkdownContent<FrontMatter>("en", options => options.Directory = "content/en");
+builder.AddKeyedMarkdownContent<FrontMatter>("ja", options => options.Directory = "content/ja");
+var english = services.GetRequiredKeyedService<ContentCollection<MarkdownContent<FrontMatter>>>("en");
+```
+
+A key identifies the DI service; each item's ID is still its `Path` relative to that source.
 
 ## Render a Markdown body
 
 Look up the item by the key passed through `AddPageParameters` and use `MarkdownBody`:
 
 ```razor
-@inject ContentDictionary<MarkdownContent<FrontMatter>> Posts
+@inject ContentCollection<MarkdownContent<FrontMatter>> Posts
 
 <div class="prose"><MarkdownBody Content="@Posts[ContentKey]" /></div>
 

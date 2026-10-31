@@ -21,8 +21,8 @@ builder.AddMarkdownContent<FrontMatter, Article>(
 builder.UseDefaultLayout<MainLayout>();
 builder.UseNotFoundPage<NotFoundPage>();
 builder.AddPageParameters<ArticlePage>(static services => services
-    .GetRequiredService<ContentDictionary<Article>>()
-    .Select(static doc => new { doc.Value.Slug, ContentKey = doc.Key }));
+    .GetRequiredService<ContentCollection<Article>>()
+    .Select(static doc => new { doc.Slug, ContentKey = doc.Id }));
 builder.AddSitemap();
 
 return await builder.Build().RunAsync();

@@ -49,7 +49,7 @@ public sealed class AppConfigurationTests : IDisposable
         var routeCalls = 0;
         string? observedOutput = null;
         string? observedCache = null;
-        builder.AddContentSource<Post>(provider =>
+        builder.RegisterContent<Post>(provider =>
         {
             loads++;
             observedOutput = provider.GetRequiredService<ResolvedSitePaths>().OutputDirectory;
@@ -61,7 +61,7 @@ public sealed class AppConfigurationTests : IDisposable
         builder.AddPageParameters<PostPage>(provider =>
         {
             routeCalls++;
-            _ = provider.GetRequiredService<ContentDictionary<Post>>().Count;
+            _ = provider.GetRequiredService<ContentCollection<Post>>().Count;
             return [];
         });
 
@@ -100,7 +100,7 @@ public sealed class AppConfigurationTests : IDisposable
             Assert.Throws<InvalidOperationException>(() => builder.Build());
             Assert.Throws<InvalidOperationException>(() => builder.Services.AddScoped<object>());
             Assert.Throws<InvalidOperationException>(() => builder.SiteInfo = TestArticleContents.CreateSiteInfo());
-            Assert.Throws<InvalidOperationException>(() => builder.AddContentSource<object>(static _ => []));
+            Assert.Throws<InvalidOperationException>(() => builder.RegisterContent<object>(static _ => []));
             Assert.Throws<InvalidOperationException>(() => builder.AddMarkdownContent<FrontMatter>(
                 _ => throw new Xunit.Sdk.XunitException("Configuration callback must not run after the site is built.")));
             Assert.Throws<InvalidOperationException>(() => builder.AddPageAssembly(typeof(PostPage).Assembly));

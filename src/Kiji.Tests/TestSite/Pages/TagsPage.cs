@@ -7,7 +7,7 @@ namespace Kiji.Tests.TestSite.Pages;
 public sealed class TagsPage : ComponentBase
 {
     [Inject]
-    public ContentDictionary<Post> Posts { get; set; } = default!;
+    public ContentCollection<Post> Posts { get; set; } = default!;
 
     [Parameter]
     public string TagSlug { get; set; } = string.Empty;
@@ -17,7 +17,7 @@ public sealed class TagsPage : ComponentBase
 
     protected override void OnParametersSet()
     {
-        var tag = Posts.Values
+        var tag = Posts
             .SelectMany(static post => post.Tags)
             .Where(tag => string.Equals(tag.UrlSlug, TagSlug, StringComparison.OrdinalIgnoreCase))
             .OrderBy(static tag => tag.Name, StringComparer.OrdinalIgnoreCase)
@@ -27,7 +27,7 @@ public sealed class TagsPage : ComponentBase
             ?? throw new KeyNotFoundException($"Tag '{TagSlug}' was not found.");
         _posts =
         [
-            .. Posts.Values
+            .. Posts
                 .Where(post => post.Tags.Any(tagItem => string.Equals(tagItem.UrlSlug, TagSlug, StringComparison.OrdinalIgnoreCase)))
                 .OrderByDescending(static post => post.CreatedAt),
         ];

@@ -30,6 +30,8 @@ public sealed class Post
     /// <summary>The slug is what routes and feeds correlate on, so it is the key.</summary>
     public string Key => Slug;
 
+    public string Id => _content.Path;
+
     public string Slug { get; }
 
     public string SlugUrlEncoded { get; }
@@ -56,15 +58,15 @@ public sealed class Post
         var frontMatter = content.FrontMatter;
         if (string.IsNullOrWhiteSpace(frontMatter.Title))
         {
-            throw new InvalidOperationException($"Missing title in front matter: {content.FileInfo.FullName}");
+            throw new InvalidOperationException($"Missing title in front matter: {content.Path}");
         }
 
         if (frontMatter.CreatedAt is null)
         {
-            throw new InvalidOperationException($"Missing createdAt in front matter: {content.FileInfo.FullName}");
+            throw new InvalidOperationException($"Missing createdAt in front matter: {content.Path}");
         }
 
-        var slug = CreateSlug(content.FileInfo);
+        var slug = CreateSlug(content.Path);
         var tags = (frontMatter.Tags ?? [])
             .OrderBy(static tag => tag, StringComparer.OrdinalIgnoreCase)
             .Select(static tag => new Tag
@@ -85,16 +87,16 @@ public sealed class Post
             tags);
     }
 
-    private static string CreateSlug(FileInfo fileInfo)
+    private static string CreateSlug(string path)
     {
-        ArgumentNullException.ThrowIfNull(fileInfo);
+        ArgumentNullException.ThrowIfNull(path);
 
-        var value = string.Equals(fileInfo.Name, "index.md", StringComparison.OrdinalIgnoreCase)
-            ? fileInfo.Directory?.Name
-            : Path.GetFileNameWithoutExtension(fileInfo.Name);
+        var value = string.Equals(Path.GetFileName(path), "index.md", StringComparison.OrdinalIgnoreCase)
+            ? Path.GetFileName(Path.GetDirectoryName(path))
+            : Path.GetFileNameWithoutExtension(Path.GetFileName(path));
         if (string.IsNullOrWhiteSpace(value))
         {
-            throw new InvalidOperationException($"Cannot determine slug for markdown file: {fileInfo.FullName}");
+            throw new InvalidOperationException($"Cannot determine slug for markdown file: {path}");
         }
 
         return NormalizeSlug(value);

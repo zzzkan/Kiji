@@ -53,8 +53,8 @@ public sealed class SiteArtifactTests : IDisposable
     {
         var artifact = new RecordingArtifact("meta/info.txt");
         var builder = await CreateBuilderAsync(artifact);
-        builder.AddPageParameters<MirrorPostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
-            .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
+        builder.AddPageParameters<MirrorPostPage>(static services => services.GetRequiredService<ContentCollection<Post>>()
+            .Select(static post => new { post.Slug, ContentKey = post.Id }));
         builder.AddSitemap("seo/sitemap.xml", ["mirror/hello-world/"]);
 
         await using var app = builder.Build();
@@ -218,7 +218,7 @@ public sealed class SiteArtifactTests : IDisposable
                 null,
                 "Testing"),
         ];
-        builder.AddContentSource<Post>(_ => items);
+        builder.RegisterContent<Post>(_ => [.. items.Select(post => (post.Id, post, Digest: (string?)null))]);
         TestArticleContents.MapSite(builder);
         foreach (var artifact in artifacts)
         {

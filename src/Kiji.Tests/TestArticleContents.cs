@@ -45,7 +45,7 @@ internal static class TestArticleContents
         builder.SiteInfo = CreateSiteInfo();
 
         IReadOnlyList<Post> items = [.. entries.Select(static entry => ClonePost(entry.Metadata, entry.Html))];
-        builder.AddContentSource(_ => items);
+        builder.RegisterContent<Post>(_ => [.. items.Select(post => (post.Id, post, Digest: (string?)null))]);
         MapSite(builder);
         return builder.Build();
     }
@@ -70,9 +70,9 @@ internal static class TestArticleContents
         MapTestAssemblyPages(builder);
         builder.UseNotFoundPage<NotFoundPage>();
 
-        builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentDictionary<Post>>()
-            .Select(static post => new { post.Value.Slug, ContentKey = post.Key }));
-        builder.AddPageParameters<TagsPage>(static services => services.GetRequiredService<ContentDictionary<Post>>().Values
+        builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentCollection<Post>>()
+            .Select(static post => new { post.Slug, ContentKey = post.Id }));
+        builder.AddPageParameters<TagsPage>(static services => services.GetRequiredService<ContentCollection<Post>>()
             .SelectMany(static post => post.Tags.Select(static tag => tag.UrlSlug))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Select(static slug => new { TagSlug = slug }));

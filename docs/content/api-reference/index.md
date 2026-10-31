@@ -174,7 +174,7 @@ builder.Services.AddScoped<RelatedPosts>();
 - Each page render has its own scope, shared by its page, layout, and child components.
 - Content loaders, page parameter and feed factories, and artifact writers cannot resolve
   scoped services.
-- `SiteInfo`, `PageInfo`, `IHostEnvironment`, `IConfiguration`, and `ContentDictionary<T>` come
+- `SiteInfo`, `PageInfo`, `IHostEnvironment`, `IConfiguration`, and `ContentCollection<T>` come
   from Kiji and cannot be replaced.
 
 ### Page metadata
@@ -207,55 +207,24 @@ Its `ImportMapDefinition` parameter accepts a custom map. See the
 
 ## Content and images
 
-### Content sources and ContentDictionary
+### Content collections
 
-`ContentDictionary<T>` is a read-only `IReadOnlyDictionary<string, T>` that components and
-factories inject. Keys ignore case and do not determine URLs; Markdown keys are paths
-relative to the content directory, using `/`. Enumeration keeps source order. Reads are
-tracked as [page dependencies](../incremental-builds/#page-dependencies).
+`ContentCollection<T>` is an `IReadOnlyCollection<T>` resolved through dependency injection.
+Enumeration returns items in source order. Treat items as immutable. Markdown IDs are paths
+relative to the content directory, using `/` and including `.md`; they do not determine URLs.
+IDs ignore case. Reads are tracked as [page dependencies](../incremental-builds/#page-dependencies).
 
-`AddContentSource` registers custom data, such as JSON, or an index derived from other
-content, such as tag counts. The loader runs when the content is first read, and again
-after content changes during development. Treat loaded values as immutable.
+| Member | Behavior |
+| --- | --- |
+| `int Count` | Number of items; observes the collection. |
+| `GetEnumerator()` | Enumerates items in source order; observes the collection. |
+| `T this[string id]` | Looks up an item; throws `KeyNotFoundException` if absent. |
+| `bool TryGetValue(string id, out T? item)` | Looks up an item, or returns `false`. |
+| `bool Contains(string id)` | Tests whether the item exists. |
 
-#### `AddContentSource<T>(Func<IServiceProvider, IReadOnlyList<T>> loader)`
-
-Items get the keys `"0"`, `"1"`, and so on. Pages that read them render on every publish.
-This example counts the tags of the [Markdown example](../markdown/#register-markdown-content):
-
-```csharp
-public sealed record TagSummary(string Name, int Count);
-```
-
-```csharp
-builder.AddMarkdownContent<FrontMatter>();
-builder.AddContentSource<TagSummary>(LoadTags);
-
-static IReadOnlyList<TagSummary> LoadTags(IServiceProvider services) =>
-    services.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
-        .Values
-        .SelectMany(post => post.FrontMatter.Tags.Distinct(StringComparer.OrdinalIgnoreCase))
-        .GroupBy(tag => tag, StringComparer.OrdinalIgnoreCase)
-        .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
-        .Select(group => new TagSummary(group.Key, group.Count()))
-        .ToArray();
-```
-
-#### `AddContentSource<T>(string sourceId, Func<IServiceProvider, IReadOnlyList<ContentEntry<T>>> loader)`
-
-Give each item an `Id` and a `Digest` so that pages reading unchanged items can be reused:
-
-```csharp
-builder.AddContentSource<TagSummary>("tag-summary", services =>
-    LoadTags(services)
-        .Select(tag => new ContentEntry<TagSummary>(Id: tag.Name, Value: tag, Digest: tag.ToString()))
-        .ToArray());
-```
-
-Keep `sourceId` stable between builds. `Id` identifies an item regardless of its position.
-`Digest` must change whenever anything affecting the value changes; here the record's
-`ToString()` includes both fields. A wrong digest can reuse stale HTML, so use `null` when
-no reliable digest exists; pages that read the item or its collection then always render.
+An ID lookup observes that item; a missing ID observes the collection. There is no public
+constructor. Register Markdown sources with the methods below. Compute derived data while
+rendering, or share it through a scoped service registered with `builder.Services.AddScoped<T>()`.
 
 ### Markdown
 
@@ -263,8 +232,20 @@ Import `Kiji.Markdown`. See [Markdown and images](../markdown/) for examples.
 
 | Method                                                                                                                                                | Behavior                                                                             |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `AddMarkdownContent<TFrontMatter>(Action<MarkdownContentOptions>? configure = null)`                                                                  | Loads `*.md` files and registers `ContentDictionary<MarkdownContent<TFrontMatter>>`. |
-| `AddMarkdownContent<TFrontMatter,TModel>(Func<MarkdownContent<TFrontMatter>,TModel> select, Action<MarkdownContentOptions>? configure = null)`        | Converts each file with `select` and registers `ContentDictionary<TModel>`.          |
+| `AddMarkdownContent<TFrontMatter>(Action<MarkdownContentOptions>? configure = null)`                                                                  | Loads `*.md` files and registers `ContentCollection<MarkdownContent<TFrontMatter>>`. |
+| `AddMarkdownContent<TFrontMatter,TModel>(Func<MarkdownContent<TFrontMatter>,TModel> select, Action<MarkdownContentOptions>? configure = null)`        | Converts each file with `select` and registers `ContentCollection<TModel>`.          |
+
+Keyed overloads register the same collection types under a string service key:
+
+| Method | Behavior |
+| --- | --- |
+| `AddKeyedMarkdownContent<TFrontMatter>(string serviceKey, Action<MarkdownContentOptions>? configure = null)` | Registers keyed Markdown content. |
+| `AddKeyedMarkdownContent<TFrontMatter,TModel>(string serviceKey, Func<MarkdownContent<TFrontMatter>,TModel> select, Action<MarkdownContentOptions>? configure = null)` | Registers keyed projected models. |
+
+Resolve them with `services.GetRequiredKeyedService<ContentCollection<T>>(serviceKey)`.
+The element type and service key identify a registration; duplicate pairs fail. An unkeyed
+collection can coexist with keyed collections of the same type. Service keys must not be
+empty or whitespace. Source options are evaluated immediately during registration.
 
 | `MarkdownContentOptions` member   | Behavior                                                                     |
 | --------------------------------- | ---------------------------------------------------------------------------- |
@@ -281,8 +262,7 @@ Rendering settings apply to every source. Configure them with
 
 | `MarkdownContent<TFrontMatter>` member                                         | Behavior                                                                            |
 | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| `FileInfo FileInfo`                                                            | The source Markdown file.                                                           |
-| `string Path`                                                                  | The path relative to the content directory, using `/`. Also the dictionary key.     |
+| `string Path`                                                                  | The path relative to the content directory, using `/`. Also the collection ID.     |
 | `TFrontMatter FrontMatter`                                                     | The parsed front matter.                                                            |
 | `ValueTask<string> RenderAsync(CancellationToken cancellationToken = default)` | Renders the body to HTML and writes its local images beside the current page.       |
 
@@ -351,8 +331,7 @@ Import `Kiji.Feeds`. This example publishes `feed.xml` from the `BlogPost` model
 
 ```csharp
 builder.AddRssFeed(services => services
-    .GetRequiredService<ContentDictionary<BlogPost>>()
-    .Values
+    .GetRequiredService<ContentCollection<BlogPost>>()
     .OrderByDescending(post => post.Date)
     .Select(post => new FeedItem(post.Title, post.Description, post.Date, post.RelativePath)));
 ```

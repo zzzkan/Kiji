@@ -29,9 +29,8 @@ not built with conflicting global properties.
 
 - Markdown front matter/body reads record the hash of the bytes actually parsed.
   Independent per-item projections retain that hash.
-- Keyed content lookup records the entry digest. Enumeration, Count, Keys, Values
-  and missing keys record the collection digest, computed once per materialization.
-  Stable IDs identify custom entries; a missing digest disables reuse for readers.
+- Content ID lookup records the item digest. Enumeration, Count
+  and missing IDs record the collection digest, computed once per materialization.
 - Images record source bytes, processor identity, repair requests and variants.
   Keep public image URLs in the page bundle and recipes sufficient for cache-only repair.
 - AlwaysRender marks pages, layouts or child components that read untracked external

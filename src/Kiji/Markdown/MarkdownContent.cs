@@ -25,7 +25,7 @@ public sealed class MarkdownContent<TFrontMatter>
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(renderAsync);
 
-        FileInfo = fileInfo;
+        SourcePath = fileInfo.FullName;
         Path = path ?? fileInfo.Name;
         ContentHash = contentHash ?? Generation.BuildFingerprint.HashFile(fileInfo.FullName);
         FrontMatter = frontMatter;
@@ -35,11 +35,10 @@ public sealed class MarkdownContent<TFrontMatter>
 
     internal string ContentHash { get; }
 
-    /// <summary>The source path relative to the content directory, using <c>/</c> separators. Also the dictionary key.</summary>
+    /// <summary>The source path relative to the content directory, using <c>/</c> separators. Also the collection ID.</summary>
     public string Path { get; }
 
-    /// <summary>The source file metadata.</summary>
-    public FileInfo FileInfo { get; }
+    internal string SourcePath { get; }
 
     /// <summary>
     /// The markdown body (front matter stripped) captured when the file was read for
@@ -54,7 +53,7 @@ public sealed class MarkdownContent<TFrontMatter>
         {
             // Reading front matter during a tracked render makes the page depend on
             // this file, so front-matter-only pages re-render when the file changes.
-            PageRenderContext.Current?.Dependencies?.AddFile(FileInfo.FullName, ContentHash);
+            PageRenderContext.Current?.Dependencies?.AddFile(SourcePath, ContentHash);
             return field;
         }
     }
@@ -69,7 +68,7 @@ public sealed class MarkdownContent<TFrontMatter>
             : null;
         cancellationToken = linked?.Token ?? (cancellationToken.CanBeCanceled ? cancellationToken : pageToken);
         cancellationToken.ThrowIfCancellationRequested();
-        context?.Dependencies?.AddFile(FileInfo.FullName, ContentHash);
+        context?.Dependencies?.AddFile(SourcePath, ContentHash);
         // A tracked render must observe all dependencies and materialize its outputs
         // again, even if the same content instance was rendered in an earlier build.
         if (context?.Dependencies is not null)

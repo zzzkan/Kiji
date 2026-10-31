@@ -121,7 +121,7 @@ public sealed class RunAsyncTests : IDisposable
         StaticSite CreateMeasuredApp(Func<string, string?> environment)
         {
             var builder = CreateBuilder(environment);
-            builder.AddContentSource<AssetRenderLog>("force-render-log", _ => [new("log", renders, "stable")]);
+            builder.RegisterContent<AssetRenderLog>(_ => [("log", renders, "stable")], "force-render-log");
             builder.AddPageParameters<AssetPage>(_ => [new { Kind = "first" }, new { Kind = "second" }]);
             return builder.Build();
         }
@@ -198,7 +198,7 @@ public sealed class RunAsyncTests : IDisposable
         builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(builder.Paths, Path.Combine(builder.Paths.ProjectDirectory, "static"));
 
-        builder.AddContentSource<Post>(static _ => []);
+        builder.RegisterContent<Post>(static _ => []);
         TestArticleContents.MapSite(builder);
         return builder;
     }

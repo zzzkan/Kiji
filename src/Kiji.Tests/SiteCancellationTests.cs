@@ -127,8 +127,8 @@ public sealed class SiteCancellationTests : IDisposable
         TestSite.TestSiteAssets.Bind(builder.Paths, Path.Combine(_root, "wwwroot"));
         builder.Services.AddSingleton<IImageProcessor>(_ => processor);
         builder.AddMarkdownContent<FrontMatter>();
-        builder.AddPageParameters<MarkdownPostTestPage>(provider => provider.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>()
-            .Select(post => new { Slug = "post", ContentKey = post.Key }));
+        builder.AddPageParameters<MarkdownPostTestPage>(provider => provider.GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>()
+            .Select(post => new { Slug = "post", ContentKey = post.Path }));
         return builder.Build();
     }
 

@@ -40,7 +40,7 @@ var builder = StaticSite.CreateBuilder(args);
 builder.SiteInfo = new SiteInfo { Name = "Portable", BaseUrl = new Uri("https://example.test/") };
 builder.Services.Configure<MarkdownOptions>(options => options.Pipeline.DocumentProcessed += _ => Console.WriteLine("RENDER"));
 builder.AddMarkdownContent<FrontMatter>();
-builder.AddPageParameters<Article>(services => services.GetRequiredService<ContentDictionary<MarkdownContent<FrontMatter>>>().Select(entry => new { Key = entry.Key }));
+builder.AddPageParameters<Article>(services => services.GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>().Select(entry => new { Key = entry.Path }));
 await builder.Build().RunAsync();
 namespace Portable { public sealed class FrontMatter { public string? Title { get; set; } } }
 '@ | Set-Content (Join-Path $root 'Program.cs')
@@ -48,7 +48,7 @@ namespace Portable { public sealed class FrontMatter { public string? Title { ge
 @page "/{Key}/"
 @using Kiji
 @using Kiji.Markdown
-@inject ContentDictionary<MarkdownContent<FrontMatter>> Articles
+@inject ContentCollection<MarkdownContent<FrontMatter>> Articles
 @((Microsoft.AspNetCore.Components.MarkupString)body)
 <small>@SourcePath()</small>
 @code {

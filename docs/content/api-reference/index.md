@@ -228,8 +228,7 @@ IDs ignore case. Reads are tracked as [page dependencies](../incremental-builds/
 | `bool Contains(string id)` | Tests whether the item exists. |
 
 An ID lookup observes that item; a missing ID observes the collection. There is no public
-constructor. Register Markdown sources with the methods below. Compute derived data while
-rendering, or share it through a scoped service registered with `builder.Services.AddScoped<T>()`.
+constructor. Register Markdown sources with the methods below.
 
 ### Markdown
 

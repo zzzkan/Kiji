@@ -59,14 +59,9 @@ local image URLs depend on the current page's output directory.
 
 ## Render pages that use external data
 
-Kiji tracks reads through `ContentCollection<T>`. Compute derived data while rendering,
-or share the calculation through `builder.Services.AddScoped<T>()`. For per-item data,
-use Markdown files with front matter and no body. For small datasets, add a project-local
-JSON file with `builder.Configuration.AddJsonFile`; configuration changes render every page.
-For data fetched externally, use `[AlwaysRender]` on components that display it.
-
-Kiji cannot see other reads, such as files, HTTP, environment variables, the clock, or
-service state. Mark components that render such values:
+Kiji tracks reads through `ContentCollection<T>`, and configuration changes render every
+page. Kiji cannot see other reads, such as files, HTTP, environment variables, the clock,
+or service state. Mark components that render such values:
 
 ```razor
 @attribute [AlwaysRender]
@@ -78,8 +73,8 @@ Every page that renders the component, including through a layout, is rendered o
 publish. If external state decides whether a child component appears, mark the parent.
 
 `AlwaysRender` only re-renders HTML; it does not refresh data a service has cached, and
-content reloads do not recreate singletons. Compute shared derived data during rendering or in scoped services. During development, restart `dotnet watch` when external data
-changes.
+content reloads do not recreate singletons. During development, restart `dotnet watch`
+when external data changes.
 
 ## Reset and inspect
 

@@ -11,8 +11,8 @@ nothing it depends on has changed, and always produce a complete site.
 
 | Change | Work |
 | --- | --- |
-| Markdown body changes | Render pages that look up or receive the item, or render its body. Metadata-only listings and navigation can be reused. |
-| Markdown front matter changes | Also render pages that enumerate the collection or read its front matter. |
+| Markdown body changes | Render pages that receive the item as a parameter, look it up by ID, or render its body. |
+| Markdown front matter changes | Also render pages that enumerate the collection, read `Count`, or read the item's `FrontMatter`. |
 | Content is added, removed, or reordered | Render pages that read the whole collection, and add or remove pages. |
 | Page parameters change | Render affected pages. |
 | A local image changes | Render pages that use it and update its variants. |
@@ -47,30 +47,22 @@ builder.AddPageParameters<PostPage>(services =>
 });
 ```
 
-Each item parameter depends on that item, just like `Posts[id]`, so the page renders again
-when its post or a neighboring post changes. Resolve items in the factory for each build;
-retaining an item from an earlier snapshot fails publishing. Objects created in the factory,
-record copies made with `with`, and arrays disable reuse; see the
-[reusable parameter types](../api-reference/#pages).
+Each item parameter depends on that item's file, like `Posts[id]`, so the page renders
+again when its post or a neighboring post changes, including body-only edits. Resolve
+items in the factory on every build; an item retained from an earlier build fails
+publishing. Values created in the factory, such as record copies made with `with` or
+arrays, disable reuse; see the [reusable parameter types](../api-reference/#pages).
 
-Kiji tracks an item through the file it was loaded from. Values you assign to an item or
-its front matter afterward, in the factory or during rendering, are not tracked, and a page
-that shows them can be reused with old values. If the factory sets `post.Next`, for example,
-adding a post between two existing ones leaves the first one's page linking to the wrong
-post. Pass related items as parameters, as above. If a component has to read values
-assigned after loading, mark it with [`AlwaysRender`](#render-pages-that-use-external-data).
+Kiji tracks an item through the file it was loaded from. Values assigned to an item or its
+front matter afterward, in the factory or during rendering, are not tracked, so a reused
+page can show old values. For example, if the factory sets `post.Next`, adding a post
+between two existing ones leaves the first post's page linking to the wrong post. Pass
+related items as parameters, as above, or mark a component that reads such values with
+[`AlwaysRender`](#render-pages-that-use-external-data).
 
 Enumerating a collection, reading `Count`, or looking up a missing ID depends on the whole
 collection, even if you filter afterward. Reads in layouts and child components count too.
-
-Collection dependencies include source order, IDs, and each item's projection digest.
-Normally that digest covers only the front matter text. If a projection calls `RenderAsync`,
-its digest includes the entire file. Reading `FrontMatter` records its own metadata dependency;
-`RenderAsync` records the entire file. ID lookups and item parameters always observe the whole
-file, even if a model has hidden its source.
-
-Do not share cached Markdown HTML between pages: local image URLs depend on the current
-page's output directory.
+These reads ignore body edits unless the projection calls `RenderAsync`.
 
 ## Render pages that use external data
 

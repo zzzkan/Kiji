@@ -228,8 +228,8 @@ assigned to items after loading are not.
 | `bool TryGetValue(string id, out T? item)` | Looks up an item, or returns `false`. |
 | `bool Contains(string id)` | Tests whether the item exists. |
 
-An ID lookup observes that item; a missing ID observes the collection. There is no public
-constructor. Register Markdown sources with the methods below.
+An ID lookup observes that item; a missing ID observes the collection. Collections are
+registered with the Markdown methods below.
 
 ### Markdown
 
@@ -248,12 +248,11 @@ Keyed overloads register the same collection types under a string service key:
 | `AddKeyedMarkdownContent<TFrontMatter,TModel>(string serviceKey, Func<MarkdownContent<TFrontMatter>,TModel> select, Action<MarkdownContentOptions>? configure = null)` | Registers keyed projected models. |
 
 Resolve them with `services.GetRequiredKeyedService<ContentCollection<T>>(serviceKey)`.
-The element type and service key identify a registration; duplicate pairs fail. An unkeyed
-collection can coexist with keyed collections of the same type. Service keys must not be
-empty or whitespace. Source options are evaluated immediately during registration. Each projection must
-return a fresh instance per item and snapshot. Enumeration and `Count` observe membership,
-source order and projection metadata; a projection that calls `RenderAsync` also observes
-the body. ID lookups and item parameters always observe the whole file.
+Each pair of element type and service key can be registered once, and an unkeyed collection
+can sit beside keyed collections of the same type. Service keys must not be empty or
+whitespace. The `configure` callback runs during registration. A projection should return
+a new instance for each item; see [page dependencies](../incremental-builds/#page-dependencies)
+for what each read depends on.
 
 | `MarkdownContentOptions` member   | Behavior                                                                     |
 | --------------------------------- | ---------------------------------------------------------------------------- |
@@ -266,10 +265,7 @@ Rendering settings apply to every source. Configure them with
 | `MarkdownOptions` member           | Behavior                                                                                                                                                                                                                   |
 | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `MarkdownPipelineBuilder Pipeline` | Markdig builder. Defaults: GFM-style tables, task lists, autolinks and strikethrough; footnotes, GitHub heading IDs and generic attributes. Use `Extensions.Replace` to change a registered extension and `DocumentProcessed` to change the parsed document. |
-| `DeserializerBuilder Yaml`         | YamlDotNet builder. Defaults: camelCase matched case-insensitively, errors on unknown keys, and UTC for dates without an offset. Dates must start with a complete `yyyy-MM-dd` date, optionally followed by a time and offset. |
-
-Front matter is optional. When present, its opening `---` line must be the first line
-and must have a closing `---` line; leading blank lines or a missing closer fail loading.
+| `DeserializerBuilder Yaml`         | YamlDotNet builder. Defaults: camelCase matched case-insensitively, errors on unknown keys, dates required to start with `yyyy-MM-dd`, and UTC for dates without an offset. |
 
 | `MarkdownContent<TFrontMatter>` member                                         | Behavior                                                                            |
 | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |

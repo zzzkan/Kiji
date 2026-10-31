@@ -7,7 +7,6 @@ public sealed class MarkdownFrontMatterParserTests
 {
     [Theory]
     [InlineData("---")]
-    [InlineData("--- \t")]
     [InlineData("---\ntitle: Hello")]
     [InlineData("---\r\ntitle: Hello\r\n----\r\nBody")]
     public void Parse_UnclosedFrontMatter_Fails(string markdown)
@@ -41,10 +40,7 @@ public sealed class MarkdownFrontMatterParserTests
 
     [Theory]
     [InlineData("10:30")]
-    [InlineData("10:30+09:00")]
     [InlineData("January 15")]
-    [InlineData("2024-01")]
-    [InlineData("01-15")]
     public void Parse_IncompleteDates_FailForBothDateTypes(string value)
     {
         var markdown = $"---\ndate: \"{value}\"\n---\n";

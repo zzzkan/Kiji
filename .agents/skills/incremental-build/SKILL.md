@@ -29,13 +29,13 @@ not built with conflicting global properties.
 
 - Markdown body reads, ID lookups and item parameters record the whole-file hash.
   FrontMatter reads record the YAML text digest against the owning collection source.
-  Enumeration/Count/missing IDs hash ordered IDs and projection digests: metadata only,
-  unless the projection called RenderAsync. Parsed-source reuse still checks the whole file.
-- Content ID lookup records the item digest. Enumeration, Count
-  and missing IDs record the collection digest, computed once per materialization.
-- Collection item parameters hash source/ID identity and record item digests; reject stale snapshot items.
-  Parsed front matter can return in a later snapshot. Strings hash by value; an instance
-  shared by several items is unidentified.
+  Parsed-source reuse still checks the whole file.
+- Enumeration, Count and missing IDs record the collection digest, computed once per
+  materialization from ordered IDs and projection digests. A projection digest covers
+  front matter only, unless the projection called RenderAsync.
+- Collection item parameters hash source/ID identity and record item digests; reject stale
+  snapshot items. Parsed front matter can return in a later snapshot. Strings hash by value;
+  an instance shared by several items is unidentified.
 - Images record source bytes, processor identity, repair requests and variants.
   Keep public image URLs in the page bundle and recipes sufficient for cache-only repair.
 - AlwaysRender marks pages, layouts or child components that read untracked external

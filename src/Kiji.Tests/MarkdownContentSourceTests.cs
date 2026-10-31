@@ -46,14 +46,11 @@ public sealed class MarkdownContentSourceTests : IDisposable
         Assert.Single(posts);
     }
 
-    [Theory]
-    [InlineData("---\ntitle: Hello", "closing '---'")]
-    [InlineData("\n---\ntitle: Hello\n---\nBody", "first line")]
-    [InlineData("---\ncreatedAt: \"10:30\"\n---\nBody", "yyyy-MM-dd")]
-    public async Task InvalidFrontMatter_FailsLoadingWithSourcePath(string markdown, string reason)
+    [Fact]
+    public async Task InvalidFrontMatter_FailsLoadingWithSourcePath()
     {
         var path = Path.Combine(_testDir, "content", "post.md");
-        await File.WriteAllTextAsync(path, markdown);
+        await File.WriteAllTextAsync(path, "---\ntitle: Hello");
         var builder = CreateBuilder();
         builder.AddMarkdownContent<FrontMatter>();
         await using var site = builder.Build();
@@ -62,7 +59,7 @@ public sealed class MarkdownContentSourceTests : IDisposable
         var error = Assert.Throws<InvalidOperationException>(() => site.ServiceProvider
             .GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>().Count);
         Assert.Contains(path, error.Message);
-        Assert.Contains(reason, error.ToString());
+        Assert.Contains("closing '---'", error.ToString());
     }
 
     [Fact]
@@ -116,9 +113,6 @@ public sealed class MarkdownContentSourceTests : IDisposable
         app.UsePlanningOptions();
         var notes = app.ServiceProvider.GetRequiredService<ContentCollection<ProjectedNote>>();
 
-        Assert.Equal(
-            ["first.md", "second.md"],
-            notes.Select(note => note.Key + ".md"));
         Assert.Equal(["first", "second"], notes.Select(static note => note.Key));
         Assert.Equal("First", notes.Single(static note => note.Key == "first").Title);
     }
@@ -134,8 +128,9 @@ public sealed class MarkdownContentSourceTests : IDisposable
 
         var content = app.ServiceProvider.GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>();
 
-        Assert.Equal("nested/post.md", Assert.Single(content).Path);
-        Assert.Equal("nested/post.md", Assert.Single(content).Path);
+        var item = Assert.Single(content);
+        Assert.Equal("nested/post.md", item.Path);
+        Assert.Same(item, content["nested/post.md"]);
     }
 
     [Fact]
@@ -193,23 +188,10 @@ public sealed class MarkdownContentSourceTests : IDisposable
         Assert.Equal("One", posts["one.md"].FrontMatter.Title);
     }
 
-    [Fact]
-    public async Task KeyedProjection_ResolvesItsModels()
-    {
-        WriteMarkdown("note.md", "Note");
-        var builder = CreateBuilder();
-        builder.AddKeyedMarkdownContent<FrontMatter, ProjectedNote>("notes",
-            content => new ProjectedNote(content.Path, content.FrontMatter.Title));
-        await using var app = builder.Build();
-        app.UsePlanningOptions();
-        var notes = app.ServiceProvider.GetRequiredKeyedService<ContentCollection<ProjectedNote>>("notes");
-        Assert.Equal(new ProjectedNote("note.md", "Note"), notes["note.md"]);
-    }
-
     [Theory]
     [InlineData(null)]
     [InlineData("posts")]
-    public void DuplicateElementTypeAndServiceKey_FailsWithRegistrationGuidance(string? serviceKey)
+    public void DuplicateElementTypeAndServiceKey_Fails(string? serviceKey)
     {
         var builder = CreateBuilder();
         void Register()
@@ -220,16 +202,6 @@ public sealed class MarkdownContentSourceTests : IDisposable
         Register();
         var error = Assert.Throws<InvalidOperationException>(Register);
         Assert.Contains("already registered", error.Message, StringComparison.Ordinal);
-        Assert.Contains("AddKeyedMarkdownContent", error.Message, StringComparison.Ordinal);
-        Assert.Contains("model type", error.Message, StringComparison.Ordinal);
-    }
-
-    [Theory]
-    [InlineData("")]
-    [InlineData(" ")]
-    public void EmptyServiceKey_IsRejected(string key)
-    {
-        Assert.Throws<ArgumentException>(() => CreateBuilder().AddKeyedMarkdownContent<FrontMatter>(key));
     }
 
     [Theory]

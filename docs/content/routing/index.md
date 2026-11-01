@@ -90,7 +90,7 @@ same collection instance supports HTML reuse; a copy constructed in the factory 
 
 Every supplied name must match a component parameter. Omitted parameters keep their
 defaults, and `EditorRequired` is not enforced. A component with only fixed routes can
-receive parameter sets too; they replace its default rendering.
+receive one parameter set, which replaces its default values.
 
 ## Route limits
 
@@ -113,5 +113,5 @@ Give the component a route and register it with `UseNotFoundPage<TPage>()`:
 builder.UseNotFoundPage<NotFoundPage>();
 ```
 
-Kiji writes it as `404.html` at the output root. Do not also register it with
-`AddPageParameters<TPage>`.
+Kiji writes it as `404.html` at the output root instead of `not-found/index.html`. Do not
+also register it with `AddPageParameters<TPage>`.

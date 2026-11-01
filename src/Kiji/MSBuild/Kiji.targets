@@ -156,8 +156,9 @@
     <!-- Replace the SDK application list before incremental copy and cleanup. -->
     <ItemGroup>
       <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" />
-      <!-- Copy when size or time differs, so an older source from another configuration still replaces a newer copy. -->
-      <ResolvedFileToPublish Include="@(KijiSiteFile);@(_KijiGzipFile);@(_KijiBrotliFile)" CopyToPublishDirectory="IfDifferent" />
+      <!-- Always copies when size or time differs (SkipCopyUnchangedFiles), so an older source from another
+           configuration still replaces a newer copy. SDK 10.0.1xx silently drops IfDifferent items. -->
+      <ResolvedFileToPublish Include="@(KijiSiteFile);@(_KijiGzipFile);@(_KijiBrotliFile)" CopyToPublishDirectory="Always" />
     </ItemGroup>
   </Target>
 

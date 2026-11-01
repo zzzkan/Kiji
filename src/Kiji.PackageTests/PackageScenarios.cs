@@ -184,6 +184,11 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
             {
                 Assert.Contains("MissingMember", await ReceiveAsync(opened, timeout.Token), StringComparison.Ordinal);
             }
+            // Diagnostics contain local source paths. A foreign page, opaque origin,
+            // or rebinding domain must not subscribe even while errors are retained.
+            await AssertReloadRejectedAsync(client, "https://attacker.example");
+            await AssertReloadRejectedAsync(client, "null");
+            await AssertReloadRejectedAsync(client, "http://attacker.example", "attacker.example");
             await EditAsync(() => fixture.Replace("Site/Home.razor", "@MissingMember", "Fixed Razor"), timeout.Token);
             bool cleared = false, reloaded = false;
             while (!cleared || !reloaded)
@@ -242,8 +247,22 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
     private static async Task<ClientWebSocket> ConnectReloadAsync(HttpClient client, CancellationToken cancellationToken)
     {
         var socket = new ClientWebSocket();
+        socket.Options.SetRequestHeader("Origin", client.BaseAddress!.GetLeftPart(UriPartial.Authority));
         await socket.ConnectAsync(new UriBuilder(client.BaseAddress!) { Scheme = "ws", Path = "/kiji/_kiji/reload" }.Uri, cancellationToken);
         return socket;
+    }
+
+    private static async Task AssertReloadRejectedAsync(HttpClient client, string origin, string? host = null)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/kiji/_kiji/reload");
+        request.Headers.Connection.Add("Upgrade");
+        request.Headers.Upgrade.ParseAdd("websocket");
+        request.Headers.Add("Sec-WebSocket-Version", "13");
+        request.Headers.Add("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==");
+        request.Headers.Add("Origin", origin);
+        request.Headers.Host = host;
+        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+        Assert.Equal(host is null ? HttpStatusCode.Forbidden : HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     private static async Task EditAsync(Action edit, CancellationToken cancellationToken)

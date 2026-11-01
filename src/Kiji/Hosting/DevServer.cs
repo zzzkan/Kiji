@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
@@ -58,6 +59,12 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
             EnvironmentName = environment.EnvironmentName,
             ContentRootPath = environment.ContentRootPath,
         });
+        // The standard Host Filtering middleware reads AllowedHosts. Supply only a
+        // fallback; appsettings, environment variables and command line stay in control.
+        builder.Configuration.Sources.Insert(0, new MemoryConfigurationSource
+        {
+            InitialData = [new("AllowedHosts", "localhost;127.0.0.1;[::1]")],
+        });
         // The site's logging, so builder.Logging and the Logging section also apply to ASP.NET Core.
         builder.Logging.ClearProviders();
         builder.Services.AddSingleton(app.ServiceProvider.GetRequiredService<ILoggerFactory>());
@@ -98,6 +105,16 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
             if (!context.WebSockets.IsWebSocketRequest)
             {
                 context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                return;
+            }
+
+            // Compilation errors include local paths, so only pages served here may
+            // subscribe. Browsers always send Origin, and AllowedHosts rejects rebound hosts.
+            string? origin = context.Request.Headers.Origin;
+            if (!string.IsNullOrEmpty(origin)
+                && !string.Equals(origin, $"{context.Request.Scheme}://{context.Request.Host}", StringComparison.OrdinalIgnoreCase))
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
                 return;
             }
 

@@ -280,15 +280,8 @@ public sealed class ImageProcessorTests : IDisposable
         // Valid little-endian EXIF with one ImageDescription ASCII entry.
         var exif = Convert.FromHexString("45786966000049492A000800000001000E010200080000001A00000000000000")
             .Concat("private\0"u8.ToArray()).ToArray();
-        var withMetadata = new byte[jpeg.Length + exif.Length + 4];
-        jpeg.AsSpan(0, 2).CopyTo(withMetadata);
-        withMetadata[2] = 0xff;
-        withMetadata[3] = 0xe1;
-        BinaryPrimitives.WriteUInt16BigEndian(withMetadata.AsSpan(4), checked((ushort)(exif.Length + 2)));
-        exif.CopyTo(withMetadata, 6);
-        jpeg.AsSpan(2).CopyTo(withMetadata.AsSpan(6 + exif.Length));
         var path = Path.Combine(_sourceDir, "metadata.jpg");
-        await File.WriteAllBytesAsync(path, withMetadata);
+        await File.WriteAllBytesAsync(path, InsertExif(jpeg, exif));
 
         var result = await _processor.ProcessAsync(path, _outputDir);
 
@@ -305,6 +298,65 @@ public sealed class ImageProcessorTests : IDisposable
         }
     }
 
+    // Stored quadrants are red, green / blue, white; each row lists the displayed
+    // top-left, top-right, bottom-left and bottom-right colors for that EXIF value.
+    [Theory]
+    [InlineData(1, "RGBW")]
+    [InlineData(2, "GRWB")]
+    [InlineData(3, "WBGR")]
+    [InlineData(4, "BWRG")]
+    [InlineData(5, "RBGW")]
+    [InlineData(6, "BRWG")]
+    [InlineData(7, "WGBR")]
+    [InlineData(8, "GWRB")]
+    public async Task ProcessImage_AppliesExifOrientation(int orientation, string displayedQuadrants)
+    {
+        using var source = new SKBitmap(800, 400);
+        using (var canvas = new SKCanvas(source))
+        {
+            foreach (var (x, y, color) in new[] { (0, 0, SKColors.Red), (400, 0, SKColors.Lime), (0, 200, SKColors.Blue), (400, 200, SKColors.White) })
+            {
+                using var paint = new SKPaint { Color = color };
+                canvas.DrawRect(x, y, 400, 200, paint);
+            }
+        }
+        using var encoded = source.Encode(SKEncodedImageFormat.Jpeg, 100);
+        // Little-endian EXIF with one Orientation SHORT entry.
+        var exif = Convert.FromHexString(
+            $"45786966000049492A0008000000010012010300010000000{orientation}00000000000000");
+        var path = Path.Combine(_sourceDir, $"orientation-{orientation}.jpg");
+        await File.WriteAllBytesAsync(path, InsertExif(encoded.ToArray(), exif));
+        var rotated = orientation >= 5;
+
+        var result = await _processor.ProcessAsync(path, _outputDir);
+
+        Assert.Equal(rotated ? 400 : 800, result.OriginalWidth);
+        Assert.Equal(rotated ? 800 : 400, result.OriginalHeight);
+        Assert.Equal(rotated ? [320, 400] : [320, 640, 800], result.Variants.Select(static variant => variant.Width));
+        foreach (var variant in result.Variants)
+        {
+            using var bitmap = SKBitmap.Decode(Path.Combine(_outputDir, variant.FileName));
+            Assert.Equal(variant.Width, bitmap.Width);
+            Assert.Equal(rotated ? variant.Width * 2 : variant.Width / 2, bitmap.Height);
+            int left = bitmap.Width / 4, right = bitmap.Width * 3 / 4, top = bitmap.Height / 4, bottom = bitmap.Height * 3 / 4;
+            Assert.Equal(displayedQuadrants, string.Concat(
+                ColorName(bitmap.GetPixel(left, top)), ColorName(bitmap.GetPixel(right, top)),
+                ColorName(bitmap.GetPixel(left, bottom)), ColorName(bitmap.GetPixel(right, bottom))));
+        }
+
+        static char ColorName(SKColor color)
+        {
+            return (color.Red > 128, color.Green > 128, color.Blue > 128) switch
+            {
+                (true, false, false) => 'R',
+                (false, true, false) => 'G',
+                (false, false, true) => 'B',
+                (true, true, true) => 'W',
+                _ => '?',
+            };
+        }
+    }
+
     [Fact]
     public async Task ProcessImage_TruncatedInputDoesNotPublishVariants()
     {
@@ -316,6 +368,19 @@ public sealed class ImageProcessorTests : IDisposable
         await Assert.ThrowsAsync<InvalidDataException>(() => _processor.ProcessAsync(path, _outputDir));
 
         Assert.Empty(Directory.GetFiles(_outputDir));
+    }
+
+    private static byte[] InsertExif(byte[] jpeg, byte[] exif)
+    {
+        // Place an APP1 segment directly after the JPEG start-of-image marker.
+        var withMetadata = new byte[jpeg.Length + exif.Length + 4];
+        jpeg.AsSpan(0, 2).CopyTo(withMetadata);
+        withMetadata[2] = 0xff;
+        withMetadata[3] = 0xe1;
+        BinaryPrimitives.WriteUInt16BigEndian(withMetadata.AsSpan(4), checked((ushort)(exif.Length + 2)));
+        exif.CopyTo(withMetadata, 6);
+        jpeg.AsSpan(2).CopyTo(withMetadata.AsSpan(6 + exif.Length));
+        return withMetadata;
     }
 
     private static async Task CreateTestImageAsync(string path, int width, int height)

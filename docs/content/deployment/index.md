@@ -79,8 +79,8 @@ jobs:
 ## Other static hosts
 
 On Netlify, Vercel, Cloudflare Pages, and similar services, use `dotnet publish` as the
-build command and `dist` as the output directory. The build environment needs the .NET 10
-SDK; otherwise, publish in your own CI and upload `dist/`.
+build command and `dist` as the output directory. The build environment needs .NET SDK
+10.0.300 or later; otherwise, publish in your own CI and upload `dist/`.
 
 Check that the host serves `about/index.html` for `/about/` and uses `404.html`, written by
 `UseNotFoundPage`, for unmatched paths.

@@ -16,7 +16,7 @@ nothing it depends on has changed, and always produce a complete site.
 | Content is added, removed, or reordered | Render pages that read the whole collection, and add or remove pages. |
 | Page parameters change | Render affected pages. |
 | A local image changes | Render pages that use it and update its variants. |
-| A static asset changes | Update the asset and pages that link it through `Assets` or `ImportMap`. |
+| A static asset is added, removed, or changed | Update the asset, and render every page that uses `Assets` or `ImportMap`. |
 | Code, packages, the .NET runtime, `SiteInfo`, the environment name, or [configuration](../api-reference/#configuration) change | Render all pages. |
 | A page uses an `AlwaysRender` component | Render that page on every publish. |
 | A page renders an `ErrorBoundaryBase` component | Render that page on every publish, even when healthy. |
@@ -48,10 +48,14 @@ builder.AddPageParameters<PostPage>(services =>
 ```
 
 Each item parameter depends on that item's file, like `Posts[id]`, so the page renders
-again when its post or a neighboring post changes, including body-only edits. Resolve
-items in the factory on every build; an item retained from an earlier build fails
-publishing. Values created in the factory, such as record copies made with `with` or
-arrays, disable reuse; see the [reusable parameter types](../api-reference/#page-parameters).
+again when its post or a neighboring post changes, including body-only edits. Passing the
+same item to several pages, as `Post` on one and `Previous` on another, keeps them all
+reusable. Values created in the factory, such as record copies made with a `with`
+expression or arrays of items, make the page render on every publish; see the
+[reusable parameter types](../api-reference/#page-parameters).
+
+Resolve items inside the factory each time it runs. While serving, the factory runs again
+after content changes, and items kept from an earlier run show stale content.
 
 Kiji tracks an item through the file it was loaded from. Values assigned to an item or its
 front matter afterward, in the factory or during rendering, are not tracked, so a reused

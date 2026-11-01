@@ -5,8 +5,8 @@ order: 10
 ---
 
 Start with the Blog template for a ready-to-customize site, or build a minimal blog from
-scratch. Both require the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
-or later; run `dotnet --version` to check.
+scratch. Both require the [.NET SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+10.0.300 or later; run `dotnet --version` to check.
 
 ## Start from a template
 

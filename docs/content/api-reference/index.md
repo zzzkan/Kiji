@@ -61,7 +61,7 @@ longer be changed.
 | `AddPageAssembly(Assembly assembly)` | Discovers routed components in another assembly. Kiji always discovers `@page` routes on public, non-abstract components in the entry assembly. Adding an assembly twice has no effect. |
 | `AddPageParameters<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)` | Adds parameter sets for a component. The factory runs once per build or reload and can read content. See [Page parameters](#page-parameters). |
 | `UseNotFoundPage<TPage>()` | Writes the component as `404.html` instead of at its route. It needs exactly one route, must be in a page assembly, and cannot also receive page parameters. A later call replaces it. |
-| `AddArtifact(string outputRelativePath, Func<Stream, SiteOutputContext, CancellationToken, Task> write)` | Writes a file after all pages. Write to the stream without disposing it. See [`SiteOutputContext`](#siteoutputcontext). |
+| `AddArtifact(string outputRelativePath, Func<Stream, SiteOutputContext, CancellationToken, Task> write)` | Writes a file after all pages. Write to the stream without disposing it. Only `dotnet publish` writes artifacts, including feeds and sitemaps; the development server returns 404 for them. See [`SiteOutputContext`](#siteoutputcontext). |
 | `StaticSite Build()` | Validates the services, makes them read-only, and returns the site. Call it once. Content is loaded only when the site runs. |
 
 Extension methods in other namespaces register content and generated files:
@@ -172,21 +172,26 @@ message for each page and generated file:
 - Each set is an anonymous object or a string-keyed dictionary. Names match public
   writable `[Parameter]` properties, ignoring case. Values keep their types; route values
   are formatted with the invariant culture.
-- Each set is rendered at every parameterized route of the component. Fixed routes beside
-  them render once with default values; a component with only fixed routes renders once
-  per set instead.
+- Each set is rendered at every parameterized route of the component, and fixed routes
+  beside them render once with default values. A component with only fixed routes renders
+  the set at each of its routes instead of its defaults, so it takes at most one set; an
+  empty sequence leaves it out.
 - Omitted parameters keep their defaults; `EditorRequired` is not checked.
 - Unknown names, wrong types, missing or empty route values, and duplicate output paths
   fail before rendering.
 - Calls for the same component add up; an empty sequence generates no pages.
 
 A page's HTML can be reused only when every parameter value is `null`, a `string`, `bool`,
-`char`, an 8- to 64-bit integer, an enum, a `Guid`, or the same instance of an item
-obtained from a `ContentCollection<T>`. Item parameters observe that item's content,
-including when the component only reads projected model properties. Objects created
-in the parameter factory, including record copies made with `with`, arrays of items, and
-an instance shared by several items are not reusable. Resolve current items inside the
-factory on every build; retaining an item from a previous snapshot fails publishing.
+`char`, an 8- to 64-bit integer, an enum, a `Guid`, or an item instance obtained from a
+`ContentCollection<T>`. One item can go to several pages, for example as one post's `Post`
+and the next post's `Previous`. Each page then depends on that item's whole file, even when
+the component reads only projected model properties. Any other value makes the page render
+on every publish, including anonymous objects, record copies made with a `with`
+expression, arrays or lists of items, and an instance that a projection returns for more
+than one file.
+
+Resolve items inside the factory each time it runs. While serving, the factory runs again
+after content changes, and items kept from an earlier run show stale content.
 
 ### `SiteInfo`
 
@@ -233,7 +238,7 @@ after loading are not.
 | Member | Behavior |
 | --- | --- |
 | `int Count` | Number of items; observes the collection. |
-| `GetEnumerator()` | Enumerates items in source order; observes the collection. |
+| `GetEnumerator()` | Enumerates items, Markdown files sorted by path ignoring case; observes the collection. |
 | `T this[string id]` | Looks up an item; throws `KeyNotFoundException` if absent. |
 | `bool TryGetValue(string id, out T? item)` | Looks up an item, or returns `false`. |
 | `bool Contains(string id)` | Tests whether the item exists. |
@@ -297,7 +302,7 @@ Selects the files of one source, through the `configure` callback.
 
 | Property | Behavior |
 | --- | --- |
-| `string Directory` | Directory to load, absolute or relative to the project. Default `"content"`. |
+| `string Directory` | Directory to load recursively, absolute or relative to the project. It must exist. Default `"content"`. |
 | `Func<FileInfo,bool>? FileFilter` | Returns `false` to skip a file. Default: load every `*.md` file. |
 
 ### `MarkdownOptions`

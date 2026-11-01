@@ -91,8 +91,8 @@ builder.AddMarkdownContent<FrontMatter, Post>(content => new Post(
 This registers `ContentCollection<Post>` instead. The projection sees one file at a time;
 compute collection-wide results, such as tag counts, while rendering or in a scoped service.
 Return a new instance for each file and keep it read-only, as this record is. Kiji does not
-track values assigned to an item after loading, and pages that receive an instance shared
-by several items render on every publish; see
+track values assigned to an item after loading, and pages that receive an instance the
+projection returned for several files render on every publish; see
 [page dependencies](../incremental-builds/#page-dependencies).
 
 ## Register several collections of the same type
@@ -121,8 +121,8 @@ Pass a collection item through `AddPageParameters` and use `MarkdownBody`:
 
 With the `Post` model, use `Content="@Post.Content"`. You can also call `RenderAsync()`
 and render the result as a `MarkupString`. Both produce raw HTML, so render only trusted
-Markdown or sanitize it first. Do not reuse rendered HTML on another page, because local
-image URLs are relative to the page that rendered it.
+Markdown or sanitize it first. Do not reuse rendered HTML on another page, because its
+image URLs point to variants written beside the page that rendered it.
 
 ## Customize parsing and HTML
 

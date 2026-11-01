@@ -341,8 +341,8 @@ Returned by `IImageProcessor.ProcessAsync`.
 
 | Property | Behavior |
 | --- | --- |
-| `int OriginalWidth` | Source width in pixels, used for the `<img>` size. |
-| `int OriginalHeight` | Source height in pixels, used for the `<img>` size. |
+| `int OriginalWidth` | Source width in pixels as displayed, after EXIF orientation. Used for the `<img>` size. |
+| `int OriginalHeight` | Source height in pixels as displayed, after EXIF orientation. Used for the `<img>` size. |
 | `IReadOnlyList<ImageVariant> Variants` | The variants in ascending width. All go into `srcset`, and the last is also the `src`. |
 
 ### `ImageVariant`

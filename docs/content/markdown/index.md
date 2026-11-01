@@ -176,10 +176,10 @@ generates. When only `width` or `height` is a positive integer, Kiji computes th
 the source aspect ratio: for a 1920×1080 source, `width=300` gives `height="169"`.
 
 The output is static: animated images keep only their first frame, metadata such as EXIF
-is removed, and colors are converted to sRGB. The EXIF orientation is applied first, so a
-portrait phone photo stays upright and its dimensions and widths describe the rotated image. To keep an image as is, put it in `wwwroot/`
-and reference it as a static asset. Remote images, paths starting with `/`, and `<img>`
-written in HTML are left unchanged.
+is removed, and colors are converted to sRGB. Kiji applies the EXIF orientation first, so
+portrait phone photos stay upright. To keep an image as is, put it in `wwwroot/` and
+reference it as a static asset. Remote images, paths starting with `/`, and `<img>` written
+in HTML are left unchanged.
 
 A missing image, or a path outside the Markdown file's directory tree, fails the render.
 To replace the image processor, see [`IImageProcessor`](../api-reference/#iimageprocessor).

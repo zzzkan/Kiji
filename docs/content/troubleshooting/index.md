@@ -6,15 +6,9 @@ order: 70
 
 ## NU1202 or NETSDK1045 mentions .NET 10
 
-Kiji needs the [.NET SDK](https://dotnet.microsoft.com/download/dotnet/10.0) 10.0.300 or
-later and a project targeting `net10.0` or later. Check `dotnet --version` and
+Kiji needs the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) or later
+and a project targeting `net10.0` or later. Check `dotnet --version` and
 `<TargetFramework>`.
-
-## `dotnet publish` succeeds but `dist/` is empty
-
-SDK 10.0.1xx generates the site but does not copy it to `dist/`. Install SDK 10.0.300 or
-later. If `dotnet --version` still shows the old SDK, check for a `global.json` that pins
-it.
 
 ## KIJI1003: Kiji sites require Microsoft.NET.Sdk.Razor
 

@@ -90,8 +90,7 @@ same collection instance supports HTML reuse; a copy constructed in the factory 
 
 Every supplied name must match a component parameter. Omitted parameters keep their
 defaults, and `EditorRequired` is not enforced. A component with only fixed routes can
-receive one parameter set, which replaces its default values at each of its routes. A
-second set fails, because it produces the same output paths again.
+receive one parameter set, which replaces its default values.
 
 ## Route limits
 

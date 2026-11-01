@@ -58,12 +58,9 @@ builder.AddMarkdownContent<FrontMatter>(options =>
 });
 ```
 
-When the content directory is inside the project, exclude it from the SDK's default
-items, as in [Getting started](../getting-started/#create-the-project). Otherwise
-every build and `dotnet watch` start enumerates every file in it. Kiji still loads and
-watches the files, so edits, additions and deletions reload the development server.
-The SDK then neither compiles C# or Razor files there nor shows them in Visual Studio's
-Solution Explorer unless Show All Files is on, so keep components outside the directory:
+When the content directory is inside the project, exclude it from the SDK's default items
+so that builds and `dotnet watch` do not scan it. Kiji still loads and watches the files.
+The SDK no longer compiles files there, so keep components outside the directory:
 
 ```xml
 <PropertyGroup>
@@ -88,11 +85,9 @@ builder.AddMarkdownContent<FrontMatter, Post>(content => new Post(
     Content: content));
 ```
 
-This registers `ContentCollection<Post>` instead. The projection sees one file at a time;
-compute collection-wide results, such as tag counts, while rendering or in a scoped service.
-Return a new instance for each file and keep it read-only, as this record is. Kiji does not
-track values assigned to an item after loading, and pages that receive an instance the
-projection returned for several files render on every publish; see
+This registers `ContentCollection<Post>` instead. The projection sees one file at a time,
+so compute collection-wide results, such as tag counts, while rendering. Return a new,
+read-only instance for each file, as this record is; see
 [page dependencies](../incremental-builds/#page-dependencies).
 
 ## Register several collections of the same type
@@ -105,7 +100,7 @@ builder.AddKeyedMarkdownContent<FrontMatter>("ja", options => options.Directory 
 var english = services.GetRequiredKeyedService<ContentCollection<MarkdownContent<FrontMatter>>>("en");
 ```
 
-A key identifies the DI service; each item's ID is still its `Path` relative to that source.
+Each item's ID is still its `Path` relative to its own directory.
 
 ## Render a Markdown body
 
@@ -121,8 +116,8 @@ Pass a collection item through `AddPageParameters` and use `MarkdownBody`:
 
 With the `Post` model, use `Content="@Post.Content"`. You can also call `RenderAsync()`
 and render the result as a `MarkupString`. Both produce raw HTML, so render only trusted
-Markdown or sanitize it first. Do not reuse rendered HTML on another page, because its
-image URLs point to variants written beside the page that rendered it.
+Markdown or sanitize it first. Render the body on each page that shows it instead of
+copying HTML rendered for another page.
 
 ## Customize parsing and HTML
 
@@ -146,8 +141,8 @@ builder.Services.Configure<MarkdownOptions>(options =>
 
 `Use*` leaves an extension that is already registered unchanged, so use
 `Extensions.Replace` to change its settings. To transform the parsed document, attach
-`options.Pipeline.DocumentProcessed`; put HTML wrappers in Razor. To discard unknown
-front matter keys, call `options.Yaml.IgnoreUnmatchedProperties()`.
+`options.Pipeline.DocumentProcessed`. To discard unknown front matter keys, call
+`options.Yaml.IgnoreUnmatchedProperties()`.
 
 ## Links and deployment paths
 

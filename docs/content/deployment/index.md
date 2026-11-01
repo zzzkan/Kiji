@@ -94,10 +94,9 @@ Kiji can also precompress your site. Add this to the project's `<PropertyGroup>`
 ```
 
 Publishing then writes `.gz` and `.br` copies of HTML, CSS, JavaScript, JSON, XML, SVG, and
-text files next to the originals. Servers configured to send precompressed files, such as
-nginx with `gzip_static` or Caddy with `precompressed`, send these copies as is instead of
-compressing each response. Editing a file in `dist/` leaves its copies out of date, so change
-the site and publish again.
+text files next to the originals, for servers that send precompressed files, such as nginx
+with `gzip_static` or Caddy with `precompressed`. Editing a file in `dist/` leaves its
+copies out of date, so change the site and publish again.
 
 GitHub Pages, Netlify, Vercel, and Cloudflare Pages compress responses themselves, so
 leave the setting off for them; it is off by default.
@@ -117,9 +116,7 @@ including `PublishedContent`, the worker to publish:
 </ItemGroup>
 ```
 
-Publishing writes `service-worker-assets.js`, which lists every published page and asset
-with its SHA-256 hash. It also publishes `service-worker.published.js` as
-`service-worker.js`, with a first line that names the manifest version. The version changes
-whenever a published file does. Load the list in the published worker with
-`self.importScripts('./service-worker-assets.js')`. `dotnet watch` serves
-`wwwroot/service-worker.js` instead.
+Publishing writes `service-worker-assets.js`, which lists every published file with its
+hash, and publishes `service-worker.published.js` as `service-worker.js`. Load the list in
+the published worker with `self.importScripts('./service-worker-assets.js')`.
+`dotnet watch` serves `wwwroot/service-worker.js` instead.

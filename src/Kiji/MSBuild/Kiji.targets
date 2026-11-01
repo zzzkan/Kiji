@@ -54,6 +54,12 @@
     <RuntimeHostConfigurationOption Include="Kiji.ProjectDirectory" Value="$(MSBuildProjectDirectory)" />
   </ItemGroup>
 
+  <!-- dotnet watch reports compilation errors, which the dev server shows, only to ASP.NET Core
+       projects. The Web SDK declares this capability; Razor SDK sites get it only while watching. -->
+  <ItemGroup Condition="'$(_KijiIsSiteApp)' == 'true' and '$(DotNetWatchBuild)' == 'true'">
+    <ProjectCapability Include="AspNetCore" />
+  </ItemGroup>
+
   <Target Name="KijiValidateAssetSdk" BeforeTargets="PrepareForBuild;KijiGenerateSite"
           Condition="'$(_KijiIsSiteApp)' == 'true'">
     <Error Condition="'$(UsingMicrosoftNETSdkRazor)' != 'true'" Code="KIJI1003"

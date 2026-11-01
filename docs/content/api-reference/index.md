@@ -86,6 +86,10 @@ builder.Services.Configure<ImageProcessorOptions>(builder.Configuration.GetSecti
 - The development server reads its own settings, such as `urls`, through standard
   ASP.NET Core configuration, including the project's appsettings files, `--urls`, and
   `ASPNETCORE_URLS`.
+- The development server answers only requests for `localhost`, `127.0.0.1` and `[::1]`.
+  To use another hostname or IP address, add it to `AllowedHosts`, for example in
+  `appsettings.Development.json`, and keep the local entries:
+  `"AllowedHosts": "localhost;127.0.0.1;[::1];dev.example"`.
 
 ### Logging
 

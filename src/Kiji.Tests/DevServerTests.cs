@@ -163,6 +163,79 @@ public sealed class DevServerTests : IAsyncDisposable
         }
     }
 
+    [Theory]
+    [InlineData("https://attacker.example", false)]
+    [InlineData("null", false)]
+    [InlineData("http://localhost:1", false)]
+    [InlineData("http://attacker.example", true)]
+    [InlineData(null, true)]
+    public async Task Serve_LiveReloadRejectsUntrustedOriginsAndReboundHosts(string? origin, bool reboundHost)
+    {
+        var (baseAddress, devServer) = await StartServerAsync(new StringWriter(), TestArticleContents.CreateSiteInfoWithBasePath());
+        await using (devServer)
+        {
+            using var client = CreateClient();
+            using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(baseAddress, "/kiji/_kiji/reload"));
+            request.Headers.Connection.Add("Upgrade");
+            request.Headers.Upgrade.ParseAdd("websocket");
+            request.Headers.Add("Sec-WebSocket-Version", "13");
+            request.Headers.Add("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==");
+            if (origin is not null) { request.Headers.Add("Origin", origin); }
+            if (reboundHost) { request.Headers.Host = "attacker.example"; }
+
+            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+
+            Assert.Equal(reboundHost ? HttpStatusCode.BadRequest : HttpStatusCode.Forbidden, response.StatusCode);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Serve_LiveReloadAcceptsSameOriginBrowsers(bool localhost)
+    {
+        var (baseAddress, devServer) = await StartServerAsync(new StringWriter(), TestArticleContents.CreateSiteInfoWithBasePath());
+        await using (devServer)
+        {
+            var page = new UriBuilder(baseAddress) { Host = localhost ? "localhost" : baseAddress.Host };
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            using var socket = new ClientWebSocket();
+            socket.Options.SetRequestHeader("Origin", page.Uri.GetLeftPart(UriPartial.Authority));
+            // Connect over the bound IP even when the browser uses its localhost alias.
+            socket.Options.SetRequestHeader("Host", page.Uri.Authority);
+            await socket.ConnectAsync(new UriBuilder(baseAddress) { Scheme = "ws", Path = "/kiji/_kiji/reload" }.Uri, timeout.Token);
+
+            Assert.Equal(WebSocketState.Open, socket.State);
+            await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Serve_AllowedHostsCanBeConfigured(bool commandLine)
+    {
+        await File.WriteAllTextAsync(Path.Combine(_testDir, "appsettings.Development.json"), """
+            { "AllowedHosts": "dev.example" }
+            """);
+        var host = commandLine ? "cli.example" : "dev.example";
+        string[] args = commandLine ? [.. TestUrls.EphemeralPort, "--AllowedHosts", host] : TestUrls.EphemeralPort;
+        var (baseAddress, devServer) = await StartServerAsync(new StringWriter(), serverArgs: args);
+        await using (devServer)
+        {
+            // A page opened through the configured host reaches live reload at its own origin.
+            var page = new UriBuilder(baseAddress) { Host = host }.Uri;
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            using var socket = new ClientWebSocket();
+            socket.Options.SetRequestHeader("Host", page.Authority);
+            socket.Options.SetRequestHeader("Origin", page.GetLeftPart(UriPartial.Authority));
+            await socket.ConnectAsync(new UriBuilder(baseAddress) { Scheme = "ws", Path = "/_kiji/reload" }.Uri, timeout.Token);
+
+            Assert.Equal(WebSocketState.Open, socket.State);
+            await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
+        }
+    }
+
     [Fact]
     public async Task Serve_AssetDiscoveryServesNewFiles()
     {
@@ -438,6 +511,29 @@ public sealed class DevServerTests : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// The developer exception page keeps the live reload client, so fixing the error
+    /// reloads it. ASP.NET Core renders that page outside the base path middleware.
+    /// </summary>
+    [Fact]
+    public async Task Serve_ExceptionPageKeepsLiveReloadUnderTheBasePath()
+    {
+        await File.WriteAllTextAsync(Path.Combine(_contentsDir, "broken.md"), "---\ntitle: [unclosed\n---\n");
+        var (baseAddress, devServer) = await StartServerAsync(new StringWriter(), TestArticleContents.CreateSiteInfoWithBasePath());
+        await using (devServer)
+        {
+            using var client = CreateClient();
+            using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(baseAddress, "/kiji/"));
+            request.Headers.Accept.ParseAdd("text/html");
+            using var response = await client.SendAsync(request);
+
+            Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+            var html = await response.Content.ReadAsStringAsync();
+            Assert.Contains("broken.md", html, StringComparison.Ordinal);
+            Assert.Contains("<script src=\"/kiji/_kiji/livereload.js\" defer></script>", html, StringComparison.Ordinal);
+        }
+    }
+
     private static HttpClient CreateClient()
     {
         return new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
@@ -550,7 +646,8 @@ public sealed class DevServerTests : IAsyncDisposable
         StringWriter logs,
         SiteInfo? site = null,
         string? additionalSlug = null,
-        Action<StaticSiteBuilder>? configureAssets = null)
+        Action<StaticSiteBuilder>? configureAssets = null,
+        string[]? serverArgs = null)
     {
         await File.WriteAllTextAsync(Path.Combine(_contentsDir, "hello-world.md"), "---\ntitle: Hello World\n---\n");
 
@@ -580,7 +677,7 @@ public sealed class DevServerTests : IAsyncDisposable
         _app = builder.Build();
 
         var reporter = new Kiji.Hosting.DevServerStatusReporter(logs, prefix: "kiji", useEmoji: true);
-        var (devServer, web) = await _app.StartDevServerAsync(TestUrls.EphemeralPort, CancellationToken.None, reporter);
+        var (devServer, web) = await _app.StartDevServerAsync(serverArgs ?? TestUrls.EphemeralPort, CancellationToken.None, reporter);
         return (new Uri(web.Urls.First()), devServer);
     }
 }

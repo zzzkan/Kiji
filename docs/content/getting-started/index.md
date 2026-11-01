@@ -112,8 +112,9 @@ dotnet watch
 
 ![Smallest site](./smallest-site.png)
 
-The browser reloads when you change a component or content file. Changes to `Program.cs`
-apply only after a restart: press `Ctrl+R` in the `dotnet watch` terminal.
+The browser reloads when you change a component or content file, and shows compilation
+errors and exceptions until you fix them. Changes to `Program.cs` apply only after a
+restart: press `Ctrl+R` in the `dotnet watch` terminal.
 
 ### Add a layout and CSS
 

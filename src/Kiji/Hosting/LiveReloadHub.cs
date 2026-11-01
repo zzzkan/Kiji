@@ -1,11 +1,14 @@
 using System.Collections.Concurrent;
 using System.Net.WebSockets;
 using System.Text;
+using System.Text.Json;
 
 namespace Kiji.Hosting;
 
 /// <summary>
-/// Tracks connected live-reload WebSocket clients and broadcasts reload messages.
+/// Tracks connected live-reload WebSocket clients and broadcasts reload messages and
+/// compilation errors. Clients receive "reload" or a JSON array of error lines; an empty
+/// array clears the errors.
 /// </summary>
 internal sealed class LiveReloadHub
 {
@@ -14,6 +17,9 @@ internal sealed class LiveReloadHub
     private readonly ConcurrentDictionary<Guid, WebSocket> _clients = new();
     private readonly Lock _sendLock = new();
     private Task _pendingSend = Task.CompletedTask;
+
+    // Changed only inside queued operations, which run one at a time.
+    private byte[]? _diagnosticsMessage;
 
     internal async Task HandleClientAsync(Func<Task<WebSocket>> acceptWebSocket, CancellationToken cancellationToken)
     {
@@ -25,6 +31,11 @@ internal sealed class LiveReloadHub
         {
             var accepted = await acceptWebSocket();
             _clients.TryAdd(id, accepted);
+            // Pages opened or reloaded while the build is broken still show its errors.
+            if (_diagnosticsMessage is { } diagnostics)
+            {
+                await SendAsync(id, accepted, diagnostics, cancellationToken);
+            }
             return accepted;
         });
 
@@ -63,7 +74,27 @@ internal sealed class LiveReloadHub
     {
         // WebSocket supports only one concurrent send. File saves and code updates
         // can arrive together, so serialize acceptance, broadcasts and close acknowledgements.
-        return QueueSendAsync(() => SendReloadAsync(cancellationToken));
+        return QueueSendAsync(() => SendToClientsAsync(ReloadMessage, cancellationToken));
+    }
+
+    /// <summary>
+    /// Shows <paramref name="diagnostics"/> in every connected browser, and in browsers
+    /// that connect later, until the next report. An empty report clears them.
+    /// </summary>
+    internal Task<int> ReportDiagnosticsAsync(string[] diagnostics, CancellationToken cancellationToken)
+    {
+        var message = JsonSerializer.SerializeToUtf8Bytes(diagnostics);
+        return QueueSendAsync(() =>
+        {
+            // dotnet watch also reports no errors after edits that had none.
+            if (diagnostics.Length == 0 && _diagnosticsMessage is null)
+            {
+                return Task.FromResult(0);
+            }
+
+            _diagnosticsMessage = diagnostics.Length == 0 ? null : message;
+            return SendToClientsAsync(message, cancellationToken);
+        });
     }
 
     private Task<T> QueueSendAsync<T>(Func<Task<T>> send)
@@ -83,36 +114,46 @@ internal sealed class LiveReloadHub
         return await send();
     }
 
-    private async Task<int> SendReloadAsync(CancellationToken cancellationToken)
+    private async Task<int> SendToClientsAsync(byte[] message, CancellationToken cancellationToken)
     {
-        var reloadedClients = 0;
+        var sentClients = 0;
 
         foreach (var (id, socket) in _clients)
         {
-            if (socket.State != WebSocketState.Open)
+            if (await SendAsync(id, socket, message, cancellationToken))
             {
-                _clients.TryRemove(id, out _);
-                continue;
-            }
-
-            try
-            {
-                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                timeout.CancelAfter(TimeSpan.FromSeconds(5));
-                await socket.SendAsync(ReloadMessage, WebSocketMessageType.Text, endOfMessage: true, timeout.Token);
-                reloadedClients++;
-            }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-            {
-                _clients.TryRemove(id, out _);
-                socket.Abort();
-            }
-            catch (Exception exception) when (exception is WebSocketException or ObjectDisposedException)
-            {
-                _clients.TryRemove(id, out _);
+                sentClients++;
             }
         }
 
-        return reloadedClients;
+        return sentClients;
+    }
+
+    private async Task<bool> SendAsync(Guid id, WebSocket socket, byte[] message, CancellationToken cancellationToken)
+    {
+        if (socket.State != WebSocketState.Open)
+        {
+            _clients.TryRemove(id, out _);
+            return false;
+        }
+
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(5));
+            await socket.SendAsync(message, WebSocketMessageType.Text, endOfMessage: true, timeout.Token);
+            return true;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _clients.TryRemove(id, out _);
+            socket.Abort();
+        }
+        catch (Exception exception) when (exception is WebSocketException or ObjectDisposedException)
+        {
+            _clients.TryRemove(id, out _);
+        }
+
+        return false;
     }
 }

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
@@ -37,6 +38,7 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
     private volatile bool _contentChanged;
     private WebApplication? _webApplication;
     private Task? _warmupTask;
+    private Task? _diagnosticsRelay;
     private SharedRenderLifetime? _sharedRenders;
     private bool _disposed;
 
@@ -48,6 +50,7 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
         // The slim host does not run hosting startups, so dotnet watch's browser
         // refresh middleware is not injected. Watch still applies code updates
         // and rebuilds scoped CSS; Kiji reloads after those outputs change.
+        // WatchDiagnosticsRelay takes only compilation errors from dotnet watch.
         var environment = app.ServiceProvider.GetRequiredService<IHostEnvironment>();
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions
         {
@@ -55,6 +58,12 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
             // Both hosts use the site's environment and project directory.
             EnvironmentName = environment.EnvironmentName,
             ContentRootPath = environment.ContentRootPath,
+        });
+        // The standard Host Filtering middleware reads AllowedHosts. Supply only a
+        // fallback; appsettings, environment variables and command line stay in control.
+        builder.Configuration.Sources.Insert(0, new MemoryConfigurationSource
+        {
+            InitialData = [new("AllowedHosts", "localhost;127.0.0.1;[::1]")],
         });
         // The site's logging, so builder.Logging and the Logging section also apply to ASP.NET Core.
         builder.Logging.ClearProviders();
@@ -65,6 +74,10 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
         builder.Configuration["DisableStaticAssetNotFoundRuntimeFallback"] = "true";
         builder.Configuration["EnableStaticAssetsDevelopmentCaching"] = "false";
         builder.Configuration["EnableStaticAssetsDevelopmentIntegrity"] = "false";
+        // The developer exception page is outside the base path middleware, which
+        // restores PathBase on the way out.
+        builder.Services.AddSingleton<Microsoft.AspNetCore.Diagnostics.IDeveloperPageExceptionFilter>(
+            new LiveReloadExceptionPageFilter(PathString.FromUriComponent(app.SiteInfo.BaseUrl.AbsolutePath.TrimEnd('/'))));
 
         // Only fill in an address when nothing else supplied one, so ASPNETCORE_URLS,
         // --urls, and launchSettings.json behave exactly as they do for any other
@@ -92,6 +105,16 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
             if (!context.WebSockets.IsWebSocketRequest)
             {
                 context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                return;
+            }
+
+            // Compilation errors include local paths, so only pages served here may
+            // subscribe. Browsers always send Origin, and AllowedHosts rejects rebound hosts.
+            string? origin = context.Request.Headers.Origin;
+            if (!string.IsNullOrEmpty(origin)
+                && !string.Equals(origin, $"{context.Request.Scheme}://{context.Request.Host}", StringComparison.OrdinalIgnoreCase))
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
                 return;
             }
 
@@ -171,6 +194,11 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
 
         await web.StartAsync(cancellationToken);
         ActiveServers.TryAdd(this, 0);
+        _diagnosticsRelay = WatchDiagnosticsRelay.RunAsync(
+            web.Configuration[WatchDiagnosticsRelay.EndpointKey],
+            web.Configuration[WatchDiagnosticsRelay.ServerKeyKey],
+            diagnostics => _hub.ReportDiagnosticsAsync(diagnostics, CancellationToken.None),
+            _sharedRenders.Token);
         _reporter.DevServerStarted(
             new Uri(new Uri(web.Urls.First()), app.SiteInfo.BaseUrl.AbsolutePath),
             app.ContentRoots,
@@ -248,6 +276,11 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
         {
             await _warmupTask;
         }
+
+        if (_diagnosticsRelay is not null)
+        {
+            await _diagnosticsRelay;
+        }
     }
 
     private static readonly Lazy<string> LiveReloadScript = new(static () =>
@@ -304,7 +337,7 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
     // PathBase carries the site's base path, so the script resolves under the prefix.
     // With no prefix its Value is null and the tag is byte-identical to a plain
     // "/_kiji/livereload.js" reference.
-    private static string InjectLiveReloadScript(string html, PathString pathBase)
+    internal static string InjectLiveReloadScript(string html, PathString pathBase)
     {
         var scriptPath = System.Text.Encodings.Web.HtmlEncoder.Default.Encode(pathBase.ToUriComponent() + "/_kiji/livereload.js");
         var tag = $"""<script src="{scriptPath}" defer></script>""";

@@ -51,7 +51,7 @@ Each item parameter depends on that item's file, like `Posts[id]`, so the page r
 again when its post or a neighboring post changes, including body-only edits. Resolve
 items in the factory on every build; an item retained from an earlier build fails
 publishing. Values created in the factory, such as record copies made with `with` or
-arrays, disable reuse; see the [reusable parameter types](../api-reference/#pages).
+arrays, disable reuse; see the [reusable parameter types](../api-reference/#page-parameters).
 
 Kiji tracks an item through the file it was loaded from. Values assigned to an item or its
 front matter afterward, in the factory or during rendering, are not tracked, so a reused

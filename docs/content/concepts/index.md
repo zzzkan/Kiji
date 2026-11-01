@@ -94,11 +94,13 @@ See [Blazor CSS isolation](https://learn.microsoft.com/aspnet/core/blazor/compon
 
 ## Generated files
 
-`AddRssFeed`, `AddSitemap`, and `AddArtifact` write feeds, sitemaps, and other site-wide
-files. See [Generated files](../api-reference/#generated-files).
+[`AddRssFeed`](../api-reference/#rssfeedstaticsitebuilderextensions),
+[`AddSitemap`](../api-reference/#sitemapstaticsitebuilderextensions), and
+[`AddArtifact`](../api-reference/#staticsitebuilder) write feeds, sitemaps, and other
+site-wide files.
 
 ## Static output
 
 The output has no Blazor runtime, so event handlers such as `@onclick` and methods such as
 `OnAfterRenderAsync` never run. Add browser behavior with JavaScript in `wwwroot/`. See
-[Unsupported Blazor features](../api-reference/#unsupported-blazor-features).
+[Blazor APIs](../api-reference/#blazor-apis).

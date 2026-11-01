@@ -174,7 +174,7 @@ For `.jpg`, `.jpeg`, `.png`, `.gif`, and `.webp` files, Kiji writes WebP version
 the page's `index.html`: 320, 640, 960, and 1280 pixels wide when the source is wider,
 plus one at the source width, up to 1920 pixels. The `<img>` gets a `srcset` and the source
 dimensions, and every image after the first loads lazily. To change the widths or the
-quality, see [Image settings](../api-reference/#image-settings).
+quality, see [`ImageProcessorOptions`](../api-reference/#imageprocessoroptions).
 
 Attributes such as `![Photo](photo.jpg){width=300 loading=eager}` replace the ones Kiji
 generates. When only `width` or `height` is a positive integer, Kiji computes the other from
@@ -186,4 +186,4 @@ and reference it as a static asset. Remote images, paths starting with `/`, and 
 written in HTML are left unchanged.
 
 A missing image, or a path outside the Markdown file's directory tree, fails the render.
-To replace the image processor, see [Image processing](../api-reference/#image-processing).
+To replace the image processor, see [`IImageProcessor`](../api-reference/#iimageprocessor).

@@ -42,7 +42,7 @@ internal sealed class ImageProcessor : IImageProcessor
             .Where(width => width < _maxWidth).Distinct().Order()];
         _generationGate = generationGate ?? ConcurrencyGate;
         CacheIdentity = BuildFingerprint.HashText(FormattableString.Invariant(
-            $"skia-webp-v1:{_quality}:{_maxWidth}:{string.Join(",", _widths)}:{EncoderIdentity}"));
+            $"skia-webp-v2:{_quality}:{_maxWidth}:{string.Join(",", _widths)}:{EncoderIdentity}"));
     }
 
     public string CacheIdentity { get; }
@@ -69,8 +69,11 @@ internal sealed class ImageProcessor : IImageProcessor
         var contentHash = BuildFingerprint.HashText(CacheIdentity + ":" + sourceHash);
         using var source = new MemoryStream(bytes, writable: false);
         using var codec = SKCodec.Create(source) ?? throw new InvalidDataException($"Cannot read image '{fileNameBase}'.");
-        var originalWidth = codec.Info.Width;
-        var originalHeight = codec.Info.Height;
+        // Report and generate the displayed orientation, as browsers show the source.
+        var origin = codec.EncodedOrigin;
+        var swapsAxes = SwapsAxes(origin);
+        var originalWidth = swapsAxes ? codec.Info.Height : codec.Info.Width;
+        var originalHeight = swapsAxes ? codec.Info.Width : codec.Info.Height;
 
         Directory.CreateDirectory(outputDirectory);
         // Another page may still reference an older variant with this basename.
@@ -152,11 +155,59 @@ internal sealed class ImageProcessor : IImageProcessor
                 throw new InvalidDataException($"Cannot decode image: {result}.");
             }
             cancellationToken.ThrowIfCancellationRequested();
-            return image;
+            return ApplyOrigin(image, codec.EncodedOrigin);
         }
         catch
         {
             image.Dispose();
+            throw;
+        }
+    }
+
+    private static bool SwapsAxes(SKEncodedOrigin origin) =>
+        origin is SKEncodedOrigin.LeftTop or SKEncodedOrigin.RightTop
+            or SKEncodedOrigin.RightBottom or SKEncodedOrigin.LeftBottom;
+
+    /// <summary>Rotates or mirrors decoded pixels to the EXIF display orientation.</summary>
+    /// <remarks>Takes ownership of <paramref name="image"/>; returns it unchanged for TopLeft.</remarks>
+    private static SKBitmap ApplyOrigin(SKBitmap image, SKEncodedOrigin origin)
+    {
+        float w = image.Width;
+        float h = image.Height;
+        // Maps stored (x, y) to displayed (x', y'): x' = scaleX*x + skewX*y + transX.
+        SKMatrix? transform = origin switch
+        {
+            SKEncodedOrigin.TopRight => new SKMatrix(-1, 0, w, 0, 1, 0, 0, 0, 1),
+            SKEncodedOrigin.BottomRight => new SKMatrix(-1, 0, w, 0, -1, h, 0, 0, 1),
+            SKEncodedOrigin.BottomLeft => new SKMatrix(1, 0, 0, 0, -1, h, 0, 0, 1),
+            SKEncodedOrigin.LeftTop => new SKMatrix(0, 1, 0, 1, 0, 0, 0, 0, 1),
+            SKEncodedOrigin.RightTop => new SKMatrix(0, -1, h, 1, 0, 0, 0, 0, 1),
+            SKEncodedOrigin.RightBottom => new SKMatrix(0, -1, h, -1, 0, w, 0, 0, 1),
+            SKEncodedOrigin.LeftBottom => new SKMatrix(0, 1, 0, -1, 0, w, 0, 0, 1),
+            _ => null,
+        };
+        if (transform is not { } matrix)
+        {
+            return image;
+        }
+
+        var size = SwapsAxes(origin) ? new SKSizeI(image.Height, image.Width) : new SKSizeI(image.Width, image.Height);
+        var oriented = new SKBitmap(image.Info.WithSize(size));
+        try
+        {
+            using (var canvas = new SKCanvas(oriented))
+            using (var paint = new SKPaint { BlendMode = SKBlendMode.Src })
+            {
+                // Axis-aligned integer transforms copy pixels exactly with nearest sampling.
+                canvas.SetMatrix(matrix);
+                canvas.DrawBitmap(image, 0, 0, new SKSamplingOptions(SKFilterMode.Nearest), paint);
+            }
+            image.Dispose();
+            return oriented;
+        }
+        catch
+        {
+            oriented.Dispose();
             throw;
         }
     }

@@ -6,7 +6,8 @@ order: 20
 
 A Kiji site is a .NET project. Razor components define pages, and `Program.cs` creates a
 builder with `StaticSite.CreateBuilder`, registers content and settings, builds the site,
-and calls `RunAsync`.
+and calls `RunAsync`. Kiji renders each page to HTML with Blazor's
+[`HtmlRenderer`](https://learn.microsoft.com/aspnet/core/blazor/components/render-components-outside-of-aspnetcore).
 
 ## Project structure
 

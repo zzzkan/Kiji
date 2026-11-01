@@ -4,8 +4,9 @@
 [![NuGet](https://img.shields.io/nuget/v/Kiji.svg)](https://www.nuget.org/packages/Kiji)
 [![License: MIT](https://img.shields.io/github/license/zzzkan/Kiji)](https://github.com/zzzkan/kiji/blob/main/LICENSE)
 
-**Write Razor. Publish a purely static site.** Kiji brings your .NET components and Markdown
-together in plain HTML, ready for any static host.
+**Write Razor. Publish a purely static site.** Kiji renders your Razor components with
+Blazor's [`HtmlRenderer`](https://learn.microsoft.com/aspnet/core/blazor/components/render-components-outside-of-aspnetcore)
+and writes each page, Markdown included, as plain HTML for any static host.
 
 ## Why Kiji
 
@@ -23,7 +24,7 @@ The browser reloads while you write, and publishing reuses unchanged pages.
 
 ### 🔄 Make it yours
 
-Customize Markdown, transform HTML, or bring your own content source and image processor.
+Customize Markdown parsing, add your own services and generated files, or replace the image processor.
 
 ### 🔕 Static by design
 

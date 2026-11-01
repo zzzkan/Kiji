@@ -22,6 +22,59 @@ public sealed class LiveReloadHubTests
     }
 
     [Fact]
+    public async Task ReportDiagnosticsAsync_ReachesPagesOpenedLaterUntilCleared()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var hub = new LiveReloadHub();
+        List<IDisposable> connections = [];
+        List<Task> handlers = [];
+        async Task<WebSocket> ConnectAsync()
+        {
+            var client = new TcpClient();
+            connections.Add(client);
+            await client.ConnectAsync((IPEndPoint)listener.LocalEndpoint, timeout.Token);
+            var server = await listener.AcceptTcpClientAsync(timeout.Token);
+            connections.Add(server);
+            var serverSocket = WebSocket.CreateFromStream(server.GetStream(), true, null, Timeout.InfiniteTimeSpan);
+            handlers.Add(hub.HandleClientAsync(() => Task.FromResult(serverSocket), timeout.Token));
+            var clientSocket = WebSocket.CreateFromStream(client.GetStream(), false, null, Timeout.InfiniteTimeSpan);
+            connections.Add(clientSocket);
+            return clientSocket;
+        }
+        async Task<string> ReceiveAsync(WebSocket socket)
+        {
+            var buffer = new byte[256];
+            var message = await socket.ReceiveAsync(buffer, timeout.Token);
+            return Encoding.UTF8.GetString(buffer, 0, message.Count);
+        }
+
+        try
+        {
+            Assert.Equal(0, await hub.ReportDiagnosticsAsync(["Home.razor(1,1): error CS0103: x"], timeout.Token));
+            // A page opened or reloaded while the build is broken still shows the error.
+            var opened = await ConnectAsync();
+            Assert.Equal("""["Home.razor(1,1): error CS0103: x"]""", await ReceiveAsync(opened));
+            Assert.Equal(1, await hub.ReportDiagnosticsAsync([], timeout.Token));
+            Assert.Equal("[]", await ReceiveAsync(opened));
+
+            // Once cleared, pages reloaded by the fix get no stale error, and later
+            // reports without errors, such as after a CSS edit, send nothing.
+            var reloaded = await ConnectAsync();
+            Assert.Equal(0, await hub.ReportDiagnosticsAsync([], timeout.Token));
+            Assert.Equal(2, await hub.BroadcastReloadAsync(timeout.Token));
+            Assert.Equal("reload", await ReceiveAsync(reloaded));
+        }
+        finally
+        {
+            await timeout.CancelAsync();
+            await Task.WhenAll(handlers);
+            connections.ForEach(static connection => connection.Dispose());
+        }
+    }
+
+    [Fact]
     public async Task BroadcastReloadAsync_WaitsForAcceptingClientToBeRegistered()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));

@@ -143,7 +143,7 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
     [Theory]
     [InlineData("Microsoft.NET.Sdk.Razor")]
     [InlineData("Microsoft.NET.Sdk.Web")]
-    public Task Watch_ContentRazorAndAssets_Reload(string sdk) => fixture.ScenarioAsync(async () =>
+    public Task Watch_ReloadsChanges_AndShowsCompilationErrors(string sdk) => fixture.ScenarioAsync(async () =>
     {
         await fixture.WatchAsync(async client =>
         {
@@ -172,6 +172,27 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
             Assert.Contains("Updated Razor", await client.GetStringAsync("/kiji/"), StringComparison.Ordinal);
             await ReloadAsync(client, () => fixture.Replace("Site/Home.razor.css", "teal", "magenta"));
             Assert.Contains("magenta", await client.GetStringAsync(AssetUrl(html, "scoped")), StringComparison.Ordinal);
+
+            // dotnet watch reports compilation errors only through its private browser
+            // refresh server, which Razor SDK sites get from Kiji's targets. Kiji relays
+            // them to open pages and pages opened later.
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+            using var socket = await ConnectReloadAsync(client, timeout.Token);
+            await EditAsync(() => fixture.Replace("Site/Home.razor", "Updated Razor", "@MissingMember"), timeout.Token);
+            Assert.Contains("MissingMember", await ReceiveAsync(socket, timeout.Token), StringComparison.Ordinal);
+            using (var opened = await ConnectReloadAsync(client, timeout.Token))
+            {
+                Assert.Contains("MissingMember", await ReceiveAsync(opened, timeout.Token), StringComparison.Ordinal);
+            }
+            await EditAsync(() => fixture.Replace("Site/Home.razor", "@MissingMember", "Fixed Razor"), timeout.Token);
+            bool cleared = false, reloaded = false;
+            while (!cleared || !reloaded)
+            {
+                var message = await ReceiveAsync(socket, timeout.Token);
+                if (message == "reload") { Assert.False(reloaded, "Fixing the error reloaded twice."); reloaded = true; }
+                else { cleared = message == "[]"; }
+            }
+            Assert.Contains("Fixed Razor", await client.GetStringAsync("/kiji/"), StringComparison.Ordinal);
         });
     }, sdk);
 
@@ -205,13 +226,8 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
     private static async Task ReloadAsync(HttpClient client, Action edit)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
-        using var socket = new ClientWebSocket();
-        await socket.ConnectAsync(new UriBuilder(client.BaseAddress!) { Scheme = "ws", Path = "/kiji/_kiji/reload" }.Uri, timeout.Token);
-        for (var attempt = 0; ; attempt++)
-        {
-            try { edit(); break; }
-            catch (IOException exception) when ((exception.HResult & 0xffff) is 32 or 33 && attempt < 40) { await Task.Delay(25, timeout.Token); }
-        }
+        using var socket = await ConnectReloadAsync(client, timeout.Token);
+        await EditAsync(edit, timeout.Token);
         var buffer = new byte[64];
         var received = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), timeout.Token);
         Assert.Equal("reload", Encoding.UTF8.GetString(buffer, 0, received.Count));
@@ -221,5 +237,34 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         try { await duplicate; }
         catch (OperationCanceledException) { }
         catch (WebSocketException) { }
+    }
+
+    private static async Task<ClientWebSocket> ConnectReloadAsync(HttpClient client, CancellationToken cancellationToken)
+    {
+        var socket = new ClientWebSocket();
+        await socket.ConnectAsync(new UriBuilder(client.BaseAddress!) { Scheme = "ws", Path = "/kiji/_kiji/reload" }.Uri, cancellationToken);
+        return socket;
+    }
+
+    private static async Task EditAsync(Action edit, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try { edit(); return; }
+            catch (IOException exception) when ((exception.HResult & 0xffff) is 32 or 33 && attempt < 40) { await Task.Delay(25, cancellationToken); }
+        }
+    }
+
+    private static async Task<string> ReceiveAsync(ClientWebSocket socket, CancellationToken cancellationToken)
+    {
+        using var message = new MemoryStream();
+        var buffer = new byte[4096];
+        WebSocketReceiveResult received;
+        do
+        {
+            received = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
+            message.Write(buffer, 0, received.Count);
+        } while (!received.EndOfMessage);
+        return Encoding.UTF8.GetString(message.ToArray());
     }
 }

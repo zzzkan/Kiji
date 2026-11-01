@@ -438,6 +438,29 @@ public sealed class DevServerTests : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// The developer exception page keeps the live reload client, so fixing the error
+    /// reloads it. ASP.NET Core renders that page outside the base path middleware.
+    /// </summary>
+    [Fact]
+    public async Task Serve_ExceptionPageKeepsLiveReloadUnderTheBasePath()
+    {
+        await File.WriteAllTextAsync(Path.Combine(_contentsDir, "broken.md"), "---\ntitle: [unclosed\n---\n");
+        var (baseAddress, devServer) = await StartServerAsync(new StringWriter(), TestArticleContents.CreateSiteInfoWithBasePath());
+        await using (devServer)
+        {
+            using var client = CreateClient();
+            using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(baseAddress, "/kiji/"));
+            request.Headers.Accept.ParseAdd("text/html");
+            using var response = await client.SendAsync(request);
+
+            Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+            var html = await response.Content.ReadAsStringAsync();
+            Assert.Contains("broken.md", html, StringComparison.Ordinal);
+            Assert.Contains("<script src=\"/kiji/_kiji/livereload.js\" defer></script>", html, StringComparison.Ordinal);
+        }
+    }
+
     private static HttpClient CreateClient()
     {
         return new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });

@@ -37,6 +37,7 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
     private volatile bool _contentChanged;
     private WebApplication? _webApplication;
     private Task? _warmupTask;
+    private Task? _diagnosticsRelay;
     private SharedRenderLifetime? _sharedRenders;
     private bool _disposed;
 
@@ -48,6 +49,7 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
         // The slim host does not run hosting startups, so dotnet watch's browser
         // refresh middleware is not injected. Watch still applies code updates
         // and rebuilds scoped CSS; Kiji reloads after those outputs change.
+        // WatchDiagnosticsRelay takes only compilation errors from dotnet watch.
         var environment = app.ServiceProvider.GetRequiredService<IHostEnvironment>();
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions
         {
@@ -65,6 +67,10 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
         builder.Configuration["DisableStaticAssetNotFoundRuntimeFallback"] = "true";
         builder.Configuration["EnableStaticAssetsDevelopmentCaching"] = "false";
         builder.Configuration["EnableStaticAssetsDevelopmentIntegrity"] = "false";
+        // The developer exception page is outside the base path middleware, which
+        // restores PathBase on the way out.
+        builder.Services.AddSingleton<Microsoft.AspNetCore.Diagnostics.IDeveloperPageExceptionFilter>(
+            new LiveReloadExceptionPageFilter(PathString.FromUriComponent(app.SiteInfo.BaseUrl.AbsolutePath.TrimEnd('/'))));
 
         // Only fill in an address when nothing else supplied one, so ASPNETCORE_URLS,
         // --urls, and launchSettings.json behave exactly as they do for any other
@@ -171,6 +177,11 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
 
         await web.StartAsync(cancellationToken);
         ActiveServers.TryAdd(this, 0);
+        _diagnosticsRelay = WatchDiagnosticsRelay.RunAsync(
+            web.Configuration[WatchDiagnosticsRelay.EndpointKey],
+            web.Configuration[WatchDiagnosticsRelay.ServerKeyKey],
+            diagnostics => _hub.ReportDiagnosticsAsync(diagnostics, CancellationToken.None),
+            _sharedRenders.Token);
         _reporter.DevServerStarted(
             new Uri(new Uri(web.Urls.First()), app.SiteInfo.BaseUrl.AbsolutePath),
             app.ContentRoots,
@@ -248,6 +259,11 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
         {
             await _warmupTask;
         }
+
+        if (_diagnosticsRelay is not null)
+        {
+            await _diagnosticsRelay;
+        }
     }
 
     private static readonly Lazy<string> LiveReloadScript = new(static () =>
@@ -304,7 +320,7 @@ internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporte
     // PathBase carries the site's base path, so the script resolves under the prefix.
     // With no prefix its Value is null and the tag is byte-identical to a plain
     // "/_kiji/livereload.js" reference.
-    private static string InjectLiveReloadScript(string html, PathString pathBase)
+    internal static string InjectLiveReloadScript(string html, PathString pathBase)
     {
         var scriptPath = System.Text.Encodings.Web.HtmlEncoder.Default.Encode(pathBase.ToUriComponent() + "/_kiji/livereload.js");
         var tag = $"""<script src="{scriptPath}" defer></script>""";

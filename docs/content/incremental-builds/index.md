@@ -87,3 +87,9 @@ For a message per page, set `Kiji.Build` to `Debug` in the
 The publish cache is in `.kiji/cache`. Restoring it in CI often costs more time than it
 saves, because code and package changes render every page anyway; measure before relying
 on it.
+
+Most of a publish's time goes to compiling code, so Kiji's staging directory also keeps a
+JIT profile: a later publish on the same machine compiles the recorded methods in the
+background before pages need them. The profile never changes output, and `dotnet clean`
+removes it. Publishing also turns off tiered PGO, which cannot pay off within one short
+process, unless the project sets `TieredPGO` itself.

@@ -4,10 +4,18 @@ using Microsoft.AspNetCore.WebUtilities;
 
 namespace Kiji;
 
+/// <param name="OutputRelativePath">The artifact's path under the output directory.</param>
+/// <param name="WriteAsync">Writes the artifact's bytes.</param>
+/// <param name="PreserveUnchangedOutput">Keeps an existing file whose bytes are unchanged.</param>
+/// <param name="IndependentOfPages">
+/// The writer reads only content and the page list, never state left by rendering, so it
+/// runs while pages render. Custom artifacts are documented to run after all pages.
+/// </param>
 internal sealed record SiteArtifactRegistration(
     string OutputRelativePath,
     Func<Stream, SiteOutputContext, CancellationToken, Task> WriteAsync,
-    bool PreserveUnchangedOutput = false)
+    bool PreserveUnchangedOutput = false,
+    bool IndependentOfPages = false)
 {
     internal async Task WriteFileAsync(string path, SiteOutputContext context, CancellationToken cancellationToken)
     {

@@ -10,6 +10,12 @@ internal sealed class SitemapArtifact
 {
     private const string NotFoundRelativePath = "404.html";
     private const string SitemapNamespace = "http://www.sitemaps.org/schemas/sitemap/0.9";
+    private static readonly XmlWriterSettings Settings = new()
+    {
+        Indent = true,
+        Encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+    };
+
     private readonly HashSet<string> _excludedPaths;
 
     /// <param name="excludedPaths">Site-relative page paths to omit in addition to <c>404.html</c>.</param>
@@ -44,33 +50,27 @@ internal sealed class SitemapArtifact
             .Where(page => !_excludedPaths.Contains(page.RelativePath))
             .OrderBy(static page => page.RelativePath, StringComparer.OrdinalIgnoreCase);
 
-        var settings = new XmlWriterSettings
+        // Synchronous XML into memory, then one asynchronous copy (see RssFeedArtifact).
+        using var buffer = new MemoryStream();
+        using (var writer = XmlWriter.Create(buffer, Settings))
         {
-            Async = true,
-            Indent = true,
-            Encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
-            CloseOutput = false,
-        };
-
-        var writer = XmlWriter.Create(output, settings);
-        await using (writer)
-        {
-            await writer.WriteStartDocumentAsync();
-            await writer.WriteStartElementAsync(prefix: null, "urlset", SitemapNamespace);
+            writer.WriteStartDocument();
+            writer.WriteStartElement(prefix: null, "urlset", SitemapNamespace);
 
             foreach (var page in pages)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                await writer.WriteStartElementAsync(prefix: null, "url", ns: null);
+                writer.WriteStartElement(prefix: null, "url", ns: null);
                 var pageUrl = context.Site.ResolveUrl(page.RelativePath);
-                await writer.WriteElementStringAsync(prefix: null, "loc", ns: null, pageUrl.AbsoluteUri);
-                await writer.WriteEndElementAsync();
+                writer.WriteElementString(prefix: null, "loc", ns: null, pageUrl.AbsoluteUri);
+                writer.WriteEndElement();
             }
 
-            await writer.WriteEndElementAsync();
-            await writer.WriteEndDocumentAsync();
-            await writer.FlushAsync();
+            writer.WriteEndElement();
+            writer.WriteEndDocument();
         }
+
+        await output.WriteAsync(buffer.GetBuffer().AsMemory(0, (int)buffer.Length), cancellationToken);
     }
 }

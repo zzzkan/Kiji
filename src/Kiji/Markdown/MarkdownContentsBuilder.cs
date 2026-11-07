@@ -22,10 +22,7 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
             throw new DirectoryNotFoundException($"Contents directory not found: {contentsDirectory}");
         }
 
-        var markdownFiles = new DirectoryInfo(contentsDirectory)
-            .EnumerateFiles("*.md", SearchOption.AllDirectories)
-            .OrderBy(static file => file.FullName, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        var markdownFiles = FindMarkdownFiles(new DirectoryInfo(contentsDirectory));
 
         // Files are read and parsed in parallel; results land at their enumeration
         // index so the collection order stays deterministic. YamlDotNet deserializers
@@ -73,5 +70,39 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
         return filter is null
             ? items
             : [.. items.Where(static item => item is not null)];
+    }
+
+    /// <summary>
+    /// Lists Markdown files as a recursive <c>*.md</c> enumeration does, ordered by path.
+    /// Content directories often hold one directory per post, so their subtrees are
+    /// enumerated in parallel instead of opening every directory serially.
+    /// </summary>
+    private static FileInfo[] FindMarkdownFiles(DirectoryInfo root)
+    {
+        var subdirectories = root.EnumerateDirectories().ToArray();
+        var found = new FileInfo[subdirectories.Length + 1][];
+        found[0] = [.. root.EnumerateFiles("*.md")];
+        var errors = new Exception?[subdirectories.Length];
+        Parallel.For(0, subdirectories.Length, index =>
+        {
+            try
+            {
+                found[index + 1] = [.. subdirectories[index].EnumerateFiles("*.md", SearchOption.AllDirectories)];
+            }
+            catch (Exception exception)
+            {
+                errors[index] = exception;
+            }
+        });
+
+        var firstError = Array.Find(errors, static error => error is not null);
+        if (firstError is not null)
+        {
+            ExceptionDispatchInfo.Capture(firstError).Throw();
+        }
+
+        return [.. found.SelectMany(static files => files)
+            .OrderBy(static file => file.FullName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static file => file.FullName, StringComparer.Ordinal)];
     }
 }

@@ -16,6 +16,7 @@ public static class SitemapStaticSiteBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        return builder.AddArtifact(path, new SitemapArtifact(excludedPaths).WriteAsync, preserveUnchangedOutput: true);
+        return builder.AddArtifact(path, new SitemapArtifact(excludedPaths).WriteAsync,
+            preserveUnchangedOutput: true, independentOfPages: true);
     }
 }

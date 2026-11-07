@@ -75,6 +75,11 @@
     <ItemGroup>
       <_KijiHostConfigurationOption Include="@(RuntimeHostConfigurationOption)" />
       <_KijiHostConfigurationOption Include="Kiji.OutputPath" Value="$(_KijiStagingDir)" />
+      <!-- Generation is one short process: hot code never outlives PGO instrumentation, which
+           otherwise costs more than it saves. An explicit TieredPGO setting still applies. -->
+      <_KijiHostConfigurationOption Include="System.Runtime.TieredPGO" Value="false" Condition="'$(TieredPGO)' == ''" />
+      <!-- Multicore JIT replays the previous publish's compiled methods; the profile is machine-local. -->
+      <_KijiHostConfigurationOption Include="Kiji.JitProfileDirectory" Value="$(_KijiDir)" />
     </ItemGroup>
     <MakeDir Directories="$(_KijiDir)" />
     <!-- Keep these arguments aligned with the SDK's GenerateBuildRuntimeConfigurationFiles

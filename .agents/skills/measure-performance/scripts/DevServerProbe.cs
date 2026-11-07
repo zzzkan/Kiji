@@ -190,7 +190,6 @@ static ProcessStartInfo StartInfo(string site, string[] command)
     info.Environment["ASPNETCORE_URLS"] = "http://127.0.0.1:0";
     info.Environment["DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER"] = "1";
     info.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
-    info.Environment.Remove("KIJI_OUTPUT");
     return info;
 }
 static async Task RunDotnet(string site, string[] command, string log)

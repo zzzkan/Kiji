@@ -90,7 +90,7 @@ public sealed class StaticSite
     public static StaticSiteBuilder CreateBuilder(string[] args)
     {
         ArgumentNullException.ThrowIfNull(args);
-        var settings = SiteRunSettings.FromEnvironment(Environment.GetEnvironmentVariable, args);
+        var settings = SiteRunSettings.FromExecutionContext(Environment.GetEnvironmentVariable, AppContext.GetData, args);
         var entryAssembly = Assembly.GetEntryAssembly() ?? throw new InvalidOperationException(
             "No entry assembly is available in this host. Run the site project as an application with dotnet run, dotnet watch or dotnet publish.");
 
@@ -108,9 +108,11 @@ public sealed class StaticSite
     /// Reads an environment variable; by default none is set. Injected so tests can exercise
     /// both modes without mutating the process environment, which parallel test classes share.
     /// </param>
+    /// <param name="runtimeData">Reads runtimeconfig properties without mutating process-wide AppContext data.</param>
     internal static StaticSiteBuilder CreateBuilder(string[] args, SiteExecutionPaths paths, Assembly entryAssembly,
-        Func<string, string?>? environment = null)
-        => new(args, paths, entryAssembly, SiteRunSettings.FromEnvironment(environment ?? (static _ => null), args));
+        Func<string, string?>? environment = null, Func<string, object?>? runtimeData = null)
+        => new(args, paths, entryAssembly, SiteRunSettings.FromExecutionContext(
+            environment ?? (static _ => null), runtimeData ?? (static _ => null), args));
 
     /// <summary>Publishes or serves the site according to the MSBuild execution context, then disposes the site.</summary>
     /// <remarks>Await this method in the entry point so <c>dotnet publish</c> generates the site.</remarks>

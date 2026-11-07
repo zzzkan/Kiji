@@ -37,10 +37,10 @@ public sealed class PageServiceContentTests : IDisposable
 
         // A different output can restore the portable cache. Force a clean render.
         var full = Path.Combine(_root, "full");
-        await CreateApp(new RelatedProbe(), environment: name => name switch
+        await CreateApp(new RelatedProbe(), runtimeData: name => name switch
         {
-            "KIJI_OUTPUT" => full,
-            "KIJI_FORCE" => "true",
+            "Kiji.OutputPath" => full,
+            "Kiji.Force" => "true",
             _ => null,
         }).RunAsync(CancellationToken.None);
         var expected = ReadHtml(full);
@@ -108,9 +108,9 @@ public sealed class PageServiceContentTests : IDisposable
         }
     }
 
-    private StaticSite CreateApp(RelatedProbe probe, Func<bool>? includeTags = null, Func<string, string?>? environment = null)
+    private StaticSite CreateApp(RelatedProbe probe, Func<bool>? includeTags = null, Func<string, object?>? runtimeData = null)
     {
-        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")), environment);
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")), runtimeData);
         builder.SiteInfo = new SiteInfo { Name = "Related", BaseUrl = new Uri("https://example.test/") };
         TestSite.TestSiteAssets.Bind(builder.Paths, Path.Combine(_root, "wwwroot"));
         builder.AddMarkdownContent<FrontMatter>();

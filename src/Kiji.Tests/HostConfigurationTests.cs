@@ -153,7 +153,7 @@ public sealed class HostConfigurationTests : IDisposable
     private StaticSiteBuilder CreateBuilder(string? environmentName, params Type[] discoveredPages)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root),
-            name => name == "DOTNET_ENVIRONMENT" ? environmentName : null, discoveredPages);
+            runtimeData: null, environment: name => name == "DOTNET_ENVIRONMENT" ? environmentName : null, discoveredPages);
         builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         return builder;
     }

@@ -30,9 +30,9 @@ internal sealed class DevServerStatusReporter
 
     internal static DevServerStatusReporter CreateForCurrentProcess()
     {
-        var useEmoji = !EnvironmentValue.IsTruthy(Environment.GetEnvironmentVariable("DOTNET_WATCH_SUPPRESS_EMOJIS"));
+        var useEmoji = !FlagValue.IsTruthy(Environment.GetEnvironmentVariable("DOTNET_WATCH_SUPPRESS_EMOJIS"));
         var useAnsiColor = !Console.IsOutputRedirected &&
-            !EnvironmentValue.IsTruthy(Environment.GetEnvironmentVariable("NO_COLOR")) &&
+            !FlagValue.IsTruthy(Environment.GetEnvironmentVariable("NO_COLOR")) &&
             !string.Equals(Environment.GetEnvironmentVariable("TERM"), "dumb", StringComparison.OrdinalIgnoreCase);
 
         return new DevServerStatusReporter(Console.Out, KijiPrefix, useEmoji, useAnsiColor);

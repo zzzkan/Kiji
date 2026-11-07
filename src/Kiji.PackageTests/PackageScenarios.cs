@@ -93,6 +93,19 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         fixture.Write("Site/value.txt", "external-value-2");
         await fixture.PublishAsync("-p:KijiForce=true", "-p:CompressionEnabled=true");
         Assert.Contains("external-value-2", Read("index.html"), StringComparison.Ordinal);
+        fixture.Write("Site/value.txt", "external-value-3");
+        await fixture.PublishAsync("--no-build", "-p:CompressionEnabled=true");
+        Assert.Contains("external-value-2", Read("index.html"), StringComparison.Ordinal);
+
+        // Run must serve after publish even when its environment contains publish paths.
+        await using (var server = RunningCommand.Start(Path.GetDirectoryName(fixture.Site)!,
+            "run", "--project", "Site/PackageSite.csproj", "-c", "Release", "--no-build",
+            "-e", "KIJI_OUTPUT=inherited-output", "-e", "Kiji.OutputPath=inherited-output",
+            "--", "--urls", "http://127.0.0.1:0"))
+        {
+            using var client = new HttpClient { BaseAddress = await server.AddressAsync() };
+            Assert.Contains("Edited body.", await client.GetStringAsync("/kiji/"), StringComparison.Ordinal);
+        }
 
         // SDK post-processing must include Kiji's generated HTML.
         Assert.Contains("published worker", Read("service-worker.js"), StringComparison.Ordinal);

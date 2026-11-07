@@ -10,10 +10,10 @@ namespace Kiji.Hosting;
 internal sealed record SiteRunSettings(string? OutputPath, bool Force, string EnvironmentName)
 {
     /// <summary>Where to generate the site. Set by Kiji's MSBuild targets on publish.</summary>
-    private const string OutputPathVariable = "KIJI_OUTPUT";
+    private const string OutputPathProperty = "Kiji.OutputPath";
 
     /// <summary>Skip the incremental plan and rebuild everything. <c>-p:KijiForce=true</c>.</summary>
-    private const string ForceVariable = "KIJI_FORCE";
+    private const string ForceProperty = "Kiji.Force";
 
     /// <summary>The environment name variable read by the .NET generic host.</summary>
     private const string EnvironmentNameVariable = "DOTNET_ENVIRONMENT";
@@ -24,11 +24,14 @@ internal sealed record SiteRunSettings(string? OutputPath, bool Force, string En
     /// Reads an environment variable. Injected so tests can exercise both modes without
     /// mutating the process environment, which parallel test classes share.
     /// </param>
+    /// <param name="runtimeData">Reads process-local runtimeconfig properties supplied for this invocation.</param>
     /// <param name="args">Command-line arguments. Only <c>--environment</c> is read, and only while serving.</param>
-    internal static SiteRunSettings FromEnvironment(Func<string, string?> environment, string[]? args = null)
+    internal static SiteRunSettings FromExecutionContext(Func<string, string?> environment,
+        Func<string, object?> runtimeData, string[]? args = null)
     {
         ArgumentNullException.ThrowIfNull(environment);
-        var outputPath = environment(OutputPathVariable);
+        ArgumentNullException.ThrowIfNull(runtimeData);
+        var outputPath = runtimeData(OutputPathProperty) as string;
         var publishing = !string.IsNullOrWhiteSpace(outputPath);
         var environmentName = environment(EnvironmentNameVariable);
         if (!publishing && string.IsNullOrWhiteSpace(environmentName))
@@ -46,7 +49,7 @@ internal sealed record SiteRunSettings(string? OutputPath, bool Force, string En
 
         return new SiteRunSettings(
             publishing ? outputPath : null,
-            EnvironmentValue.IsTruthy(environment(ForceVariable)),
+            publishing && FlagValue.IsTruthy(runtimeData(ForceProperty)?.ToString()),
             !string.IsNullOrWhiteSpace(environmentName) ? environmentName
                 : publishing ? Environments.Production : Environments.Development);
     }

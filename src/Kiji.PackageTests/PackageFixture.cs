@@ -145,7 +145,8 @@ public sealed class PackageFixture : IAsyncLifetime
     }
 
     internal Task<string> DotnetAsync(params string[] arguments) => RunningCommand.RunAsync(Work, arguments);
-    internal Task<string> PublishAsync(params string[] options) => DotnetAsync(["publish", "Site/PackageSite.csproj", "-c", "Release", .. options]);
+    internal Task<string> PublishAsync(params string[] options) =>
+        DotnetAsync(["publish", "Site/PackageSite.csproj", "-c", "Release", "-o", Path.Combine(Site, "dist"), .. options]);
 
     internal async Task WatchAsync(Func<HttpClient, Task> check)
     {

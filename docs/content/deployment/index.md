@@ -4,7 +4,7 @@ description: Publish to GitHub Pages or another static host, including under a s
 order: 50
 ---
 
-`dotnet publish` writes the site to `dist/` as static files only, ready to upload to any
+`dotnet publish -o dist` writes the site to `dist/` as static files only, ready to upload to any
 static host. Before publishing, set `SiteInfo.BaseUrl` to the site's final public URL;
 Kiji uses it for page, feed, sitemap, and image URLs.
 
@@ -66,7 +66,8 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
-      - run: dotnet publish MySite
+      - working-directory: MySite
+        run: dotnet publish -o dist
 
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
@@ -78,7 +79,7 @@ jobs:
 
 ## Other static hosts
 
-On Netlify, Vercel, Cloudflare Pages, and similar services, use `dotnet publish` as the
+On Netlify, Vercel, Cloudflare Pages, and similar services, use `dotnet publish -o dist` as the
 build command and `dist` as the output directory. The build environment needs the .NET 10
 SDK; otherwise, publish in your own CI and upload `dist/`.
 

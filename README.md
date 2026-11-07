@@ -65,7 +65,7 @@ The browser reloads as you edit content and components.
 Stop the development server with `Ctrl+C`, then generate the static site in `dist/`:
 
 ```pwsh
-dotnet publish
+dotnet publish -o dist
 ```
 
 See [Kiji.Templates](https://github.com/zzzkan/Kiji.Templates) for all templates and options,

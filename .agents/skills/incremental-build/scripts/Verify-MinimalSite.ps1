@@ -35,7 +35,7 @@ foreach ($mode in @('publish', 'no-build', 'compressed', 'compressed-no-build', 
         default { @() }
     }
     $compressed = $mode -in @('compressed', 'compressed-no-build', 'project-compressed')
-    & dotnet publish $site -c Release "-p:RestorePackagesPath=$RunRoot/packages" @extra *> (Join-Path $RunRoot "minimal-$mode.log")
+    & dotnet publish $site -c Release -o (Join-Path $site 'dist') "-p:RestorePackagesPath=$RunRoot/packages" @extra *> (Join-Path $RunRoot "minimal-$mode.log")
     if ($LASTEXITCODE) { throw "Minimal site failed: $mode. See $RunRoot." }
     $files = @(Get-ChildItem (Join-Path $site 'dist') -Recurse -File)
     $expected = if ($compressed) { @('index.html', 'index.html.br', 'index.html.gz') } else { @('index.html') }
@@ -69,7 +69,7 @@ foreach ($mode in @('default', 'project-compressed', 'global-uncompressed')) {
     if ($mode -in @('project-compressed', 'global-uncompressed')) { $webProject = $webProject.Replace('</PropertyGroup>', '<CompressionEnabled>true</CompressionEnabled></PropertyGroup>') }
     [IO.File]::WriteAllText((Join-Path $webSite 'MinimalWeb.csproj'), $webProject)
     [string[]] $extra = if ($mode -eq 'global-uncompressed') { @('-p:CompressionEnabled=false') } else { @() }
-    & dotnet publish $webSite -c Release "-p:RestorePackagesPath=$RunRoot/packages" @extra *> (Join-Path $RunRoot "minimal-web-$mode.log")
+    & dotnet publish $webSite -c Release -o (Join-Path $webSite 'dist') "-p:RestorePackagesPath=$RunRoot/packages" @extra *> (Join-Path $RunRoot "minimal-web-$mode.log")
     if ($LASTEXITCODE) { throw "Minimal Web site failed: $mode." }
     $webHtml = Join-Path $webSite 'dist/index.html'
     if (![IO.File]::ReadAllText($webHtml).Contains('<h1>Minimal site</h1>')) { throw "Missing Web HTML: $mode." }
@@ -83,14 +83,14 @@ foreach ($mode in @('default', 'project-compressed', 'global-uncompressed')) {
 try {
     [IO.File]::WriteAllText((Join-Path $RunRoot 'linked.txt'), 'linked bytes')
     [IO.File]::WriteAllText($project, $original.Replace('</Project>', '<ItemGroup><Content Include="../linked.txt" Link="wwwroot/linked.txt" CopyToPublishDirectory="PreserveNewest" /></ItemGroup></Project>'))
-    & dotnet publish $site -c Release "-p:RestorePackagesPath=$RunRoot/packages" *> (Join-Path $RunRoot 'minimal-linked.log')
+    & dotnet publish $site -c Release -o (Join-Path $site 'dist') "-p:RestorePackagesPath=$RunRoot/packages" *> (Join-Path $RunRoot 'minimal-linked.log')
     if ($LASTEXITCODE -or [IO.File]::ReadAllText((Join-Path $site 'dist/linked.txt')) -ne 'linked bytes') { throw 'Linked source failed.' }
     [IO.File]::WriteAllText($project, $original)
     [IO.File]::WriteAllText((Join-Path $site 'Home.razor.css'), 'h1 { color: red; }')
-    & dotnet publish $site -c Release "-p:RestorePackagesPath=$RunRoot/packages" *> (Join-Path $RunRoot 'minimal-css.log')
+    & dotnet publish $site -c Release -o (Join-Path $site 'dist') "-p:RestorePackagesPath=$RunRoot/packages" *> (Join-Path $RunRoot 'minimal-css.log')
     if ($LASTEXITCODE -or !(Test-Path (Join-Path $site 'dist/Minimal.styles.css'))) { throw 'Scoped CSS failed.' }
     [IO.File]::Delete((Join-Path $site 'Home.razor.css'))
-    & dotnet publish $site -c Release "-p:RestorePackagesPath=$RunRoot/packages" *> (Join-Path $RunRoot 'minimal-emptied.log')
+    & dotnet publish $site -c Release -o (Join-Path $site 'dist') "-p:RestorePackagesPath=$RunRoot/packages" *> (Join-Path $RunRoot 'minimal-emptied.log')
     if ($LASTEXITCODE -or (Compare-Object @('index.html') @(Get-ChildItem (Join-Path $site 'dist') -File -Recurse | Select-Object -ExpandProperty Name | Sort-Object))) { throw 'Retired assets remain.' }
     foreach ($kind in @('runtime', 'publish.runtime')) {
         $manifest = Get-Content (Join-Path $site "bin/Release/net10.0/Minimal.staticwebassets.$kind.json") -Raw | ConvertFrom-Json

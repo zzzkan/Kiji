@@ -234,7 +234,7 @@ function Invoke-Publish([string] $variant, [string] $scenario, [int] $round) {
     $before = Get-FileStates $dist
     $compressionBefore = Get-CompressedStates $compressionDir
     $prefix = Join-Path $root "$variant-$scenario-$round"
-    $arguments = @('publish', $site, '-c', 'Release', '--no-restore', '-v:minimal', "-logger:Kiji.Performance.PublishTimingLogger,$loggerDll;$prefix.msbuild.json")
+    $arguments = @('publish', $site, '-c', 'Release', '-o', $dist, '--no-restore', '-v:minimal', "-logger:Kiji.Performance.PublishTimingLogger,$loggerDll;$prefix.msbuild.json")
     $arguments += @(Get-Properties $variant)
     $elapsed = Invoke-Dotnet $arguments ($prefix + '.log') @{ KIJI_PERFORMANCE_REPORT=($prefix + '.kiji.json') }
     $msbuild = Get-Content -Raw -LiteralPath ($prefix + '.msbuild.json') | ConvertFrom-Json
@@ -288,7 +288,8 @@ if (!$SkipInstrumentationCheck) {
             foreach ($enabled in $order) {
                 $label = if ($enabled) { 'on' } else { 'off' }
                 $prefix = Join-Path $root "$variant-instrumentation-$label-$round"
-                $arguments = @('publish', (Join-Path $root $variant), '-c', 'Release', '--no-restore', '-v:minimal')
+                $site = Join-Path $root $variant
+                $arguments = @('publish', $site, '-c', 'Release', '-o', (Join-Path $site 'dist'), '--no-restore', '-v:minimal')
                 $arguments += @(Get-Properties $variant)
                 $environment = @{ KIJI_PERFORMANCE_REPORT='' }
                 if ($enabled) {

@@ -12,8 +12,5 @@
   </ItemGroup>
 
   <Import Project="../src/Kiji/MSBuild/Kiji.targets" />
-  <PropertyGroup Condition="'$(_KijiIsSiteApp)' == 'true' and '$(UseArtifactsOutput)' != 'true'">
-    <PublishDir Condition="'$(PublishDir)' == ''">$(MSBuildProjectDirectory)/dist/</PublishDir>
-  </PropertyGroup>
 
 </Project>

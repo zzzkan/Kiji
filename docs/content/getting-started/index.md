@@ -36,7 +36,7 @@ styles, syntax highlighting, and RSS.
 - Components are in `Pages/`, `Layout/`, and `Components/`; styles are in
   `wwwroot/css/app.css`.
 
-Stop the server with `Ctrl+C`, run `dotnet publish`, and upload the contents of `dist/`
+Stop the server with `Ctrl+C`, run `dotnet publish -o dist`, and upload the contents of `dist/`
 to your static host. See [Deployment](../deployment/).
 
 ## Build from scratch
@@ -382,7 +382,7 @@ To add a post, create another directory such as `content/posts/second-post/` wit
 Stop the development server and publish:
 
 ```pwsh
-dotnet publish
+dotnet publish -o dist
 ```
 
 `dist/` now contains the generated HTML and `css/app.css`, ready for any static host.

@@ -24,15 +24,6 @@
     <_DebugSymbolsOutputPath Remove="@(_DebugSymbolsOutputPath)" />
   </ItemGroup>
 
-  <PropertyGroup Condition="'$(_KijiIsSiteApp)' == 'true' and '$(UseArtifactsOutput)' != 'true' and '$(PublishDirName)' == 'publish'">
-    <!-- Replace only the SDK default; preserve explicit publish directories and artifacts layout. -->
-    <_KijiSdkDefaultPublishDir Condition="'$(AppendRuntimeIdentifierToOutputPath)' != 'true' and
-                                               '$(RuntimeIdentifier)' != '' and
-                                               '$(_UsingDefaultRuntimeIdentifier)' != 'true'">$(OutputPath)$(RuntimeIdentifier)$([System.IO.Path]::DirectorySeparatorChar)$(PublishDirName)$([System.IO.Path]::DirectorySeparatorChar)</_KijiSdkDefaultPublishDir>
-    <_KijiSdkDefaultPublishDir Condition="'$(_KijiSdkDefaultPublishDir)' == ''">$(OutputPath)$(PublishDirName)$([System.IO.Path]::DirectorySeparatorChar)</_KijiSdkDefaultPublishDir>
-    <PublishDir Condition="'$(PublishDir)' == '$(_KijiSdkDefaultPublishDir)'">$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', 'dist'))</PublishDir>
-  </PropertyGroup>
-
   <PropertyGroup Condition="'$(_KijiIsSiteApp)' == 'true'">
     <_KijiDotNetHost>$(DOTNET_HOST_PATH)</_KijiDotNetHost>
     <_KijiDotNetHost Condition="'$(_KijiDotNetHost)' == ''">dotnet</_KijiDotNetHost>
@@ -45,7 +36,7 @@
     <StaticWebAssetBasePath>/</StaticWebAssetBasePath>
     <CustomAfterStaticWebAssetsSdkTargets>$(MSBuildThisFileDirectory)Kiji.StaticWebAssets.targets</CustomAfterStaticWebAssetsSdkTargets>
 
-    <!-- Exclude project-local output, but keep nested input directories. -->
+    <!-- Keep the documented -o dist output out of later builds and watch. -->
     <DefaultItemExcludes>$(DefaultItemExcludes);dist/**</DefaultItemExcludes>
   </PropertyGroup>
 

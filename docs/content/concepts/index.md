@@ -34,7 +34,7 @@ components as you prefer. Add `.kiji/` and `dist/` to `.gitignore`.
 | Command          | Result                                                            |
 | ---------------- | ----------------------------------------------------------------- |
 | `dotnet watch`   | Serve a preview at <http://localhost:8080> that reloads on changes. |
-| `dotnet publish` | Write the static site to `dist/`, reusing unchanged pages.        |
+| `dotnet publish -o dist` | Write the static site to `dist/`, reusing unchanged pages. |
 | `dotnet clean`   | Remove build output and the `.kiji/` cache.                       |
 
 Changes to `Program.cs` apply only after a restart: press `Ctrl+R` in the `dotnet watch`

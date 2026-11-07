@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Net;
 using System.Net.WebSockets;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -23,6 +24,26 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         Assert.True(File.Exists(Path.Combine(buildDirectory, "publish", "index.html")));
         Assert.False(File.Exists(Path.Combine(buildDirectory, "dist", "previous.json")));
         Assert.False(File.Exists(Path.Combine(fixture.Site, "dist", "index.html")));
+    });
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public Task Publish_NoBuild_WithRuntimeIdentifier_RespectsUseAppHost(bool useAppHost) => fixture.ScenarioAsync(async () =>
+    {
+        const string project = "Site/PackageSite.csproj";
+        var rid = RuntimeInformation.RuntimeIdentifier;
+        var appHostName = OperatingSystem.IsWindows() ? "PackageSite.exe" : "PackageSite";
+        fixture.Replace(project, "<OutputType>Exe</OutputType>",
+            $"<OutputType>Exe</OutputType><UseAppHost>{(useAppHost ? "true" : "false")}</UseAppHost>");
+
+        await fixture.DotnetAsync("build", project, "-c", "Release", "-r", rid, "--no-self-contained");
+        var buildDirectory = Path.Combine(fixture.Site, "bin", "Release", "net10.0", rid);
+        Assert.Equal(useAppHost, File.Exists(Path.Combine(buildDirectory, appHostName)));
+
+        await fixture.PublishAsync("--no-build", "-r", rid, "--no-self-contained");
+        Assert.True(File.Exists(Path.Combine(fixture.Site, "dist", "index.html")));
+        Assert.False(File.Exists(Path.Combine(fixture.Site, "dist", appHostName)));
     });
 
     [Fact]

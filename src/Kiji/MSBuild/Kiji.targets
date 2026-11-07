@@ -9,9 +9,9 @@
 
   <!-- Stable Release site MVIDs allow cache reuse across checkouts. -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release' and '$(_KijiIsSiteApp)' == 'true'">
+    <!-- Portable PDB metadata can change the MVID across checkouts and revisions. -->
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
-    <UseAppHost>false</UseAppHost>
     <Deterministic>true</Deterministic>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <PathMap Condition="'$(PathMap)' != ''">$(PathMap),</PathMap>

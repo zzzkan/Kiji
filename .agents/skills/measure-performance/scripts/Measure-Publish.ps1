@@ -11,8 +11,8 @@ param(
     [hashtable] $CandidateProperties = @{},
     [switch] $AllowCompressionDifferences,
     [switch] $AllowNewFingerprintAliases,
-    [ValidateSet('NoChange', 'OneEdited', 'PublishOutputRemoved', 'Fresh')]
-    [string[]] $Scenarios = @('NoChange', 'OneEdited', 'PublishOutputRemoved', 'Fresh')
+    [ValidateSet('NoChange', 'ManifestRemoved', 'OneEdited', 'PublishOutputRemoved', 'Fresh')]
+    [string[]] $Scenarios = @('NoChange', 'ManifestRemoved', 'OneEdited', 'PublishOutputRemoved', 'Fresh')
 )
 $ErrorActionPreference = 'Stop'
 $Repository = [IO.Path]::GetFullPath($Repository)
@@ -223,6 +223,7 @@ function Invoke-Publish([string] $variant, [string] $scenario, [int] $round) {
         foreach ($name in @('bin', 'obj', '.kiji', 'dist')) { Remove-Owned (Join-Path $site $name) }
         $null = Invoke-Dotnet (@('restore', $site) + @(Get-Properties $variant)) (Join-Path $root "$variant-$scenario-$round-restore.log")
     }
+    if ($scenario -eq 'ManifestRemoved') { Remove-Item -LiteralPath (Join-Path $site '.kiji/cache/manifest.json') }
     if ($scenario -eq 'PublishOutputRemoved') { Remove-Owned (Join-Path $site 'dist') }
     if ($scenario -eq 'OneEdited') {
         $letter = if ($round % 2) { 'A' } else { 'B' }
@@ -337,6 +338,7 @@ $summary = foreach ($scenario in $Scenarios) {
     LogicalProcessors=[Environment]::ProcessorCount; ProcessorIdentifier=$env:PROCESSOR_IDENTIFIER; Provenance=$provenance
     Semantics=@{
         NoChange='Previously built site and existing published output'
+        ManifestRemoved='Only the Kiji build manifest removed before timing; all pages render with image cache, staging and published files retained'
         OneEdited='Alternating equal-length edits to exactly one Markdown input'
         PublishOutputRemoved='Only dist removed; bin/obj and Kiji cache/staging remain'
         Fresh='bin/obj/.kiji/dist removed each invocation; restore outside timing; warm OS/package caches'

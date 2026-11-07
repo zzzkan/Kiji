@@ -69,7 +69,11 @@ The measurement-only MSBuild logger compiles under the ignored run directory;
 it is not a Kiji dependency, solution project or packaged build task.
 
 - NoChange retains all outputs.
-  OneEdited alternates equal-length edits to one Markdown input.
+- ManifestRemoved deletes only `.kiji/cache/manifest.json` before timing. Every page
+  renders with image caches, staging, and published files retained. It replaces
+  ForceRender. Re-run both packages under ManifestRemoved for a like-for-like comparison
+  with a baseline previously measured using ForceRender.
+- OneEdited alternates equal-length edits to one Markdown input.
 - PublishOutputRemoved removes only dist, retaining Kiji staging and caches. Do not
   call this Kiji's CacheOnly scenario: that benchmark repairs the generator output.
 - Fresh clears bin, obj, .kiji and dist before every invocation, then restores outside

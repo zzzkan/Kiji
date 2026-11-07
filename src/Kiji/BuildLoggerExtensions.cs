@@ -20,6 +20,9 @@ internal static partial class BuildLoggerExtensions
     [LoggerMessage(4, LogLevel.Information, "Removed {Count} file(s) the build did not produce.")]
     internal static partial void OutputsRemoved(this ILogger logger, int count);
 
+    [LoggerMessage(5, LogLevel.Information, "Publishing for environment '{EnvironmentName}'.")]
+    internal static partial void PublishingEnvironment(this ILogger logger, string environmentName);
+
     [LoggerMessage(10, LogLevel.Debug, "Generated: {Path}")]
     internal static partial void PageGenerated(this ILogger logger, string path);
 

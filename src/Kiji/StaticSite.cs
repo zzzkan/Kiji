@@ -186,6 +186,8 @@ public sealed class StaticSite
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
         ObjectDisposedException.ThrowIf(_disposed, this);
+        // The name may come from an inherited DOTNET_ENVIRONMENT, so show it before anything can fail.
+        BuildLogger.PublishingEnvironment(_environment.EnvironmentName);
 
         await using var cacheLease = await CacheLease.AcquireAsync(Paths.ResolveCachePath(), cancellationToken);
         var options = Paths.ResolveForPublish(outputPath);

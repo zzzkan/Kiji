@@ -59,7 +59,8 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   Content becomes accessible through factories/loaders/artifacts only after execution
   paths settle. Do not expose a provider or content collection on StaticSite. IHostEnvironment
   is read-only: its name selects the configuration files at creation. Publish takes the name
-  only from DOTNET_ENVIRONMENT; serving follows WebApplicationBuilder's order (--environment,
+  only from DOTNET_ENVIRONMENT, the generic host convention and the one machine-dependent input
+  kept, and logs it; serving follows WebApplicationBuilder's order (--environment,
   DOTNET_ENVIRONMENT, ASPNETCORE_ENVIRONMENT). Default configuration sources stay
   project-local (no environment variables, command line or user secrets, which differ between
   machines). The dev server uses standard ASP.NET Core configuration with the same project

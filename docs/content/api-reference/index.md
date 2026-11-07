@@ -36,40 +36,40 @@ builder.SiteInfo = new SiteInfo
 return await builder.Build().RunAsync();
 ```
 
-| Member | Behavior |
-| --- | --- |
-| `static StaticSiteBuilder CreateBuilder(string[] args)` | Creates a builder for the current project. While serving, `args` can set the environment and development server options such as `--urls`. |
-| `Task<int> RunAsync(CancellationToken cancellationToken = default)` | Serves the site during `dotnet watch` and generates it during `dotnet publish`. Return its result from `Program.cs`. |
+| Member                                                              | Behavior                                                                                                                                  |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `static StaticSiteBuilder CreateBuilder(string[] args)`             | Creates a builder for the current project. While serving, `args` can set the environment and development server options such as `--urls`. |
+| `Task<int> RunAsync(CancellationToken cancellationToken = default)` | Serves the site during `dotnet watch` and generates it during `dotnet publish`. Return its result from `Program.cs`.                      |
 
 ### `StaticSiteBuilder`
 
 Holds every registration for the site. Configure it before calling `Build`. Registration
 methods return the builder, so calls can be chained.
 
-| Property | Behavior |
-| --- | --- |
-| `SiteInfo SiteInfo` | Required site metadata. See [`SiteInfo`](#siteinfo). |
-| `IServiceCollection Services` | Services for components. See [Services](#services). |
-| `IHostEnvironment Environment` | The environment name. See [Environment](#environment). |
+| Property                              | Behavior                                                 |
+| ------------------------------------- | -------------------------------------------------------- |
+| `SiteInfo SiteInfo`                   | Required site metadata. See [`SiteInfo`](#siteinfo).     |
+| `IServiceCollection Services`         | Services for components. See [Services](#services).      |
+| `IHostEnvironment Environment`        | The environment name. See [Environment](#environment).   |
 | `IConfigurationManager Configuration` | Site configuration. See [Configuration](#configuration). |
-| `ILoggingBuilder Logging` | Logging providers and filters. See [Logging](#logging). |
+| `ILoggingBuilder Logging`             | Logging providers and filters. See [Logging](#logging).  |
 
-| Method | Behavior |
-| --- | --- |
-| `UseDefaultLayout<TLayout>()` | Sets the layout for pages without their own `@layout`. Without it, pages render directly inside `<body>`. |
-| `AddPageAssembly(Assembly assembly)` | Adds pages from another assembly, such as a Razor class library. Pages in the site project are found automatically. |
-| `AddPageParameters<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)` | Supplies parameter values for a component's pages. See [Page parameters](#page-parameters). |
-| `UseNotFoundPage<TPage>()` | Writes the component as `404.html` instead of at its route. The component needs exactly one route and cannot also receive page parameters. |
-| `AddArtifact(string outputRelativePath, Func<Stream, SiteOutputContext, CancellationToken, Task> write)` | Writes a file after all pages. Write to the stream without disposing it. See [`SiteOutputContext`](#siteoutputcontext). |
-| `StaticSite Build()` | Validates the services and returns the site. Call it once. |
+| Method                                                                                                   | Behavior                                                                                                                                   |
+| -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `UseDefaultLayout<TLayout>()`                                                                            | Sets the layout for pages without their own `@layout`. Without it, pages render directly inside `<body>`.                                  |
+| `AddPageAssembly(Assembly assembly)`                                                                     | Adds pages from another assembly, such as a Razor class library. Pages in the site project are found automatically.                        |
+| `AddPageParameters<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)`                       | Supplies parameter values for a component's pages. See [Page parameters](#page-parameters).                                                |
+| `UseNotFoundPage<TPage>()`                                                                               | Writes the component as `404.html` instead of at its route. The component needs exactly one route and cannot also receive page parameters. |
+| `AddArtifact(string outputRelativePath, Func<Stream, SiteOutputContext, CancellationToken, Task> write)` | Writes a file after all pages. Write to the stream without disposing it. See [`SiteOutputContext`](#siteoutputcontext).                    |
+| `StaticSite Build()`                                                                                     | Validates the services and returns the site. Call it once.                                                                                 |
 
 Extension methods in other namespaces register content and generated files:
 
-| Method | Namespace |
-| --- | --- |
+| Method                                                                                  | Namespace       |
+| --------------------------------------------------------------------------------------- | --------------- |
 | [`AddMarkdownContent`, `AddKeyedMarkdownContent`](#markdownstaticsitebuilderextensions) | `Kiji.Markdown` |
-| [`AddRssFeed`](#rssfeedstaticsitebuilderextensions) | `Kiji.Feeds` |
-| [`AddSitemap`](#sitemapstaticsitebuilderextensions) | `Kiji.Sitemaps` |
+| [`AddRssFeed`](#rssfeedstaticsitebuilderextensions)                                     | `Kiji.Feeds`    |
+| [`AddSitemap`](#sitemapstaticsitebuilderextensions)                                     | `Kiji.Sitemaps` |
 
 Only `dotnet publish` writes artifacts, feeds, and sitemaps; the development server
 returns 404 for them.
@@ -103,8 +103,7 @@ if (builder.Environment.IsDevelopment())
 ```
 
 `dotnet publish` uses `DOTNET_ENVIRONMENT` and defaults to `Production`. `dotnet watch`
-defaults to `Development`; `--environment`, `DOTNET_ENVIRONMENT`, or
-`ASPNETCORE_ENVIRONMENT` changes it.
+defaults to `Development`.
 
 #### Configuration
 
@@ -167,13 +166,13 @@ page render on every publish.
 
 Site metadata, assigned to `StaticSiteBuilder.SiteInfo` and injectable into components.
 
-| Property | Default | Behavior |
-| --- | --- | --- |
-| `Uri BaseUrl` | Required | The site's public URL, such as `https://example.com/blog/`. Its path is the base path of every page. |
-| `string Name` | Required | Site name, also the RSS channel title. |
-| `string Description` | `""` | Site description, also the RSS channel description. |
-| `string Language` | `"en"` | Written to `<html lang>` and the RSS channel. |
-| `string Author` | `""` | For your components; Kiji does not write it. |
+| Property             | Default  | Behavior                                                                                             |
+| -------------------- | -------- | ---------------------------------------------------------------------------------------------------- |
+| `Uri BaseUrl`        | Required | The site's public URL, such as `https://example.com/blog/`. Its path is the base path of every page. |
+| `string Name`        | Required | Site name, also the RSS channel title.                                                               |
+| `string Description` | `""`     | Site description, also the RSS channel description.                                                  |
+| `string Language`    | `"en"`   | Written to `<html lang>` and the RSS channel.                                                        |
+| `string Author`      | `""`     | For your components; Kiji does not write it.                                                         |
 
 `Uri ResolveUrl(string path)` returns the absolute URL of a site-relative path. A leading
 `/` is ignored, so `"about/"` and `"/about/"` both stay under the base path, and `""`
@@ -183,8 +182,8 @@ returns `BaseUrl`.
 
 Describes the page being rendered. Inject it in pages, layouts, and components.
 
-| Property | Behavior |
-| --- | --- |
+| Property  | Behavior                                                                                                    |
+| --------- | ----------------------------------------------------------------------------------------------------------- |
 | `Uri Url` | The page's absolute public URL, including the base path. The development server uses the published URL too. |
 
 ```razor
@@ -201,32 +200,32 @@ The items of one content source, injected as a service. Markdown IDs are paths r
 the content directory, such as `posts/hello/index.md`, and ignore case. For how reads affect
 page reuse, see [what changes cause work](../incremental-builds/#what-changes-cause-work).
 
-| Member | Behavior |
-| --- | --- |
-| `int Count` | Number of items. |
-| `GetEnumerator()` | Enumerates items in path order. |
-| `T this[string id]` | Looks up an item; throws `KeyNotFoundException` if absent. |
-| `bool TryGetValue(string id, out T? item)` | Looks up an item, or returns `false`. |
-| `bool Contains(string id)` | Tests whether the item exists. |
+| Member                                     | Behavior                                                   |
+| ------------------------------------------ | ---------------------------------------------------------- |
+| `int Count`                                | Number of items.                                           |
+| `GetEnumerator()`                          | Enumerates items in path order.                            |
+| `T this[string id]`                        | Looks up an item; throws `KeyNotFoundException` if absent. |
+| `bool TryGetValue(string id, out T? item)` | Looks up an item, or returns `false`.                      |
+| `bool Contains(string id)`                 | Tests whether the item exists.                             |
 
 ### `SiteOutputContext`
 
 Passed to the writer registered with `AddArtifact`.
 
-| Property | Behavior |
-| --- | --- |
-| `SiteInfo Site` | The site metadata. |
-| `IReadOnlyList<SitePageInfo> Pages` | Every generated page. |
-| `IServiceProvider Services` | Site services, including content collections. |
+| Property                            | Behavior                                      |
+| ----------------------------------- | --------------------------------------------- |
+| `SiteInfo Site`                     | The site metadata.                            |
+| `IReadOnlyList<SitePageInfo> Pages` | Every generated page.                         |
+| `IServiceProvider Services`         | Site services, including content collections. |
 
 ### `SitePageInfo`
 
 A generated page, listed in `SiteOutputContext.Pages`.
 
-| Property | Behavior |
-| --- | --- |
-| `string RelativePath` | The page URL relative to `BaseUrl`, such as `posts/hello/`, or `""` for the home page. |
-| `string OutputRelativePath` | The output file, such as `posts/hello/index.html`, with `\` separators on Windows. |
+| Property                    | Behavior                                                                               |
+| --------------------------- | -------------------------------------------------------------------------------------- |
+| `string RelativePath`       | The page URL relative to `BaseUrl`, such as `posts/hello/`, or `""` for the home page. |
+| `string OutputRelativePath` | The output file, such as `posts/hello/index.html`, with `\` separators on Windows.     |
 
 ### `AlwaysRenderAttribute`
 
@@ -242,12 +241,12 @@ See [Markdown and images](../markdown/) for examples.
 
 Each method loads the `*.md` files of one directory and registers a `ContentCollection<T>`:
 
-| Method | Registers |
-| --- | --- |
-| `AddMarkdownContent<TFrontMatter>(Action<MarkdownContentOptions>? configure = null)` | `ContentCollection<MarkdownContent<TFrontMatter>>` |
-| `AddMarkdownContent<TFrontMatter,TModel>(Func<MarkdownContent<TFrontMatter>,TModel> select, Action<MarkdownContentOptions>? configure = null)` | `ContentCollection<TModel>`, converting each file with `select` |
-| `AddKeyedMarkdownContent<TFrontMatter>(string serviceKey, Action<MarkdownContentOptions>? configure = null)` | `ContentCollection<MarkdownContent<TFrontMatter>>` under `serviceKey` |
-| `AddKeyedMarkdownContent<TFrontMatter,TModel>(string serviceKey, Func<MarkdownContent<TFrontMatter>,TModel> select, Action<MarkdownContentOptions>? configure = null)` | `ContentCollection<TModel>` under `serviceKey` |
+| Method                                                                                                                                                                 | Registers                                                             |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `AddMarkdownContent<TFrontMatter>(Action<MarkdownContentOptions>? configure = null)`                                                                                   | `ContentCollection<MarkdownContent<TFrontMatter>>`                    |
+| `AddMarkdownContent<TFrontMatter,TModel>(Func<MarkdownContent<TFrontMatter>,TModel> select, Action<MarkdownContentOptions>? configure = null)`                         | `ContentCollection<TModel>`, converting each file with `select`       |
+| `AddKeyedMarkdownContent<TFrontMatter>(string serviceKey, Action<MarkdownContentOptions>? configure = null)`                                                           | `ContentCollection<MarkdownContent<TFrontMatter>>` under `serviceKey` |
+| `AddKeyedMarkdownContent<TFrontMatter,TModel>(string serviceKey, Func<MarkdownContent<TFrontMatter>,TModel> select, Action<MarkdownContentOptions>? configure = null)` | `ContentCollection<TModel>` under `serviceKey`                        |
 
 Resolve a keyed collection with
 `services.GetRequiredKeyedService<ContentCollection<T>>(serviceKey)`. Each element type can
@@ -257,37 +256,37 @@ be registered once per key.
 
 Selects the files to load, through the `configure` callback.
 
-| Property | Behavior |
-| --- | --- |
-| `string Directory` | Directory to load recursively, absolute or relative to the project. It must exist. Default `"content"`. |
-| `Func<FileInfo,bool>? FileFilter` | Returns `false` to skip a file. Default: load every `*.md` file. |
+| Property                          | Behavior                                                                                                |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `string Directory`                | Directory to load recursively, absolute or relative to the project. It must exist. Default `"content"`. |
+| `Func<FileInfo,bool>? FileFilter` | Returns `false` to skip a file. Default: load every `*.md` file.                                        |
 
 ### `MarkdownOptions`
 
 Parsing settings for all Markdown content. Configure them with
 `builder.Services.Configure<MarkdownOptions>(options => ...)`.
 
-| Property | Behavior |
-| --- | --- |
-| `MarkdownPipelineBuilder Pipeline` | Markdig builder. Defaults: GFM-style tables, task lists, autolinks and strikethrough; footnotes, GitHub heading IDs and generic attributes. |
-| `DeserializerBuilder Yaml` | YamlDotNet builder for front matter. Defaults: camelCase keys matched case-insensitively, errors on unknown keys, and UTC for dates without an offset. |
+| Property                           | Behavior                                                                                                                                               |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `MarkdownPipelineBuilder Pipeline` | Markdig builder. Defaults: GFM-style tables, task lists, autolinks and strikethrough; footnotes, GitHub heading IDs and generic attributes.            |
+| `DeserializerBuilder Yaml`         | YamlDotNet builder for front matter. Defaults: camelCase keys matched case-insensitively, errors on unknown keys, and UTC for dates without an offset. |
 
 ### `MarkdownContent<TFrontMatter>`
 
 One Markdown file in a collection.
 
-| Member | Behavior |
-| --- | --- |
-| `string Path` | The path relative to the content directory, using `/`. Also the collection ID. |
-| `TFrontMatter FrontMatter` | The parsed front matter. |
+| Member                                                                         | Behavior                                                                                                     |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `string Path`                                                                  | The path relative to the content directory, using `/`. Also the collection ID.                               |
+| `TFrontMatter FrontMatter`                                                     | The parsed front matter.                                                                                     |
 | `ValueTask<string> RenderAsync(CancellationToken cancellationToken = default)` | Renders the body to HTML. Call it while rendering a page, because local images are written beside that page. |
 
 ### `MarkdownBody<TFrontMatter>`
 
 A component that renders a Markdown body with no wrapper element.
 
-| Parameter | Behavior |
-| --- | --- |
+| Parameter                               | Behavior                         |
+| --------------------------------------- | -------------------------------- |
 | `MarkdownContent<TFrontMatter> Content` | Required. The content to render. |
 
 ```razor
@@ -309,11 +308,11 @@ builder.Services.Configure<ImageProcessorOptions>(options =>
 });
 ```
 
-| Property | Default | Behavior |
-| --- | --- | --- |
-| `IReadOnlyList<int>? Widths` | `null` | Widths of the smaller variants. `null` uses 320, 640, 960, and 1280. Widths at or above the source width or `MaxWidth` are skipped. |
-| `int MaxWidth` | `1920` | The widest variant. Every image also gets a variant at its own width, up to this value. |
-| `int Quality` | `80` | Lossy WebP quality from 1 to 100. |
+| Property                     | Default | Behavior                                                                                                                            |
+| ---------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `IReadOnlyList<int>? Widths` | `null`  | Widths of the smaller variants. `null` uses 320, 640, 960, and 1280. Widths at or above the source width or `MaxWidth` are skipped. |
+| `int MaxWidth`               | `1920`  | The widest variant. Every image also gets a variant at its own width, up to this value.                                             |
+| `int Quality`                | `80`    | Lossy WebP quality from 1 to 100.                                                                                                   |
 
 A custom `IImageProcessor` ignores these settings.
 
@@ -326,10 +325,10 @@ interface and register it as a singleton:
 builder.Services.AddSingleton<IImageProcessor, MyImageProcessor>();
 ```
 
-| Member | Behavior |
-| --- | --- |
-| `Task<ProcessedImageInfo> ProcessAsync(string sourceFilePath, string outputDirectory, CancellationToken cancellationToken = default)` | Writes variants of the source image into `outputDirectory` and describes them. |
-| `string? CacheIdentity` | Lets later publishes reuse generated images while it stays the same. `null`, the default, disables reuse. |
+| Member                                                                                                                                | Behavior                                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `Task<ProcessedImageInfo> ProcessAsync(string sourceFilePath, string outputDirectory, CancellationToken cancellationToken = default)` | Writes variants of the source image into `outputDirectory` and describes them.                            |
+| `string? CacheIdentity`                                                                                                               | Lets later publishes reuse generated images while it stays the same. `null`, the default, disables reuse. |
 
 The processor must support concurrent calls and keep no page or content state. Change
 `CacheIdentity` whenever the output would change, including settings and encoder versions;
@@ -339,11 +338,11 @@ The processor must support concurrent calls and keep no page or content state. C
 
 Returned by `IImageProcessor.ProcessAsync`.
 
-| Property | Behavior |
-| --- | --- |
-| `int OriginalWidth` | Source width in pixels as displayed, after EXIF orientation. Used for the `<img>` size. |
-| `int OriginalHeight` | Source height in pixels as displayed, after EXIF orientation. Used for the `<img>` size. |
-| `IReadOnlyList<ImageVariant> Variants` | The variants in ascending width. All go into `srcset`, and the last is also the `src`. |
+| Property                               | Behavior                                                                                 |
+| -------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `int OriginalWidth`                    | Source width in pixels as displayed, after EXIF orientation. Used for the `<img>` size.  |
+| `int OriginalHeight`                   | Source height in pixels as displayed, after EXIF orientation. Used for the `<img>` size. |
+| `IReadOnlyList<ImageVariant> Variants` | The variants in ascending width. All go into `srcset`, and the last is also the `src`.   |
 
 ### `ImageVariant`
 
@@ -434,6 +433,6 @@ browser behavior.
 
 ## MSBuild properties
 
-| Property | Behavior |
-| --- | --- |
+| Property    | Behavior                                                                                                                                                                       |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `KijiForce` | `true` renders every page in that publish, as in `dotnet publish -p:KijiForce=true`. Image caches are kept. See [Reset and inspect](../incremental-builds/#reset-and-inspect). |

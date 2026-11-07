@@ -184,6 +184,20 @@ public sealed class RunAsyncTests : IDisposable
         Assert.Contains("environment:Staging", await PublishAsync("Staging"), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Publish_LogsTheEnvironmentName()
+    {
+        var logs = new RecordingLoggerProvider();
+        var builder = CreateBuilder(environment: EnvironmentWith([("DOTNET_ENVIRONMENT", "Staging")]));
+        builder.Logging.AddProvider(logs);
+        await using var app = builder.Build();
+
+        await app.PublishAsync(_outputDir);
+
+        // An inherited environment name changes the output, so the summary shows it.
+        Assert.Contains(("Kiji.Build", LogLevel.Information, "Publishing for environment 'Staging'."), logs.Entries);
+    }
+
     [Theory]
     [InlineData(null, false)]
     [InlineData("Debug", true)]

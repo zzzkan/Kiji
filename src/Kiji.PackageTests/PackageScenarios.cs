@@ -88,15 +88,6 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         Assert.False(File.Exists(PublicFile(oldUrl)));
         Assert.Contains("modified", File.ReadAllText(PublicFile(AssetUrl(html))), StringComparison.Ordinal);
 
-        // This file is deliberately untracked: the MSBuild switch must reach Kiji.
-        Assert.Contains("external-value-1", html, StringComparison.Ordinal);
-        fixture.Write("Site/value.txt", "external-value-2");
-        await fixture.PublishAsync("-p:KijiForce=true", "-p:CompressionEnabled=true");
-        Assert.Contains("external-value-2", Read("index.html"), StringComparison.Ordinal);
-        fixture.Write("Site/value.txt", "external-value-3");
-        await fixture.PublishAsync("--no-build", "-p:CompressionEnabled=true");
-        Assert.Contains("external-value-2", Read("index.html"), StringComparison.Ordinal);
-
         // Run must serve after publish even when its environment contains publish paths.
         await using (var server = RunningCommand.Start(Path.GetDirectoryName(fixture.Site)!,
             "run", "--project", "Site/PackageSite.csproj", "-c", "Release", "--no-build",
@@ -148,9 +139,14 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         Assert.DoesNotContain("published worker", File.ReadAllText(Path.Combine(fixture.Site, "worker", "service-worker.js")), StringComparison.Ordinal);
 
         var stagingDirectory = Assert.Single(Directory.GetDirectories(Path.Combine(fixture.Site, "obj"), "site", SearchOption.AllDirectories));
+        // This file is deliberately untracked. Cleaning must make the next publish render it again.
+        Assert.Contains("external-value-1", Read("index.html"), StringComparison.Ordinal);
+        fixture.Write("Site/value.txt", "external-value-2");
         await fixture.DotnetAsync("clean", "Site/PackageSite.csproj", "-c", "Release");
         Assert.False(Directory.Exists(Path.Combine(fixture.Site, ".kiji")));
         Assert.False(Directory.Exists(stagingDirectory));
+        await fixture.PublishAsync();
+        Assert.Contains("external-value-2", Read("index.html"), StringComparison.Ordinal);
     });
 
     [Theory]

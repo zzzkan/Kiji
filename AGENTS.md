@@ -28,7 +28,7 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
 - Follow the .NET host builder shape: CreateBuilder -> builder.Services/Add*/Use* -> Build
   -> RunAsync. Every registration lives on StaticSiteBuilder; StaticSite only runs. Add* adds,
   Use* sets a single value. Kiji adds no command-line options:
-  watch serves, publish generates, clean cleans. MSBuild owns KijiForce;
+  watch serves, publish generates, clean removes the caches and staging directory.
   ASP.NET Core configuration owns the dev server address. Serving reads only the standard
   --environment host argument. Prefer conventions to flags.
 - All log output goes through the site's ILogger (Kiji's own under Kiji.Build), except the dev
@@ -75,11 +75,11 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   Kiji-owned registrations in Build. Compute derived data during rendering or in scoped services;
   content reload does not recreate singletons. Use AlwaysRender on components reading
   untracked external state. Content items are tracked by source, ID and file; values assigned
-  to them after loading are untracked state, documented rather than detected. KijiForce
-  refreshes all pages for a whole publish. Instantiating any ErrorBoundaryBase component
-  prevents HTML reuse for that page, even when healthy. The
-  default boundary logger reports exceptions as warnings; logging never controls
-  cacheability or the publish result. Use an unhandled exception for a build gate.
+  to them after loading are untracked state, documented rather than detected.
+  Instantiating any ErrorBoundaryBase component prevents HTML reuse for that page,
+  even when healthy. The default boundary logger reports exceptions as warnings;
+  logging never controls cacheability or the publish result. Use an unhandled exception
+  for a build gate.
 - Use Blazor's PageTitle and HeadContent; KijiRoot supplies the single HeadOutlet.
   Each page gets a fresh renderer/dispatcher, isolating the framework's section state.
   HeadContent replaces earlier providers rather than appending; compose shared tags
@@ -87,7 +87,7 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
 - Customize IImageProcessor through builder.Services. The last unkeyed registration must
   be a singleton; standard DI ownership applies. It must support concurrency and retain
   no page/content state. Reload does not recreate it. Include external configuration
-  and encoder versions in cache identities; HTML reuse controls do not clear image caches.
+  and encoder versions in cache identities.
   Every ImageProcessorOptions setting must stay in its CacheIdentity. Options are validated when
   the site starts running, never in Build.
 

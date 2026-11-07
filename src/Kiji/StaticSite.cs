@@ -35,7 +35,6 @@ public sealed class StaticSite
     private readonly ServiceProvider _services;
     private ComponentRenderer? _renderer;
     private ResolvedSitePaths? _activeOptions;
-    private bool _forceFullBuild;
     private bool _hasRun;
     private bool _disposed;
 
@@ -144,7 +143,6 @@ public sealed class StaticSite
             {
                 if (_settings.OutputPath is { } outputPath)
                 {
-                    _forceFullBuild = _settings.Force;
                     await PublishAsync(outputPath, cts.Token);
                     return 0;
                 }
@@ -226,7 +224,6 @@ public sealed class StaticSite
         var plan = await planner.CreatePlanAsync(
             snapshot.Pages,
             [.. _pageAssemblies, .. _serviceAssemblies, typeof(StaticSite).Assembly],
-            _forceFullBuild,
             cancellationToken);
         phases.Mark(BuildPhaseTimer.Plan);
 
@@ -242,7 +239,7 @@ public sealed class StaticSite
         // Render only the pages the plan could not prove unchanged, recording what
         // each render reads and writes for the next build's skip checks. The previous
         // manifest comes along so a render that reproduces the bytes already on disk
-        // skips the write; with KijiForce there is no manifest and everything is written.
+        // skips the write.
         var recorders = new ConcurrentDictionary<string, BuildDependencyRecorder>(StringComparer.OrdinalIgnoreCase);
         var rendered = await StaticSiteGenerator.RenderPagesAsync(
             options,

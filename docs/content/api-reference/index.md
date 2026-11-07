@@ -15,7 +15,6 @@ order: 100
 - [`Kiji.Feeds` namespace](#kijifeeds-namespace): RSS feeds
 - [`Kiji.Sitemaps` namespace](#kijisitemaps-namespace): sitemaps
 - [Blazor APIs](#blazor-apis): ASP.NET Core components and services in static pages
-- [MSBuild properties](#msbuild-properties): `KijiForce`
 
 ## `Kiji` namespace
 
@@ -331,8 +330,7 @@ builder.Services.AddSingleton<IImageProcessor, MyImageProcessor>();
 | `string? CacheIdentity`                                                                                                               | Lets later publishes reuse generated images while it stays the same. `null`, the default, disables reuse. |
 
 The processor must support concurrent calls and keep no page or content state. Change
-`CacheIdentity` whenever the output would change, including settings and encoder versions;
-`KijiForce` does not clear image caches.
+`CacheIdentity` whenever the output would change, including settings and encoder versions.
 
 ### `ProcessedImageInfo`
 
@@ -430,9 +428,3 @@ the page's public URL, and `NavLink` marks the current page as active. `Navigate
 Event handlers such as `@onclick` never run in the browser, and `OnAfterRender` and
 `OnAfterRenderAsync` never run at all. Use a `<script>` element or a JavaScript module for
 browser behavior.
-
-## MSBuild properties
-
-| Property    | Behavior                                                                                                                                                                       |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `KijiForce` | `true` renders every page in that publish, as in `dotnet publish -p:KijiForce=true`. Image caches are kept. See [Reset and inspect](../incremental-builds/#reset-and-inspect). |

@@ -35,14 +35,11 @@ public sealed class PageServiceContentTests : IDisposable
         Assert.Contains(change == "add" ? "related:second,third" : "related:</p>",
             incremental[Path.Combine("service-related", "first", "index.html")], StringComparison.Ordinal);
 
-        // A different output can restore the portable cache. Force a clean render.
+        // A different output can restore the portable cache while its manifest exists.
+        File.Delete(Path.Combine(_root, ".kiji", "cache", "manifest.json"));
         var full = Path.Combine(_root, "full");
-        await CreateApp(new RelatedProbe(), runtimeData: name => name switch
-        {
-            "Kiji.OutputPath" => full,
-            "Kiji.Force" => "true",
-            _ => null,
-        }).RunAsync(CancellationToken.None);
+        await using var fullApp = CreateApp(new RelatedProbe());
+        await fullApp.PublishAsync(full);
         var expected = ReadHtml(full);
         Assert.Equal(expected.Keys.Order(), incremental.Keys.Order());
         foreach (var (key, html) in expected)
@@ -108,9 +105,9 @@ public sealed class PageServiceContentTests : IDisposable
         }
     }
 
-    private StaticSite CreateApp(RelatedProbe probe, Func<bool>? includeTags = null, Func<string, object?>? runtimeData = null)
+    private StaticSite CreateApp(RelatedProbe probe, Func<bool>? includeTags = null)
     {
-        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")), runtimeData);
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")));
         builder.SiteInfo = new SiteInfo { Name = "Related", BaseUrl = new Uri("https://example.test/") };
         TestSite.TestSiteAssets.Bind(builder.Paths, Path.Combine(_root, "wwwroot"));
         builder.AddMarkdownContent<FrontMatter>();

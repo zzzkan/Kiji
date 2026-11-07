@@ -68,7 +68,7 @@ installs the existing phase observer. Package and workload hashes are recorded.
 The measurement-only MSBuild logger compiles under the ignored run directory;
 it is not a Kiji dependency, solution project or packaged build task.
 
-- NoChange retains all outputs. ForceRender uses KijiForce without clearing files.
+- NoChange retains all outputs.
   OneEdited alternates equal-length edits to one Markdown input.
 - PublishOutputRemoved removes only dist, retaining Kiji staging and caches. Do not
   call this Kiji's CacheOnly scenario: that benchmark repairs the generator output.

@@ -673,8 +673,8 @@ public sealed class IncrementalBuildTests : IDisposable
             }
         }, environment: name => name switch
         {
-            "KIJI_OUTPUT" => "dist",
-            "KIJI_FORCE" => "true",
+            "Kiji.OutputPath" => "dist",
+            "Kiji.Force" => "true",
             _ => null,
         });
         await Assert.ThrowsAnyAsync<Exception>(() => builder.Build().RunAsync(CancellationToken.None));

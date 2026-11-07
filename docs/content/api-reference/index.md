@@ -71,6 +71,9 @@ Extension methods in other namespaces register content and generated files:
 | [`AddRssFeed`](#rssfeedstaticsitebuilderextensions) | `Kiji.Feeds` |
 | [`AddSitemap`](#sitemapstaticsitebuilderextensions) | `Kiji.Sitemaps` |
 
+Publish mode and `KijiForce` are supplied through a runtimeconfig used only for that
+publish invocation.
+
 Only `dotnet publish` writes artifacts, feeds, and sitemaps; the development server
 returns 404 for them.
 

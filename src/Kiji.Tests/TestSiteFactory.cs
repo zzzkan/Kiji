@@ -9,11 +9,12 @@ internal static class TestSiteFactory
         => CreateBuilder(paths, environment: null, discoveredPages);
 
     /// <param name="paths">The project and asset paths.</param>
-    /// <param name="environment">Reads the environment variables the site sees; by default none is set.</param>
+    /// <param name="environment">Reads environment variables and runtime metadata for the test invocation.</param>
     /// <param name="discoveredPages">Test pages discovered with their default rendering.</param>
     public static StaticSiteBuilder CreateBuilder(SiteExecutionPaths paths, Func<string, string?>? environment, params Type[] discoveredPages)
     {
-        var builder = StaticSite.CreateBuilder([], paths, typeof(TestSiteFactory).Assembly, environment);
+        var builder = StaticSite.CreateBuilder([], paths, typeof(TestSiteFactory).Assembly,
+            environment, runtimeData: name => environment?.Invoke(name));
         // Empty parameter sets leave out the other test pages.
         var omit = typeof(StaticSiteBuilder).GetMethod(nameof(StaticSiteBuilder.AddPageParameters))!;
         foreach (var type in PageDiscovery.FromAssembly(typeof(TestSiteFactory).Assembly)

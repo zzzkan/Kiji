@@ -80,10 +80,32 @@
     <Error Condition="!Exists('$(TargetPath)')" Code="KIJI1001"
            Text="Kiji cannot generate the site: '$(TargetPath)' does not exist. Build the project before publishing." />
 
+    <!-- Keep publish context out of the normal runtimeconfig and inherited environment. -->
+    <ItemGroup>
+      <_KijiHostConfigurationOption Include="@(RuntimeHostConfigurationOption)" />
+      <_KijiHostConfigurationOption Include="Kiji.OutputPath" Value="$(_KijiStagingDir)" />
+      <_KijiHostConfigurationOption Include="Kiji.Force" Value="$(KijiForce)" />
+    </ItemGroup>
+    <MakeDir Directories="$(_KijiDir)" />
+    <GenerateRuntimeConfigurationFiles AssetsFilePath="$(ProjectAssetsFile)"
+                                       TargetFramework="$(TargetFramework)"
+                                       TargetFrameworkMoniker="$(TargetFrameworkMoniker)"
+                                       RuntimeConfigPath="$(_KijiDir)publish.runtimeconfig.json"
+                                       RuntimeIdentifier="$(RuntimeIdentifier)"
+                                       PlatformLibraryName="$(MicrosoftNETPlatformLibrary)"
+                                       RuntimeFrameworks="@(RuntimeFramework)"
+                                       RollForward="$(RollForward)"
+                                       UserRuntimeConfig="$(UserRuntimeConfig)"
+                                       HostConfigurationOptions="@(_KijiHostConfigurationOption)"
+                                       AdditionalProbingPaths="@(AdditionalProbingPath)"
+                                       IsSelfContained="$(SelfContained)"
+                                       WriteIncludedFrameworks="$(_WriteIncludedFrameworks)"
+                                       GenerateRuntimeConfigDevFile="false"
+                                       AlwaysIncludeCoreFramework="$(AlwaysIncludeCoreFrameworkInRuntimeConfig)" />
+
     <!-- Only the process exit code fails publish; log lines remain MSBuild messages. -->
-    <Exec Command="&quot;$(_KijiDotNetHost)&quot; exec &quot;$(TargetPath)&quot;"
+    <Exec Command="&quot;$(_KijiDotNetHost)&quot; exec --runtimeconfig &quot;$(_KijiDir)publish.runtimeconfig.json&quot; &quot;$(TargetPath)&quot;"
           WorkingDirectory="$(MSBuildProjectDirectory)"
-          EnvironmentVariables="KIJI_OUTPUT=$(_KijiStagingDir);KIJI_FORCE=$(KijiForce)"
           IgnoreStandardErrorWarningFormat="true"
           StandardOutputImportance="high" StandardErrorImportance="high" />
 

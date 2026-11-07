@@ -39,8 +39,8 @@ public sealed class PageServiceContentTests : IDisposable
         var full = Path.Combine(_root, "full");
         await CreateApp(new RelatedProbe(), environment: name => name switch
         {
-            "KIJI_OUTPUT" => full,
-            "KIJI_FORCE" => "true",
+            "Kiji.OutputPath" => full,
+            "Kiji.Force" => "true",
             _ => null,
         }).RunAsync(CancellationToken.None);
         var expected = ReadHtml(full);

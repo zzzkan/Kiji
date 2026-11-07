@@ -36,7 +36,7 @@ public sealed class SiteCancellationTests : IDisposable
                 await release.Task.WaitAsync(token);
             },
         };
-        var run = CreateApp(processor, name => name == "KIJI_OUTPUT" ? output : null).RunAsync(cancellation.Token);
+        var run = CreateApp(processor, name => name == "Kiji.OutputPath" ? output : null).RunAsync(cancellation.Token);
         try
         {
             await started.Task.WaitAsync(TimeSpan.FromSeconds(10));

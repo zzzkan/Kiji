@@ -12,6 +12,17 @@ namespace Kiji.PackageTests;
 public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<PackageFixture>
 {
     [Fact]
+    public Task Publish_UsesSdkDefaultDestination() => fixture.ScenarioAsync(async () =>
+    {
+        const string project = "Site/PackageSite.csproj";
+        fixture.Replace(project, "<UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier>",
+            "<UseCurrentRuntimeIdentifier>false</UseCurrentRuntimeIdentifier>");
+        await fixture.DotnetAsync("publish", project, "-c", "Release");
+        Assert.True(File.Exists(Path.Combine(fixture.Site, "bin", "Release", "net10.0", "publish", "index.html")));
+        Assert.False(Directory.Exists(Path.Combine(fixture.Site, "dist")));
+    });
+
+    [Fact]
     public Task Publish_Edit_AndClean() => fixture.ScenarioAsync(async () =>
     {
         fixture.Write("Site/wwwroot/selected.txt", "All-kind fallback");

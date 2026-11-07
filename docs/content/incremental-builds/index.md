@@ -68,15 +68,17 @@ publish. If external state decides whether a child component appears, mark the p
 
 ## Reset and inspect
 
+Run `dotnet clean` before publishing to rebuild the project, render every page, and
+regenerate images from scratch. Clean removes the build output, Kiji's staging
+directory, and `.kiji`, including the publish and image caches. Use the same build
+configuration for both commands.
+
 ```pwsh
-# Render every page once; later publishes reuse the results.
-dotnet publish -p:KijiForce=true
+dotnet clean -c Release
+dotnet publish -c Release
 
 # Show Kiji's summary in a terminal.
 dotnet publish -v d
-
-# Remove build output and the cache.
-dotnet clean
 ```
 
 For a message per page, set `Kiji.Build` to `Debug` in the

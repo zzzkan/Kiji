@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using Kiji.Markdown;
 using Kiji.Tests.TestSite;
 using Microsoft.Extensions.Logging;
@@ -117,34 +116,6 @@ public sealed class RunAsyncTests : IDisposable
     }
 
     [Fact]
-    public async Task RunAsync_WithForce_RebuildsEveryPage()
-    {
-        var renders = new AssetRenderLog();
-        StaticSite CreateMeasuredApp(string? force = null)
-        {
-            var builder = CreateBuilder(_outputDir, force);
-            builder.Services.AddSingleton(renders);
-            builder.AddPageParameters<AssetPage>(_ => [new { Kind = "first" }, new { Kind = "second" }]);
-            return builder.Build();
-        }
-        await CreateMeasuredApp().RunAsync(CancellationToken.None);
-
-        await CreateMeasuredApp().RunAsync(CancellationToken.None);
-        Assert.Equal(1, renders.Counts["first"]);
-        Assert.Equal(1, renders.Counts["second"]);
-
-        var indexPath = Path.Combine(_outputDir, "index.html");
-        File.SetLastWriteTimeUtc(indexPath, new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
-        var stampBefore = File.GetLastWriteTimeUtc(indexPath);
-
-        await CreateMeasuredApp(force: "1").RunAsync(CancellationToken.None);
-
-        Assert.Equal(2, renders.Counts["first"]);
-        Assert.Equal(2, renders.Counts["second"]);
-        Assert.Equal(stampBefore, File.GetLastWriteTimeUtc(indexPath));
-    }
-
-    [Fact]
     public async Task RunAsync_CanceledDevRun_ExitsNormallyWithoutPublishing()
     {
         using var cts = new CancellationTokenSource();
@@ -221,15 +192,10 @@ public sealed class RunAsyncTests : IDisposable
         Assert.Equal(details, build.Contains(("Kiji.Build", LogLevel.Debug, $"Generated: {Path.Combine(_outputDir, "index.html")}")));
     }
 
-    private StaticSiteBuilder CreateBuilder(string? outputPath = null, string? force = null, Func<string, string?>? environment = null)
+    private StaticSiteBuilder CreateBuilder(string? outputPath = null, Func<string, string?>? environment = null)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")),
-            runtimeData: name => name switch
-            {
-                "Kiji.OutputPath" => outputPath,
-                "Kiji.Force" => force,
-                _ => null,
-            }, environment: environment);
+            runtimeData: name => name == "Kiji.OutputPath" ? outputPath : null, environment: environment);
         builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(builder.Paths, Path.Combine(builder.Paths.ProjectDirectory, "static"));
 

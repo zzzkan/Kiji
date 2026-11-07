@@ -40,9 +40,8 @@ not built with conflicting global properties.
   Keep public image URLs in the page bundle and recipes sufficient for cache-only repair.
 - AlwaysRender marks pages, layouts or child components that read untracked external
   state. Any output page rendering one is uncacheable, including nested/dynamic children.
-  KijiForce bypasses HTML reuse for the entire publish while still saving successful
-  renders for later reuse. Neither adds external watchers or clears
-  image processing caches. Do not reintroduce per-input registration APIs.
+  AlwaysRender does not add external watchers or clear image processing caches.
+  Do not reintroduce per-input registration APIs.
 - Invalidate content, file hashes and value resolutions before each publish/dev reload.
   Verify inputs before manifest publication, including joining verification on failure.
   Conflicting reads within one build must fail.
@@ -60,8 +59,8 @@ travels between checkouts; development uses `.kiji/dev-site`.
   pages retain metadata only.
 - Reconcile all pages, images, static files and artifacts, removing unknown outputs.
   Static files compare hashes; feeds, sitemaps and custom artifacts always regenerate.
-- Missing, corrupt or incompatible manifests trigger full rendering. KijiForce ignores
-  the manifest; identical freshly rendered output need not be rewritten.
+- Missing, corrupt or incompatible manifests trigger full rendering. Use `dotnet clean`
+  to remove the cache and staging directory before a full publish.
 
 ## Changes and verification
 

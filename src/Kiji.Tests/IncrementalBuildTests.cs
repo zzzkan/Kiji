@@ -661,26 +661,21 @@ public sealed class IncrementalBuildTests : IDisposable
         await BuildAsync(root);
         var manifestPath = Path.Combine(root, ".kiji", "cache", "manifest.json");
         var manifest = await File.ReadAllBytesAsync(manifestPath);
+        await WritePostAsync(root, "stable", "Stable Post", "Body before rendering.");
         var changed = 0;
-        var builder = CreateBuilder(root, () =>
+        await Assert.ThrowsAnyAsync<Exception>(() => BuildAsync(root, () =>
         {
             if (Interlocked.Exchange(ref changed, 1) == 0)
             {
                 var input = Path.Combine(root, "content", "stable.md");
                 var stamp = File.GetLastWriteTimeUtc(input);
-                File.WriteAllText(input, File.ReadAllText(input).Replace("Stable body.", "Edited body.", StringComparison.Ordinal));
+                File.WriteAllText(input, File.ReadAllText(input).Replace("Body before rendering.", "Body during rendering.", StringComparison.Ordinal));
                 File.SetLastWriteTimeUtc(input, stamp);
             }
-        }, runtimeData: name => name switch
-        {
-            "Kiji.OutputPath" => "dist",
-            "Kiji.Force" => "true",
-            _ => null,
-        });
-        await Assert.ThrowsAnyAsync<Exception>(() => builder.Build().RunAsync(CancellationToken.None));
+        }));
         Assert.Equal(manifest, await File.ReadAllBytesAsync(manifestPath));
         await BuildAsync(root);
-        Assert.Contains("Edited body.", await File.ReadAllTextAsync(Path.Combine(root, "dist", "md", "stable", "index.html")), StringComparison.Ordinal);
+        Assert.Contains("Body during rendering.", await File.ReadAllTextAsync(Path.Combine(root, "dist", "md", "stable", "index.html")), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1191,10 +1186,9 @@ public sealed class IncrementalBuildTests : IDisposable
         await app.PublishAsync(Path.Combine(root, "dist"));
     }
 
-    private static StaticSiteBuilder CreateBuilder(string root, Action? onRender = null, string directory = "content",
-        Func<string, object?>? runtimeData = null)
+    private static StaticSiteBuilder CreateBuilder(string root, Action? onRender = null, string directory = "content")
     {
-        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")), runtimeData);
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
         builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(builder.Paths, Path.Combine(builder.Paths.ProjectDirectory, "static"));
 

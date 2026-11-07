@@ -1,15 +1,9 @@
 namespace Kiji;
 
-/// <summary>
-/// Reads flag values, including the <c>DOTNET_WATCH_*</c> / <c>NO_COLOR</c> environment
-/// variables the dev server honors and Kiji's process-local publish settings.
-/// </summary>
+/// <summary>Interprets environment variable flags for the dev server's status output.</summary>
 internal static class FlagValue
 {
-    /// <summary>
-    /// Whether a flag is on. Only <c>1</c> and <c>true</c> count, matching
-    /// what MSBuild writes for a boolean property.
-    /// </summary>
+    /// <summary>Returns true for <c>1</c> or <c>true</c> (case-insensitive).</summary>
     internal static bool IsTruthy(string? value)
     {
         return value is not null &&

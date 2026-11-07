@@ -75,10 +75,10 @@ configuration for both commands.
 
 ```pwsh
 dotnet clean -c Release
-dotnet publish -c Release
+dotnet publish -c Release -o dist
 
 # Show Kiji's summary in a terminal.
-dotnet publish -v d
+dotnet publish -o dist -v d
 ```
 
 For a message per page, set `Kiji.Build` to `Debug` in the

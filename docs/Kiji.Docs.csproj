@@ -4,7 +4,7 @@
     <OutputType>Exe</OutputType>
     <RootNamespace>Kiji.Docs</RootNamespace>
     <UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier>
-    <DefaultItemExcludes>$(DefaultItemExcludes);content/**;dist/**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);content/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>

@@ -17,9 +17,12 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         const string project = "Site/PackageSite.csproj";
         fixture.Replace(project, "<UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier>",
             "<UseCurrentRuntimeIdentifier>false</UseCurrentRuntimeIdentifier>");
+        fixture.Write("Site/dist/previous.json", "{}");
         await fixture.DotnetAsync("publish", project, "-c", "Release");
-        Assert.True(File.Exists(Path.Combine(fixture.Site, "bin", "Release", "net10.0", "publish", "index.html")));
-        Assert.False(Directory.Exists(Path.Combine(fixture.Site, "dist")));
+        var buildDirectory = Path.Combine(fixture.Site, "bin", "Release", "net10.0");
+        Assert.True(File.Exists(Path.Combine(buildDirectory, "publish", "index.html")));
+        Assert.False(File.Exists(Path.Combine(buildDirectory, "dist", "previous.json")));
+        Assert.False(File.Exists(Path.Combine(fixture.Site, "dist", "index.html")));
     });
 
     [Fact]

@@ -35,6 +35,9 @@
     <!-- The site uses root paths; libraries retain their configured paths. -->
     <StaticWebAssetBasePath>/</StaticWebAssetBasePath>
     <CustomAfterStaticWebAssetsSdkTargets>$(MSBuildThisFileDirectory)Kiji.StaticWebAssets.targets</CustomAfterStaticWebAssetsSdkTargets>
+
+    <!-- Keep the documented -o dist output out of later builds and watch. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);dist/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <!-- Runtime metadata keeps checkout paths out of code identity. -->

@@ -9,8 +9,8 @@ namespace Kiji.Tests;
 /// <summary>
 /// Covers what <see cref="StaticSite.RunAsync(CancellationToken)"/> decides from the
 /// execution context. The dev-server branch is exercised by <see cref="DevServerTests"/>;
-/// what matters here is that the presence of <c>Kiji.OutputPath</c> is the whole switch,
-/// and that each branch settles the site's paths on its own directory.
+/// these tests cover how runtimeconfig selects publish mode and how each branch
+/// settles the site's paths.
 /// </summary>
 public sealed class RunAsyncTests : IDisposable
 {
@@ -63,7 +63,7 @@ public sealed class RunAsyncTests : IDisposable
     [Fact]
     public async Task RunAsync_MissingAssetCatalog_FailsWithoutPublishingPartialSite()
     {
-        await using var app = CreateBuilder(EnvironmentWith([("Kiji.OutputPath", _outputDir)])).Build();
+        await using var app = CreateBuilder(_outputDir).Build();
         File.Delete(app.Paths.AssetManifestBasePath + ".staticwebassets.publish.runtime.json");
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => app.RunAsync(CancellationToken.None));
         Assert.Contains("Razor SDK and Kiji targets", error.Message, StringComparison.Ordinal);
@@ -97,7 +97,7 @@ public sealed class RunAsyncTests : IDisposable
     [Fact]
     public async Task RunAsync_DisposesTheSite_AndRejectsASecondRun()
     {
-        var app = CreateBuilder(EnvironmentWith([("Kiji.OutputPath", _outputDir)])).Build();
+        var app = CreateBuilder(_outputDir).Build();
 
         var exitCode = await app.RunAsync(CancellationToken.None);
 
@@ -111,7 +111,7 @@ public sealed class RunAsyncTests : IDisposable
     [Fact]
     public async Task RunAsync_WithRelativeOutputPath_ResolvesAgainstTheSiteRoot()
     {
-        await CreateBuilder(EnvironmentWith([("Kiji.OutputPath", "out")])).Build().RunAsync(CancellationToken.None);
+        await CreateBuilder("out").Build().RunAsync(CancellationToken.None);
 
         Assert.True(File.Exists(Path.Combine(_testDir, "out", "index.html")));
     }
@@ -120,16 +120,16 @@ public sealed class RunAsyncTests : IDisposable
     public async Task RunAsync_WithForce_RebuildsEveryPage()
     {
         var renders = new AssetRenderLog();
-        StaticSite CreateMeasuredApp(Func<string, string?> environment)
+        StaticSite CreateMeasuredApp(string? force = null)
         {
-            var builder = CreateBuilder(environment);
+            var builder = CreateBuilder(_outputDir, force);
             builder.Services.AddSingleton(renders);
             builder.AddPageParameters<AssetPage>(_ => [new { Kind = "first" }, new { Kind = "second" }]);
             return builder.Build();
         }
-        await CreateMeasuredApp(EnvironmentWith([("Kiji.OutputPath", _outputDir)])).RunAsync(CancellationToken.None);
+        await CreateMeasuredApp().RunAsync(CancellationToken.None);
 
-        await CreateMeasuredApp(EnvironmentWith([("Kiji.OutputPath", _outputDir)])).RunAsync(CancellationToken.None);
+        await CreateMeasuredApp().RunAsync(CancellationToken.None);
         Assert.Equal(1, renders.Counts["first"]);
         Assert.Equal(1, renders.Counts["second"]);
 
@@ -137,7 +137,7 @@ public sealed class RunAsyncTests : IDisposable
         File.SetLastWriteTimeUtc(indexPath, new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
         var stampBefore = File.GetLastWriteTimeUtc(indexPath);
 
-        await CreateMeasuredApp(EnvironmentWith([("Kiji.OutputPath", _outputDir), ("Kiji.Force", "1")])).RunAsync(CancellationToken.None);
+        await CreateMeasuredApp(force: "1").RunAsync(CancellationToken.None);
 
         Assert.Equal(2, renders.Counts["first"]);
         Assert.Equal(2, renders.Counts["second"]);
@@ -149,8 +149,20 @@ public sealed class RunAsyncTests : IDisposable
     {
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
-        var exitCode = await CreateBuilder(EnvironmentWith([("Kiji.OutputPath", "   ")])).Build().RunAsync(cts.Token);
+        var exitCode = await CreateBuilder("   ").Build().RunAsync(cts.Token);
         Assert.Equal(0, exitCode);
+        Assert.False(Directory.Exists(_outputDir));
+    }
+
+    [Fact]
+    public async Task RunAsync_EnvironmentOutputPaths_DoNotSelectPublishMode()
+    {
+        var builder = CreateBuilder(environment: EnvironmentWith([
+            ("KIJI_OUTPUT", _outputDir), ("Kiji.OutputPath", _outputDir)]));
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        Assert.Equal(0, await builder.Build().RunAsync(cts.Token));
         Assert.False(Directory.Exists(_outputDir));
     }
 
@@ -160,8 +172,9 @@ public sealed class RunAsyncTests : IDisposable
         async Task<string> PublishAsync(string? environmentName)
         {
             var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir),
-                EnvironmentWith([("Kiji.OutputPath", _outputDir), ("DOTNET_ENVIRONMENT", environmentName)]),
-                typeof(HostEnvironmentPage));
+                runtimeData: name => name == "Kiji.OutputPath" ? _outputDir : null,
+                environment: name => name == "DOTNET_ENVIRONMENT" ? environmentName : null,
+                discoveredPages: typeof(HostEnvironmentPage));
             builder.SiteInfo = TestArticleContents.CreateSiteInfo();
             Assert.Equal(0, await builder.Build().RunAsync(CancellationToken.None));
             return await File.ReadAllTextAsync(Path.Combine(_outputDir, "environment", "index.html"));
@@ -182,7 +195,7 @@ public sealed class RunAsyncTests : IDisposable
                 $$"""{ "Logging": { "LogLevel": { "Kiji.Build": "{{configuredLevel}}" } } }""");
         }
         var logs = new RecordingLoggerProvider();
-        var builder = CreateBuilder(EnvironmentWith([("Kiji.OutputPath", _outputDir)]));
+        var builder = CreateBuilder(_outputDir);
         builder.Logging.AddProvider(logs);
 
         Assert.Equal(0, await builder.Build().RunAsync(CancellationToken.None));
@@ -194,9 +207,15 @@ public sealed class RunAsyncTests : IDisposable
         Assert.Equal(details, build.Contains(("Kiji.Build", LogLevel.Debug, $"Generated: {Path.Combine(_outputDir, "index.html")}")));
     }
 
-    private StaticSiteBuilder CreateBuilder(Func<string, string?>? environment = null)
+    private StaticSiteBuilder CreateBuilder(string? outputPath = null, string? force = null, Func<string, string?>? environment = null)
     {
-        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")), environment);
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")),
+            runtimeData: name => name switch
+            {
+                "Kiji.OutputPath" => outputPath,
+                "Kiji.Force" => force,
+                _ => null,
+            }, environment: environment);
         builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(builder.Paths, Path.Combine(builder.Paths.ProjectDirectory, "static"));
 

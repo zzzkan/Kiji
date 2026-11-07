@@ -543,7 +543,7 @@ public sealed class DevServerTests : IAsyncDisposable
     public async Task Serve_WebHostUsesTheSiteEnvironmentAndLogging()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(Path.Combine(_testDir, "site")),
-            name => name == "DOTNET_ENVIRONMENT" ? "Staging" : null);
+            runtimeData: null, environment: name => name == "DOTNET_ENVIRONMENT" ? "Staging" : null);
         builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         var logs = new RecordingLoggerProvider();
         builder.Logging.AddProvider(logs);

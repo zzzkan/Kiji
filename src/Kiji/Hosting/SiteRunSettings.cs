@@ -49,7 +49,7 @@ internal sealed record SiteRunSettings(string? OutputPath, bool Force, string En
 
         return new SiteRunSettings(
             publishing ? outputPath : null,
-            publishing && EnvironmentValue.IsTruthy(runtimeData(ForceProperty)?.ToString()),
+            publishing && FlagValue.IsTruthy(runtimeData(ForceProperty)?.ToString()),
             !string.IsNullOrWhiteSpace(environmentName) ? environmentName
                 : publishing ? Environments.Production : Environments.Development);
     }

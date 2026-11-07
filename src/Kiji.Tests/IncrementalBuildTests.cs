@@ -671,7 +671,7 @@ public sealed class IncrementalBuildTests : IDisposable
                 File.WriteAllText(input, File.ReadAllText(input).Replace("Stable body.", "Edited body.", StringComparison.Ordinal));
                 File.SetLastWriteTimeUtc(input, stamp);
             }
-        }, environment: name => name switch
+        }, runtimeData: name => name switch
         {
             "Kiji.OutputPath" => "dist",
             "Kiji.Force" => "true",
@@ -1192,9 +1192,9 @@ public sealed class IncrementalBuildTests : IDisposable
     }
 
     private static StaticSiteBuilder CreateBuilder(string root, Action? onRender = null, string directory = "content",
-        Func<string, string?>? environment = null)
+        Func<string, object?>? runtimeData = null)
     {
-        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")), environment);
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")), runtimeData);
         builder.SiteInfo = TestArticleContents.CreateSiteInfo();
         TestSiteAssets.Bind(builder.Paths, Path.Combine(builder.Paths.ProjectDirectory, "static"));
 

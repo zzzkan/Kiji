@@ -87,6 +87,8 @@
       <_KijiHostConfigurationOption Include="Kiji.Force" Value="$(KijiForce)" />
     </ItemGroup>
     <MakeDir Directories="$(_KijiDir)" />
+    <!-- Keep these arguments aligned with the SDK's GenerateBuildRuntimeConfigurationFiles
+         target. Publish uses its own config path and host options, with no dev companion. -->
     <GenerateRuntimeConfigurationFiles AssetsFilePath="$(ProjectAssetsFile)"
                                        TargetFramework="$(TargetFramework)"
                                        TargetFrameworkMoniker="$(TargetFrameworkMoniker)"

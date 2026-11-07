@@ -2,7 +2,7 @@ using Xunit;
 
 namespace Kiji.Tests;
 
-public sealed class EnvironmentValueTests
+public sealed class FlagValueTests
 {
     [Theory]
     [InlineData("1", true)]
@@ -12,6 +12,6 @@ public sealed class EnvironmentValueTests
     [InlineData(" true ", false)]
     public void BuildFlags_AcceptOnlyExplicitTruthyValues(string? value, bool expected)
     {
-        Assert.Equal(expected, EnvironmentValue.IsTruthy(value));
+        Assert.Equal(expected, FlagValue.IsTruthy(value));
     }
 }

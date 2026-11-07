@@ -66,7 +66,8 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
-      - run: dotnet publish MySite -o MySite/dist
+      - working-directory: MySite
+        run: dotnet publish -o dist
 
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5

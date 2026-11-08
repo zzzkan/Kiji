@@ -1,9 +1,12 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Kiji.Hosting;
 
-internal sealed class SiteApplicationLifetime : IHostApplicationLifetime, IDisposable
+[SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable",
+    Justification = "Like the generic host lifetime, tokens remain usable after site disposal. No wait handles are created.")]
+internal sealed class SiteApplicationLifetime : IHostApplicationLifetime
 {
     private static readonly Action<ILogger, Exception?> LogCallbackError = LoggerMessage.Define(
         LogLevel.Error, new EventId(0, "LifetimeCallbackFailed"), "An application lifetime callback failed.");
@@ -29,12 +32,5 @@ internal sealed class SiteApplicationLifetime : IHostApplicationLifetime, IDispo
         {
             if (Logger is { } logger) { LogCallbackError(logger, exception); }
         }
-    }
-
-    public void Dispose()
-    {
-        _started.Dispose();
-        _stopping.Dispose();
-        _stopped.Dispose();
     }
 }

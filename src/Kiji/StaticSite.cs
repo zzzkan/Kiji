@@ -34,6 +34,7 @@ public sealed class StaticSite : IAsyncDisposable
     private readonly Type? _notFoundComponentType;
     private readonly ServiceProvider _services;
     private readonly SiteApplicationLifetime _lifetime;
+    private readonly int _hostedServiceCount;
     private ComponentRenderer? _renderer;
     private ResolvedSitePaths? _activeOptions;
     private bool _hasRun;
@@ -42,6 +43,7 @@ public sealed class StaticSite : IAsyncDisposable
     internal StaticSite(StaticSiteBuilder builder)
     {
         _lifetime = builder.Lifetime;
+        _hostedServiceCount = builder.Services.Count(static descriptor => descriptor.ServiceType == typeof(IHostedService));
         _args = builder.Args;
         _settings = builder.RunSettings;
         _runtime = builder.Runtime;
@@ -137,7 +139,8 @@ public sealed class StaticSite : IAsyncDisposable
         try
         {
             _lifetime.Logger = BuildLogger;
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.ApplicationStopping);
+            if (_hostedServiceCount > 0) { BuildLogger.HostedServicesNotStarted(_hostedServiceCount); }
+            var stoppingToken = _lifetime.ApplicationStopping;
 
             using var cancellation = cancellationToken.Register(_lifetime.StopApplication);
 
@@ -154,14 +157,14 @@ public sealed class StaticSite : IAsyncDisposable
             {
                 if (_settings.OutputPath is { } outputPath)
                 {
-                    await PublishAsync(outputPath, cts.Token);
+                    await PublishAsync(outputPath, stoppingToken);
                     return 0;
                 }
 
-                await ServeAsync(cts.Token);
+                await ServeAsync(stoppingToken);
                 return 0;
             }
-            catch (OperationCanceledException) when (cts.IsCancellationRequested)
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 // Stopping the dev server with Ctrl+C is a normal exit; an interrupted
                 // generation left partial output and is reported as failure.
@@ -182,14 +185,21 @@ public sealed class StaticSite : IAsyncDisposable
             return;
         }
         _disposed = true;
-        _lifetime.StopApplication();
-        _lifetime.NotifyStopped();
-        try { await _services.DisposeAsync(); }
+        try
+        {
+            // Resolve directly: the site is marked disposed to make callbacks and repeated disposal safe.
+            _lifetime.Logger ??= _services.GetRequiredService<ILoggerFactory>().CreateLogger(BuildLoggerExtensions.CategoryName);
+            _lifetime.StopApplication();
+            _lifetime.NotifyStopped();
+        }
         finally
         {
-            _configuration.Dispose();
-            _environment.DisposeContentRootFileProvider();
-            _lifetime.Dispose();
+            try { await _services.DisposeAsync(); }
+            finally
+            {
+                _configuration.Dispose();
+                _environment.DisposeContentRootFileProvider();
+            }
         }
     }
 

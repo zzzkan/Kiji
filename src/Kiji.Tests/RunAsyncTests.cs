@@ -195,6 +195,44 @@ public sealed class RunAsyncTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_WarnsAboutHostedServices_WithoutInstantiatingThem()
+    {
+        var logs = new RecordingLoggerProvider();
+        var builder = CreateBuilder(_outputDir);
+        builder.Logging.AddProvider(logs);
+        builder.Services.AddSingleton<IHostedService>(_ => throw new InvalidOperationException("Must not instantiate hosted services."));
+        await using var site = builder.Build();
+
+        Assert.Equal(0, await site.RunAsync());
+        Assert.Single(logs.Entries, static entry => entry.Level == LogLevel.Warning
+            && entry.Message.Contains("1 IHostedService registration(s)", StringComparison.Ordinal)
+            && entry.Message.Contains("will not be started", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Dispose_UnrunSite_LogsCallbackFailures_AndKeepsLifetimeTokensReadable()
+    {
+        var logs = new RecordingLoggerProvider();
+        var builder = CreateBuilder();
+        builder.Logging.AddProvider(logs);
+        builder.Services.AddSingleton<LifetimeObserver>();
+        await using var site = builder.Build();
+        var observer = site.ServiceProvider.GetRequiredService<LifetimeObserver>();
+        using var stopping = observer.Lifetime.ApplicationStopping.Register(() => throw new InvalidOperationException("Stopping callback"));
+        using var stopped = observer.Lifetime.ApplicationStopped.Register(() => throw new InvalidOperationException("Stopped callback"));
+
+        await site.DisposeAsync();
+
+        Assert.False(observer.Lifetime.ApplicationStarted.IsCancellationRequested);
+        Assert.True(observer.Lifetime.ApplicationStopping.IsCancellationRequested);
+        Assert.True(observer.Lifetime.ApplicationStopped.IsCancellationRequested);
+        observer.Lifetime.StopApplication();
+        Assert.Equal(1, observer.Disposals);
+        Assert.Equal(2, logs.Entries.Count(static entry => entry.Level == LogLevel.Error
+            && entry.Message == "An application lifetime callback failed."));
+    }
+
+    [Fact]
     public async Task Lifetime_FailedStartup_SignalsShutdownWithoutStarted_AndDisposesServices()
     {
         var builder = CreateBuilder(_outputDir);

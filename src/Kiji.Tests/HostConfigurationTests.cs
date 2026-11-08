@@ -4,6 +4,7 @@ using Kiji.Generation;
 using Kiji.Tests.TestSite;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.Metrics;
 using Microsoft.Extensions.Options;
 using Xunit;
 
@@ -101,8 +102,11 @@ public sealed class HostConfigurationTests : IDisposable
     [Theory]
     [InlineData("""{ "Site": { "Title": "same" }, "Logging": { "LogLevel": { "Kiji.Build": "Debug" } } }""", true)]
     [InlineData("""{ "Site": { "Title": "same" }, "logging": { "Console": { "FormatterName": "simple" } } }""", true)]
+    [InlineData("""{ "Site": { "Title": "same" }, "Metrics": { "EnabledMetrics": { "Test.Meter": true } } }""", true)]
+    [InlineData("""{ "Site": { "Title": "same" }, "metrics": { "EnabledMetrics": { "Test.Meter": false } } }""", true)]
+    [InlineData("""{ "Site": { "Title": "same" }, "MetricsTheme": "dark" }""", false)]
     [InlineData("""{ "Site": { "Title": "same" }, "LoggingTheme": "dark" }""", false)]
-    public async Task Fingerprint_LeavesOutOnlyTheLoggingSection(string changed, bool reused)
+    public async Task Fingerprint_LeavesOutOnlyDiagnosticsSections(string changed, bool reused)
     {
         async Task<string> PublishAsync()
         {
@@ -117,8 +121,19 @@ public sealed class HostConfigurationTests : IDisposable
         var first = await PublishAsync();
         WriteSettings("appsettings.json", changed);
 
-        // Raising a log level to inspect a build must not render every page again.
+        // Changing diagnostics must not render every page again; similarly named site keys must.
         Assert.Equal(reused, first == await PublishAsync());
+    }
+
+    [Fact]
+    public async Task MetricsSettings_ConfigureInstrumentRules()
+    {
+        WriteSettings("appsettings.json", """{ "Metrics": { "EnabledMetrics": { "Test.Meter": true } } }""");
+        var builder = CreateBuilder(environmentName: null);
+        await using var site = builder.Build();
+        var rules = site.ServiceProvider.GetRequiredService<IOptions<MetricsOptions>>().Value.Rules;
+
+        Assert.Contains(rules, static rule => rule.MeterName == "Test.Meter" && rule.Enable);
     }
 
     [Fact]

@@ -63,6 +63,7 @@ public sealed class StaticSiteBuilder : IHostApplicationBuilder
         // Rules for the same category apply in order, so defaults come before the section.
         _services.AddMetrics();
         Metrics = new SiteMetricsBuilder(_services);
+        Metrics.AddConfiguration(Configuration.GetSection("Metrics"));
         _services.AddLogging();
         Logging = new SiteLoggingBuilder(_services);
         Logging.SetMinimumLevel(LogLevel.Warning);
@@ -103,10 +104,11 @@ public sealed class StaticSiteBuilder : IHostApplicationBuilder
     {
         EnsureConfigurable();
         ArgumentNullException.ThrowIfNull(siteInfo);
+        // Configuration binding sets only keys present in the section, bypassing required members.
         if (siteInfo.BaseUrl is null || siteInfo.Name is null)
         {
             throw new ArgumentException(
-                $"SiteInfo.{(siteInfo.BaseUrl is null ? nameof(SiteInfo.BaseUrl) : nameof(SiteInfo.Name))} is required.",
+                $"SiteInfo.{(siteInfo.BaseUrl is null ? nameof(SiteInfo.BaseUrl) : nameof(SiteInfo.Name))} is required. A SiteInfo bound from configuration lacks it when the section does not set it.",
                 nameof(siteInfo));
         }
         _siteInfo = siteInfo;
@@ -116,7 +118,7 @@ public sealed class StaticSiteBuilder : IHostApplicationBuilder
     /// <summary>Shared state for host builder extensions.</summary>
     public IDictionary<object, object> Properties { get; } = new Dictionary<object, object>();
 
-    /// <summary>Configures metrics for site services.</summary>
+    /// <summary>Configures metrics for site services using the Metrics configuration section.</summary>
     public IMetricsBuilder Metrics { get; }
 
     // Kiji relies on the standard provider's scope and call-site validation.
@@ -145,7 +147,7 @@ public sealed class StaticSiteBuilder : IHostApplicationBuilder
     /// <summary>The site configuration, also available to components as <see cref="IConfiguration"/>.</summary>
     /// <remarks>
     /// It reads <c>appsettings.json</c> and <c>appsettings.{Environment}.json</c> from the project directory. Add other
-    /// sources, such as prefixed environment variables or user secrets, explicitly. Every value outside the <c>Logging</c>
+    /// sources, such as prefixed environment variables or user secrets, explicitly. Every value outside the <c>Logging</c> and <c>Metrics</c>
     /// section is part of the publish fingerprint: changing one renders every page again. Files are read once per process.
     /// </remarks>
     public IConfigurationManager Configuration => HostConfiguration;

@@ -23,6 +23,9 @@ internal static partial class BuildLoggerExtensions
     [LoggerMessage(5, LogLevel.Information, "Publishing for environment '{EnvironmentName}'.")]
     internal static partial void PublishingEnvironment(this ILogger logger, string environmentName);
 
+    [LoggerMessage(6, LogLevel.Warning, "{Count} IHostedService registration(s) found. Kiji does not start hosted services; these services will not be started. Use a separate host for background services.")]
+    internal static partial void HostedServicesNotStarted(this ILogger logger, int count);
+
     [LoggerMessage(10, LogLevel.Debug, "Generated: {Path}")]
     internal static partial void PageGenerated(this ILogger logger, string path);
 

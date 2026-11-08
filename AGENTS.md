@@ -65,7 +65,7 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   project-local (no environment variables, command line or user secrets, which differ between
   machines). The dev server uses standard ASP.NET Core configuration with the same project
   directory and environment. Per-key reads are not tracked, so the environment name and all
-  configuration outside the Logging section are in the publish options fingerprint.
+  configuration outside the Logging and Metrics sections are in the publish options fingerprint.
 - The dev server enforces BaseUrl's path prefix and uses `.kiji/dev-site`.
   Only `.kiji/cache` (pages) and `.kiji/jit` (publish JIT profile) are portable; CI restores
   either or both. Planning creates no output directories.

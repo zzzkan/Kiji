@@ -36,7 +36,7 @@ public sealed class IncrementalBuildTests : IDisposable
     {
         var root = CreateSiteRoot("item-parameters");
         var log = new ContentRenderLog();
-        await using var site = CreateArticleBuilder(root, log).Build();
+        await using var site = CreateArticleBuilder(root, log).BuildSite();
         await site.PublishAsync("dist");
         await site.PublishAsync("dist");
         Assert.Equal(1, log.Counts["stable"]);
@@ -48,7 +48,7 @@ public sealed class IncrementalBuildTests : IDisposable
 
         var scratch = CreateSiteRoot("item-parameters-full");
         await WritePostAsync(scratch, "changing", "Changed", "New body.");
-        await using var clean = CreateArticleBuilder(scratch, new ContentRenderLog()).Build();
+        await using var clean = CreateArticleBuilder(scratch, new ContentRenderLog()).BuildSite();
         await clean.PublishAsync("dist");
         AssertDirectoriesIdentical(Path.Combine(scratch, "dist"), Path.Combine(root, "dist"));
     }
@@ -59,7 +59,7 @@ public sealed class IncrementalBuildTests : IDisposable
         var root = CreateSiteRoot("item-navigation");
         await WritePostAsync(root, "third", "Third", "Third body.");
         var log = new ContentRenderLog();
-        await using var site = CreateArticleBuilder(root, log, navigation: true).Build();
+        await using var site = CreateArticleBuilder(root, log, navigation: true).BuildSite();
         await site.PublishAsync("dist");
         await site.PublishAsync("dist");
         Assert.Equal(1, log.Counts["stable"]);
@@ -77,7 +77,7 @@ public sealed class IncrementalBuildTests : IDisposable
         var log = new ContentRenderLog();
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
         builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
-        TestSiteAssets.Bind(builder.Paths, Path.Combine(root, "static"));
+        TestSiteAssets.Bind(builder.GetSitePaths(), Path.Combine(root, "static"));
         builder.Services.AddSingleton(log);
         builder.AddKeyedMarkdownContent<FrontMatter, ContentArticle>("first",
             content => ContentArticle.Create(content) with { Title = "First source" });
@@ -90,7 +90,7 @@ public sealed class IncrementalBuildTests : IDisposable
             Slug = "selected",
             Article = services.GetRequiredKeyedService<ContentCollection<ContentArticle>>(key)["stable.md"],
         }]);
-        await using var site = builder.Build();
+        await using var site = builder.BuildSite();
         await site.PublishAsync("dist");
         await site.PublishAsync("dist");
         Assert.Equal(1, log.Counts["selected"]);
@@ -107,7 +107,7 @@ public sealed class IncrementalBuildTests : IDisposable
         // registers the same instances again.
         var root = CreateSiteRoot("front-matter-items");
         var log = new ContentRenderLog();
-        await using var site = CreateItemBuilder(root, log, static content => content.FrontMatter).Build();
+        await using var site = CreateItemBuilder(root, log, static content => content.FrontMatter).BuildSite();
         await site.PublishAsync("dist");
         await site.PublishAsync("dist");
         Assert.Equal(1, log.Counts["stable"]);
@@ -132,7 +132,7 @@ public sealed class IncrementalBuildTests : IDisposable
         var builder = strings
             ? CreateItemBuilder(root, log, static _ => "")
             : CreateItemBuilder(root, log, _ => shared);
-        await using var site = builder.Build();
+        await using var site = builder.BuildSite();
         await site.PublishAsync("dist");
         await site.PublishAsync("dist");
         var renders = strings ? 1 : 2;
@@ -140,13 +140,13 @@ public sealed class IncrementalBuildTests : IDisposable
         Assert.Equal(renders, log.Counts["changing"]);
     }
 
-    private static StaticSiteBuilder CreateItemBuilder<TModel>(string root, ContentRenderLog log,
+    private static HostApplicationBuilder CreateItemBuilder<TModel>(string root, ContentRenderLog log,
         Func<MarkdownContent<FrontMatter>, TModel> select)
         where TModel : class
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
         builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
-        TestSiteAssets.Bind(builder.Paths, Path.Combine(root, "static"));
+        TestSiteAssets.Bind(builder.GetSitePaths(), Path.Combine(root, "static"));
         builder.Services.AddSingleton(log);
         builder.AddMarkdownContent(select);
         builder.AddPageParameters<ContentItemPage>(services =>
@@ -163,7 +163,7 @@ public sealed class IncrementalBuildTests : IDisposable
         var root = CreateSiteRoot("stale-shared-item");
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
         builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
-        TestSiteAssets.Bind(builder.Paths, Path.Combine(root, "static"));
+        TestSiteAssets.Bind(builder.GetSitePaths(), Path.Combine(root, "static"));
         builder.Services.AddSingleton(new ContentRenderLog());
         var shared = new FrontMatter { Title = "Shared" };
         builder.AddMarkdownContent<FrontMatter, FrontMatter>(_ => shared);
@@ -175,7 +175,7 @@ public sealed class IncrementalBuildTests : IDisposable
             retained ??= services.GetRequiredService<ContentCollection<FrontMatter>>().First();
             return [new { Slug = "shared", Item = retained }];
         });
-        await using var site = builder.Build();
+        await using var site = builder.BuildSite();
         await site.PublishAsync("dist");
 
         var error = await Assert.ThrowsAnyAsync<Exception>(() => site.PublishAsync("dist"));
@@ -197,7 +197,7 @@ public sealed class IncrementalBuildTests : IDisposable
                 Article = array ? article : article with { },
                 Items = array ? new[] { article } : null,
             }));
-        await using var site = builder.Build();
+        await using var site = builder.BuildSite();
         await site.PublishAsync("dist");
         await site.PublishAsync("dist");
         Assert.Equal(2, log.Counts["stable"]);
@@ -215,8 +215,8 @@ public sealed class IncrementalBuildTests : IDisposable
             retained ??= services.GetRequiredService<ContentCollection<ContentArticle>>()["stable.md"];
             return [new { retained.Slug, Article = retained }];
         });
-        await using var site = builder.Build();
-        await using (var development = CreateArticleBuilder(root, new ContentRenderLog()).Build())
+        await using var site = builder.BuildSite();
+        await using (var development = CreateArticleBuilder(root, new ContentRenderLog()).BuildSite())
         {
             var developmentPage = development.CreateSnapshot().Pages[0];
             development.InvalidateContent();
@@ -235,13 +235,13 @@ public sealed class IncrementalBuildTests : IDisposable
         Assert.Contains("previous content snapshot", planningError.ToString(), StringComparison.Ordinal);
     }
 
-    private static StaticSiteBuilder CreateArticleBuilder(string root, ContentRenderLog log,
+    private static HostApplicationBuilder CreateArticleBuilder(string root, ContentRenderLog log,
         bool navigation = false, bool mapPages = true, bool renderBodies = false,
         bool showNavigation = false, bool projectionRendersBody = false)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
         builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
-        TestSiteAssets.Bind(builder.Paths, Path.Combine(root, "static"));
+        TestSiteAssets.Bind(builder.GetSitePaths(), Path.Combine(root, "static"));
         builder.Services.AddSingleton(log);
         builder.AddMarkdownContent<FrontMatter, ContentArticle>(content =>
         {
@@ -277,14 +277,14 @@ public sealed class IncrementalBuildTests : IDisposable
     {
         var root = CreateSiteRoot("split-digests");
         var log = new ContentRenderLog();
-        static StaticSiteBuilder Create(string directory, ContentRenderLog observer)
+        static HostApplicationBuilder Create(string directory, ContentRenderLog observer)
         {
             var builder = CreateArticleBuilder(directory, observer, renderBodies: true, showNavigation: true);
             builder.AddPageParameters<ContentArticleListPage>(_ =>
                 [new { Kind = "metadata" }, new { Kind = "front-matter" }, new { Kind = "count" }]);
             return builder;
         }
-        await using var site = Create(root, log).Build();
+        await using var site = Create(root, log).BuildSite();
         await site.PublishAsync("dist");
         await site.PublishAsync("dist");
         Assert.All(log.Counts.Values, count => Assert.Equal(1, count));
@@ -300,7 +300,7 @@ public sealed class IncrementalBuildTests : IDisposable
 
         var scratch = CreateSiteRoot("split-digests-full");
         await WritePostAsync(scratch, "changing", title, "Edited body.");
-        await using var clean = Create(scratch, new ContentRenderLog()).Build();
+        await using var clean = Create(scratch, new ContentRenderLog()).BuildSite();
         await clean.PublishAsync("dist");
         AssertDirectoriesIdentical(Path.Combine(scratch, "dist"), Path.Combine(root, "dist"));
     }
@@ -312,13 +312,13 @@ public sealed class IncrementalBuildTests : IDisposable
     {
         var root = CreateSiteRoot("body-listing");
         var log = new ContentRenderLog();
-        StaticSiteBuilder Create(string directory, ContentRenderLog observer)
+        HostApplicationBuilder Create(string directory, ContentRenderLog observer)
         {
             var builder = CreateArticleBuilder(directory, observer, projectionRendersBody: projection);
             builder.AddPageParameters<ContentArticleListPage>(_ => [new { Kind = projection ? "metadata" : "render" }]);
             return builder;
         }
-        await using var site = Create(root, log).Build();
+        await using var site = Create(root, log).BuildSite();
         await site.PublishAsync("dist");
         await site.PublishAsync("dist");
         var listing = "list-" + (projection ? "metadata" : "render");
@@ -331,7 +331,7 @@ public sealed class IncrementalBuildTests : IDisposable
 
         var scratch = CreateSiteRoot("body-listing-full");
         await WritePostAsync(scratch, "changing", "Changing Post", "Edited body.");
-        await using var clean = Create(scratch, new ContentRenderLog()).Build();
+        await using var clean = Create(scratch, new ContentRenderLog()).BuildSite();
         await clean.PublishAsync("dist");
         AssertDirectoriesIdentical(Path.Combine(scratch, "dist"), Path.Combine(root, "dist"));
     }
@@ -385,7 +385,7 @@ public sealed class IncrementalBuildTests : IDisposable
     public async Task ReusingAppForSameOutput_ReloadsContentAndMatchesFreshBuild()
     {
         var root = CreateSiteRoot("reused");
-        await using var app = CreateBuilder(root).Build();
+        await using var app = CreateBuilder(root).BuildSite();
         await app.PublishAsync(Path.Combine(root, "dist"));
         await WritePostAsync(root, "changing", "Changed", "Freshly loaded content.");
         await app.PublishAsync(Path.Combine(root, "dist"));
@@ -406,11 +406,11 @@ public sealed class IncrementalBuildTests : IDisposable
         {
             var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
             builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
-            TestSiteAssets.Bind(builder.Paths, Path.Combine(_testDir, "static"));
+            TestSiteAssets.Bind(builder.GetSitePaths(), Path.Combine(_testDir, "static"));
             builder.Services.AddSingleton<Func<string>>(() => value);
             builder.AddPageParameters<RenderPolicyPage>(_ => [new { Kind = "cached" }, new { Kind = "child" }]);
             if (useLayout) { builder.UseDefaultLayout<AlwaysRenderLayout>(); }
-            await using var app = builder.Build();
+            await using var app = builder.BuildSite();
             await app.PublishAsync(output);
         }
 
@@ -425,7 +425,7 @@ public sealed class IncrementalBuildTests : IDisposable
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir), typeof(BoundaryPolicyPage));
         builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         builder.Services.AddSingleton<Action>(() => renders++);
-        await using var app = builder.Build();
+        await using var app = builder.BuildSite();
 
         await app.PublishAsync(Path.Combine(_testDir, "dist"));
         await app.PublishAsync(Path.Combine(_testDir, "dist"));
@@ -462,7 +462,7 @@ public sealed class IncrementalBuildTests : IDisposable
         {
             var builder = CreateBuilder(siteRoot, RecordRender);
             builder.UseSiteInfo(TestArticleContents.CreateSiteInfoWithBasePath());
-            await using var app = builder.Build();
+            await using var app = builder.BuildSite();
             await app.PublishAsync(Path.Combine(siteRoot, "dist"));
         }
     }
@@ -772,7 +772,7 @@ public sealed class IncrementalBuildTests : IDisposable
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
         builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
-        TestSiteAssets.Bind(builder.Paths, Path.Combine(builder.Paths.ProjectDirectory, "static"));
+        TestSiteAssets.Bind(builder.GetSitePaths(), Path.Combine(builder.GetSitePaths().ProjectDirectory, "static"));
 
         builder.AddMarkdownContent<FrontMatter>();
         builder.RegisterContent<Post>(static _ => []);
@@ -790,7 +790,7 @@ public sealed class IncrementalBuildTests : IDisposable
             .GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>()
             .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Path), ContentKey = post.Path }));
 
-        await using var app = builder.Build();
+        await using var app = builder.BuildSite();
         await app.PublishAsync(Path.Combine(root, "dist"));
     }
 
@@ -798,7 +798,7 @@ public sealed class IncrementalBuildTests : IDisposable
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
         builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
-        TestSiteAssets.Bind(builder.Paths, Path.Combine(builder.Paths.ProjectDirectory, "static"));
+        TestSiteAssets.Bind(builder.GetSitePaths(), Path.Combine(builder.GetSitePaths().ProjectDirectory, "static"));
 
         builder.AddMarkdownContent<FrontMatter>(static options => options.Directory = "content/posts");
         builder.AddMarkdownContent<FrontMatter, ScopedNote>(
@@ -815,7 +815,7 @@ public sealed class IncrementalBuildTests : IDisposable
             .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Path), ContentKey = post.Path }));
         builder.AddPageParameters<ScopedNotesIndexPage>(static _ => [new { Kind = "all" }]);
 
-        await using var app = builder.Build();
+        await using var app = builder.BuildSite();
         await app.PublishAsync(Path.Combine(root, "dist"));
     }
 
@@ -896,7 +896,7 @@ public sealed class IncrementalBuildTests : IDisposable
     public async Task SameLengthAndTimestamp_ContentChangeIsDetected()
     {
         var root = CreateSiteRoot("stamp");
-        await using var app = CreateBuilder(root).Build();
+        await using var app = CreateBuilder(root).BuildSite();
         await app.PublishAsync("dist");
         var path = Path.Combine(root, "content", "stable.md");
         var stamp = File.GetLastWriteTimeUtc(path);
@@ -1011,7 +1011,7 @@ public sealed class IncrementalBuildTests : IDisposable
         {
             var builder = CreateBuilder(root, () => Interlocked.Increment(ref renders), Path.Combine(external, "content"));
             builder.Services.AddSingleton<IImageProcessor, TestSite.PageServices.TrackingImageProcessor>();
-            await using var app = builder.Build();
+            await using var app = builder.BuildSite();
             await app.PublishAsync("dist");
         }
         await Build();
@@ -1037,15 +1037,15 @@ public sealed class IncrementalBuildTests : IDisposable
         await File.WriteAllBytesAsync(Path.Combine(root, "content", "source.png"), [1, 2, 3]);
         var publishingBuilder = CreateBuilder(root);
         publishingBuilder.Services.AddSingleton<IImageProcessor, TestSite.PageServices.TrackingImageProcessor>();
-        await using (var publishing = publishingBuilder.Build())
+        await using (var publishing = publishingBuilder.BuildSite())
         {
             await publishing.PublishAsync("dist");
         }
         var cache = Path.Combine(root, ".kiji", "cache");
         var before = SnapshotDirectory(cache);
-        var builder = CreateBuilder(root);
+        var builder = CreateBuilder(root, serve: true);
         builder.Services.AddSingleton<IImageProcessor, TestSite.PageServices.TrackingImageProcessor>();
-        await using var app = builder.Build();
+        await using var app = builder.BuildSite();
         var (server, web) = await app.StartDevServerAsync(TestUrls.EphemeralPort, CancellationToken.None);
         await using (server)
         {
@@ -1076,7 +1076,7 @@ public sealed class IncrementalBuildTests : IDisposable
         {
             var builder = CreateBuilder(root, Record);
             builder.Services.AddSingleton<IImageProcessor>(processor);
-            await using var app = builder.Build();
+            await using var app = builder.BuildSite();
             await app.PublishAsync("dist");
         }
         await Build();
@@ -1104,7 +1104,7 @@ public sealed class IncrementalBuildTests : IDisposable
         {
             var builder = CreateBuilder(root);
             builder.Services.AddSingleton<IImageProcessor>(processor);
-            await using var app = builder.Build();
+            await using var app = builder.BuildSite();
             await app.PublishAsync("dist");
         }
         await Build();
@@ -1182,15 +1182,15 @@ public sealed class IncrementalBuildTests : IDisposable
 
     private static async Task BuildAsync(string root, Action? onRender = null)
     {
-        await using var app = CreateBuilder(root, onRender).Build();
+        await using var app = CreateBuilder(root, onRender).BuildSite();
         await app.PublishAsync(Path.Combine(root, "dist"));
     }
 
-    private static StaticSiteBuilder CreateBuilder(string root, Action? onRender = null, string directory = "content")
+    private static HostApplicationBuilder CreateBuilder(string root, Action? onRender = null, string directory = "content", bool serve = false)
     {
-        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")), outputPath: serve ? null : "dist");
         builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
-        TestSiteAssets.Bind(builder.Paths, Path.Combine(builder.Paths.ProjectDirectory, "static"));
+        TestSiteAssets.Bind(builder.GetSitePaths(), Path.Combine(builder.GetSitePaths().ProjectDirectory, "static"));
 
         builder.Services.Configure<MarkdownOptions>(options => options.Pipeline.DocumentProcessed += _ => onRender?.Invoke());
         builder.AddMarkdownContent<FrontMatter>(options => options.Directory = directory);

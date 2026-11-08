@@ -19,7 +19,7 @@ public sealed class FixedPageParametersTests : IDisposable
             builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
             builder.Services.AddSingleton(log);
             if (parameters is not null) { builder.AddPageParameters<FixedParameterPage>(_ => parameters); }
-            await using var site = builder.Build();
+            await using var site = builder.BuildSite();
             await site.PublishAsync("dist");
         }
 

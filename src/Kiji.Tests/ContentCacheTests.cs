@@ -53,7 +53,7 @@ public sealed class ContentCacheTests : IDisposable
         Assert.True(manifest.Pages.Single(page => page.RoutePath == "/cache/two/").HtmlLength > 0);
     }
 
-    private StaticSite CreateSite(Func<IReadOnlyList<(string Id, CacheItem Item, string? Digest)>> load)
+    private TestSiteHost CreateSite(Func<IReadOnlyList<(string Id, CacheItem Item, string? Digest)>> load)
     {
         Directory.CreateDirectory(_root);
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
@@ -61,7 +61,7 @@ public sealed class ContentCacheTests : IDisposable
         builder.RegisterContent<CacheItem>(_ => load(), "data");
         builder.AddPageParameters<CacheItemPage>(services => services.GetRequiredService<ContentCollection<CacheItem>>()
             .Select((_, index) => new { Id = index == 0 ? "one" : "two" }));
-        return builder.Build();
+        return builder.BuildSite();
     }
 
     public void Dispose()

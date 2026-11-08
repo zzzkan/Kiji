@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Kiji.Markdown;
 using Kiji.Sitemaps;
 using Kiji.Tests.TestSite;
@@ -18,22 +19,22 @@ public sealed class AppConfigurationTests : IDisposable
         builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         var finalInfo = TestArticleContents.CreateSiteInfo();
         builder.UseSiteInfo(finalInfo);
-        await using var site = builder.Build();
+        await using var site = builder.BuildSite();
         Assert.Same(finalInfo, site.ServiceProvider.GetRequiredService<SiteInfo>());
     }
 
     [Fact]
-    public async Task MissingSite_FailsBuildBeforeCreatingOutput_AndCanBeCorrected()
+    public async Task MissingSite_FailsAtExecutionBeforeCreatingOutput()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
-
-        var exception = Assert.Throws<InvalidOperationException>(() => builder.Build());
-
-        Assert.Contains("UseSiteInfo", exception.Message, StringComparison.Ordinal);
-        Assert.False(Directory.Exists(_root));
-        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
-        builder.Services.AddScoped<object>();
-        await using var site = builder.Build();
+        var logs = new RecordingLoggerProvider();
+        builder.Logging.AddProvider(logs);
+        var host = builder.Build();
+        var exitCode = (RecordingExitCode)host.Services.GetRequiredService<IProcessExitCode>();
+        await host.RunAsync();
+        Assert.Equal(1, exitCode.Value);
+        Assert.Contains(logs.Exceptions, static error => error.Message.Contains("UseSiteInfo", StringComparison.Ordinal));
+        Assert.False(Directory.Exists(Path.Combine(_root, "dist")));
     }
 
     [Theory]
@@ -41,7 +42,7 @@ public sealed class AppConfigurationTests : IDisposable
     [InlineData(true)]
     public async Task Build_FreezesRegistrations_AndLoadsContentOnlyAfterPathsSettle(bool serve)
     {
-        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root), outputPath: serve ? null : "output");
         builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         builder.Services.AddScoped<object>();
         var loads = 0;
@@ -64,11 +65,11 @@ public sealed class AppConfigurationTests : IDisposable
             return [];
         });
 
-        await using var app = builder.Build();
+        await using var app = builder.BuildSite();
         AssertFrozen();
         Assert.Equal(0, loads);
         Assert.Equal(0, routeCalls);
-        Assert.False(Directory.Exists(_root));
+        Assert.False(Directory.Exists(Path.Combine(_root, "output")));
 
         var output = Path.Combine(_root, "output");
         if (serve)
@@ -96,7 +97,7 @@ public sealed class AppConfigurationTests : IDisposable
 
         void AssertFrozen()
         {
-            Assert.Throws<InvalidOperationException>(() => builder.Build());
+            Assert.Throws<InvalidOperationException>(() => builder.BuildSite());
             Assert.Throws<InvalidOperationException>(() => builder.Services.AddScoped<object>());
             Assert.Throws<InvalidOperationException>(() => builder.UseSiteInfo(TestArticleContents.CreateSiteInfo()));
             Assert.Throws<InvalidOperationException>(() => builder.RegisterContent<object>(static _ => []));

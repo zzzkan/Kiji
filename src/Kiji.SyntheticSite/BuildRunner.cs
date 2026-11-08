@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Kiji.Feeds;
 using Kiji.Generation;
+using Kiji.Hosting;
 using Kiji.Markdown;
 using Kiji.Sitemaps;
 using Kiji.SyntheticSite.Pages;
@@ -66,7 +67,7 @@ public static class BuildRunner
     /// </summary>
     public static async Task BuildSiteAsync(string root)
     {
-        var builder = StaticSite.CreateBuilder([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "synthetic")), typeof(BuildRunner).Assembly);
+        var builder = StaticSite.CreateBuilder([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "synthetic")), typeof(BuildRunner).Assembly, runtimeData: name => name == "Kiji.OutputPath" ? Path.Combine(root, "dist") : null);
         builder.UseSiteInfo(new SiteInfo
         {
             BaseUrl = new Uri("https://bench.example.com/"),
@@ -93,7 +94,7 @@ public static class BuildRunner
                 RelativePath: $"blog/{PostSlug.From(post.Path)}/")));
         builder.AddSitemap();
 
-        await using var app = builder.Build();
-        await app.PublishAsync(Path.Combine(root, "dist"));
+        using var host = builder.Build();
+        await host.Services.GetRequiredService<SiteEngine>().PublishAsync();
     }
 }

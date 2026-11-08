@@ -14,6 +14,7 @@ $project = Join-Path $site 'Consumer.csproj'
 "@ | Set-Content $project
 @'
 using Kiji;
+using Microsoft.Extensions.Hosting;
 var builder = StaticSite.CreateBuilder(args);
 builder.UseSiteInfo(new SiteInfo { Name = "Consumer", BaseUrl = new Uri("https://example.test/sub/") });
 await builder.Build().RunAsync();

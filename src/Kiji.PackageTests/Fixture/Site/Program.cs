@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Hosting;
 using Kiji;
 using Kiji.Markdown;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,4 +12,4 @@ builder.AddPageParameters<ArticlePage>(services => services
     .GetRequiredService<ContentCollection<MarkdownContent<Article>>>()
     .Select(entry => new { Slug = Path.GetFileNameWithoutExtension(entry.Path), ContentKey = entry.Path }));
 
-return await builder.Build().RunAsync();
+await builder.Build().RunAsync();

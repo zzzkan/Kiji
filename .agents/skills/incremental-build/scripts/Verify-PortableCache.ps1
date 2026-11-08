@@ -33,6 +33,7 @@ function New-Fixture([string] $name) {
 "@ | Set-Content (Join-Path $root 'Portable.csproj')
     @'
 using Kiji;
+using Microsoft.Extensions.Hosting;
 using Kiji.Markdown;
 using Microsoft.Extensions.DependencyInjection;
 using Portable;

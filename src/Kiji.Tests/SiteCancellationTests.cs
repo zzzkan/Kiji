@@ -36,12 +36,15 @@ public sealed class SiteCancellationTests : IDisposable
                 await release.Task.WaitAsync(token);
             },
         };
-        var run = CreateApp(processor, runtimeData: name => name == "Kiji.OutputPath" ? output : null).RunAsync(cancellation.Token);
+        var running = CreateApp(processor, runtimeData: name => name == "Kiji.OutputPath" ? output : null);
+        var exitCode = (RecordingExitCode)running.ServiceProvider.GetRequiredService<IProcessExitCode>();
+        var run = running.Host.RunAsync(cancellation.Token);
         try
         {
             await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
             cancellation.Cancel();
-            Assert.Equal(1, await run.WaitAsync(TimeSpan.FromSeconds(10)));
+            await run.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Equal(1, exitCode.Value);
             Assert.Equal(manifest, File.ReadAllBytes(Path.Combine(cache, "manifest.json")));
             Assert.Equal(originalHtml, File.ReadAllText(htmlPath));
         }
@@ -82,7 +85,7 @@ public sealed class SiteCancellationTests : IDisposable
                 }
             },
         };
-        await using var app = CreateApp(processor);
+        await using var app = CreateApp(processor, serve: true);
         var (server, web) = await app.StartDevServerAsync(TestUrls.EphemeralPort, runStop.Token);
         using var client = new HttpClient { BaseAddress = new Uri(web.Urls.First()) };
         var request = client.GetStringAsync("/md/post/", requestStop.Token);
@@ -120,16 +123,16 @@ public sealed class SiteCancellationTests : IDisposable
         }
     }
 
-    private StaticSite CreateApp(TrackingImageProcessor processor, Func<string, object?>? runtimeData = null)
+    private TestSiteHost CreateApp(TrackingImageProcessor processor, Func<string, object?>? runtimeData = null, bool serve = false)
     {
-        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")), runtimeData);
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")), runtimeData ?? (name => name == "Kiji.OutputPath" && !serve ? "dist" : null));
         builder.UseSiteInfo(new SiteInfo { Name = "Cancellation", BaseUrl = new Uri("https://example.test/") });
-        TestSite.TestSiteAssets.Bind(builder.Paths, Path.Combine(_root, "wwwroot"));
+        TestSite.TestSiteAssets.Bind(builder.GetSitePaths(), Path.Combine(_root, "wwwroot"));
         builder.Services.AddSingleton<IImageProcessor>(_ => processor);
         builder.AddMarkdownContent<FrontMatter>();
         builder.AddPageParameters<MarkdownPostTestPage>(provider => provider.GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>()
             .Select(post => new { Slug = "post", ContentKey = post.Path }));
-        return builder.Build();
+        return builder.BuildSite();
     }
 
     private void WriteContent(string text)

@@ -51,7 +51,7 @@ public sealed class HostConfigurationTests : IDisposable
         // Machine-specific values would make every publish render every page and break the portable cache.
         Assert.NotNull(Environment.GetEnvironmentVariable("PATH"));
         Assert.Null(builder.Configuration["PATH"]);
-        await using var site = builder.Build();
+        await using var site = builder.BuildSite();
         Assert.Same(builder.Configuration, site.ServiceProvider.GetRequiredService<IConfiguration>());
     }
 
@@ -66,7 +66,7 @@ public sealed class HostConfigurationTests : IDisposable
             {
                 builder.Configuration.AddInMemoryCollection([new("Site:Title", overrideTitle)]);
             }
-            await using var site = builder.Build();
+            await using var site = builder.BuildSite();
             await site.PublishAsync(output);
             return await File.ReadAllTextAsync(Path.Combine(output, "configuration", "index.html"));
         }
@@ -86,7 +86,7 @@ public sealed class HostConfigurationTests : IDisposable
         {
             var builder = CreateBuilder(environmentName: null, typeof(FeatureOptionsPage));
             builder.Services.Configure<FeatureOptions>(builder.Configuration.GetSection("Feature"));
-            await using var site = builder.Build();
+            await using var site = builder.BuildSite();
             await site.PublishAsync(output);
             return await File.ReadAllTextAsync(Path.Combine(output, "feature", "index.html"));
         }
@@ -111,7 +111,7 @@ public sealed class HostConfigurationTests : IDisposable
         async Task<string> PublishAsync()
         {
             var builder = CreateBuilder(environmentName: null, typeof(ConfigurationPage));
-            await using var site = builder.Build();
+            await using var site = builder.BuildSite();
             await site.PublishAsync(Path.Combine(_root, "dist"));
             var manifest = await File.ReadAllTextAsync(Path.Combine(_root, ".kiji", "cache", "manifest.json"));
             return JsonSerializer.Deserialize(manifest, BuildManifestJsonContext.Default.BuildManifest)!.OptionsHash;
@@ -130,7 +130,7 @@ public sealed class HostConfigurationTests : IDisposable
     {
         WriteSettings("appsettings.json", """{ "Metrics": { "EnabledMetrics": { "Test.Meter": true } } }""");
         var builder = CreateBuilder(environmentName: null);
-        await using var site = builder.Build();
+        await using var site = builder.BuildSite();
         var rules = site.ServiceProvider.GetRequiredService<IOptions<MetricsOptions>>().Value.Rules;
 
         Assert.Contains(rules, static rule => rule.MeterName == "Test.Meter" && rule.Enable);
@@ -143,7 +143,7 @@ public sealed class HostConfigurationTests : IDisposable
         var builder = CreateBuilder(environmentName: null);
         builder.Services.Configure<ImageProcessorOptions>(builder.Configuration.GetSection("Images"));
 
-        await using var site = builder.Build();
+        await using var site = builder.BuildSite();
         var options = site.ServiceProvider.GetRequiredService<IOptions<ImageProcessorOptions>>().Value;
 
         Assert.Equal([480], options.Widths);
@@ -165,10 +165,10 @@ public sealed class HostConfigurationTests : IDisposable
         Assert.Contains($"SiteInfo.{property} is required", exception.Message, StringComparison.Ordinal);
     }
 
-    private StaticSiteBuilder CreateBuilder(string? environmentName, params Type[] discoveredPages)
+    private HostApplicationBuilder CreateBuilder(string? environmentName, params Type[] discoveredPages)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root),
-            runtimeData: null, environment: name => name == "DOTNET_ENVIRONMENT" ? environmentName : null, discoveredPages);
+            runtimeData: name => name == "Kiji.OutputPath" ? "dist" : null, environment: name => name == "DOTNET_ENVIRONMENT" ? environmentName : null, discoveredPages);
         builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         return builder;
     }

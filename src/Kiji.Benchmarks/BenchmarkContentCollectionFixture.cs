@@ -10,6 +10,6 @@ internal static class BenchmarkContentCollectionFixture
         var builder = StaticSite.CreateBuilder([], new SiteExecutionPaths(AppContext.BaseDirectory), typeof(BenchmarkContentCollectionFixture).Assembly);
         builder.UseSiteInfo(new SiteInfo { Name = "Fixture", BaseUrl = new Uri("https://example.test/") });
         builder.RegisterContent<T>(_ => [.. items.Select(item => (id(item), item, Digest: (string?)null))]);
-        return builder.Build().ServiceProvider.GetRequiredService<ContentCollection<T>>();
+        return builder.Build().Services.GetRequiredService<ContentCollection<T>>();
     }
 }

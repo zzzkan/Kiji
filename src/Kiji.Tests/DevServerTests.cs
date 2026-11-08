@@ -14,7 +14,7 @@ public sealed class DevServerTests : IAsyncDisposable
     private readonly string _testDir;
     private readonly string _contentsDir;
     private readonly string _staticDir;
-    private StaticSite? _app;
+    private TestSiteHost? _app;
     private int _contentLoads;
 
     public DevServerTests()
@@ -258,7 +258,7 @@ public sealed class DevServerTests : IAsyncDisposable
         {
             return StartServerAsync(logs, configureAssets: builder =>
             {
-                var prefix = builder.Paths.AssetManifestBasePath!;
+                var prefix = builder.GetSitePaths().AssetManifestBasePath!;
                 var path = prefix + ".staticwebassets.runtime.json";
                 if (missing) { File.Delete(path); }
                 else { TestSiteAssets.WriteManifest(path, [], []); }
@@ -348,7 +348,7 @@ public sealed class DevServerTests : IAsyncDisposable
         await File.WriteAllTextAsync(script, "original");
         using var logs = new StringWriter();
         var (baseAddress, devServer) = await StartServerAsync(logs, configureAssets: builder =>
-            TestSiteAssets.WriteManifest(builder.Paths.AssetManifestBasePath + ".staticwebassets.runtime.json",
+            TestSiteAssets.WriteManifest(builder.GetSitePaths().AssetManifestBasePath + ".staticwebassets.runtime.json",
                 [new(script, "Components/Card.razor.js")], [components]));
         await using (devServer)
         {
@@ -548,7 +548,7 @@ public sealed class DevServerTests : IAsyncDisposable
         var logs = new RecordingLoggerProvider();
         builder.Logging.AddProvider(logs);
         builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Information);
-        _app = builder.Build();
+        _app = builder.BuildSite();
         var (server, web) = await _app.StartDevServerAsync(TestUrls.EphemeralPort, CancellationToken.None,
             new Kiji.Hosting.DevServerStatusReporter(TextWriter.Null, "kiji", useEmoji: false));
         await using (server)
@@ -577,11 +577,11 @@ public sealed class DevServerTests : IAsyncDisposable
         Directory.CreateDirectory(notes);
         await File.WriteAllTextAsync(Path.Combine(posts, "post.md"), "---\ntitle: Post\n---\n\nOriginal body");
         await File.WriteAllTextAsync(Path.Combine(notes, "note.md"), "---\ntitle: Original note\n---\n");
-        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(Path.Combine(_testDir, "site")));
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(Path.Combine(_testDir, "site")), outputPath: null);
         builder.UseSiteInfo(TestArticleContents.CreateSiteInfoWithBasePath());
         string SourcePath(string path)
         {
-            return absolute ? path : Path.GetRelativePath(builder.Paths.ProjectDirectory, path);
+            return absolute ? path : Path.GetRelativePath(builder.GetSitePaths().ProjectDirectory, path);
         }
         builder.AddMarkdownContent<FrontMatter>(options => options.Directory = SourcePath(posts));
         builder.AddMarkdownContent<FrontMatter, ScopedNote>(ScopedNote.Create,
@@ -590,7 +590,7 @@ public sealed class DevServerTests : IAsyncDisposable
             .GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>()
             .Select(post => new { Slug = "post", ContentKey = post.Path }));
         builder.AddPageParameters<ScopedNotesIndexPage>(_ => [new { Kind = "all" }]);
-        _app = builder.Build();
+        _app = builder.BuildSite();
         using var logs = new StringWriter();
         var (server, web) = await _app.StartDevServerAsync(TestUrls.EphemeralPort, CancellationToken.None,
             new Kiji.Hosting.DevServerStatusReporter(logs, "kiji", useEmoji: false));
@@ -646,14 +646,14 @@ public sealed class DevServerTests : IAsyncDisposable
         StringWriter logs,
         SiteInfo? site = null,
         string? additionalSlug = null,
-        Action<StaticSiteBuilder>? configureAssets = null,
+        Action<HostApplicationBuilder>? configureAssets = null,
         string[]? serverArgs = null)
     {
         await File.WriteAllTextAsync(Path.Combine(_contentsDir, "hello-world.md"), "---\ntitle: Hello World\n---\n");
 
-        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")), outputPath: null);
         builder.UseSiteInfo(site ?? TestArticleContents.CreateSiteInfo());
-        TestSiteAssets.Bind(builder.Paths, _staticDir);
+        TestSiteAssets.Bind(builder.GetSitePaths(), _staticDir);
         configureAssets?.Invoke(builder);
 
         var contentsDir = _contentsDir;
@@ -674,7 +674,7 @@ public sealed class DevServerTests : IAsyncDisposable
         {
             builder.AddPageParameters<Kiji.Tests.TestSite.Pages.PostPage>(_ => [new { Slug = additionalSlug, ContentKey = "hello-world.md" }]);
         }
-        _app = builder.Build();
+        _app = builder.BuildSite();
 
         var reporter = new Kiji.Hosting.DevServerStatusReporter(logs, prefix: "kiji", useEmoji: true);
         var (devServer, web) = await _app.StartDevServerAsync(serverArgs ?? TestUrls.EphemeralPort, CancellationToken.None, reporter);

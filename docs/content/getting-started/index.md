@@ -83,6 +83,7 @@ Replace `Program.cs` with the site definition:
 
 ```csharp
 using Kiji;
+using Microsoft.Extensions.Hosting;
 
 var builder = StaticSite.CreateBuilder(args);
 builder.UseSiteInfo(new SiteInfo
@@ -91,7 +92,7 @@ builder.UseSiteInfo(new SiteInfo
     Name = "My Site",
 });
 
-return await builder.Build().RunAsync();
+await builder.Build().RunAsync();
 ```
 
 Create `Pages/Home.razor`:
@@ -179,6 +180,7 @@ Update `Program.cs` to import the layout namespace and register the layout:
 
 ```csharp
 using Kiji;
+using Microsoft.Extensions.Hosting;
 using MySite.Layout;
 
 var builder = StaticSite.CreateBuilder(args);
@@ -190,7 +192,7 @@ builder.UseSiteInfo(new SiteInfo
 
 builder.UseDefaultLayout<MainLayout>();
 
-return await builder.Build().RunAsync();
+await builder.Build().RunAsync();
 ```
 
 Add `PageHead` to `Pages/Home.razor`:
@@ -313,6 +315,7 @@ Add the required namespaces and registrations to `Program.cs`:
 
 ```csharp
 using Kiji;
+using Microsoft.Extensions.Hosting;
 using Kiji.Markdown;
 using Microsoft.Extensions.DependencyInjection;
 using MySite.Layout;
@@ -333,7 +336,7 @@ builder.AddPageParameters<PostPage>(services => services
     .GetRequiredService<ContentCollection<BlogPost>>()
     .Select(post => new { post.Slug, Post = post }));
 
-return await builder.Build().RunAsync();
+await builder.Build().RunAsync();
 ```
 
 `AddMarkdownContent` calls `BlogPost.Create` for each Markdown file and registers

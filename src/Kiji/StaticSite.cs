@@ -1,772 +1,95 @@
-using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using Kiji.Assets;
-using Kiji.Components;
-using Kiji.Generation;
 using Kiji.Hosting;
+using Kiji.Markdown;
 using Kiji.Rendering;
-using Kiji.Routing;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.Metrics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Kiji;
 
-/// <summary>Generates and serves a static website configured with <see cref="StaticSiteBuilder"/>.</summary>
-public sealed class StaticSite : IAsyncDisposable
+/// <summary>Creates generic host builders configured to publish or serve a Kiji site.</summary>
+public static class StaticSite
 {
-    private readonly string[] _args;
-    private readonly SiteRunSettings _settings;
-    private readonly ContentRuntime _runtime;
-    private readonly SiteHostEnvironment _environment;
-    private readonly ConfigurationManager _configuration;
-    private readonly IReadOnlyList<PageParameterRegistration> _pageParameters;
-    private readonly IReadOnlyList<SiteArtifactRegistration> _artifacts;
-    private readonly IReadOnlyList<Assembly> _pageAssemblies;
-    private readonly IReadOnlyCollection<Assembly> _serviceAssemblies;
-    private readonly Type? _defaultLayoutType;
-    private readonly Type? _notFoundComponentType;
-    private readonly ServiceProvider _services;
-    private readonly SiteApplicationLifetime _lifetime;
-    private readonly int _hostedServiceCount;
-    private ComponentRenderer? _renderer;
-    private ResolvedSitePaths? _activeOptions;
-    private bool _hasRun;
-    private bool _disposed;
+    /// <summary>Creates a site host builder with no development server arguments.</summary>
+    public static HostApplicationBuilder CreateBuilder() => CreateBuilder([]);
 
-    internal StaticSite(StaticSiteBuilder builder)
-    {
-        _lifetime = builder.Lifetime;
-        _hostedServiceCount = builder.Services.Count(static descriptor => descriptor.ServiceType == typeof(IHostedService));
-        _args = builder.Args;
-        _settings = builder.RunSettings;
-        _runtime = builder.Runtime;
-        _environment = builder.HostEnvironment;
-        _configuration = builder.HostConfiguration;
-        _pageParameters = [.. builder.PageParameters];
-        _artifacts = [.. builder.Artifacts];
-        _pageAssemblies = [.. builder.PageAssemblies];
-        _defaultLayoutType = builder.DefaultLayoutType;
-        _notFoundComponentType = builder.NotFoundComponentType;
-        Paths = builder.Paths;
-        SiteInfo = builder.SiteInfo;
-
-        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-        ContentRoots = [.. builder.ContentPaths.Select(Paths.ResolveAgainstRoot).Distinct(comparer)];
-
-        _runtime.Dependencies.Register("image-processor", () => ImageProcessorIdentity.Get(ServiceProvider.GetRequiredService<IImageProcessor>()));
-        (_services, _serviceAssemblies) = builder.BuildServices(() => _activeOptions ?? throw new InvalidOperationException(
-            "ResolvedSitePaths was resolved before a command settled the site's paths."));
-        _runtime.Attach(_services);
-    }
-
-    internal SiteInfo SiteInfo { get; }
-
-    internal SiteExecutionPaths Paths { get; }
-
-    internal string[] ContentRoots { get; }
-
-    // Created on first use, so building the site creates no services.
-    private ILogger BuildLogger => field ??= ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(BuildLoggerExtensions.CategoryName);
-
-    // Content must not resolve execution paths before publish/serve has settled them.
-    internal IServiceProvider ServiceProvider
-    {
-        get
-        {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-            return _services;
-        }
-    }
-
-    /// <summary>Creates a builder for a site that discovers routed components in the entry assembly.</summary>
-    public static StaticSiteBuilder CreateBuilder() => CreateBuilder([]);
-
-    /// <summary>Creates a builder with development server arguments.</summary>
-    /// <param name="args">
-    /// While serving, <c>--environment</c> selects the environment, and the arguments go to ASP.NET Core
-    /// configuration, such as <c>--urls</c>. Publishing ignores them.
-    /// </param>
-    public static StaticSiteBuilder CreateBuilder(string[] args)
+    /// <summary>Creates a site host builder. Arguments configure only the development server.</summary>
+    public static HostApplicationBuilder CreateBuilder(string[] args)
     {
         ArgumentNullException.ThrowIfNull(args);
-        // First, so the rest of the process can use methods compiled in the background.
+        // Start early so the host and rendering pipeline can use background-compiled methods.
         PublishJitProfile.Start(AppContext.GetData);
-        var settings = SiteRunSettings.FromExecutionContext(Environment.GetEnvironmentVariable, AppContext.GetData, args);
-        var entryAssembly = Assembly.GetEntryAssembly() ?? throw new InvalidOperationException(
-            "No entry assembly is available in this host. Run the site project as an application with dotnet run, dotnet watch or dotnet publish.");
-
-        return new StaticSiteBuilder(
-            args,
-            SiteExecutionPaths.FromRuntimeMetadata(AppContext.GetData("Kiji.ProjectDirectory"), entryAssembly),
-            entryAssembly,
-            settings);
+        var entryAssembly = Assembly.GetEntryAssembly() ?? throw new InvalidOperationException("No entry assembly is available. Run the site project as an application.");
+        return CreateBuilder(args, SiteExecutionPaths.FromRuntimeMetadata(AppContext.GetData("Kiji.ProjectDirectory"), entryAssembly),
+            entryAssembly, Environment.GetEnvironmentVariable, AppContext.GetData);
     }
 
-    /// <param name="args">As in the public overload: read only while serving.</param>
-    /// <param name="paths">The project and asset paths.</param>
-    /// <param name="entryAssembly">The assembly whose routed components are discovered.</param>
-    /// <param name="environment">
-    /// Reads an environment variable; by default none is set. Injected so tests can exercise
-    /// both modes without mutating the process environment, which parallel test classes share.
-    /// </param>
-    /// <param name="runtimeData">Reads runtimeconfig properties without mutating process-wide AppContext data.</param>
-    internal static StaticSiteBuilder CreateBuilder(string[] args, SiteExecutionPaths paths, Assembly entryAssembly,
+    internal static HostApplicationBuilder CreateBuilder(string[] args, SiteExecutionPaths paths, Assembly entryAssembly,
         Func<string, string?>? environment = null, Func<string, object?>? runtimeData = null)
-        => new(args, paths, entryAssembly, SiteRunSettings.FromExecutionContext(
-            environment ?? (static _ => null), runtimeData ?? (static _ => null), args));
-
-    /// <summary>Publishes or serves the site according to the MSBuild execution context, then disposes the site.</summary>
-    /// <remarks>Await this method in the entry point so <c>dotnet publish</c> generates the site.</remarks>
-    /// <returns>
-    /// The process exit code: 1 when a publish is canceled, otherwise 0. Failures are rethrown.
-    /// </returns>
-    public async Task<int> RunAsync(CancellationToken cancellationToken = default)
     {
-        if (_hasRun)
+        ArgumentNullException.ThrowIfNull(args);
+        var settings = SiteRunSettings.FromExecutionContext(environment ?? (static _ => null), runtimeData ?? (static _ => null), args);
+        var builder = new HostApplicationBuilder(new HostApplicationBuilderSettings
         {
-            throw new InvalidOperationException("A StaticSite can only be run once.");
-        }
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        _hasRun = true;
-
-        try
-        {
-            _lifetime.Logger = BuildLogger;
-            if (_hostedServiceCount > 0) { BuildLogger.HostedServicesNotStarted(_hostedServiceCount); }
-            var stoppingToken = _lifetime.ApplicationStopping;
-
-            using var cancellation = cancellationToken.Register(_lifetime.StopApplication);
-
-            void HandleShutdownSignal(PosixSignalContext context)
-            {
-                context.Cancel = true;
-                _lifetime.StopApplication();
-            }
-
-            using var sigInt = PosixSignalRegistration.Create(PosixSignal.SIGINT, HandleShutdownSignal);
-            using var sigTerm = PosixSignalRegistration.Create(PosixSignal.SIGTERM, HandleShutdownSignal);
-
-            try
-            {
-                if (_settings.OutputPath is { } outputPath)
-                {
-                    await PublishAsync(outputPath, stoppingToken);
-                    return 0;
-                }
-
-                await ServeAsync(stoppingToken);
-                return 0;
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                // Stopping the dev server with Ctrl+C is a normal exit; an interrupted
-                // generation left partial output and is reported as failure.
-                return _settings.Publishing ? 1 : 0;
-            }
-        }
-        finally
-        {
-            await DisposeAsync();
-        }
-    }
-
-    /// <summary>Releases the site's services and configuration.</summary>
-    public async ValueTask DisposeAsync()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-        _disposed = true;
-        try
-        {
-            // Resolve directly: the site is marked disposed to make callbacks and repeated disposal safe.
-            _lifetime.Logger ??= _services.GetRequiredService<ILoggerFactory>().CreateLogger(BuildLoggerExtensions.CategoryName);
-            _lifetime.StopApplication();
-            _lifetime.NotifyStopped();
-        }
-        finally
-        {
-            try { await _services.DisposeAsync(); }
-            finally
-            {
-                _configuration.Dispose();
-                _environment.DisposeContentRootFileProvider();
-            }
-        }
-    }
-
-    /// <summary>Generates the site, reusing unchanged output from a previous publish.</summary>
-    /// <param name="outputPath">An absolute output directory or a path relative to the site project directory.</param>
-    /// <remarks>Repeated publication uses the same output directory; switching directories or execution modes requires a new site.</remarks>
-    internal async Task PublishAsync(string outputPath, CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        // The name may come from an inherited DOTNET_ENVIRONMENT, so show it before anything can fail.
-        BuildLogger.PublishingEnvironment(_environment.EnvironmentName);
-
-        await using var cacheLease = await CacheLease.AcquireAsync(Paths.ResolveCachePath(), cancellationToken);
-        var options = Paths.ResolveForPublish(outputPath);
-        var assetManifest = options.AssetManifestPath is null ? new StaticAssetManifest { Assets = [] }
-            : StaticAssetManifest.Load(options.AssetManifestPath, options.AssetEndpointsPath, SiteInfo.BaseUrl);
-        UseAssetResources(assetManifest.Resources);
-        var assets = assetManifest.Assets;
-        OutputPathValidator.Validate(options, assetManifest, Paths.ProjectDirectory, Paths.ResolveKijiPath(), ContentRoots);
-        UseRunOptions(options);
-        InvalidateContent();
-        // After the paths settle, so validators can read content, and before any output.
-        ValidateOnStart();
-        _lifetime.NotifyStarted();
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var stopwatch = Stopwatch.StartNew();
-        var phases = new BuildPhaseTimer();
-        var snapshot = CreateSnapshot();
-        var renderer = GetRenderer();
-
-        var reservedPaths = CreateReservedArtifactPaths(options, snapshot, assets);
-        var artifactPaths = ReserveArtifactPaths(options, reservedPaths);
-        phases.Mark(BuildPhaseTimer.Snapshot);
-
-        // The sitemap reads only the page list, so it is written while pages are planned and
-        // rendered. Artifacts that run site code, including the feed factory, still run after
-        // all pages in registration order.
-        var artifactContext = _artifacts.Count == 0 ? null : CreateOutputContext(snapshot);
-        using var artifactCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var independentArtifacts = WriteArtifactsAsync(artifactPaths, artifactContext, independentOfPages: true,
-            artifactCancellation.Token);
-
-        IncrementalBuildPlanner planner;
-        IncrementalBuildPlan plan;
-        IReadOnlyList<string> staticFiles;
-        IReadOnlyList<RenderedPage> rendered;
-        var recorders = new ConcurrentDictionary<string, BuildDependencyRecorder>(StringComparer.OrdinalIgnoreCase);
-        try
-        {
-            planner = new IncrementalBuildPlanner(
-                options,
-                Paths.ProjectDirectory,
-                Paths.ResolveCachePath(),
-                SiteInfo,
-                _environment.EnvironmentName,
-                _configuration,
-                _runtime.Files, _runtime.Dependencies,
-                _services.GetRequiredService<IImageProcessor>(), assetManifest.Resources, BuildLogger,
-                _runtime.ResolveItem);
-
-            // Snapshot planning already required every page type to come from a page assembly.
-            // Helpers and custom encoder factories may live outside the page assemblies.
-            // Their code is a build input even when pages only reach it through injection.
-            plan = await planner.CreatePlanAsync(
-                snapshot.Pages,
-                [.. _pageAssemblies, .. _serviceAssemblies, typeof(StaticSite).Assembly],
-                cancellationToken);
-            phases.Mark(BuildPhaseTimer.Plan);
-
-            // The output directory is kept, never wiped: whatever this build does not
-            // produce is deleted by the reconciliation pass below, which is both cheaper
-            // than a delete-and-rewrite and checked against the directory itself.
-            Directory.CreateDirectory(options.OutputDirectory);
-            phases.Mark(BuildPhaseTimer.Clean);
-
-            staticFiles = await planner.SyncStaticFilesAsync(assets);
-            phases.Mark(BuildPhaseTimer.Static);
-
-            // Render only the pages the plan could not prove unchanged, recording what
-            // each render reads and writes for the next build's skip checks. The previous
-            // manifest comes along so a render that reproduces the bytes already on disk
-            // skips the write.
-            rendered = await StaticSiteGenerator.RenderPagesAsync(
-                options,
-                plan.PagesToRender,
-                (request, output, ct) =>
-                {
-                    var recorder = recorders.GetOrAdd(request.OutputRelativePath, static _ => new BuildDependencyRecorder());
-                    return RenderPageAsync(renderer, request, output, recorder, ct);
-                },
-                plan.OldManifest?.Pages.ToDictionary(
-                    static page => page.OutputRelativePath,
-                    StringComparer.OrdinalIgnoreCase),
-                cancellationToken,
-                planner.OutputStampsValid,
-                BuildLogger);
-            phases.Mark(BuildPhaseTimer.Render);
-        }
-        catch
-        {
-            // Report the build failure, not a write it interrupted.
-            await artifactCancellation.CancelAsync();
-            try { await independentArtifacts; }
-            catch (Exception) when (artifactCancellation.IsCancellationRequested) { }
-            throw;
-        }
-
-        await independentArtifacts;
-        await WriteArtifactsAsync(artifactPaths, artifactContext, independentOfPages: false, cancellationToken);
-        IReadOnlyList<string> artifacts = [.. artifactPaths.Select(path => Path.GetRelativePath(options.OutputDirectory, path))];
-        phases.Mark(BuildPhaseTimer.Artifacts);
-
-        // Input verification is independent of output reconciliation and entry
-        // construction. Join it before publishing the cache, including on failure.
-        var verification = recorders.IsEmpty ? Task.CompletedTask : Task.Run(
-            () => IncrementalBuildPlanner.VerifyInputs(recorders.Values), cancellationToken);
-        BuildManifest manifest;
-        try
-        {
-            // One entry per rendered page, verifying its dependencies: independent
-            // work, so it runs in parallel and lands at its own index to keep the manifest
-            // order deterministic.
-            var renderedEntries = new BuildManifestPage[rendered.Count];
-            Parallel.For(0, rendered.Count, index =>
-            {
-                var page = rendered[index];
-                renderedEntries[index] = planner.CreatePageEntry(
-                    page.Request,
-                    page.OutputHash,
-                    recorders[page.Request.OutputRelativePath],
-                    page.Html);
-            });
-
-            var pageEntries = new List<BuildManifestPage>(plan.CarriedPages.Count + rendered.Count);
-            pageEntries.AddRange(plan.CarriedPages);
-            pageEntries.AddRange(renderedEntries);
-            pageEntries.Sort(static (left, right) => StringComparer.OrdinalIgnoreCase.Compare(
-                left.OutputRelativePath, right.OutputRelativePath));
-
-            phases.Mark(BuildPhaseTimer.Entries);
-
-            manifest = new BuildManifest
-            {
-                SchemaVersion = BuildManifest.CurrentSchemaVersion,
-                OptionsHash = plan.OptionsHash,
-                CodeDependencies = plan.CodeDependencies,
-                Pages = pageEntries,
-                StaticFiles = staticFiles,
-                Artifacts = artifacts,
-            };
-
-            planner.ReconcileOutputs(manifest);
-        }
-        finally { await verification; }
-        phases.Mark(BuildPhaseTimer.Reconcile);
-
-        planner.SaveManifest(manifest, plan.OldManifest, cancellationToken);
-        // Still under the cache lease, so concurrent publishes cannot interleave the save.
-        PublishJitProfile.Save(Paths.ResolveKijiPath(), rendered.Count);
-        phases.Mark(BuildPhaseTimer.Manifest);
-
-        var written = rendered.Count(static page => page.Written);
-        BuildLogger.PagesGenerated(written, plan.CarriedPages.Count, rendered.Count - written, stopwatch.ElapsedMilliseconds);
-    }
-
-    /// <summary>Starts the development server with automatic browser reload on content changes.</summary>
-    /// <remarks>The address comes from ASP.NET Core configuration, defaulting to <c>http://127.0.0.1:8080</c>.</remarks>
-    internal async Task ServeAsync(CancellationToken cancellationToken = default)
-    {
-        var (devServer, web) = await StartDevServerAsync(_args, cancellationToken);
-        await using (devServer)
-        {
-            using var stopping = web.Lifetime.ApplicationStopping.Register(_lifetime.StopApplication);
-            await web.WaitForShutdownAsync(cancellationToken);
-        }
-    }
-
-    /// <param name="args">
-    /// Forwarded to <c>WebApplication.CreateSlimBuilder</c>, so <c>--urls</c> works the
-    /// way it does for any ASP.NET Core app. Tests pass an explicit <c>--urls</c> with
-    /// port 0 rather than mutating process-wide state.
-    /// </param>
-    /// <param name="cancellationToken">Stops the server.</param>
-    /// <param name="reporter">Overrides the console reporter. For tests.</param>
-    internal async Task<(DevServer DevServer, WebApplication WebApplication)> StartDevServerAsync(
-        string[] args,
-        CancellationToken cancellationToken,
-        DevServerStatusReporter? reporter = null)
-    {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        var options = UseRunOptions(Paths.ResolveForDevelopment());
-        OutputPathValidator.ValidateInputs(options.OutputDirectory, ContentRoots);
-        ValidateOnStart();
-
-        var devServer = new DevServer(this, reporter);
-        try
-        {
-            var web = await devServer.StartAsync(options, args, cancellationToken);
-            _lifetime.NotifyStarted();
-            return (devServer, web);
-        }
-        catch
-        {
-            await devServer.DisposeAsync();
-            throw;
-        }
-    }
-
-    internal async Task<string> RenderPageAsync(PageRenderRequest request, CancellationToken cancellationToken,
-        SharedRenderLifetime? sharedRenders = null)
-    {
-        using var output = new StringWriter();
-        await RenderPageAsync(GetRenderer(), request, output, dependencies: null, cancellationToken, sharedRenders);
-        return output.ToString();
-    }
-
-    internal void InvalidateContent() => _runtime.Invalidate();
-
-    internal SiteSnapshot CreateSnapshot()
-    {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        // Planning expands page parameter factories, which read content. If nothing has settled
-        // the options yet, fall back to paths that cannot be mistaken for a deliverable.
-        UsePlanningOptions();
-
-        var snapshotPhases = new BuildPhaseTimer();
-        var scanned = new List<PageDiscovery.DiscoveredPage>();
-        foreach (var assembly in _pageAssemblies)
-        {
-            scanned.AddRange(PageDiscovery.FromAssembly(assembly));
-        }
-
-        var parameterRoutes = _pageParameters.Select(static registration => registration.ComponentType)
-            .Distinct().ToDictionary(static type => type, FindParameterRoutes);
-        // Registered non-public components are pages too, with all of their routes.
-        var scannedTypes = scanned.Select(static page => page.ComponentType).ToHashSet();
-        scanned.AddRange(parameterRoutes.Keys.Where(type => !scannedTypes.Contains(type)).SelectMany(PageDiscovery.FromType));
-
-        var discovered = PageDiscovery.EnsureUniqueRoutes(ApplyNotFoundOverride(scanned));
-
-        snapshotPhases.Mark(BuildPhaseTimer.Discovery);
-
-        var pageParameters = new Dictionary<string, List<IReadOnlyDictionary<string, object?>>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var registration in _pageParameters)
-        {
-            var routes = parameterRoutes[registration.ComponentType];
-            IReadOnlyList<IReadOnlyDictionary<string, object?>> entries =
-                [.. registration.Parameters(ServiceProvider).Select(ConvertParameters)];
-            snapshotPhases.Mark(BuildPhaseTimer.RouteEntries);
-            ValidateRouteEntries(registration.ComponentType, routes, entries);
-            snapshotPhases.Mark(BuildPhaseTimer.RouteValidation);
-
-            foreach (var route in routes)
-            {
-                if (!pageParameters.TryGetValue(route.SourceIdentifier, out var combined))
-                {
-                    pageParameters.Add(route.SourceIdentifier, combined = []);
-                }
-                combined.AddRange(entries);
-            }
-        }
-
-        // Expanding a page parameter factory is where content is first read, so this is where
-        // loading and parsing every markdown file lands.
-        snapshotPhases.Mark(BuildPhaseTimer.Routes);
-
-        var plannedPages = StaticPagePlanner.PlanPages(
-            discovered,
-            pageParameters);
-
-        var requests = plannedPages
-            .Select(request => request with { RootParameters = CreateRootParameters(request) })
-            .ToList();
-
-        snapshotPhases.Mark(BuildPhaseTimer.Planning);
-
-        return new SiteSnapshot(requests);
-    }
-
-    /// <summary>
-    /// Selects the routes receiving AddPageParameters: all parameterized routes of the component,
-    /// or all its routes when every route is fixed. Fixed routes beside parameterized ones keep their default rendering.
-    /// </summary>
-    private IReadOnlyList<PageDiscovery.DiscoveredPage> FindParameterRoutes(Type componentType)
-    {
-        ValidatePageAssembly(componentType);
-        var pages = PageDiscovery.FromType(componentType);
-        var parameterized = pages.Where(static page => page.PageDefinition.IsDynamic).ToArray();
-        return parameterized.Length > 0 ? parameterized : pages;
-    }
-
-    private void ValidatePageAssembly(Type componentType)
-    {
-        if (!_pageAssemblies.Contains(componentType.Assembly))
-        {
-            throw new InvalidOperationException(
-                $"Page component '{componentType.FullName}' belongs to an unregistered assembly. Call AddPageAssembly(typeof({componentType.Name}).Assembly) before building the site.");
-        }
-    }
-
-    private static void ValidateRouteEntries(
-        Type componentType,
-        IReadOnlyList<PageDiscovery.DiscoveredPage> routes,
-        IReadOnlyList<IReadOnlyDictionary<string, object?>> entries)
-    {
-        var declaredParameters = PageDiscovery.Parameters(componentType);
-        var routeList = string.Join(", ", routes.Select(static route => $"'{route.SourceIdentifier}'"));
-
-        foreach (var entry in entries)
-        {
-            foreach (var route in routes)
-            {
-                var missing = route.PageDefinition.ParameterNames
-                    .Where(name => !entry.ContainsKey(name))
-                    .OrderBy(static name => name, StringComparer.Ordinal)
-                    .ToArray();
-                if (missing.Length > 0)
-                {
-                    throw new InvalidOperationException(
-                        $"Page parameters for '{componentType.FullName}' did not supply required route values for '{route.SourceIdentifier}': {string.Join(", ", missing.Select(static name => $"'{name}'"))}.");
-                }
-            }
-
-            foreach (var (name, value) in entry)
-            {
-                if (!declaredParameters.TryGetValue(name, out var property))
-                {
-                    throw new InvalidOperationException(
-                        $"Page parameters for '{componentType.FullName}' ({routeList}) supplied '{name}', which is not a declared '[Parameter]' property.");
-                }
-                if (!property.IsWritable)
-                {
-                    throw new InvalidOperationException(
-                        $"Page parameters for '{componentType.FullName}' ({routeList}) supplied parameter '{name}', which must have a public setter and cannot be an indexer.");
-                }
-                var type = property.PropertyType;
-                var compatible = value is null
-                    ? !type.IsValueType || Nullable.GetUnderlyingType(type) is not null
-                    : type.IsInstanceOfType(value);
-                if (!compatible)
-                {
-                    throw new InvalidOperationException(
-                        $"Page parameters for '{componentType.FullName}' ({routeList}) supplied parameter '{name}': expected '{type.FullName}', actual '{value?.GetType().FullName ?? "null"}'. Implicit parameter conversions are not supported.");
-                }
-            }
-        }
-    }
-
-    private IReadOnlyList<PageDiscovery.DiscoveredPage> ApplyNotFoundOverride(
-        IReadOnlyList<PageDiscovery.DiscoveredPage> discovered)
-    {
-        if (_notFoundComponentType is null)
-        {
-            return discovered;
-        }
-
-        ValidatePageAssembly(_notFoundComponentType);
-        var candidates = PageDiscovery.FromType(_notFoundComponentType);
-        if (candidates.Count != 1)
-        {
-            throw new InvalidOperationException(
-                $"Not-found component '{_notFoundComponentType.FullName}' must declare exactly one '@page' route template.");
-        }
-        var overridden = StaticPageDefinition.Create(
-            "/404.html",
-            routePathOverride: "/404.html",
-            outputRelativePathOverride: "404.html");
-
-        return [.. discovered.Where(page => page.ComponentType != _notFoundComponentType),
-            new PageDiscovery.DiscoveredPage(overridden.SourceIdentifier, _notFoundComponentType, overridden)];
-    }
-
-    private async Task RenderPageAsync(
-        ComponentRenderer renderer,
-        PageRenderRequest request,
-        TextWriter output,
-        BuildDependencyRecorder? dependencies,
-        CancellationToken cancellationToken,
-        SharedRenderLifetime? sharedRenders = null)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        if (dependencies is not null)
-        {
-            foreach (var value in request.Parameters.Values)
-            {
-                if (value is not null && _runtime.ResolveItem(value) is { } identity)
-                {
-                    dependencies.AddValue(identity.DependencyKey, identity.Digest);
-                }
-            }
-        }
-
-        PageRenderContext.SetCurrent(CreatePageRenderContext(request, dependencies, sharedRenders, cancellationToken));
-        try
-        {
-            await renderer.RenderComponentToAsync<KijiRoot>(
-                output,
-                request.RootParameters ?? CreateRootParameters(request));
-            // Component lifecycle methods can absorb cancellation exceptions.
-            cancellationToken.ThrowIfCancellationRequested();
-        }
-        finally
-        {
-            PageRenderContext.SetCurrent(null);
-        }
-    }
-
-    private PageRenderContext CreatePageRenderContext(PageRenderRequest request, BuildDependencyRecorder? dependencies,
-        SharedRenderLifetime? sharedRenders, CancellationToken cancellationToken)
-    {
-        var outputRelativeDirectory = Path.GetDirectoryName(request.OutputRelativePath) ?? string.Empty;
-
-        return new PageRenderContext
-        {
-            RoutePath = request.RoutePath,
-            OutputRelativeDirectory = outputRelativeDirectory,
-            OutputUrlDirectory = PageRenderContext.CreateOutputUrlDirectory(SiteInfo.BaseUrl, outputRelativeDirectory),
-            Dependencies = dependencies,
-            CancellationToken = cancellationToken,
-            SharedRenders = sharedRenders,
-            Assets = _assetResources,
-        };
-    }
-
-    private AssetResources _assetResources = AssetResources.Empty;
-
-    internal void UseAssetResources(AssetResources resources) => _assetResources = resources;
-
-    private Dictionary<string, object?> CreateRootParameters(PageRenderRequest request)
-    {
-        return new Dictionary<string, object?>(StringComparer.Ordinal)
-        {
-            [nameof(KijiRoot.PageType)] = request.ComponentType,
-            [nameof(KijiRoot.PageParameters)] = request.Parameters,
-            [nameof(KijiRoot.DefaultLayout)] = _defaultLayoutType,
-        };
-    }
-
-    private SiteOutputContext CreateOutputContext(SiteSnapshot snapshot)
-    {
-        return new SiteOutputContext(
-            SiteInfo,
-            [.. snapshot.Pages.Select(static page => new SitePageInfo(
-                page.RoutePath.TrimStart('/'),
-                page.OutputRelativePath))],
-            ServiceProvider);
-    }
-
-    /// <summary>Resolves every artifact path, in registration order, before any output is written.</summary>
-    private string[] ReserveArtifactPaths(ResolvedSitePaths options, Dictionary<string, string> reservedPaths)
-    {
-        var paths = new string[_artifacts.Count];
-        for (var i = 0; i < _artifacts.Count; i++)
-        {
-            var artifact = _artifacts[i];
-            var fullPath = OutputPathValidator.ResolveUnderRoot(
-                options.OutputDirectory,
-                artifact.OutputRelativePath,
-                "Artifact output path");
-            if (reservedPaths.TryGetValue(fullPath, out var collisionTarget))
-            {
-                throw new InvalidOperationException(
-                    $"Artifact output path '{artifact.OutputRelativePath}' collides with {collisionTarget}.");
-            }
-
-            reservedPaths[fullPath] = "another artifact output path";
-            paths[i] = fullPath;
-        }
-
-        return paths;
-    }
-
-    private async Task WriteArtifactsAsync(string[] paths, SiteOutputContext? context, bool independentOfPages,
-        CancellationToken cancellationToken)
-    {
-        for (var i = 0; i < _artifacts.Count; i++)
-        {
-            var artifact = _artifacts[i];
-            if (artifact.IndependentOfPages != independentOfPages)
-            {
-                continue;
-            }
-
-            if (independentOfPages)
-            {
-                // Leave the planning and rendering path before writing.
-                await Task.Yield();
-            }
-
-            var fullPath = paths[i];
-            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-            await artifact.WriteFileAsync(fullPath, context!, cancellationToken);
-            BuildLogger.ArtifactGenerated(fullPath);
-        }
-    }
-
-    private static Dictionary<string, string> CreateReservedArtifactPaths(ResolvedSitePaths options, SiteSnapshot snapshot, IReadOnlyList<StaticAsset> assets)
-    {
-        var reservedPaths = snapshot.Pages.ToDictionary(
-            page => OutputPathValidator.ResolveUnderRoot(
-                options.OutputDirectory,
-                page.OutputRelativePath,
-                "Page output path"),
-            static _ => "a generated page output path",
-            StringComparer.OrdinalIgnoreCase);
-
-        foreach (var file in assets)
-        {
-            var relativePath = file.Target;
-            var outputPath = OutputPathValidator.ResolveUnderRoot(
-                options.OutputDirectory,
-                relativePath,
-                "Static file output path");
-            if (reservedPaths.TryGetValue(outputPath, out var existing) && existing == "a generated page output path")
-            {
-                throw new InvalidOperationException(
-                    $"Static file '{relativePath}' collides with a generated page output path. Rename the static file or change the page route.");
-            }
-            reservedPaths[outputPath] = "a static file output path";
-        }
-
-        return reservedPaths;
-    }
-
-    private static IReadOnlyDictionary<string, object?> ConvertParameters(object values)
-    {
-        ArgumentNullException.ThrowIfNull(values);
-        return new RouteValueDictionary(values)
-            .ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.OrdinalIgnoreCase);
-    }
-
-    private ResolvedSitePaths UseRunOptions(ResolvedSitePaths options)
-    {
-        if (_activeOptions is not null && _activeOptions != options)
-        {
-            throw new InvalidOperationException(
-                "This StaticSite has already settled its paths. Build a new site to use a different output directory or switch between publishing and serving.");
-        }
-
-        return _activeOptions = options;
-    }
-
-    /// <summary>
-    /// Settles on planning paths without generating anything. For tests that load content
-    /// directly; a real site reaches this through <see cref="RunAsync(CancellationToken)"/>.
-    /// </summary>
-    internal void UsePlanningOptions()
-    {
-        _activeOptions ??= Paths.ResolveForDevelopment();
-    }
-
-    private ComponentRenderer GetRenderer()
-    {
-        return _renderer ??= new ComponentRenderer(ServiceProvider);
-    }
-
-    /// <summary>
-    /// Runs the options validation that <c>ValidateOnStart</c> registers, as the generic host does when it
-    /// starts: after Build, before any output. A failure surfaces in RunAsync, which then disposes the
-    /// services asynchronously.
-    /// </summary>
-    private void ValidateOnStart()
-    {
-        // .NET 10 has only the synchronous validator; use IAsyncStartupValidator from .NET 11.
-        ServiceProvider.GetService<IStartupValidator>()?.Validate();
+            DisableDefaults = true,
+            Args = null,
+            ContentRootPath = paths.ProjectDirectory,
+            EnvironmentName = settings.EnvironmentName,
+            ApplicationName = entryAssembly.GetName().Name,
+        });
+        // Host settings bootstrap IHostEnvironment but must not fingerprint an absolute
+        // checkout path or become application configuration. Keep only project sources.
+        builder.Configuration.Sources.Clear();
+        builder.Configuration.AddJsonFile("appsettings.json", optional: true, reloadOnChange: false);
+        builder.Configuration.AddJsonFile($"appsettings.{settings.EnvironmentName}.json", optional: true, reloadOnChange: false);
+        builder.Logging.SetMinimumLevel(LogLevel.Warning);
+        builder.Logging.AddFilter(BuildLoggerExtensions.CategoryName, LogLevel.Information);
+        builder.Logging.AddConfiguration(builder.Configuration.GetSection("Logging"));
+        builder.Logging.AddConsole(static options => options.LogToStandardErrorThreshold = LogLevel.Warning);
+        builder.Metrics.AddConfiguration(builder.Configuration.GetSection("Metrics"));
+
+        ComponentRenderer.AddComponentRenderingServices(builder.Services);
+
+        builder.Services.AddOptions<ImageProcessorOptions>()
+            .Validate(static options => options.Quality is >= 1 and <= 100,
+                "ImageProcessorOptions.Quality must be between 1 and 100.")
+            .Validate(static options => options.MaxWidth > 0,
+                "ImageProcessorOptions.MaxWidth must be positive.")
+            .Validate(static options => options.Widths is null || options.Widths.All(static width => width > 0),
+                "ImageProcessorOptions.Widths must contain only positive widths.")
+            .ValidateOnStart();
+        builder.Services.AddSingleton<IImageProcessor>(static provider => new ImageProcessor(
+            provider.GetRequiredService<IOptions<ImageProcessorOptions>>().Value,
+            logger: provider.GetRequiredService<ILoggerFactory>().CreateLogger(BuildLoggerExtensions.CategoryName)));
+
+        builder.Services.AddOptions<MarkdownOptions>();
+        builder.Services.AddSingleton(static provider => new MarkdownProcessor(
+            provider.GetRequiredService<ResolvedSitePaths>(),
+            provider.GetRequiredService<IImageProcessor>(),
+            provider.GetRequiredService<IOptions<MarkdownOptions>>().Value));
+
+        builder.Services.AddSingleton<SiteInfo>(static _ => throw new InvalidOperationException("Call UseSiteInfo before running the site."));
+        var options = new StaticSiteOptions();
+        options.PageAssemblies.Add(entryAssembly);
+        var runtime = new ContentRuntime();
+        builder.Services.AddSingleton(options);
+        builder.Services.AddSingleton(runtime);
+        builder.Services.AddSingleton(paths);
+        builder.Services.AddSingleton(settings.Publishing ? paths.ResolveForPublish(settings.OutputPath!) : paths.ResolveForDevelopment());
+        builder.Services.AddSingleton(settings);
+        builder.Services.AddSingleton<IProcessExitCode, ProcessExitCode>();
+        builder.Services.AddSingleton<SiteEngine>();
+        builder.Services.AddSingleton(new SiteServerArguments([.. args]));
+        if (settings.Publishing) { builder.Services.AddHostedService<SitePublishService>(); }
+        else { builder.Services.AddHostedService<SiteServeService>(); }
+        var context = new SiteBuilderContext(builder, options, runtime, paths);
+        ((IHostApplicationBuilder)builder).Properties[SiteBuilderContext.Key] = context;
+        builder.ConfigureContainer(new KijiServiceProviderFactory(context));
+        return builder;
     }
 }

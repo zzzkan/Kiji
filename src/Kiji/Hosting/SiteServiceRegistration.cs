@@ -12,7 +12,10 @@ namespace Kiji.Hosting;
 internal static class SiteServiceRegistration
 {
     internal static bool IsManaged(Type type) =>
-        type == typeof(SiteInfo) || type == typeof(PageInfo) || type == typeof(ResolvedSitePaths)
+        type == typeof(StaticSiteOptions) || type == typeof(ContentRuntime) || type == typeof(SiteExecutionPaths)
+        || type == typeof(SiteEngine) || type == typeof(SiteRunSettings) || type == typeof(SiteServerArguments)
+        || type == typeof(KijiServiceProviderStamp) || type == typeof(SiteInfo) || type == typeof(PageInfo)
+        || type == typeof(ResolvedSitePaths)
         || type == typeof(IHostApplicationLifetime) || type == typeof(IHostEnvironment) || type == typeof(IConfiguration)
         || type == typeof(NavigationManager)
         || type == typeof(IJSRuntime) || type == typeof(IComponentActivator)
@@ -22,7 +25,7 @@ internal static class SiteServiceRegistration
 
     internal static void Validate(IServiceCollection services, IReadOnlyList<ServiceDescriptor> managed)
     {
-        var expected = managed.ToLookup(static descriptor => descriptor.ServiceType);
+        var expected = managed.Where(static descriptor => IsManaged(descriptor.ServiceType)).ToLookup(static descriptor => descriptor.ServiceType);
         var actual = services.Where(static descriptor => IsManaged(descriptor.ServiceType))
             .ToLookup(static descriptor => descriptor.ServiceType);
         foreach (var type in expected.Select(static group => group.Key).Concat(actual.Select(static group => group.Key)).Distinct())
@@ -31,7 +34,17 @@ internal static class SiteServiceRegistration
             if (!expected[type].SequenceEqual(actual[type]))
             {
                 throw new InvalidOperationException(
-                    $"Service '{type.FullName}' is managed by Kiji and cannot be added, removed or replaced through StaticSiteBuilder.Services.");
+                    $"Service '{type.FullName}' is managed by Kiji and cannot be added, removed or replaced through builder.Services.");
+            }
+        }
+
+        // Other hosted services are welcome, but the Kiji execution service must remain
+        // registered exactly once. Comparing descriptor identity also detects replacement.
+        foreach (var descriptor in managed.Where(static descriptor => descriptor.ServiceType == typeof(IHostedService)))
+        {
+            if (services.Count(actualDescriptor => ReferenceEquals(actualDescriptor, descriptor)) != 1)
+            {
+                throw new InvalidOperationException("The Kiji hosted service is managed by Kiji and cannot be removed, duplicated or replaced through builder.Services.");
             }
         }
 
@@ -40,8 +53,17 @@ internal static class SiteServiceRegistration
         if (imageProcessor?.Lifetime != ServiceLifetime.Singleton)
         {
             throw new InvalidOperationException(
-                "IImageProcessor requires an unkeyed Singleton registration. Register it with AddSingleton on StaticSiteBuilder.Services.");
+                "IImageProcessor requires an unkeyed Singleton registration. Register it with AddSingleton on builder.Services.");
         }
+    }
+
+    internal static IServiceProvider RequireProvider(IServiceProvider services)
+    {
+        if (services.GetService<KijiServiceProviderStamp>() is null)
+        {
+            throw new NotSupportedException("Kiji requires its service provider factory. Custom containers are not supported.");
+        }
+        return services;
     }
 
     internal static IReadOnlyCollection<Assembly> CollectAssemblies(IServiceCollection services)

@@ -10,6 +10,6 @@ internal static class ContentCollectionFixture
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
         builder.UseSiteInfo(new SiteInfo { Name = "Fixture", BaseUrl = new Uri("https://example.test/") });
         builder.RegisterContent<T>(_ => [.. items.Select(item => (id(item), item, Digest: (string?)null))]);
-        return builder.Build().ServiceProvider.GetRequiredService<ContentCollection<T>>();
+        return builder.BuildSite().ServiceProvider.GetRequiredService<ContentCollection<T>>();
     }
 }

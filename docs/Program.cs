@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Hosting;
 using Kiji;
 using Kiji.Docs.Layout;
 using Kiji.Docs.Models;
@@ -34,4 +35,4 @@ builder.AddPageParameters<ArticlePage>(static services =>
 });
 builder.AddSitemap();
 
-return await builder.Build().RunAsync();
+await builder.Build().RunAsync();

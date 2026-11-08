@@ -1,27 +1,19 @@
 using Kiji.Markdown;
 using Kiji.Tests.TestSite;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace Kiji.Tests;
 
-/// <summary>
-/// Covers what <see cref="StaticSite.RunAsync(CancellationToken)"/> decides from the
-/// execution context. The dev-server branch is exercised by <see cref="DevServerTests"/>;
-/// these tests cover how runtimeconfig selects publish mode and how each branch
-/// settles the site's paths.
-/// </summary>
+/// <summary>Exercises Kiji through the standard host, including process-independent exit codes.</summary>
 public sealed class RunAsyncTests : IDisposable
 {
-    private readonly string _testDir;
-    private readonly string _outputDir;
+    private readonly string _testDir = Path.Combine(Path.GetTempPath(), $"kiji-run-{Guid.NewGuid():N}");
+    private string OutputDir => Path.Combine(_testDir, "publish");
 
     public RunAsyncTests()
     {
-        _testDir = Path.Combine(Path.GetTempPath(), $"kiji-run-{Guid.NewGuid():N}");
-        _outputDir = Path.Combine(_testDir, "publish");
         Directory.CreateDirectory(Path.Combine(_testDir, "content"));
         Directory.CreateDirectory(Path.Combine(_testDir, "static"));
         File.WriteAllText(Path.Combine(_testDir, "static", "keep.css"), "body{}");
@@ -29,46 +21,96 @@ public sealed class RunAsyncTests : IDisposable
 
     public void Dispose()
     {
-        if (Directory.Exists(_testDir))
+        if (Directory.Exists(_testDir)) { Directory.Delete(_testDir, recursive: true); }
+    }
+
+    [Fact]
+    public async Task Publish_SucceedsAndDisposesServicesThroughStandardRunAsync()
+    {
+        var builder = CreateBuilder(OutputDir);
+        builder.Services.AddSingleton<LifetimeObserver>();
+        var host = builder.Build();
+        var observer = host.Services.GetRequiredService<LifetimeObserver>();
+        var exitCode = host.Services.GetRequiredService<IProcessExitCode>() as RecordingExitCode;
+        await host.RunAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(0, exitCode!.Value);
+        Assert.True(File.Exists(Path.Combine(OutputDir, "index.html")));
+        Assert.True(observer.Lifetime.ApplicationStopping.IsCancellationRequested);
+        Assert.True(observer.Lifetime.ApplicationStopped.IsCancellationRequested);
+        Assert.Equal(1, observer.Disposals);
+    }
+
+    [Fact]
+    public async Task Publish_MissingAssetCatalog_LogsTheExceptionAndFailsWithoutOutput()
+    {
+        var logs = new RecordingLoggerProvider();
+        var builder = CreateBuilder(OutputDir);
+        builder.Logging.AddProvider(logs);
+        File.Delete(builder.GetSitePaths().AssetManifestBasePath + ".staticwebassets.publish.runtime.json");
+        var host = builder.Build();
+        var exitCode = (RecordingExitCode)host.Services.GetRequiredService<IProcessExitCode>();
+        await host.RunAsync();
+        Assert.Equal(1, exitCode.Value);
+        Assert.Contains(logs.Exceptions, static error => error.Message.Contains("Razor SDK and Kiji targets", StringComparison.Ordinal));
+        Assert.Contains(("Kiji.Build", LogLevel.Error, "Site publishing failed."), logs.Entries);
+        Assert.False(Directory.Exists(OutputDir));
+    }
+
+    [Fact]
+    public async Task Publish_ResolvesRelativeOutputAgainstProjectRoot()
+    {
+        await CreateBuilder("out").Build().RunAsync();
+        Assert.True(File.Exists(Path.Combine(_testDir, "out", "index.html")));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Publish_StopApplicationAndExternalCancellation_ReportIncompleteOutput(bool external)
+    {
+        using var cancellation = new CancellationTokenSource();
+        var builder = CreateBuilder(OutputDir);
+        builder.AddArtifact("stop.txt", async (_, context, token) =>
         {
-            Directory.Delete(_testDir, recursive: true);
-        }
+            if (external) { cancellation.Cancel(); }
+            else { context.Services.GetRequiredService<IHostApplicationLifetime>().StopApplication(); }
+            await Task.Delay(Timeout.Infinite, token);
+        });
+        var host = builder.Build();
+        var exitCode = (RecordingExitCode)host.Services.GetRequiredService<IProcessExitCode>();
+        await host.RunAsync(cancellation.Token).WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(1, exitCode.Value);
     }
 
     [Fact]
-    public async Task PublishSite_RejectsSourceAndCacheOutputPathsWithoutChangingSources()
+    public async Task Publish_StartsAndStopsUserHostedServices()
     {
-        var source = Path.Combine(_testDir, "content", "keep.txt");
-        await File.WriteAllTextAsync(source, "source data");
-        foreach (var output in new[] { _testDir, "content", "content/generated", "static", "static/generated", ".kiji", ".kiji/cache/site" })
+        var builder = CreateBuilder(OutputDir);
+        var service = new HostedServiceProbe();
+        builder.Services.AddSingleton<IHostedService>(service);
+        builder.AddArtifact("started.txt", async (stream, _, token) =>
         {
-            var builder = CreateBuilder();
-            builder.AddMarkdownContent<FrontMatter>();
-            await using var app = builder.Build();
-            await Assert.ThrowsAsync<InvalidOperationException>(() => app.PublishAsync(output));
-            Assert.Equal("source data", await File.ReadAllTextAsync(source));
-        }
+            await service.Started.Task.WaitAsync(token);
+            await stream.WriteAsync("started"u8.ToArray(), token);
+        });
+        await builder.Build().RunAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(1, service.Starts);
+        Assert.Equal(1, service.Stops);
+        Assert.Equal("started", await File.ReadAllTextAsync(Path.Combine(OutputDir, "started.txt")));
     }
 
     [Fact]
-    public async Task PublishSite_RejectsChangingPathsOnAnExistingApp()
+    public async Task Dispose_UnstartedHost_DisposesServicesWithoutShutdownNotifications()
     {
-        await using var app = CreateBuilder().Build();
-        await app.PublishAsync(_outputDir);
-        var other = Path.Combine(_testDir, "other");
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => app.PublishAsync(other));
-        Assert.Contains("Build a new site", exception.Message, StringComparison.Ordinal);
-        Assert.False(Directory.Exists(other));
-    }
-
-    [Fact]
-    public async Task RunAsync_MissingAssetCatalog_FailsWithoutPublishingPartialSite()
-    {
-        await using var app = CreateBuilder(_outputDir).Build();
-        File.Delete(app.Paths.AssetManifestBasePath + ".staticwebassets.publish.runtime.json");
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => app.RunAsync(CancellationToken.None));
-        Assert.Contains("Razor SDK and Kiji targets", error.Message, StringComparison.Ordinal);
-        Assert.False(Directory.Exists(_outputDir));
+        var builder = CreateBuilder(OutputDir);
+        builder.Services.AddSingleton<LifetimeObserver>();
+        var host = builder.Build();
+        var observer = host.Services.GetRequiredService<LifetimeObserver>();
+        await ((IAsyncDisposable)host).DisposeAsync();
+        Assert.Equal(1, observer.Disposals);
+        Assert.False(observer.Lifetime.ApplicationStarted.IsCancellationRequested);
+        Assert.False(observer.Lifetime.ApplicationStopping.IsCancellationRequested);
+        Assert.False(observer.Lifetime.ApplicationStopped.IsCancellationRequested);
     }
 
     [Theory]
@@ -78,103 +120,60 @@ public sealed class RunAsyncTests : IDisposable
     [InlineData(false, "Production", "Development", "Staging", "Staging")]
     [InlineData(true, null, "Development", "Development", "Production")]
     [InlineData(true, "Staging", "Development", "Development", "Staging")]
-    public async Task Environment_SelectsProjectSettingsForTheExecutionMode(
+    public void Environment_SelectsOnlyProjectSettingsForTheExecutionMode(
         bool publish, string? dotnet, string? aspnet, string? argument, string expected)
     {
-        await File.WriteAllTextAsync(Path.Combine(_testDir, $"appsettings.{expected}.json"), """{ "Selected": "yes" }""");
+        File.WriteAllText(Path.Combine(_testDir, $"appsettings.{expected}.json"), """{ "Selected": "yes" }""");
         string[] args = argument is null ? [] : ["--environment", argument, "--Selected", "no"];
-        var builder = StaticSite.CreateBuilder(args,
-            new SiteExecutionPaths(_testDir), typeof(StaticSite).Assembly,
-            EnvironmentWith([("DOTNET_ENVIRONMENT", dotnet), ("ASPNETCORE_ENVIRONMENT", aspnet)]),
-            runtimeData: name => name == "Kiji.OutputPath" && publish ? _outputDir : null);
-        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
-        await using var site = builder.Build();
-
+        var builder = StaticSite.CreateBuilder(args, new SiteExecutionPaths(_testDir), typeof(StaticSite).Assembly,
+            environment: name => name switch { "DOTNET_ENVIRONMENT" => dotnet, "ASPNETCORE_ENVIRONMENT" => aspnet, _ => null },
+            runtimeData: name => name == "Kiji.OutputPath" && publish ? OutputDir : null);
+        using var host = builder.Build();
         Assert.Equal(expected, builder.Environment.EnvironmentName);
         Assert.Equal(Path.GetFullPath(_testDir), builder.Environment.ContentRootPath);
         Assert.Equal("yes", builder.Configuration["Selected"]);
+        Assert.Null(builder.Configuration["PATH"]);
+    }
+
+    [Theory]
+    [InlineData("environment")]
+    [InlineData("root")]
+    public void Build_RejectsEnvironmentMutation(string property)
+    {
+        var builder = CreateBuilder(OutputDir);
+        if (property == "environment") { builder.Environment.EnvironmentName = "Changed"; }
+        else { builder.Environment.ContentRootPath = Path.GetTempPath(); }
+        var exception = Assert.Throws<InvalidOperationException>(() => builder.Build());
+        Assert.Contains("Do not change", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task RunAsync_DisposesTheSite_AndRejectsASecondRun()
+    public async Task Run_RejectsReplacingKijiServiceProviderFactory()
     {
-        var app = CreateBuilder(_outputDir).Build();
-
-        var exitCode = await app.RunAsync(CancellationToken.None);
-
-        Assert.Equal(0, exitCode);
-        Assert.True(File.Exists(Path.Combine(_outputDir, "index.html")));
-        Assert.Throws<ObjectDisposedException>(() => app.ServiceProvider);
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => app.RunAsync(CancellationToken.None));
-        Assert.Contains("only be run once", exception.Message, StringComparison.Ordinal);
+        var builder = CreateBuilder(OutputDir);
+        builder.Services.AddOptions<FeatureOptions>()
+            .Validate<ContentCollection<Post>>(static (_, content) => content.Count == 0)
+            .ValidateOnStart();
+        builder.ConfigureContainer(new DefaultServiceProviderFactory());
+        using var host = builder.Build();
+        var exception = await Assert.ThrowsAsync<NotSupportedException>(() => host.StartAsync());
+        Assert.Contains("factory", exception.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(OutputDir));
     }
 
     [Fact]
-    public async Task RunAsync_WithRelativeOutputPath_ResolvesAgainstTheSiteRoot()
+    public void Extensions_RejectNonKijiBuilders()
     {
-        await CreateBuilder("out").Build().RunAsync(CancellationToken.None);
-
-        Assert.True(File.Exists(Path.Combine(_testDir, "out", "index.html")));
-    }
-
-    [Fact]
-    public async Task RunAsync_CanceledDevRun_ExitsNormallyWithoutPublishing()
-    {
-        using var cts = new CancellationTokenSource();
-        await cts.CancelAsync();
-        var exitCode = await CreateBuilder("   ").Build().RunAsync(cts.Token);
-        Assert.Equal(0, exitCode);
-        Assert.False(Directory.Exists(_outputDir));
-    }
-
-    [Fact]
-    public async Task RunAsync_EnvironmentOutputPaths_DoNotSelectPublishMode()
-    {
-        var builder = CreateBuilder(environment: EnvironmentWith([
-            ("KIJI_OUTPUT", _outputDir), ("Kiji.OutputPath", _outputDir)]));
-        using var cts = new CancellationTokenSource();
-        await cts.CancelAsync();
-
-        Assert.Equal(0, await builder.Build().RunAsync(cts.Token));
-        Assert.False(Directory.Exists(_outputDir));
-    }
-
-    [Fact]
-    public async Task Publish_RendersPagesAgainWhenTheEnvironmentChanges()
-    {
-        async Task<string> PublishAsync(string? environmentName)
-        {
-            var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir),
-                runtimeData: name => name == "Kiji.OutputPath" ? _outputDir : null,
-                environment: name => name == "DOTNET_ENVIRONMENT" ? environmentName : null,
-                discoveredPages: typeof(HostEnvironmentPage));
-            builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
-            Assert.Equal(0, await builder.Build().RunAsync(CancellationToken.None));
-            return await File.ReadAllTextAsync(Path.Combine(_outputDir, "environment", "index.html"));
-        }
-
-        Assert.Contains("environment:Production", await PublishAsync(null), StringComparison.Ordinal);
-        Assert.Contains("environment:Staging", await PublishAsync("Staging"), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task Publish_LogsTheEnvironmentName()
-    {
-        var logs = new RecordingLoggerProvider();
-        var builder = CreateBuilder(environment: EnvironmentWith([("DOTNET_ENVIRONMENT", "Staging")]));
-        builder.Logging.AddProvider(logs);
-        await using var app = builder.Build();
-
-        await app.PublishAsync(_outputDir);
-
-        // An inherited environment name changes the output, so the summary shows it.
-        Assert.Contains(("Kiji.Build", LogLevel.Information, "Publishing for environment 'Staging'."), logs.Entries);
+        var builder = new HostApplicationBuilder(new HostApplicationBuilderSettings { DisableDefaults = true });
+        Assert.Throws<InvalidOperationException>(() => builder.UseSiteInfo(TestArticleContents.CreateSiteInfo()));
+        Assert.Throws<InvalidOperationException>(() => builder.AddMarkdownContent<FrontMatter>());
+        Assert.Throws<InvalidOperationException>(() => builder.AddPageParameters<Kiji.Tests.TestSite.Pages.PostPage>(static _ => []));
     }
 
     [Theory]
     [InlineData(null, false)]
     [InlineData("Debug", true)]
-    public async Task Publish_LogsProgressUnderKijiBuild(string? configuredLevel, bool details)
+    public async Task Publish_PreservesEnvironmentAndProgressLogs(string? configuredLevel, bool details)
     {
         if (configuredLevel is not null)
         {
@@ -182,143 +181,105 @@ public sealed class RunAsyncTests : IDisposable
                 $$"""{ "Logging": { "LogLevel": { "Kiji.Build": "{{configuredLevel}}" } } }""");
         }
         var logs = new RecordingLoggerProvider();
-        var builder = CreateBuilder(_outputDir);
+        var builder = CreateBuilder(OutputDir, environment: name => name == "DOTNET_ENVIRONMENT" ? "Staging" : null);
         builder.Logging.AddProvider(logs);
-
-        Assert.Equal(0, await builder.Build().RunAsync(CancellationToken.None));
-
-        // Summaries are Information by default, and the Logging section enables per-file details.
-        var build = logs.Entries.Where(static entry => entry.Category == "Kiji.Build").ToArray();
-        Assert.Contains(build, static entry => entry.Level == LogLevel.Information
-            && entry.Message.StartsWith("Generated ", StringComparison.Ordinal) && entry.Message.Contains(" pages (", StringComparison.Ordinal));
-        Assert.Equal(details, build.Contains(("Kiji.Build", LogLevel.Debug, $"Generated: {Path.Combine(_outputDir, "index.html")}")));
+        await builder.Build().RunAsync();
+        Assert.Contains(("Kiji.Build", LogLevel.Information, "Publishing for environment 'Staging'."), logs.Entries);
+        Assert.Contains(logs.Entries, static entry => entry.Category == "Kiji.Build" && entry.Level == LogLevel.Information && entry.Message.StartsWith("Generated ", StringComparison.Ordinal));
+        Assert.Equal(details, logs.Entries.Contains(("Kiji.Build", LogLevel.Debug, $"Generated: {Path.Combine(OutputDir, "index.html")}")));
     }
 
     [Fact]
-    public async Task RunAsync_WarnsAboutHostedServices_WithoutInstantiatingThem()
+    public async Task Publish_RendersAgainWhenEnvironmentChanges()
     {
-        var logs = new RecordingLoggerProvider();
-        var builder = CreateBuilder(_outputDir);
-        builder.Logging.AddProvider(logs);
-        builder.Services.AddSingleton<IHostedService>(_ => throw new InvalidOperationException("Must not instantiate hosted services."));
-        await using var site = builder.Build();
-
-        Assert.Equal(0, await site.RunAsync());
-        Assert.Single(logs.Entries, static entry => entry.Level == LogLevel.Warning
-            && entry.Message.Contains("1 IHostedService registration(s)", StringComparison.Ordinal)
-            && entry.Message.Contains("will not be started", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public async Task Dispose_UnrunSite_LogsCallbackFailures_AndKeepsLifetimeTokensReadable()
-    {
-        var logs = new RecordingLoggerProvider();
-        var builder = CreateBuilder();
-        builder.Logging.AddProvider(logs);
-        builder.Services.AddSingleton<LifetimeObserver>();
-        await using var site = builder.Build();
-        var observer = site.ServiceProvider.GetRequiredService<LifetimeObserver>();
-        using var stopping = observer.Lifetime.ApplicationStopping.Register(() => throw new InvalidOperationException("Stopping callback"));
-        using var stopped = observer.Lifetime.ApplicationStopped.Register(() => throw new InvalidOperationException("Stopped callback"));
-
-        await site.DisposeAsync();
-
-        Assert.False(observer.Lifetime.ApplicationStarted.IsCancellationRequested);
-        Assert.True(observer.Lifetime.ApplicationStopping.IsCancellationRequested);
-        Assert.True(observer.Lifetime.ApplicationStopped.IsCancellationRequested);
-        observer.Lifetime.StopApplication();
-        Assert.Equal(1, observer.Disposals);
-        Assert.Equal(2, logs.Entries.Count(static entry => entry.Level == LogLevel.Error
-            && entry.Message == "An application lifetime callback failed."));
-    }
-
-    [Fact]
-    public async Task Lifetime_FailedStartup_SignalsShutdownWithoutStarted_AndDisposesServices()
-    {
-        var builder = CreateBuilder(_outputDir);
-        builder.Services.AddSingleton<LifetimeObserver>();
-        await using var site = builder.Build();
-        var observer = site.ServiceProvider.GetRequiredService<LifetimeObserver>();
-        var started = observer.Lifetime.ApplicationStarted;
-        var stopping = observer.Lifetime.ApplicationStopping;
-        var stopped = observer.Lifetime.ApplicationStopped;
-        using var callback = stopping.Register(() => throw new InvalidOperationException("Callback failure"));
-        File.Delete(site.Paths.AssetManifestBasePath + ".staticwebassets.publish.runtime.json");
-
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => site.RunAsync());
-
-        Assert.Contains("Razor SDK and Kiji targets", exception.Message, StringComparison.Ordinal);
-        Assert.False(started.IsCancellationRequested);
-        Assert.True(stopping.IsCancellationRequested);
-        Assert.True(stopped.IsCancellationRequested);
-        Assert.Equal(1, observer.Disposals);
-    }
-
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Lifetime_StopApplicationAndCancellation_StopPublish(bool externalCancellation)
-    {
-        using var cancellation = new CancellationTokenSource();
-        var builder = CreateBuilder(_outputDir);
-        var notifications = new List<string>();
-        // A constructor dependency must pass ValidateOnBuild and resolve in a user factory.
-        builder.Services.AddSingleton<LifetimeObserver>();
-        builder.AddArtifact("stop.txt", async (_, services, token) =>
+        async Task<string> PublishAsync(string? environment)
         {
-            var lifetime = services.Services.GetRequiredService<LifetimeObserver>().Lifetime;
-            Assert.True(lifetime.ApplicationStarted.IsCancellationRequested);
-            if (externalCancellation) { cancellation.Cancel(); }
-            else { lifetime.StopApplication(); }
-            await Task.Delay(Timeout.Infinite, token);
-        });
-        await using var site = builder.Build();
-        var lifetime = site.ServiceProvider.GetRequiredService<IHostApplicationLifetime>();
-        using var started = lifetime.ApplicationStarted.Register(() => notifications.Add("started"));
-        using var stopping = lifetime.ApplicationStopping.Register(() => notifications.Add("stopping"));
-        using var stopped = lifetime.ApplicationStopped.Register(() => notifications.Add("stopped"));
-
-        Assert.Equal(1, await site.RunAsync(cancellation.Token).WaitAsync(TimeSpan.FromSeconds(10)));
-        Assert.Equal(["started", "stopping", "stopped"], notifications);
+            var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir),
+                runtimeData: name => name == "Kiji.OutputPath" ? OutputDir : null,
+                environment: name => name == "DOTNET_ENVIRONMENT" ? environment : null,
+                discoveredPages: typeof(HostEnvironmentPage));
+            builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
+            await builder.Build().RunAsync();
+            return await File.ReadAllTextAsync(Path.Combine(OutputDir, "environment", "index.html"));
+        }
+        Assert.Contains("environment:Production", await PublishAsync(null), StringComparison.Ordinal);
+        Assert.Contains("environment:Staging", await PublishAsync("Staging"), StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task Dispose_UnrunSite_DisposesAsyncServicesAndSignalsShutdownOnce()
+    public async Task Publish_ParallelHostsKeepTheirEnvironmentAndExitCodesSeparate()
     {
-        var builder = CreateBuilder();
-        builder.Services.AddSingleton<LifetimeObserver>();
-        await using var site = builder.Build();
-        var observer = site.ServiceProvider.GetRequiredService<LifetimeObserver>();
-        var started = observer.Lifetime.ApplicationStarted;
-        var stopped = observer.Lifetime.ApplicationStopped;
-        var stops = 0;
-        using var registration = observer.Lifetime.ApplicationStopping.Register(() => stops++);
-
-        await site.DisposeAsync();
-        await site.DisposeAsync();
-
-        Assert.False(started.IsCancellationRequested);
-        Assert.True(stopped.IsCancellationRequested);
-        Assert.Equal(1, stops);
-        Assert.Equal(1, observer.Disposals);
-        await Assert.ThrowsAsync<ObjectDisposedException>(() => site.RunAsync());
+        await Task.WhenAll(Enumerable.Range(0, 8).Select(async index =>
+        {
+            var root = Path.Combine(_testDir, $"host-{index}");
+            var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(root),
+                runtimeData: name => name == "Kiji.OutputPath" ? "dist" : null,
+                environment: name => name == "DOTNET_ENVIRONMENT" ? $"Environment{index}" : null,
+                discoveredPages: typeof(HostEnvironmentPage));
+            builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
+            if (index % 2 != 0)
+            {
+                builder.AddArtifact("failure.txt", static (_, _, _) => throw new InvalidOperationException("Expected failure"));
+            }
+            var host = builder.Build();
+            var exitCode = (RecordingExitCode)host.Services.GetRequiredService<IProcessExitCode>();
+            await host.RunAsync();
+            Assert.Equal(index % 2, exitCode.Value);
+            Assert.Contains($"environment:Environment{index}", await File.ReadAllTextAsync(Path.Combine(root, "dist", "environment", "index.html")), StringComparison.Ordinal);
+        }));
     }
 
-    private StaticSiteBuilder CreateBuilder(string? outputPath = null, Func<string, string?>? environment = null)
+    [Fact]
+    public async Task StartupValidation_CanReadContentAndUsesTheRootProviderBeforeOutput()
+    {
+        var builder = CreateBuilder(OutputDir);
+        var loads = 0;
+        builder.RegisterContent<object>(provider =>
+        {
+            loads++;
+            Assert.Equal(OutputDir, provider.GetRequiredService<ResolvedSitePaths>().OutputDirectory);
+            Assert.False(Directory.Exists(OutputDir));
+            Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ScopedDependency>());
+            return [];
+        });
+        builder.Services.AddScoped<ScopedDependency>();
+        builder.Services.AddOptions<FeatureOptions>()
+            .Validate<ContentCollection<object>>((_, content) => content.Count == 0)
+            .ValidateOnStart();
+        var host = builder.Build();
+        Assert.Equal(0, loads);
+        await host.RunAsync();
+        Assert.True(loads > 0);
+    }
+
+    private sealed class ScopedDependency;
+
+    private HostApplicationBuilder CreateBuilder(string? outputPath, Func<string, string?>? environment = null)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")),
             runtimeData: name => name == "Kiji.OutputPath" ? outputPath : null, environment: environment);
         builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
-        TestSiteAssets.Bind(builder.Paths, Path.Combine(builder.Paths.ProjectDirectory, "static"));
-
+        TestSiteAssets.Bind(builder.GetSitePaths(), Path.Combine(_testDir, "static"));
         builder.RegisterContent<Post>(static _ => []);
         TestArticleContents.MapSite(builder);
         return builder;
     }
 
-    private static Func<string, string?> EnvironmentWith(IEnumerable<(string Name, string? Value)> values)
+    private sealed class HostedServiceProbe : IHostedService
     {
-        var map = values.ToDictionary(pair => pair.Name, pair => pair.Value, StringComparer.Ordinal);
-        return name => map.GetValueOrDefault(name);
+        internal TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal int Starts { get; private set; }
+        internal int Stops { get; private set; }
+        public Task StartAsync(CancellationToken cancellationToken)
+        {
+            Starts++;
+            Started.SetResult();
+            return Task.CompletedTask;
+        }
+        public Task StopAsync(CancellationToken cancellationToken)
+        {
+            Stops++;
+            return Task.CompletedTask;
+        }
     }
 }

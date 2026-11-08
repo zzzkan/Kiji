@@ -18,7 +18,7 @@ public sealed class PageInfoTests : IDisposable
     {
         var builder = CreateBuilder(baseUrl);
         builder.AddPageParameters<PageInfoTestPage>(_ => [new { Key = key }]);
-        await using var app = builder.Build();
+        await using var app = builder.BuildSite();
         var request = Assert.Single(app.CreateSnapshot().Pages);
 
         var html = await app.RenderPageAsync(request, CancellationToken.None);
@@ -66,13 +66,13 @@ public sealed class PageInfoTests : IDisposable
                 break;
         }
 
-        await using var app = builder.Build();
+        await using var app = builder.BuildSite();
         var exception = await Assert.ThrowsAnyAsync<Exception>(() => app.PublishAsync(Path.Combine(_root, "dist")));
         Assert.Contains("scoped service", exception.ToString(), StringComparison.OrdinalIgnoreCase);
         Assert.Contains(nameof(PageInfo), exception.ToString(), StringComparison.Ordinal);
     }
 
-    private StaticSiteBuilder CreateBuilder(string baseUrl)
+    private HostApplicationBuilder CreateBuilder(string baseUrl)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
         builder.UseSiteInfo(new SiteInfo { BaseUrl = new Uri(baseUrl), Name = "Page info" });

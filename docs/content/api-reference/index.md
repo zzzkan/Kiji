@@ -20,9 +20,11 @@ order: 100
 
 ### `StaticSite`
 
-Runs a site configured with `StaticSiteBuilder`:
+Creates a standard `HostApplicationBuilder` with Kiji's project-local configuration:
 
 ```csharp
+using Microsoft.Extensions.Hosting;
+
 var builder = StaticSite.CreateBuilder(args);
 builder.UseSiteInfo(new SiteInfo
 {
@@ -31,54 +33,51 @@ builder.UseSiteInfo(new SiteInfo
 });
 
 // builder.Services, Add* and Use* registrations
-
-return await builder.Build().RunAsync();
+await builder.Build().RunAsync();
 ```
 
-| Member                                                              | Behavior                                                                                                                                  |
-| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `static StaticSiteBuilder CreateBuilder()`                          | Creates a builder without development server arguments.                                                                                   |
-| `static StaticSiteBuilder CreateBuilder(string[] args)`             | Creates a builder for the current project. While serving, `args` can set the environment and development server options such as `--urls`. |
-| `Task<int> RunAsync(CancellationToken cancellationToken = default)` | Serves the site during `dotnet watch` and generates it during `dotnet publish`. Return its result from `Program.cs`.                      |
+| Member                                                       | Behavior                                                                                                                                                     |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `static HostApplicationBuilder CreateBuilder()`              | Creates a builder without development server arguments.                                                                                                      |
+| `static HostApplicationBuilder CreateBuilder(string[] args)` | Creates a builder for the current project. While serving, arguments configure ASP.NET Core, including `--environment` and `--urls`. Publishing ignores them. |
 
-`StaticSite` implements `IAsyncDisposable`. Use `await using` when building a site that
-might not reach `RunAsync`; `RunAsync` also disposes the site, including on failure.
-Repeated disposal is safe.
+The resulting `IHost` uses the standard `RunAsync` extension, which disposes it when
+execution ends. It serves during `dotnet watch` and generates during `dotnet publish`.
+Publish failures are logged under `Kiji.Build` and set the process exit code to 1;
+canceling an incomplete publish also sets it to 1. Successful publication sets it to 0.
+`RunAsync` does not return an exit code. Host construction and startup errors can still
+throw. If you build a host without running it, dispose it yourself.
 
-### `StaticSiteBuilder`
+### `StaticSiteBuilderExtensions`
 
-Holds every registration for the site. Configure it before calling `Build`. Registration
-methods return the builder, so calls can be chained.
+Kiji's registration methods extend `IHostApplicationBuilder` and return that interface.
+Use a builder created by `StaticSite.CreateBuilder`; other builders are rejected so
+machine-specific default configuration does not enter the site unintentionally.
+Keep the concrete builder variable to call its standard `Build()` method.
 
-| Property                                 | Behavior                                                 |
-| ---------------------------------------- | -------------------------------------------------------- |
-| `IServiceCollection Services`            | Services for components. See [Services](#services).      |
-| `IHostEnvironment Environment`           | The environment name. See [Environment](#environment).   |
-| `IConfigurationManager Configuration`    | Site configuration. See [Configuration](#configuration). |
-| `IDictionary<object, object> Properties` | Shared state for host builder extensions.                |
-| `IMetricsBuilder Metrics`                | Metrics configuration from the `Metrics` section.        |
-| `ILoggingBuilder Logging`                | Logging providers and filters. See [Logging](#logging).  |
+| Property        | Behavior                                                                            |
+| --------------- | ----------------------------------------------------------------------------------- |
+| `Services`      | Standard DI services for components and hosted services. See [Services](#services). |
+| `Environment`   | Host environment. See [Environment](#environment).                                  |
+| `Configuration` | Project-local configuration. See [Configuration](#configuration).                   |
+| `Properties`    | Shared state for host builder extensions.                                           |
+| `Metrics`       | Metrics configuration from the `Metrics` section.                                   |
+| `Logging`       | Logging providers and filters. See [Logging](#logging).                             |
 
-| Method                                                                                                   | Behavior                                                                                                                                   |
-| -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `UseSiteInfo(SiteInfo siteInfo)`                                                                         | Sets required site metadata. A later call replaces it; `Build()` rejects missing metadata.                                                 |
-| `UseDefaultLayout<TLayout>()`                                                                            | Sets the layout for pages without their own `@layout`. Without it, pages render directly inside `<body>`.                                  |
-| `AddPageAssembly(Assembly assembly)`                                                                     | Adds pages from another assembly, such as a Razor class library. Pages in the site project are found automatically.                        |
-| `AddPageParameters<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)`                       | Supplies parameter values for a component's pages. See [Page parameters](#page-parameters).                                                |
-| `UseNotFoundPage<TPage>()`                                                                               | Writes the component as `404.html` instead of at its route. The component needs exactly one route and cannot also receive page parameters. |
-| `AddArtifact(string outputRelativePath, Func<Stream, SiteOutputContext, CancellationToken, Task> write)` | Writes a file after all pages. Write to the stream without disposing it. See [`SiteOutputContext`](#siteoutputcontext).                    |
-| `StaticSite Build()`                                                                                     | Validates the services and returns the site. Call it once.                                                                                 |
+| Extension method                                                                                         | Behavior                                                                                                       |
+| -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `UseSiteInfo(SiteInfo siteInfo)`                                                                         | Sets required metadata as a singleton. A later call replaces it; missing metadata fails when execution starts. |
+| `UseDefaultLayout<TLayout>()`                                                                            | Sets the layout for pages without their own `@layout`.                                                         |
+| `AddPageAssembly(Assembly assembly)`                                                                     | Adds pages from another assembly without duplicates. The entry assembly is included automatically.             |
+| `AddPageParameters<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)`                       | Adds parameter sets. See [Page parameters](#page-parameters).                                                  |
+| `UseNotFoundPage<TPage>()`                                                                               | Writes the component as `404.html`. It needs exactly one route and cannot receive page parameters.             |
+| `AddArtifact(string outputRelativePath, Func<Stream, SiteOutputContext, CancellationToken, Task> write)` | Writes a file after all pages. Do not dispose the stream. See [`SiteOutputContext`](#siteoutputcontext).       |
 
-The builder implements `IHostApplicationBuilder`, so extensions that configure its
-services, configuration, logging, and metrics can be used. Container replacement
-through `IHostApplicationBuilder.ConfigureContainer` throws `NotSupportedException`:
-Kiji requires the standard DI provider. Kiji does not start `IHostedService` instances
-or provide the full generic host lifecycle; extensions that depend on those features
-(including some Aspire integrations) need separate hosting. `RunAsync` logs a warning
-when `IHostedService` registrations are present; it does not instantiate them.
-
-Migration: replace `builder.SiteInfo = info;` with `builder.UseSiteInfo(info);`.
-Site metadata remains injectable as `SiteInfo` after building.
+Standard `Build()` validates service registrations and scopes and freezes the service
+collection. Options with `ValidateOnStart` are validated at host startup, before output
+is written; content-reading validators can resolve the already fixed execution paths.
+Kiji requires its service provider factory. Replacing it with `ConfigureContainer`
+is detected at startup and throws `NotSupportedException`.
 
 Extension methods in other namespaces register content and generated files:
 
@@ -106,15 +105,17 @@ builder.Services.AddScoped<RelatedPosts>();
 - Kiji's own services, such as `SiteInfo`, `PageInfo`, and `ContentCollection<T>`, cannot
   be replaced.
 
-`IHostApplicationLifetime` is available in the site container. `ApplicationStarted`
-is signaled after publish validation or development server startup. Cancellation,
-SIGINT/SIGTERM, and `StopApplication()` signal `ApplicationStopping` and cancel the
-run. `ApplicationStopped` is signaled when the run ends, before services are disposed.
-Disposing an unrun site signals stopping and stopped without signaling started.
-Callback failures are logged even when the site was never run. Lifetime tokens
-remain readable after disposal.
-The development server has its own container and lifetime; its shutdown also stops
-the site run. Kiji does not start background hosted services.
+`IHostApplicationLifetime` follows the generic host lifecycle. `ApplicationStarted`
+means the host started; it does not guarantee publish initialization or generation
+has completed. SIGINT/SIGTERM, cancellation and `StopApplication()` stop the host.
+Disposing a host that was never started disposes its services without issuing stopping
+or stopped notifications. Put resource cleanup in `Dispose` or `DisposeAsync`.
+
+User `IHostedService` and `BackgroundService` registrations start and stop normally.
+They can run alongside page generation. Their mutable state is not tracked for HTML
+reuse; use `AlwaysRender` on components that read it, as for other untracked state.
+The development server has its own container and lifetime; stopping it also stops
+the site host. Both containers use the site's logger factory.
 
 #### Environment
 
@@ -130,7 +131,10 @@ if (builder.Environment.IsDevelopment())
 ```
 
 `dotnet publish` uses `DOTNET_ENVIRONMENT` and defaults to `Production`. `dotnet watch`
-defaults to `Development`.
+defaults to `Development`. While serving, precedence is `--environment`, then
+`DOTNET_ENVIRONMENT`, then `ASPNETCORE_ENVIRONMENT`. The content root is the project
+directory supplied by MSBuild. Changing the environment name or content root after
+`CreateBuilder` is rejected by `Build`, because configuration and paths are already selected.
 
 #### Configuration
 
@@ -153,9 +157,8 @@ builder.Services.Configure<ImageProcessorOptions>(builder.Configuration.GetSecti
 #### Metrics
 
 `Metrics` is a standard `IMetricsBuilder`. As in the generic host, the `Metrics`
-configuration section configures meter, instrument, and listener rules. Kiji does
-not start hosted services registered by metrics or telemetry extensions; those
-integrations may require a separate host.
+configuration section configures meter, instrument, and listener rules. Hosted
+services registered by telemetry extensions participate in the standard host lifecycle.
 
 The `Logging` and `Metrics` sections are excluded from the publish configuration
 fingerprint, so diagnostics changes alone do not regenerate pages. Other sections,
@@ -202,7 +205,7 @@ page render on every publish.
 
 ### `SiteInfo`
 
-Site metadata, set with `StaticSiteBuilder.UseSiteInfo(...)` and injectable into components.
+Site metadata, set with `builder.UseSiteInfo(...)` and injectable into components.
 
 | Property             | Default  | Behavior                                                                                             |
 | -------------------- | -------- | ---------------------------------------------------------------------------------------------------- |

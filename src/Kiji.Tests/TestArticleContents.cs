@@ -39,7 +39,7 @@ internal static class TestArticleContents
     /// Builds a site wired exactly like the real site (pages, not-found, content
     /// and tag route mappings) over the given posts.
     /// </summary>
-    private static StaticSite CreateApp(params (Post Metadata, string Html)[] entries)
+    private static TestSiteHost CreateApp(params (Post Metadata, string Html)[] entries)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
         builder.UseSiteInfo(CreateSiteInfo());
@@ -47,13 +47,13 @@ internal static class TestArticleContents
         IReadOnlyList<Post> items = [.. entries.Select(static entry => ClonePost(entry.Metadata, entry.Html))];
         builder.RegisterContent<Post>(_ => [.. items.Select(post => (post.Id, post, Digest: (string?)null))]);
         MapSite(builder);
-        return builder.Build();
+        return builder.BuildSite();
     }
 
     /// <summary>
     /// Includes the shared fixture's fixed pages; callers supply dynamic parameters explicitly.
     /// </summary>
-    public static StaticSiteBuilder MapTestAssemblyPages(StaticSiteBuilder builder)
+    public static HostApplicationBuilder MapTestAssemblyPages(HostApplicationBuilder builder)
     {
         builder.AddPageParameters<HomePage>(static _ => [new { }]);
         builder.AddPageParameters<AboutPage>(static _ => [new { }]);
@@ -62,7 +62,7 @@ internal static class TestArticleContents
         return builder;
     }
 
-    public static StaticSiteBuilder MapSite(StaticSiteBuilder builder)
+    public static HostApplicationBuilder MapSite(HostApplicationBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
 

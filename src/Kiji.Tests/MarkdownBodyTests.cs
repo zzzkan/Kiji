@@ -13,8 +13,7 @@ public sealed class MarkdownBodyTests
             new FrontMatter(), string.Empty, (_, _) => Task.FromResult("<p>Hello &amp; 日本語</p>"), contentHash: "hash");
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
         builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
-        await using var app = builder.Build();
-        app.UsePlanningOptions();
+        await using var app = builder.BuildSite();
 
         var html = await new ComponentRenderer(app.ServiceProvider).RenderComponentAsync<MarkdownBody<FrontMatter>>(
             new Dictionary<string, object?> { [nameof(MarkdownBody<>.Content)] = content });

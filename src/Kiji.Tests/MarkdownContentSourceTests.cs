@@ -36,8 +36,7 @@ public sealed class MarkdownContentSourceTests : IDisposable
                 if (readContent) { _ = posts.Count; }
             });
         builder.AddMarkdownContent<FrontMatter>();
-        await using var site = builder.Build();
-        site.UsePlanningOptions();
+        await using var site = builder.BuildSite();
         var posts = site.ServiceProvider.GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>();
 
         var error = Assert.Throws<InvalidOperationException>(() => posts.Count);
@@ -53,8 +52,7 @@ public sealed class MarkdownContentSourceTests : IDisposable
         await File.WriteAllTextAsync(path, "---\ntitle: Hello");
         var builder = CreateBuilder();
         builder.AddMarkdownContent<FrontMatter>();
-        await using var site = builder.Build();
-        site.UsePlanningOptions();
+        await using var site = builder.BuildSite();
 
         var error = Assert.Throws<InvalidOperationException>(() => site.ServiceProvider
             .GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>().Count);
@@ -94,8 +92,7 @@ public sealed class MarkdownContentSourceTests : IDisposable
         var builder = CreateBuilder(Path.Combine(_testDir, "site"));
         builder.AddMarkdownContent<FrontMatter>(options => options.Directory = absolute
             ? Path.Combine(_testDir, "content") : "../content");
-        await using var app = builder.Build();
-        app.UsePlanningOptions();
+        await using var app = builder.BuildSite();
         Assert.Equal("inside.md", Assert.Single(app.ServiceProvider
             .GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>().Select(content => content.Path)));
     }
@@ -109,8 +106,7 @@ public sealed class MarkdownContentSourceTests : IDisposable
         var builder = CreateBuilder();
         builder.AddMarkdownContent<OrderedFrontMatter, ProjectedNote>(
             select: static content => new ProjectedNote(Path.GetFileNameWithoutExtension(content.Path), content.FrontMatter.Title));
-        var app = builder.Build();
-        app.UsePlanningOptions();
+        var app = builder.BuildSite();
         var notes = app.ServiceProvider.GetRequiredService<ContentCollection<ProjectedNote>>();
 
         Assert.Equal(["first", "second"], notes.Select(static note => note.Key));
@@ -123,8 +119,7 @@ public sealed class MarkdownContentSourceTests : IDisposable
         WriteMarkdown("nested/post.md", "Post");
         var builder = CreateBuilder();
         builder.AddMarkdownContent<FrontMatter>();
-        var app = builder.Build();
-        app.UsePlanningOptions();
+        var app = builder.BuildSite();
 
         var content = app.ServiceProvider.GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>();
 
@@ -145,8 +140,7 @@ public sealed class MarkdownContentSourceTests : IDisposable
         builder.AddMarkdownContent<FrontMatter, ProjectedNote>(
             content => new ProjectedNote(content.Path, content.FrontMatter.Title),
             options => options.Directory = "content/notes");
-        await using var app = builder.Build();
-        app.UsePlanningOptions();
+        await using var app = builder.BuildSite();
         var posts = app.ServiceProvider.GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>();
         var notes = app.ServiceProvider.GetRequiredService<ContentCollection<ProjectedNote>>();
         Assert.Equal("Two", notes["two.md"].Title);
@@ -175,8 +169,7 @@ public sealed class MarkdownContentSourceTests : IDisposable
         builder.AddKeyedMarkdownContent<FrontMatter>("posts", options => options.Directory = "content/posts");
         builder.AddKeyedMarkdownContent<FrontMatter>("notes", options => options.Directory = "content/notes");
         builder.AddMarkdownContent<FrontMatter>();
-        await using var app = builder.Build();
-        app.UsePlanningOptions();
+        await using var app = builder.BuildSite();
         var posts = app.ServiceProvider.GetRequiredKeyedService<ContentCollection<MarkdownContent<FrontMatter>>>("posts");
         var notes = app.ServiceProvider.GetRequiredKeyedService<ContentCollection<MarkdownContent<FrontMatter>>>("notes");
         Assert.Equal("One", Assert.Single(posts).FrontMatter.Title);
@@ -214,12 +207,12 @@ public sealed class MarkdownContentSourceTests : IDisposable
         var input = Path.Combine(_testDir, directory, "keep.md");
         System.IO.Directory.CreateDirectory(Path.GetDirectoryName(input)!);
         await File.WriteAllTextAsync(input, "original");
-        var builder = CreateBuilder();
+        var builder = CreateBuilder(outputPath: output);
         builder.AddMarkdownContent<FrontMatter>();
         builder.AddMarkdownContent<FrontMatter, ProjectedNote>(
             content => new ProjectedNote(content.Path, content.FrontMatter.Title),
             options => options.Directory = directory);
-        await using var app = builder.Build();
+        await using var app = builder.BuildSite();
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
@@ -257,9 +250,9 @@ public sealed class MarkdownContentSourceTests : IDisposable
             """);
     }
 
-    private StaticSiteBuilder CreateBuilder(string? projectDirectory = null)
+    private HostApplicationBuilder CreateBuilder(string? projectDirectory = null, string? outputPath = "dist")
     {
-        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(projectDirectory ?? _testDir));
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(projectDirectory ?? _testDir), outputPath: outputPath);
         builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         return builder;
     }
@@ -268,8 +261,7 @@ public sealed class MarkdownContentSourceTests : IDisposable
     {
         var builder = CreateBuilder();
         builder.AddMarkdownContent<FrontMatter>(configure);
-        var app = builder.Build();
-        app.UsePlanningOptions();
+        var app = builder.BuildSite();
         return [.. app.ServiceProvider.GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>()
             .Select(static content => Path.GetFileNameWithoutExtension(content.Path))];
     }

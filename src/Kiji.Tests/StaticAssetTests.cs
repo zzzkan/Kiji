@@ -101,17 +101,17 @@ public sealed class StaticAssetTests : IDisposable
         Assert.False(File.Exists(Path.Combine(_root, "dist", "assets", "assets", "index.html")));
     }
 
-    private StaticSite CreateSite(AssetRenderLog log, string path = "app.js")
+    private TestSiteHost CreateSite(AssetRenderLog log, string path = "app.js")
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")));
         builder.UseSiteInfo(TestArticleContents.CreateSiteInfoWithBasePath());
         builder.Services.AddSingleton(log);
         builder.AddPageParameters<AssetPage>(_ => PageKinds
             .Select(kind => new { Kind = kind, Path = path }));
-        return builder.Build();
+        return builder.BuildSite();
     }
 
-    private void WriteAssets(StaticSite site, string path, string hashed)
+    private void WriteAssets(TestSiteHost site, string path, string hashed)
     {
         var directory = Path.Combine(_root, "wwwroot");
         var source = Path.Combine(directory, path);

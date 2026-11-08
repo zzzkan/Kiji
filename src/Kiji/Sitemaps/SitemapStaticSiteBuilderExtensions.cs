@@ -1,7 +1,8 @@
+using Microsoft.Extensions.Hosting;
 namespace Kiji.Sitemaps;
 
 /// <summary>
-/// Sitemap support for <see cref="StaticSiteBuilder"/>.
+/// Sitemap support for <see cref="IHostApplicationBuilder"/>.
 /// </summary>
 public static class SitemapStaticSiteBuilderExtensions
 {
@@ -9,8 +10,8 @@ public static class SitemapStaticSiteBuilderExtensions
     /// <param name="builder">The site builder.</param>
     /// <param name="path">The output-relative path, defaulting to <c>sitemap.xml</c>.</param>
     /// <param name="excludedPaths">Site-relative page paths to omit. <c>404.html</c> is always omitted.</param>
-    public static StaticSiteBuilder AddSitemap(
-        this StaticSiteBuilder builder,
+    public static IHostApplicationBuilder AddSitemap(
+        this IHostApplicationBuilder builder,
         string path = "sitemap.xml",
         IEnumerable<string>? excludedPaths = null)
     {

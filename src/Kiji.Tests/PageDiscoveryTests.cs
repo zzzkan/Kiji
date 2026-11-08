@@ -6,7 +6,7 @@ using Xunit;
 namespace Kiji.Tests;
 
 /// <summary>
-/// Tests for page discovery and route mapping through <see cref="StaticSite"/>.
+/// Tests for page discovery and route mapping through <see cref="TestSiteHost"/>.
 /// </summary>
 public sealed class PageDiscoveryTests
 {
@@ -29,7 +29,7 @@ public sealed class PageDiscoveryTests
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory), typeof(HomePage), typeof(AboutPage));
         builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
-        var app = builder.Build();
+        var app = builder.BuildSite();
 
         Assert.Equal(["/", "/about/"], app.CreateSnapshot().Pages.Select(static page => page.RoutePath).Order(StringComparer.Ordinal));
     }
@@ -78,7 +78,7 @@ public sealed class PageDiscoveryTests
         builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentCollection<Post>>()
             .Select(static post => new { post.Slug, ContentKey = post.Id }));
         // No mapping for the dynamic /tags/{TagSlug}/ template.
-        var app = builder.Build();
+        var app = builder.BuildSite();
 
         var error = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());
         Assert.Contains(nameof(TagsPage), error.Message, StringComparison.Ordinal);
@@ -146,14 +146,14 @@ public sealed class PageDiscoveryTests
         builder.UseDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(builder);
         builder.UseNotFoundPage<PostListComponent>();
-        var app = builder.Build();
+        var app = builder.BuildSite();
 
         var exception = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());
 
         Assert.Contains("does not declare a '@page' route template", exception.Message, StringComparison.Ordinal);
     }
 
-    private static (StaticSite App, ContentCollection<Post> Posts) CreateAppWithTagRoutes(Func<IEnumerable<object>> tagRoutes)
+    private static (TestSiteHost App, ContentCollection<Post> Posts) CreateAppWithTagRoutes(Func<IEnumerable<object>> tagRoutes)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
         builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
@@ -164,7 +164,7 @@ public sealed class PageDiscoveryTests
         builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentCollection<Post>>()
             .Select(static post => new { post.Slug, ContentKey = post.Id }));
         builder.AddPageParameters<TagsPage>(_ => tagRoutes());
-        var app = builder.Build();
+        var app = builder.BuildSite();
         return (app, app.ServiceProvider.GetRequiredService<ContentCollection<Post>>());
     }
 }

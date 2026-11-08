@@ -8,8 +8,9 @@ namespace Kiji;
 /// <param name="WriteAsync">Writes the artifact's bytes.</param>
 /// <param name="PreserveUnchangedOutput">Keeps an existing file whose bytes are unchanged.</param>
 /// <param name="IndependentOfPages">
-/// The writer reads only content and the page list, never state left by rendering, so it
-/// runs while pages render. Custom artifacts are documented to run after all pages.
+/// The writer runs no site code and reads only the page list, so it runs while pages render.
+/// Writers that run site code, such as custom artifacts and feed factories, run after all
+/// pages in registration order.
 /// </param>
 internal sealed record SiteArtifactRegistration(
     string OutputRelativePath,

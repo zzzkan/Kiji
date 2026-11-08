@@ -1,5 +1,4 @@
-using System.Text;
-using System.Xml;
+using Kiji.Generation;
 
 namespace Kiji.Sitemaps;
 
@@ -10,11 +9,6 @@ internal sealed class SitemapArtifact
 {
     private const string NotFoundRelativePath = "404.html";
     private const string SitemapNamespace = "http://www.sitemaps.org/schemas/sitemap/0.9";
-    private static readonly XmlWriterSettings Settings = new()
-    {
-        Indent = true,
-        Encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
-    };
 
     private readonly HashSet<string> _excludedPaths;
 
@@ -50,27 +44,23 @@ internal sealed class SitemapArtifact
             .Where(page => !_excludedPaths.Contains(page.RelativePath))
             .OrderBy(static page => page.RelativePath, StringComparer.OrdinalIgnoreCase);
 
-        // Synchronous XML into memory, then one asynchronous copy (see RssFeedArtifact).
-        using var buffer = new MemoryStream();
-        using (var writer = XmlWriter.Create(buffer, Settings))
+        using var xml = new ChunkedXmlOutput(output);
+        var writer = xml.Writer;
+        writer.WriteStartDocument();
+        writer.WriteStartElement(prefix: null, "urlset", SitemapNamespace);
+
+        foreach (var page in pages)
         {
-            writer.WriteStartDocument();
-            writer.WriteStartElement(prefix: null, "urlset", SitemapNamespace);
+            cancellationToken.ThrowIfCancellationRequested();
 
-            foreach (var page in pages)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                writer.WriteStartElement(prefix: null, "url", ns: null);
-                var pageUrl = context.Site.ResolveUrl(page.RelativePath);
-                writer.WriteElementString(prefix: null, "loc", ns: null, pageUrl.AbsoluteUri);
-                writer.WriteEndElement();
-            }
-
+            writer.WriteStartElement(prefix: null, "url", ns: null);
+            var pageUrl = context.Site.ResolveUrl(page.RelativePath);
+            writer.WriteElementString(prefix: null, "loc", ns: null, pageUrl.AbsoluteUri);
             writer.WriteEndElement();
-            writer.WriteEndDocument();
+            await xml.WriteChunkAsync(cancellationToken);
         }
 
-        await output.WriteAsync(buffer.GetBuffer().AsMemory(0, (int)buffer.Length), cancellationToken);
+        writer.WriteEndElement();
+        await xml.CompleteAsync(cancellationToken);
     }
 }

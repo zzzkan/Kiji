@@ -18,6 +18,6 @@ public static class RssFeedStaticSiteBuilderExtensions
         ArgumentNullException.ThrowIfNull(items);
 
         var artifact = new RssFeedArtifact(items, path);
-        return builder.AddArtifact(path, artifact.WriteAsync, preserveUnchangedOutput: true, independentOfPages: true);
+        return builder.AddArtifact(path, artifact.WriteAsync, preserveUnchangedOutput: true);
     }
 }

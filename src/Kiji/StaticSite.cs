@@ -210,8 +210,9 @@ public sealed class StaticSite
         var artifactPaths = ReserveArtifactPaths(options, reservedPaths);
         phases.Mark(BuildPhaseTimer.Snapshot);
 
-        // Built-in artifacts read only content and the page list, so they are written while
-        // pages are planned and rendered. Custom artifacts still run after all pages.
+        // The sitemap reads only the page list, so it is written while pages are planned and
+        // rendered. Artifacts that run site code, including the feed factory, still run after
+        // all pages in registration order.
         var artifactContext = _artifacts.Count == 0 ? null : CreateOutputContext(snapshot);
         using var artifactCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var independentArtifacts = WriteArtifactsAsync(artifactPaths, artifactContext, independentOfPages: true,

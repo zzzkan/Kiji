@@ -135,6 +135,32 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
     }
 
     [Fact]
+    public async Task PublishAsync_FeedRunsAfterEarlierArtifacts()
+    {
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
+        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        TestSiteAssets.Bind(builder.Paths, GetStaticDirectory());
+        builder.RegisterContent<Post>(_ => []);
+        TestArticleContents.MapSite(builder);
+
+        // Site code may prepare values in an artifact registered before the feed.
+        var title = "not prepared";
+        builder.AddArtifact("prepare.txt", async (output, _, ct) =>
+        {
+            await Task.Delay(50, ct);
+            title = "prepared";
+            await output.WriteAsync("ok"u8.ToArray(), ct);
+        });
+        builder.AddRssFeed(_ => [new FeedItem(title, "Description", DateTimeOffset.UnixEpoch, "")]);
+
+        await using var app = builder.Build();
+        await app.PublishAsync(_outputDir);
+
+        var feedXml = await File.ReadAllTextAsync(Path.Combine(_outputDir, "feed.xml"));
+        Assert.Contains("<title>prepared</title>", feedXml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task PublishAsync_MarkdownImages_BundledWithPageAndRootRelativeUrls()
     {
         var postDir = Path.Combine(_contentsDir, "hello");

@@ -49,7 +49,10 @@ not built with conflicting global properties.
 ## Publication
 
 IncrementalBuildPlanner owns planning and manifest publication. Only `.kiji/cache`
-travels between checkouts; development uses `.kiji/dev-site`.
+and `.kiji/jit` travel between checkouts; development uses `.kiji/dev-site`.
+`.kiji/jit` holds only the publish JIT profile, saved atomically under the cache lease
+after a successful publish. It never affects output or reuse decisions, so CI can
+restore it with or without `.kiji/cache`.
 
 - Serialize builds sharing a cache with a lease; page work remains parallel.
 - Publish the complete immutable HTML bundle before atomically replacing its manifest.

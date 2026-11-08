@@ -84,12 +84,19 @@ dotnet publish -o dist -v d
 For a message per page, set `Kiji.Build` to `Debug` in the
 [Logging](../api-reference/#logging) section. Changing that section keeps the cache.
 
-The publish cache is in `.kiji/cache`. Restoring it in CI often costs more time than it
-saves, because code and package changes render every page anyway; measure before relying
-on it.
+Publishing keeps two portable caches that CI can restore independently:
 
-Most of a publish's time goes to compiling code, so Kiji's staging directory also keeps a
-JIT profile: a later publish on the same machine compiles the recorded methods in the
-background before pages need them. The profile never changes output, and `dotnet clean`
-removes it. Publishing also turns off tiered PGO, which cannot pay off within one short
-process, unless the project sets `TieredPGO` itself.
+| Directory     | Contents                                              | Size for 1,000 pages |
+| ------------- | ----------------------------------------------------- | -------------------- |
+| `.kiji/cache` | Page HTML, image variants and the manifest            | about 3.7 MB, plus images |
+| `.kiji/jit`   | A profile of the code compiled during the last publish | about 120 KB         |
+
+Most of a publish's time goes to compiling code. With the profile, a publish compiles
+the recorded methods in the background before pages need them, even when every page
+renders. The profile never changes output, and an outdated profile only does less. The
+page cache lets unchanged pages skip rendering, but code and package changes render every
+page anyway, and restoring it costs more. Cache `.kiji/jit` first, add `.kiji/cache` only
+when measurements show it pays off, and use `dotnet clean` to remove both.
+
+Publishing also turns off tiered PGO, which cannot pay off within one short process,
+unless the project sets `TieredPGO` itself.

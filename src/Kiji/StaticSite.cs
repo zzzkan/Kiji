@@ -332,6 +332,8 @@ public sealed class StaticSite
         phases.Mark(BuildPhaseTimer.Reconcile);
 
         planner.SaveManifest(manifest, plan.OldManifest, cancellationToken);
+        // Still under the cache lease, so concurrent publishes cannot interleave the save.
+        PublishJitProfile.Save(Paths.ResolveKijiPath(), rendered.Count);
         phases.Mark(BuildPhaseTimer.Manifest);
 
         var written = rendered.Count(static page => page.Written);

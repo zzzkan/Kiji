@@ -154,7 +154,9 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
 
         var stagingDirectory = Assert.Single(Directory.GetDirectories(Path.Combine(fixture.Site, "obj"), "site", SearchOption.AllDirectories));
         // Publishes replay the previous publish's JIT profile; losing it only makes publishing slower.
+        // The portable copy lets a clean checkout restore it without the page cache.
         Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(stagingDirectory)!, "publish.jitprofile")));
+        Assert.True(File.Exists(Path.Combine(fixture.Site, ".kiji", "jit", "publish.jitprofile")));
         // This file is deliberately untracked. Cleaning must make the next publish render it again.
         Assert.Contains("external-value-1", Read("index.html"), StringComparison.Ordinal);
         fixture.Write("Site/value.txt", "external-value-2");

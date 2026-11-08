@@ -1,6 +1,5 @@
 using System.Globalization;
-using System.Text;
-using System.Xml;
+using Kiji.Generation;
 
 namespace Kiji.Feeds;
 
@@ -22,55 +21,45 @@ internal sealed class RssFeedArtifact(
         cancellationToken.ThrowIfCancellationRequested();
 
         var site = context.Site;
-        var settings = new XmlWriterSettings
+        using var xml = new ChunkedXmlOutput(output);
+        var writer = xml.Writer;
+        writer.WriteStartDocument();
+        writer.WriteStartElement(prefix: null, "rss", ns: null);
+        writer.WriteAttributeString(prefix: null, "version", ns: null, "2.0");
+        writer.WriteAttributeString("xmlns", "atom", ns: null, AtomNamespace);
+
+        writer.WriteStartElement(prefix: null, "channel", ns: null);
+        writer.WriteElementString(prefix: null, "title", ns: null, site.Name);
+        writer.WriteElementString(prefix: null, "link", ns: null, site.BaseUrl.AbsoluteUri);
+        writer.WriteElementString(prefix: null, "description", ns: null, site.Description);
+        writer.WriteElementString(prefix: null, "language", ns: null, site.Language);
+
+        writer.WriteStartElement("atom", "link", AtomNamespace);
+        writer.WriteAttributeString(prefix: null, "href", ns: null, site.ResolveUrl(outputRelativePath).AbsoluteUri);
+        writer.WriteAttributeString(prefix: null, "rel", ns: null, "self");
+        writer.WriteAttributeString(prefix: null, "type", ns: null, "application/rss+xml");
+        writer.WriteEndElement();
+
+        foreach (var item in items(context.Services))
         {
-            Async = true,
-            Indent = true,
-            Encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
-            CloseOutput = false,
-        };
+            cancellationToken.ThrowIfCancellationRequested();
 
-        var writer = XmlWriter.Create(output, settings);
-        await using (writer)
-        {
-            await writer.WriteStartDocumentAsync();
-            await writer.WriteStartElementAsync(prefix: null, "rss", ns: null);
-            await writer.WriteAttributeStringAsync(prefix: null, "version", ns: null, "2.0");
-            await writer.WriteAttributeStringAsync("xmlns", "atom", ns: null, AtomNamespace);
+            var itemUrl = site.ResolveUrl(item.RelativePath).AbsoluteUri;
+            // RFC 1123 date; converting to UTC keeps the offset correct for any zone.
+            var pubDate = item.PublishedAt.UtcDateTime.ToString("r", CultureInfo.InvariantCulture);
 
-            await writer.WriteStartElementAsync(prefix: null, "channel", ns: null);
-            await writer.WriteElementStringAsync(prefix: null, "title", ns: null, site.Name);
-            await writer.WriteElementStringAsync(prefix: null, "link", ns: null, site.BaseUrl.AbsoluteUri);
-            await writer.WriteElementStringAsync(prefix: null, "description", ns: null, site.Description);
-            await writer.WriteElementStringAsync(prefix: null, "language", ns: null, site.Language);
-
-            await writer.WriteStartElementAsync("atom", "link", AtomNamespace);
-            await writer.WriteAttributeStringAsync(prefix: null, "href", ns: null, site.ResolveUrl(outputRelativePath).AbsoluteUri);
-            await writer.WriteAttributeStringAsync(prefix: null, "rel", ns: null, "self");
-            await writer.WriteAttributeStringAsync(prefix: null, "type", ns: null, "application/rss+xml");
-            await writer.WriteEndElementAsync();
-
-            foreach (var item in items(context.Services))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                var itemUrl = site.ResolveUrl(item.RelativePath).AbsoluteUri;
-                // RFC 1123 date; converting to UTC keeps the offset correct for any zone.
-                var pubDate = item.PublishedAt.UtcDateTime.ToString("r", CultureInfo.InvariantCulture);
-
-                await writer.WriteStartElementAsync(prefix: null, "item", ns: null);
-                await writer.WriteElementStringAsync(prefix: null, "title", ns: null, item.Title);
-                await writer.WriteElementStringAsync(prefix: null, "link", ns: null, itemUrl);
-                await writer.WriteElementStringAsync(prefix: null, "guid", ns: null, itemUrl);
-                await writer.WriteElementStringAsync(prefix: null, "pubDate", ns: null, pubDate);
-                await writer.WriteElementStringAsync(prefix: null, "description", ns: null, item.Description);
-                await writer.WriteEndElementAsync();
-            }
-
-            await writer.WriteEndElementAsync();
-            await writer.WriteEndElementAsync();
-            await writer.WriteEndDocumentAsync();
-            await writer.FlushAsync();
+            writer.WriteStartElement(prefix: null, "item", ns: null);
+            writer.WriteElementString(prefix: null, "title", ns: null, item.Title);
+            writer.WriteElementString(prefix: null, "link", ns: null, itemUrl);
+            writer.WriteElementString(prefix: null, "guid", ns: null, itemUrl);
+            writer.WriteElementString(prefix: null, "pubDate", ns: null, pubDate);
+            writer.WriteElementString(prefix: null, "description", ns: null, item.Description);
+            writer.WriteEndElement();
+            await xml.WriteChunkAsync(cancellationToken);
         }
+
+        writer.WriteEndElement();
+        writer.WriteEndElement();
+        await xml.CompleteAsync(cancellationToken);
     }
 }

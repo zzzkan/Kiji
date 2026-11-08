@@ -89,6 +89,8 @@ public sealed class StaticSite
     public static StaticSiteBuilder CreateBuilder(string[] args)
     {
         ArgumentNullException.ThrowIfNull(args);
+        // First, so the rest of the process can use methods compiled in the background.
+        PublishJitProfile.Start(AppContext.GetData);
         var settings = SiteRunSettings.FromExecutionContext(Environment.GetEnvironmentVariable, AppContext.GetData, args);
         var entryAssembly = Assembly.GetEntryAssembly() ?? throw new InvalidOperationException(
             "No entry assembly is available in this host. Run the site project as an application with dotnet run, dotnet watch or dotnet publish.");
@@ -205,59 +207,85 @@ public sealed class StaticSite
         var renderer = GetRenderer();
 
         var reservedPaths = CreateReservedArtifactPaths(options, snapshot, assets);
+        var artifactPaths = ReserveArtifactPaths(options, reservedPaths);
         phases.Mark(BuildPhaseTimer.Snapshot);
 
-        var planner = new IncrementalBuildPlanner(
-            options,
-            Paths.ProjectDirectory,
-            Paths.ResolveCachePath(),
-            SiteInfo,
-            _environment.EnvironmentName,
-            _configuration,
-            _runtime.Files, _runtime.Dependencies,
-            _services.GetRequiredService<IImageProcessor>(), assetManifest.Resources, BuildLogger,
-            _runtime.ResolveItem);
+        // The sitemap reads only the page list, so it is written while pages are planned and
+        // rendered. Artifacts that run site code, including the feed factory, still run after
+        // all pages in registration order.
+        var artifactContext = _artifacts.Count == 0 ? null : CreateOutputContext(snapshot);
+        using var artifactCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var independentArtifacts = WriteArtifactsAsync(artifactPaths, artifactContext, independentOfPages: true,
+            artifactCancellation.Token);
 
-        // Snapshot planning already required every page type to come from a page assembly.
-        // Helpers and custom encoder factories may live outside the page assemblies.
-        // Their code is a build input even when pages only reach it through injection.
-        var plan = await planner.CreatePlanAsync(
-            snapshot.Pages,
-            [.. _pageAssemblies, .. _serviceAssemblies, typeof(StaticSite).Assembly],
-            cancellationToken);
-        phases.Mark(BuildPhaseTimer.Plan);
-
-        // The output directory is kept, never wiped: whatever this build does not
-        // produce is deleted by the reconciliation pass below, which is both cheaper
-        // than a delete-and-rewrite and checked against the directory itself.
-        Directory.CreateDirectory(options.OutputDirectory);
-        phases.Mark(BuildPhaseTimer.Clean);
-
-        var staticFiles = await planner.SyncStaticFilesAsync(assets);
-        phases.Mark(BuildPhaseTimer.Static);
-
-        // Render only the pages the plan could not prove unchanged, recording what
-        // each render reads and writes for the next build's skip checks. The previous
-        // manifest comes along so a render that reproduces the bytes already on disk
-        // skips the write.
+        IncrementalBuildPlanner planner;
+        IncrementalBuildPlan plan;
+        IReadOnlyList<string> staticFiles;
+        IReadOnlyList<RenderedPage> rendered;
         var recorders = new ConcurrentDictionary<string, BuildDependencyRecorder>(StringComparer.OrdinalIgnoreCase);
-        var rendered = await StaticSiteGenerator.RenderPagesAsync(
-            options,
-            plan.PagesToRender,
-            (request, output, ct) =>
-            {
-                var recorder = recorders.GetOrAdd(request.OutputRelativePath, static _ => new BuildDependencyRecorder());
-                return RenderPageAsync(renderer, request, output, recorder, ct);
-            },
-            plan.OldManifest?.Pages.ToDictionary(
-                static page => page.OutputRelativePath,
-                StringComparer.OrdinalIgnoreCase),
-            cancellationToken,
-            planner.OutputStampsValid,
-            BuildLogger);
-        phases.Mark(BuildPhaseTimer.Render);
+        try
+        {
+            planner = new IncrementalBuildPlanner(
+                options,
+                Paths.ProjectDirectory,
+                Paths.ResolveCachePath(),
+                SiteInfo,
+                _environment.EnvironmentName,
+                _configuration,
+                _runtime.Files, _runtime.Dependencies,
+                _services.GetRequiredService<IImageProcessor>(), assetManifest.Resources, BuildLogger,
+                _runtime.ResolveItem);
 
-        var artifacts = await GenerateArtifactsAsync(options, snapshot, reservedPaths, cancellationToken);
+            // Snapshot planning already required every page type to come from a page assembly.
+            // Helpers and custom encoder factories may live outside the page assemblies.
+            // Their code is a build input even when pages only reach it through injection.
+            plan = await planner.CreatePlanAsync(
+                snapshot.Pages,
+                [.. _pageAssemblies, .. _serviceAssemblies, typeof(StaticSite).Assembly],
+                cancellationToken);
+            phases.Mark(BuildPhaseTimer.Plan);
+
+            // The output directory is kept, never wiped: whatever this build does not
+            // produce is deleted by the reconciliation pass below, which is both cheaper
+            // than a delete-and-rewrite and checked against the directory itself.
+            Directory.CreateDirectory(options.OutputDirectory);
+            phases.Mark(BuildPhaseTimer.Clean);
+
+            staticFiles = await planner.SyncStaticFilesAsync(assets);
+            phases.Mark(BuildPhaseTimer.Static);
+
+            // Render only the pages the plan could not prove unchanged, recording what
+            // each render reads and writes for the next build's skip checks. The previous
+            // manifest comes along so a render that reproduces the bytes already on disk
+            // skips the write.
+            rendered = await StaticSiteGenerator.RenderPagesAsync(
+                options,
+                plan.PagesToRender,
+                (request, output, ct) =>
+                {
+                    var recorder = recorders.GetOrAdd(request.OutputRelativePath, static _ => new BuildDependencyRecorder());
+                    return RenderPageAsync(renderer, request, output, recorder, ct);
+                },
+                plan.OldManifest?.Pages.ToDictionary(
+                    static page => page.OutputRelativePath,
+                    StringComparer.OrdinalIgnoreCase),
+                cancellationToken,
+                planner.OutputStampsValid,
+                BuildLogger);
+            phases.Mark(BuildPhaseTimer.Render);
+        }
+        catch
+        {
+            // Report the build failure, not a write it interrupted.
+            await artifactCancellation.CancelAsync();
+            try { await independentArtifacts; }
+            catch (Exception) when (artifactCancellation.IsCancellationRequested) { }
+            throw;
+        }
+
+        await independentArtifacts;
+        await WriteArtifactsAsync(artifactPaths, artifactContext, independentOfPages: false, cancellationToken);
+        IReadOnlyList<string> artifacts = [.. artifactPaths.Select(path => Path.GetRelativePath(options.OutputDirectory, path))];
         phases.Mark(BuildPhaseTimer.Artifacts);
 
         // Input verification is independent of output reconciliation and entry
@@ -305,6 +333,8 @@ public sealed class StaticSite
         phases.Mark(BuildPhaseTimer.Reconcile);
 
         planner.SaveManifest(manifest, plan.OldManifest, cancellationToken);
+        // Still under the cache lease, so concurrent publishes cannot interleave the save.
+        PublishJitProfile.Save(Paths.ResolveKijiPath(), rendered.Count);
         phases.Mark(BuildPhaseTimer.Manifest);
 
         var written = rendered.Count(static page => page.Written);
@@ -593,19 +623,13 @@ public sealed class StaticSite
             ServiceProvider);
     }
 
-    private async Task<IReadOnlyList<string>> GenerateArtifactsAsync(ResolvedSitePaths options, SiteSnapshot snapshot,
-        Dictionary<string, string> reservedPaths, CancellationToken cancellationToken)
+    /// <summary>Resolves every artifact path, in registration order, before any output is written.</summary>
+    private string[] ReserveArtifactPaths(ResolvedSitePaths options, Dictionary<string, string> reservedPaths)
     {
-        if (_artifacts.Count == 0)
+        var paths = new string[_artifacts.Count];
+        for (var i = 0; i < _artifacts.Count; i++)
         {
-            return [];
-        }
-
-        var artifactRelativePaths = new List<string>(_artifacts.Count);
-        var context = CreateOutputContext(snapshot);
-
-        foreach (var artifact in _artifacts)
-        {
+            var artifact = _artifacts[i];
             var fullPath = OutputPathValidator.ResolveUnderRoot(
                 options.OutputDirectory,
                 artifact.OutputRelativePath,
@@ -617,15 +641,34 @@ public sealed class StaticSite
             }
 
             reservedPaths[fullPath] = "another artifact output path";
-            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-
-            await artifact.WriteFileAsync(fullPath, context, cancellationToken);
-
-            artifactRelativePaths.Add(Path.GetRelativePath(options.OutputDirectory, fullPath));
-            BuildLogger.ArtifactGenerated(fullPath);
+            paths[i] = fullPath;
         }
 
-        return artifactRelativePaths;
+        return paths;
+    }
+
+    private async Task WriteArtifactsAsync(string[] paths, SiteOutputContext? context, bool independentOfPages,
+        CancellationToken cancellationToken)
+    {
+        for (var i = 0; i < _artifacts.Count; i++)
+        {
+            var artifact = _artifacts[i];
+            if (artifact.IndependentOfPages != independentOfPages)
+            {
+                continue;
+            }
+
+            if (independentOfPages)
+            {
+                // Leave the planning and rendering path before writing.
+                await Task.Yield();
+            }
+
+            var fullPath = paths[i];
+            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+            await artifact.WriteFileAsync(fullPath, context!, cancellationToken);
+            BuildLogger.ArtifactGenerated(fullPath);
+        }
     }
 
     private static Dictionary<string, string> CreateReservedArtifactPaths(ResolvedSitePaths options, SiteSnapshot snapshot, IReadOnlyList<StaticAsset> assets)

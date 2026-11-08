@@ -60,6 +60,25 @@ public sealed class FeedsTests
     }
 
     [Fact]
+    public async Task WriteAsync_LargeFeed_WritesInBoundedChunks()
+    {
+        var description = new string('x', 4096);
+        var artifact = new RssFeedArtifact(_ => Enumerable.Range(0, 500)
+            .Select(i => new FeedItem($"Post {i}", description, DateTimeOffset.UnixEpoch, $"blog/{i}/")));
+
+        // The output's own buffering spills large feeds to disk; the writer must not hold the feed.
+        using var output = new WriteSizeRecordingStream();
+        await artifact.WriteAsync(output, CreateContext(), CancellationToken.None);
+
+        Assert.True(output.Length > 1024 * 1024);
+        Assert.True(output.LargestWrite <= 128 * 1024, $"Largest write: {output.LargestWrite} bytes.");
+        output.Position = 0;
+        var titles = XDocument.Load(output).Root!.Element("channel")!.Elements("item")
+            .Select(static item => item.Element("title")!.Value);
+        Assert.Equal(Enumerable.Range(0, 500).Select(static i => $"Post {i}"), titles);
+    }
+
+    [Fact]
     public async Task WriteAsync_CustomPath_SetsAtomSelfLink()
     {
         var artifact = new RssFeedArtifact(static _ => [], outputRelativePath: "rss/all.xml");

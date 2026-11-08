@@ -26,7 +26,8 @@ public sealed class MarkdownOptions
     public DeserializerBuilder Yaml { get; } = new DeserializerBuilder()
         .WithNamingConvention(CamelCaseNamingConvention.Instance)
         .WithCaseInsensitivePropertyMatching()
-        .WithTypeConverter(new MarkdownDateTimeConverter());
+        .WithTypeConverter(new MarkdownDateTimeConverter())
+        .WithTypeInspector(static inner => new CachedPropertyTypeInspector(inner), static where => where.OnTop());
 
     internal IDeserializer CreateDeserializer()
     {

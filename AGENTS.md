@@ -67,7 +67,8 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   directory and environment. Per-key reads are not tracked, so the environment name and all
   configuration outside the Logging section are in the publish options fingerprint.
 - The dev server enforces BaseUrl's path prefix and uses `.kiji/dev-site`.
-  Only `.kiji/cache` is portable; planning creates no output directories.
+  Only `.kiji/cache` (pages) and `.kiji/jit` (publish JIT profile) are portable; CI restores
+  either or both. Planning creates no output directories.
 - StaticSiteBuilder.Services is standard DI; Build validates it, makes it read-only and
   builds the provider. Kiji's defaults and managed services are registered when the builder
   is created. Each render owns a scope. Loaders, page parameter/feed

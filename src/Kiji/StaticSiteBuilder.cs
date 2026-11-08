@@ -267,13 +267,14 @@ public sealed class StaticSiteBuilder
     internal StaticSiteBuilder AddArtifact(
         string outputRelativePath,
         Func<Stream, SiteOutputContext, CancellationToken, Task> write,
-        bool preserveUnchangedOutput)
+        bool preserveUnchangedOutput,
+        bool independentOfPages = false)
     {
         EnsureConfigurable();
         ArgumentException.ThrowIfNullOrWhiteSpace(outputRelativePath);
         ArgumentNullException.ThrowIfNull(write);
 
-        _artifacts.Add(new SiteArtifactRegistration(outputRelativePath, write, preserveUnchangedOutput));
+        _artifacts.Add(new SiteArtifactRegistration(outputRelativePath, write, preserveUnchangedOutput, independentOfPages));
         return this;
     }
 

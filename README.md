@@ -47,11 +47,11 @@ Edit your site settings in `Program.cs`:
 //Program.cs
 
 var builder = StaticSite.CreateBuilder(args);
-builder.SiteInfo = new SiteInfo
+builder.UseSiteInfo(new SiteInfo
 {
     BaseUrl = new Uri("https://example.org/"),
     Name = "My Blog",
-};
+});
 ```
 
 Start the development server and open <http://localhost:8080>:

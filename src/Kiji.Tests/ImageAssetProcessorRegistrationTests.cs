@@ -86,7 +86,7 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root),
             runtimeData: name => name == "Kiji.OutputPath" ? output : null);
-        builder.SiteInfo = new SiteInfo { Name = "Images", BaseUrl = new Uri("https://example.test/") };
+        builder.UseSiteInfo(new SiteInfo { Name = "Images", BaseUrl = new Uri("https://example.test/") });
         return builder;
     }
 

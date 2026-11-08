@@ -1,6 +1,8 @@
 using Kiji.Markdown;
 using Kiji.Tests.TestSite;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Xunit;
 
 namespace Kiji.Tests;
@@ -85,7 +87,7 @@ public sealed class RunAsyncTests : IDisposable
             new SiteExecutionPaths(_testDir), typeof(StaticSite).Assembly,
             EnvironmentWith([("DOTNET_ENVIRONMENT", dotnet), ("ASPNETCORE_ENVIRONMENT", aspnet)]),
             runtimeData: name => name == "Kiji.OutputPath" && publish ? _outputDir : null);
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         await using var site = builder.Build();
 
         Assert.Equal(expected, builder.Environment.EnvironmentName);
@@ -146,7 +148,7 @@ public sealed class RunAsyncTests : IDisposable
                 runtimeData: name => name == "Kiji.OutputPath" ? _outputDir : null,
                 environment: name => name == "DOTNET_ENVIRONMENT" ? environmentName : null,
                 discoveredPages: typeof(HostEnvironmentPage));
-            builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+            builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
             Assert.Equal(0, await builder.Build().RunAsync(CancellationToken.None));
             return await File.ReadAllTextAsync(Path.Combine(_outputDir, "environment", "index.html"));
         }
@@ -192,11 +194,83 @@ public sealed class RunAsyncTests : IDisposable
         Assert.Equal(details, build.Contains(("Kiji.Build", LogLevel.Debug, $"Generated: {Path.Combine(_outputDir, "index.html")}")));
     }
 
+    [Fact]
+    public async Task Lifetime_FailedStartup_SignalsShutdownWithoutStarted_AndDisposesServices()
+    {
+        var builder = CreateBuilder(_outputDir);
+        builder.Services.AddSingleton<LifetimeObserver>();
+        await using var site = builder.Build();
+        var observer = site.ServiceProvider.GetRequiredService<LifetimeObserver>();
+        var started = observer.Lifetime.ApplicationStarted;
+        var stopping = observer.Lifetime.ApplicationStopping;
+        var stopped = observer.Lifetime.ApplicationStopped;
+        using var callback = stopping.Register(() => throw new InvalidOperationException("Callback failure"));
+        File.Delete(site.Paths.AssetManifestBasePath + ".staticwebassets.publish.runtime.json");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => site.RunAsync());
+
+        Assert.Contains("Razor SDK and Kiji targets", exception.Message, StringComparison.Ordinal);
+        Assert.False(started.IsCancellationRequested);
+        Assert.True(stopping.IsCancellationRequested);
+        Assert.True(stopped.IsCancellationRequested);
+        Assert.Equal(1, observer.Disposals);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Lifetime_StopApplicationAndCancellation_StopPublish(bool externalCancellation)
+    {
+        using var cancellation = new CancellationTokenSource();
+        var builder = CreateBuilder(_outputDir);
+        var notifications = new List<string>();
+        // A constructor dependency must pass ValidateOnBuild and resolve in a user factory.
+        builder.Services.AddSingleton<LifetimeObserver>();
+        builder.AddArtifact("stop.txt", async (_, services, token) =>
+        {
+            var lifetime = services.Services.GetRequiredService<LifetimeObserver>().Lifetime;
+            Assert.True(lifetime.ApplicationStarted.IsCancellationRequested);
+            if (externalCancellation) { cancellation.Cancel(); }
+            else { lifetime.StopApplication(); }
+            await Task.Delay(Timeout.Infinite, token);
+        });
+        await using var site = builder.Build();
+        var lifetime = site.ServiceProvider.GetRequiredService<IHostApplicationLifetime>();
+        using var started = lifetime.ApplicationStarted.Register(() => notifications.Add("started"));
+        using var stopping = lifetime.ApplicationStopping.Register(() => notifications.Add("stopping"));
+        using var stopped = lifetime.ApplicationStopped.Register(() => notifications.Add("stopped"));
+
+        Assert.Equal(1, await site.RunAsync(cancellation.Token).WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.Equal(["started", "stopping", "stopped"], notifications);
+    }
+
+    [Fact]
+    public async Task Dispose_UnrunSite_DisposesAsyncServicesAndSignalsShutdownOnce()
+    {
+        var builder = CreateBuilder();
+        builder.Services.AddSingleton<LifetimeObserver>();
+        await using var site = builder.Build();
+        var observer = site.ServiceProvider.GetRequiredService<LifetimeObserver>();
+        var started = observer.Lifetime.ApplicationStarted;
+        var stopped = observer.Lifetime.ApplicationStopped;
+        var stops = 0;
+        using var registration = observer.Lifetime.ApplicationStopping.Register(() => stops++);
+
+        await site.DisposeAsync();
+        await site.DisposeAsync();
+
+        Assert.False(started.IsCancellationRequested);
+        Assert.True(stopped.IsCancellationRequested);
+        Assert.Equal(1, stops);
+        Assert.Equal(1, observer.Disposals);
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => site.RunAsync());
+    }
+
     private StaticSiteBuilder CreateBuilder(string? outputPath = null, Func<string, string?>? environment = null)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")),
             runtimeData: name => name == "Kiji.OutputPath" ? outputPath : null, environment: environment);
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         TestSiteAssets.Bind(builder.Paths, Path.Combine(builder.Paths.ProjectDirectory, "static"));
 
         builder.RegisterContent<Post>(static _ => []);

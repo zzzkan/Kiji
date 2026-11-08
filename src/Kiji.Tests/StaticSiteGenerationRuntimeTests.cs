@@ -39,7 +39,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
     public async Task PublishAsync_NavigationFailsWithoutPublishingPage(bool refresh)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfoWithBasePath();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfoWithBasePath());
         void Navigate(NavigationManager navigation)
         {
             if (refresh)
@@ -65,7 +65,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
     public async Task PublishAsync_WritesDynamicBlogAndTagPagesAndFeed()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         TestSiteAssets.Bind(builder.Paths, GetStaticDirectory());
 
         IReadOnlyList<Post> items =
@@ -181,7 +181,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         await CreateTestImageAsync(Path.Combine(postDir, "images", "nested.png"), 400, 300);
 
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfoWithBasePath();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfoWithBasePath());
         TestSiteAssets.Bind(builder.Paths, GetStaticDirectory());
 
         builder.AddMarkdownContent<FrontMatter>();
@@ -228,7 +228,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         async Task<string> PublishAsync(Action<Kiji.Assets.ImageProcessorOptions>? configure = null)
         {
             var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir));
-            builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+            builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
             if (configure is not null) { builder.Services.Configure(configure); }
             builder.AddMarkdownContent<FrontMatter>();
             builder.AddPageParameters<MarkdownPostTestPage>(static services => services

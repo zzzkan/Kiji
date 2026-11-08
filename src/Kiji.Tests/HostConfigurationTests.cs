@@ -145,7 +145,7 @@ public sealed class HostConfigurationTests : IDisposable
         var builder = CreateBuilder(environmentName: null);
         var info = builder.Configuration.GetRequiredSection("Site").Get<SiteInfo>()!;
 
-        var exception = Assert.Throws<ArgumentException>(() => builder.SiteInfo = info);
+        var exception = Assert.Throws<ArgumentException>(() => builder.UseSiteInfo(info));
 
         Assert.Contains($"SiteInfo.{property} is required", exception.Message, StringComparison.Ordinal);
     }
@@ -154,7 +154,7 @@ public sealed class HostConfigurationTests : IDisposable
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root),
             runtimeData: null, environment: name => name == "DOTNET_ENVIRONMENT" ? environmentName : null, discoveredPages);
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         return builder;
     }
 

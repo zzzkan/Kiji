@@ -81,6 +81,7 @@ public sealed class PageServiceTests : IDisposable
     [InlineData("open-generic")]
     [InlineData("provider")]
     [InlineData("environment")]
+    [InlineData("lifetime")]
     [InlineData("content")]
     [InlineData("configuration")]
     [InlineData("keyed-content-remove")]
@@ -100,6 +101,7 @@ public sealed class PageServiceTests : IDisposable
             case "keyed": services.AddKeyedSingleton("alternate", builder.SiteInfo); break;
             case "open-generic": services.AddSingleton(typeof(ContentCollection<>), typeof(ContentCollection<>)); break;
             case "provider": services.AddSingleton<IServiceProvider>(_ => throw new NotSupportedException()); break;
+            case "lifetime": services.RemoveAll<Microsoft.Extensions.Hosting.IHostApplicationLifetime>(); break;
             case "environment": services.Replace(ServiceDescriptor.Singleton(builder.Environment)); break;
             case "content": services.RemoveAll<ContentCollection<object>>(); break;
             case "configuration": services.AddSingleton<Microsoft.Extensions.Configuration.IConfiguration>(new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build()); break;
@@ -229,7 +231,7 @@ public sealed class PageServiceTests : IDisposable
     private StaticSiteBuilder CreateBuilder(ServiceProbe? probe = null)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
-        builder.SiteInfo = new SiteInfo { Name = "Services", BaseUrl = new Uri("https://example.test/") };
+        builder.UseSiteInfo(new SiteInfo { Name = "Services", BaseUrl = new Uri("https://example.test/") });
         if (probe is not null)
         {
             builder.Services.AddSingleton(probe);

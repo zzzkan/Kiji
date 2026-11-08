@@ -6,6 +6,7 @@ using Kiji.Rendering;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.Metrics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -15,9 +16,10 @@ namespace Kiji;
 /// <summary>Configures a static site's metadata, services, content, pages, and generated files.</summary>
 /// <remarks>
 /// Create it with <see cref="StaticSite.CreateBuilder(string[])"/> and call <see cref="Build"/> once.
+/// Implements host builder configuration APIs; custom containers and hosted service startup are not supported.
 /// Building the site makes <see cref="Services"/> and the registration methods read-only.
 /// </remarks>
-public sealed class StaticSiteBuilder
+public sealed class StaticSiteBuilder : IHostApplicationBuilder
 {
     private readonly ServiceCollection _services = [];
     private readonly List<ServiceDescriptor> _managedServices;
@@ -54,10 +56,13 @@ public sealed class StaticSiteBuilder
         // services are present from the start, so TryAdd-style extensions see them.
         Services.AddSingleton(_ => SiteInfo);
         _services.AddSingleton<IHostEnvironment>(HostEnvironment);
+        _services.AddSingleton<IHostApplicationLifetime>(Lifetime);
         _services.AddSingleton<IConfiguration>(Configuration);
 
         // As in other .NET hosts, the Logging section applies and builder.Logging changes the rest.
         // Rules for the same category apply in order, so defaults come before the section.
+        _services.AddMetrics();
+        Metrics = new SiteMetricsBuilder(_services);
         _services.AddLogging();
         Logging = new SiteLoggingBuilder(_services);
         Logging.SetMinimumLevel(LogLevel.Warning);
@@ -88,29 +93,36 @@ public sealed class StaticSiteBuilder
         _managedServices = [.. _services.Where(static descriptor => SiteServiceRegistration.IsManaged(descriptor.ServiceType))];
     }
 
-    /// <summary>The site metadata, required before <see cref="Build"/>.</summary>
-    /// <remarks>
-    /// It can be bound from configuration, for example
-    /// <c>builder.Configuration.GetRequiredSection("Site").Get&lt;SiteInfo&gt;()</c>.
-    /// </remarks>
-    /// <exception cref="ArgumentException">The value has no <see cref="Kiji.SiteInfo.BaseUrl"/> or <see cref="Kiji.SiteInfo.Name"/>.</exception>
-    public SiteInfo SiteInfo
+    private SiteInfo? _siteInfo;
+
+    internal SiteInfo SiteInfo => _siteInfo!;
+
+    /// <summary>Sets the required site metadata. A later call replaces it.</summary>
+    /// <remarks>Metadata can be bound with Configuration.GetRequiredSection("Site").Get&lt;SiteInfo&gt;().</remarks>
+    public StaticSiteBuilder UseSiteInfo(SiteInfo siteInfo)
     {
-        get => field ?? throw new InvalidOperationException("Set StaticSiteBuilder.SiteInfo before building the site.");
-        set
+        EnsureConfigurable();
+        ArgumentNullException.ThrowIfNull(siteInfo);
+        if (siteInfo.BaseUrl is null || siteInfo.Name is null)
         {
-            EnsureConfigurable();
-            ArgumentNullException.ThrowIfNull(value);
-            // Configuration binding sets only the keys present, bypassing required members.
-            if (value.BaseUrl is null || value.Name is null)
-            {
-                throw new ArgumentException(
-                    $"SiteInfo.{(value.BaseUrl is null ? nameof(SiteInfo.BaseUrl) : nameof(SiteInfo.Name))} is required. A SiteInfo bound from configuration lacks it when the section does not set it.",
-                    nameof(value));
-            }
-            field = value;
+            throw new ArgumentException(
+                $"SiteInfo.{(siteInfo.BaseUrl is null ? nameof(SiteInfo.BaseUrl) : nameof(SiteInfo.Name))} is required.",
+                nameof(siteInfo));
         }
-    } = null!;
+        _siteInfo = siteInfo;
+        return this;
+    }
+
+    /// <summary>Shared state for host builder extensions.</summary>
+    public IDictionary<object, object> Properties { get; } = new Dictionary<object, object>();
+
+    /// <summary>Configures metrics for site services.</summary>
+    public IMetricsBuilder Metrics { get; }
+
+    // Kiji relies on the standard provider's scope and call-site validation.
+    void IHostApplicationBuilder.ConfigureContainer<TContainerBuilder>(
+        IServiceProviderFactory<TContainerBuilder> factory, Action<TContainerBuilder>? configure)
+        => throw new NotSupportedException("Kiji uses the standard service provider and does not support custom containers.");
 
     /// <summary>The services available to components and site factories.</summary>
     /// <remarks>
@@ -145,6 +157,8 @@ public sealed class StaticSiteBuilder
     /// The <c>Logging</c> configuration section applies, as in other .NET hosts.
     /// </remarks>
     public ILoggingBuilder Logging { get; }
+
+    internal SiteApplicationLifetime Lifetime { get; } = new();
 
     internal string[] Args { get; }
 
@@ -288,7 +302,10 @@ public sealed class StaticSiteBuilder
         {
             throw new InvalidOperationException("Build can only be called once.");
         }
-        _ = SiteInfo;
+        if (_siteInfo is null)
+        {
+            throw new InvalidOperationException("Call UseSiteInfo before building the site.");
+        }
         _built = true;
         return new StaticSite(this);
     }

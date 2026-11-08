@@ -290,7 +290,7 @@ public sealed class PageRegistrationTests
     private static StaticSiteBuilder CreateBuilder(SiteExecutionPaths? paths = null)
     {
         var builder = TestSiteFactory.CreateBuilder(paths ?? new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         return builder;
     }
 

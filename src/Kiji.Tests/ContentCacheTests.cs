@@ -57,7 +57,7 @@ public sealed class ContentCacheTests : IDisposable
     {
         Directory.CreateDirectory(_root);
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         builder.RegisterContent<CacheItem>(_ => load(), "data");
         builder.AddPageParameters<CacheItemPage>(services => services.GetRequiredService<ContentCollection<CacheItem>>()
             .Select((_, index) => new { Id = index == 0 ? "one" : "two" }));

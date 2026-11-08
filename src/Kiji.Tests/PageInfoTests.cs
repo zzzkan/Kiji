@@ -75,7 +75,7 @@ public sealed class PageInfoTests : IDisposable
     private StaticSiteBuilder CreateBuilder(string baseUrl)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
-        builder.SiteInfo = new SiteInfo { BaseUrl = new Uri(baseUrl), Name = "Page info" };
+        builder.UseSiteInfo(new SiteInfo { BaseUrl = new Uri(baseUrl), Name = "Page info" });
         return builder;
     }
 

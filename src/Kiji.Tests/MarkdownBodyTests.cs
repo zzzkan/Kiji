@@ -12,7 +12,7 @@ public sealed class MarkdownBodyTests
         var content = new MarkdownContent<FrontMatter>(new FileInfo(Path.Combine(AppContext.BaseDirectory, "post.md")),
             new FrontMatter(), string.Empty, (_, _) => Task.FromResult("<p>Hello &amp; 日本語</p>"), contentHash: "hash");
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         await using var app = builder.Build();
         app.UsePlanningOptions();
 

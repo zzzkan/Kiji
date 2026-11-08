@@ -19,7 +19,7 @@ using Microsoft.Extensions.Options;
 namespace Kiji;
 
 /// <summary>Generates and serves a static website configured with <see cref="StaticSiteBuilder"/>.</summary>
-public sealed class StaticSite
+public sealed class StaticSite : IAsyncDisposable
 {
     private readonly string[] _args;
     private readonly SiteRunSettings _settings;
@@ -33,6 +33,7 @@ public sealed class StaticSite
     private readonly Type? _defaultLayoutType;
     private readonly Type? _notFoundComponentType;
     private readonly ServiceProvider _services;
+    private readonly SiteApplicationLifetime _lifetime;
     private ComponentRenderer? _renderer;
     private ResolvedSitePaths? _activeOptions;
     private bool _hasRun;
@@ -40,6 +41,7 @@ public sealed class StaticSite
 
     internal StaticSite(StaticSiteBuilder builder)
     {
+        _lifetime = builder.Lifetime;
         _args = builder.Args;
         _settings = builder.RunSettings;
         _runtime = builder.Runtime;
@@ -82,6 +84,9 @@ public sealed class StaticSite
     }
 
     /// <summary>Creates a builder for a site that discovers routed components in the entry assembly.</summary>
+    public static StaticSiteBuilder CreateBuilder() => CreateBuilder([]);
+
+    /// <summary>Creates a builder with development server arguments.</summary>
     /// <param name="args">
     /// While serving, <c>--environment</c> selects the environment, and the arguments go to ASP.NET Core
     /// configuration, such as <c>--urls</c>. Publishing ignores them.
@@ -126,16 +131,20 @@ public sealed class StaticSite
         {
             throw new InvalidOperationException("A StaticSite can only be run once.");
         }
+        ObjectDisposedException.ThrowIf(_disposed, this);
         _hasRun = true;
 
         try
         {
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _lifetime.Logger = BuildLogger;
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.ApplicationStopping);
+
+            using var cancellation = cancellationToken.Register(_lifetime.StopApplication);
 
             void HandleShutdownSignal(PosixSignalContext context)
             {
                 context.Cancel = true;
-                cts.Cancel();
+                _lifetime.StopApplication();
             }
 
             using var sigInt = PosixSignalRegistration.Create(PosixSignal.SIGINT, HandleShutdownSignal);
@@ -166,17 +175,22 @@ public sealed class StaticSite
     }
 
     /// <summary>Releases the site's services and configuration.</summary>
-    internal async ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         if (_disposed)
         {
             return;
         }
         _disposed = true;
-
-        await _services.DisposeAsync();
-        _configuration.Dispose();
-        _environment.DisposeContentRootFileProvider();
+        _lifetime.StopApplication();
+        _lifetime.NotifyStopped();
+        try { await _services.DisposeAsync(); }
+        finally
+        {
+            _configuration.Dispose();
+            _environment.DisposeContentRootFileProvider();
+            _lifetime.Dispose();
+        }
     }
 
     /// <summary>Generates the site, reusing unchanged output from a previous publish.</summary>
@@ -200,6 +214,8 @@ public sealed class StaticSite
         InvalidateContent();
         // After the paths settle, so validators can read content, and before any output.
         ValidateOnStart();
+        _lifetime.NotifyStarted();
+        cancellationToken.ThrowIfCancellationRequested();
 
         var stopwatch = Stopwatch.StartNew();
         var phases = new BuildPhaseTimer();
@@ -348,6 +364,7 @@ public sealed class StaticSite
         var (devServer, web) = await StartDevServerAsync(_args, cancellationToken);
         await using (devServer)
         {
+            using var stopping = web.Lifetime.ApplicationStopping.Register(_lifetime.StopApplication);
             await web.WaitForShutdownAsync(cancellationToken);
         }
     }
@@ -373,6 +390,7 @@ public sealed class StaticSite
         try
         {
             var web = await devServer.StartAsync(options, args, cancellationToken);
+            _lifetime.NotifyStarted();
             return (devServer, web);
         }
         catch

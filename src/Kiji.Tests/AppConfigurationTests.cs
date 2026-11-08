@@ -15,9 +15,9 @@ public sealed class AppConfigurationTests : IDisposable
     public async Task Build_ResolvesLastAssignedSiteInfo()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         var finalInfo = TestArticleContents.CreateSiteInfo();
-        builder.SiteInfo = finalInfo;
+        builder.UseSiteInfo(finalInfo);
         await using var site = builder.Build();
         Assert.Same(finalInfo, site.ServiceProvider.GetRequiredService<SiteInfo>());
     }
@@ -29,10 +29,9 @@ public sealed class AppConfigurationTests : IDisposable
 
         var exception = Assert.Throws<InvalidOperationException>(() => builder.Build());
 
-        Assert.Contains("StaticSiteBuilder.SiteInfo", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("UseSiteInfo", exception.Message, StringComparison.Ordinal);
         Assert.False(Directory.Exists(_root));
-        Assert.Throws<InvalidOperationException>(() => builder.SiteInfo);
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         builder.Services.AddScoped<object>();
         await using var site = builder.Build();
     }
@@ -43,7 +42,7 @@ public sealed class AppConfigurationTests : IDisposable
     public async Task Build_FreezesRegistrations_AndLoadsContentOnlyAfterPathsSettle(bool serve)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         builder.Services.AddScoped<object>();
         var loads = 0;
         var routeCalls = 0;
@@ -99,7 +98,7 @@ public sealed class AppConfigurationTests : IDisposable
         {
             Assert.Throws<InvalidOperationException>(() => builder.Build());
             Assert.Throws<InvalidOperationException>(() => builder.Services.AddScoped<object>());
-            Assert.Throws<InvalidOperationException>(() => builder.SiteInfo = TestArticleContents.CreateSiteInfo());
+            Assert.Throws<InvalidOperationException>(() => builder.UseSiteInfo(TestArticleContents.CreateSiteInfo()));
             Assert.Throws<InvalidOperationException>(() => builder.RegisterContent<object>(static _ => []));
             Assert.Throws<InvalidOperationException>(() => builder.AddMarkdownContent<FrontMatter>(
                 _ => throw new Xunit.Sdk.XunitException("Configuration callback must not run after the site is built.")));

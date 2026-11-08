@@ -24,11 +24,11 @@ Runs a site configured with `StaticSiteBuilder`:
 
 ```csharp
 var builder = StaticSite.CreateBuilder(args);
-builder.SiteInfo = new SiteInfo
+builder.UseSiteInfo(new SiteInfo
 {
     BaseUrl = new Uri("https://example.com/"),
     Name = "My Site",
-};
+});
 
 // builder.Services, Add* and Use* registrations
 
@@ -37,8 +37,13 @@ return await builder.Build().RunAsync();
 
 | Member                                                              | Behavior                                                                                                                                  |
 | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `static StaticSiteBuilder CreateBuilder()` | Creates a builder without development server arguments. |
 | `static StaticSiteBuilder CreateBuilder(string[] args)`             | Creates a builder for the current project. While serving, `args` can set the environment and development server options such as `--urls`. |
 | `Task<int> RunAsync(CancellationToken cancellationToken = default)` | Serves the site during `dotnet watch` and generates it during `dotnet publish`. Return its result from `Program.cs`.                      |
+
+`StaticSite` implements `IAsyncDisposable`. Use `await using` when building a site that
+might not reach `RunAsync`; `RunAsync` also disposes the site, including on failure.
+Repeated disposal is safe.
 
 ### `StaticSiteBuilder`
 
@@ -47,20 +52,32 @@ methods return the builder, so calls can be chained.
 
 | Property                              | Behavior                                                 |
 | ------------------------------------- | -------------------------------------------------------- |
-| `SiteInfo SiteInfo`                   | Required site metadata. See [`SiteInfo`](#siteinfo).     |
 | `IServiceCollection Services`         | Services for components. See [Services](#services).      |
 | `IHostEnvironment Environment`        | The environment name. See [Environment](#environment).   |
 | `IConfigurationManager Configuration` | Site configuration. See [Configuration](#configuration). |
+| `IDictionary<object, object> Properties` | Shared state for host builder extensions. |
+| `IMetricsBuilder Metrics` | Metrics configuration for site services. |
 | `ILoggingBuilder Logging`             | Logging providers and filters. See [Logging](#logging).  |
 
 | Method                                                                                                   | Behavior                                                                                                                                   |
 | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `UseSiteInfo(SiteInfo siteInfo)` | Sets required site metadata. A later call replaces it; `Build()` rejects missing metadata. |
 | `UseDefaultLayout<TLayout>()`                                                                            | Sets the layout for pages without their own `@layout`. Without it, pages render directly inside `<body>`.                                  |
 | `AddPageAssembly(Assembly assembly)`                                                                     | Adds pages from another assembly, such as a Razor class library. Pages in the site project are found automatically.                        |
 | `AddPageParameters<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)`                       | Supplies parameter values for a component's pages. See [Page parameters](#page-parameters).                                                |
 | `UseNotFoundPage<TPage>()`                                                                               | Writes the component as `404.html` instead of at its route. The component needs exactly one route and cannot also receive page parameters. |
 | `AddArtifact(string outputRelativePath, Func<Stream, SiteOutputContext, CancellationToken, Task> write)` | Writes a file after all pages. Write to the stream without disposing it. See [`SiteOutputContext`](#siteoutputcontext).                    |
 | `StaticSite Build()`                                                                                     | Validates the services and returns the site. Call it once.                                                                                 |
+
+The builder implements `IHostApplicationBuilder`, so extensions that configure its
+services, configuration, logging, and metrics can be used. Container replacement
+through `IHostApplicationBuilder.ConfigureContainer` throws `NotSupportedException`:
+Kiji requires the standard DI provider. Kiji does not start `IHostedService` instances
+or provide the full generic host lifecycle; extensions that depend on those features
+(including some Aspire integrations) need separate hosting.
+
+Migration: replace `builder.SiteInfo = info;` with `builder.UseSiteInfo(info);`.
+Site metadata remains injectable as `SiteInfo` after building.
 
 Extension methods in other namespaces register content and generated files:
 
@@ -87,6 +104,14 @@ builder.Services.AddScoped<RelatedPosts>();
 - Page parameter and feed factories and artifact writers cannot resolve scoped services.
 - Kiji's own services, such as `SiteInfo`, `PageInfo`, and `ContentCollection<T>`, cannot
   be replaced.
+
+`IHostApplicationLifetime` is available in the site container. `ApplicationStarted`
+is signaled after publish validation or development server startup. Cancellation,
+SIGINT/SIGTERM, and `StopApplication()` signal `ApplicationStopping` and cancel the
+run. `ApplicationStopped` is signaled when the run ends, before services are disposed.
+Disposing an unrun site signals stopping and stopped without signaling started.
+The development server has its own container and lifetime; its shutdown also stops
+the site run. Kiji does not start background hosted services.
 
 #### Environment
 
@@ -163,7 +188,7 @@ page render on every publish.
 
 ### `SiteInfo`
 
-Site metadata, assigned to `StaticSiteBuilder.SiteInfo` and injectable into components.
+Site metadata, set with `StaticSiteBuilder.UseSiteInfo(...)` and injectable into components.
 
 | Property             | Default  | Behavior                                                                                             |
 | -------------------- | -------- | ---------------------------------------------------------------------------------------------------- |

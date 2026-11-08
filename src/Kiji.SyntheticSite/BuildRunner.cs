@@ -67,14 +67,14 @@ public static class BuildRunner
     public static async Task BuildSiteAsync(string root)
     {
         var builder = StaticSite.CreateBuilder([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "synthetic")), typeof(BuildRunner).Assembly);
-        builder.SiteInfo = new SiteInfo
+        builder.UseSiteInfo(new SiteInfo
         {
             BaseUrl = new Uri("https://bench.example.com/"),
             Name = "Kiji Bench",
             Description = "Synthetic benchmark site.",
             Language = "en",
             Author = "bench",
-        };
+        });
 
         builder.AddMarkdownContent<PostFrontMatter>(static options => options.Directory = "contents");
         builder.UseDefaultLayout<MainLayout>();

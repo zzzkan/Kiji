@@ -13,7 +13,7 @@ public sealed class ComponentRendererTests
     public async Task RenderComponentAsync_ErrorBoundaryRendersAsyncFallbackWithoutLoggingProviders()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         builder.Logging.ClearProviders();
         await using var app = builder.Build();
         app.UsePlanningOptions();
@@ -31,7 +31,7 @@ public sealed class ComponentRendererTests
     public async Task RenderPageAsync_IsolatesNavigationAndNavLinksAcrossRenders(string baseUrl)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.SiteInfo = new SiteInfo { Name = "Navigation", BaseUrl = new Uri(baseUrl) };
+        builder.UseSiteInfo(new SiteInfo { Name = "Navigation", BaseUrl = new Uri(baseUrl) });
         builder.AddPageParameters<NavigationTestPage>(_ => [new { Id = "first" }, new { Id = "日本 語" }]);
         await using var app = builder.Build();
         var pages = app.CreateSnapshot().Pages;
@@ -61,7 +61,7 @@ public sealed class ComponentRendererTests
     public async Task RenderPageAsync_IsolatesHeadAcrossParallelAndSequentialRenders()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         await using var app = builder.Build();
         string[] names = ["first", "second"];
 

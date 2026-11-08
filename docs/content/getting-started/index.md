@@ -85,11 +85,11 @@ Replace `Program.cs` with the site definition:
 using Kiji;
 
 var builder = StaticSite.CreateBuilder(args);
-builder.SiteInfo = new SiteInfo
+builder.UseSiteInfo(new SiteInfo
 {
     BaseUrl = new Uri("https://example.com/"),
     Name = "My Site",
-};
+});
 
 return await builder.Build().RunAsync();
 ```
@@ -182,11 +182,11 @@ using Kiji;
 using MySite.Layout;
 
 var builder = StaticSite.CreateBuilder(args);
-builder.SiteInfo = new SiteInfo
+builder.UseSiteInfo(new SiteInfo
 {
     BaseUrl = new Uri("https://example.com/"),
     Name = "My Site",
-};
+});
 
 builder.UseDefaultLayout<MainLayout>();
 
@@ -320,11 +320,11 @@ using MySite.Models;
 using MySite.Pages;
 
 var builder = StaticSite.CreateBuilder(args);
-builder.SiteInfo = new SiteInfo
+builder.UseSiteInfo(new SiteInfo
 {
     BaseUrl = new Uri("https://example.com/"),
     Name = "My Site",
-};
+});
 
 builder.AddMarkdownContent<PostFrontMatter, BlogPost>(BlogPost.Create,
     options => options.Directory = "content/posts");

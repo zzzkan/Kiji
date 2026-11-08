@@ -544,7 +544,7 @@ public sealed class DevServerTests : IAsyncDisposable
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(Path.Combine(_testDir, "site")),
             runtimeData: null, environment: name => name == "DOTNET_ENVIRONMENT" ? "Staging" : null);
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         var logs = new RecordingLoggerProvider();
         builder.Logging.AddProvider(logs);
         builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Information);
@@ -578,7 +578,7 @@ public sealed class DevServerTests : IAsyncDisposable
         await File.WriteAllTextAsync(Path.Combine(posts, "post.md"), "---\ntitle: Post\n---\n\nOriginal body");
         await File.WriteAllTextAsync(Path.Combine(notes, "note.md"), "---\ntitle: Original note\n---\n");
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(Path.Combine(_testDir, "site")));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfoWithBasePath();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfoWithBasePath());
         string SourcePath(string path)
         {
             return absolute ? path : Path.GetRelativePath(builder.Paths.ProjectDirectory, path);
@@ -652,7 +652,7 @@ public sealed class DevServerTests : IAsyncDisposable
         await File.WriteAllTextAsync(Path.Combine(_contentsDir, "hello-world.md"), "---\ntitle: Hello World\n---\n");
 
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
-        builder.SiteInfo = site ?? TestArticleContents.CreateSiteInfo();
+        builder.UseSiteInfo(site ?? TestArticleContents.CreateSiteInfo());
         TestSiteAssets.Bind(builder.Paths, _staticDir);
         configureAssets?.Invoke(builder);
 

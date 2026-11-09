@@ -189,7 +189,12 @@ foreach ($variant in $variants) {
     $createLine = 'StaticSite.CreateBuilder([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "synthetic")), typeof(BuildRunner).Assembly, runtimeData: name => name == "Kiji.OutputPath" ? Path.Combine(root, "dist") : null)'
     $publishLine = 'await host.Services.GetRequiredService<SiteEngine>().PublishAsync();'
     if (!$code.Contains($createLine) -or !$code.Contains($publishLine)) { throw 'Frozen harness adapter no longer matches. Review it before measuring.' }
-    [IO.File]::WriteAllText($runner, $code.Replace($createLine, 'StaticSite.CreateBuilder([])').Replace($publishLine, 'await app.RunAsync();').Replace('using var host = builder.Build();', 'var app = builder.Build();').Replace('using Kiji.Hosting;', 'using Microsoft.Extensions.Hosting;'))
+    $code = $code.Replace($createLine, 'StaticSite.CreateBuilder([])').Replace($publishLine, 'await app.RunAsync();')
+    $code = $code.Replace('using var host = builder.Build();', 'var app = builder.Build();')
+    $code = $code.Replace('using Kiji.Hosting;', 'using Microsoft.Extensions.Hosting;')
+    # The real host validates options at startup; only the direct runner needs the explicit call.
+    $code = $code.Replace('        host.Services.GetService<IStartupValidator>()?.Validate();', '')
+    [IO.File]::WriteAllText($runner, $code)
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PublishEntry.cs') -Destination (Join-Path $site 'Program.cs')
     '<Project><PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup></Project>' | Set-Content -LiteralPath (Join-Path $site 'Directory.Build.props')
     '<Project />' | Set-Content -LiteralPath (Join-Path $site 'Directory.Build.targets')

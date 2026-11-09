@@ -6,6 +6,7 @@ using Kiji.Markdown;
 using Kiji.Sitemaps;
 using Kiji.SyntheticSite.Pages;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Kiji.SyntheticSite;
 
@@ -95,6 +96,9 @@ public static class BuildRunner
         builder.AddSitemap();
 
         using var host = builder.Build();
+        // The direct benchmark runner does not start hosted services. Preserve the
+        // startup validation performed by the former direct PublishAsync API.
+        host.Services.GetService<IStartupValidator>()?.Validate();
         await host.Services.GetRequiredService<SiteEngine>().PublishAsync();
     }
 }

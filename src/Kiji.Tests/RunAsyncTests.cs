@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 using Kiji.Markdown;
 using Kiji.Tests.TestSite;
 using Microsoft.Extensions.DependencyInjection;
@@ -70,6 +72,31 @@ public sealed class RunAsyncTests : IDisposable
 
         Assert.Equal(1, exitCode.Value);
         Assert.Contains(logs.Exceptions, static error => error.Message.Contains("Razor SDK and Kiji targets", StringComparison.Ordinal));
+        Assert.Contains(("Kiji.Build", LogLevel.Error, "Development server failed."), logs.Entries);
+    }
+
+    [Fact]
+    public async Task Serve_OccupiedPort_LogsTheFailureAndSetsFailureExitCode()
+    {
+        using var listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        listener.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+        listener.Listen();
+        var port = ((IPEndPoint)listener.LocalEndPoint!).Port;
+        var logs = new RecordingLoggerProvider();
+        var builder = StaticSite.CreateBuilder(["--urls", $"http://127.0.0.1:{port}"],
+            new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")), typeof(StaticSite).Assembly);
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
+        TestSiteAssets.Bind(builder.GetSitePaths(), Path.Combine(_testDir, "static"));
+        builder.Services.AddSingleton<IProcessExitCode, RecordingExitCode>();
+        builder.Logging.AddProvider(logs);
+        var host = builder.Build();
+        var exitCode = (RecordingExitCode)host.Services.GetRequiredService<IProcessExitCode>();
+
+        await host.RunAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(1, exitCode.Value);
+        Assert.Contains(logs.Entries, static entry => entry.Level == LogLevel.Error
+            && entry.Message.StartsWith("Hosting failed to start", StringComparison.Ordinal));
         Assert.Contains(("Kiji.Build", LogLevel.Error, "Development server failed."), logs.Entries);
     }
 

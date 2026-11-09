@@ -314,6 +314,10 @@ $summary = foreach ($scenario in $Scenarios) {
     foreach ($variant in $variants) {
         $runs = @($results | Where-Object { $_.Variant -eq $variant -and $_.Scenario -eq $scenario -and $_.Measured })
         $sorted = @($runs.ElapsedMs | Sort-Object)
+        $middle = [int][math]::Floor($sorted.Count / 2)
+        $median = if ($sorted.Count % 2 -eq 0) {
+            ($sorted[$middle - 1] + $sorted[$middle]) / 2
+        } else { $sorted[$middle] }
         $meanCategories = @{}
         foreach ($name in @($runs | ForEach-Object { $_.Categories.Keys } | Sort-Object -Unique)) {
             $meanCategories[$name] = ($runs | ForEach-Object { [double] $_.Categories[$name] } | Measure-Object -Average).Average
@@ -323,7 +327,7 @@ $summary = foreach ($scenario in $Scenarios) {
             $phaseMeans[$name] = ($runs | ForEach-Object { @($_.Kiji.Phases | Where-Object Phase -EQ $name | Measure-Object ElapsedMs -Sum).Sum } | Measure-Object -Average).Average
         }
         [pscustomobject]@{
-            Scenario=$scenario; Variant=$variant; MedianMs=$sorted[[int][math]::Floor($sorted.Count/2)]
+            Scenario=$scenario; Variant=$variant; MedianMs=$median
             MeanMs=($runs.ElapsedMs | Measure-Object -Average).Average
             MinMs=$sorted[0]; MaxMs=$sorted[-1]; MeanCategories=$meanCategories; MeanKijiPhases=$phaseMeans
             MeanKijiEntryMs=($runs.Kiji.EntryMilliseconds | Measure-Object -Average).Average

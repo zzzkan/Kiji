@@ -23,9 +23,7 @@ internal static class TestSiteFactory
         var builder = StaticSite.CreateBuilder([], paths, typeof(TestSiteFactory).Assembly,
             environment, runtimeData);
         // Empty parameter sets leave out the other test pages.
-        var omit = typeof(StaticSiteHostBuilderExtensions).GetMethods().Single(static method =>
-            method.Name == nameof(StaticSiteHostBuilderExtensions.AddPageParameters)
-            && method.GetParameters()[0].ParameterType == typeof(IHostApplicationBuilder));
+        var omit = typeof(StaticSiteHostBuilderExtensions).GetMethod(nameof(StaticSiteHostBuilderExtensions.AddPageParameters))!;
         foreach (var type in PageDiscovery.FromAssembly(typeof(TestSiteFactory).Assembly)
             .Select(static page => page.ComponentType).Distinct().Except(discoveredPages))
         {

@@ -46,26 +46,24 @@ execution ends. It serves during `dotnet watch` and generates during `dotnet pub
 Publish failures are logged under `Kiji.Build` and set the process exit code to 1;
 canceling an incomplete publish also sets it to 1. Successful publication sets it to 0.
 Development server startup or execution failures are also logged under `Kiji.Build`
-and set the process exit code to 1. Cancellation while serving is a normal shutdown.
+and set the process exit code to 1. ASP.NET Core can also log its own startup failure
+(for example, when a port is already in use), so the same cause may appear twice.
+Cancellation while serving is a normal shutdown.
 `RunAsync` does not return an exit code. Service validation and host startup errors can still
 throw. If you build a host without running it, dispose it yourself.
 
 ### `StaticSiteHostBuilderExtensions`
 
-Kiji's registration methods extend `IHostApplicationBuilder` and preserve the concrete
-`HostApplicationBuilder` returned by the factory, so calls can end in `.Build()`.
+Kiji's registration methods extend and return `IHostApplicationBuilder`.
 Use a builder created by `StaticSite.CreateBuilder`; other builders are rejected so
 machine-specific default configuration does not enter the site unintentionally.
+Keep the concrete builder variable to call its standard `Build()` method:
 
 ```csharp
-await StaticSite.CreateBuilder(args).UseSiteInfo(info).Build().RunAsync();
+var builder = StaticSite.CreateBuilder(args);
+builder.UseSiteInfo(info);
+await builder.Build().RunAsync();
 ```
-
-Methods without page or content type arguments return `TBuilder` constrained to
-`IHostApplicationBuilder`. Methods such as `UseDefaultLayout<TLayout>` and
-`AddMarkdownContent<TFrontMatter>` also provide `HostApplicationBuilder` overloads,
-so their existing type arguments remain sufficient. A reference already typed as
-`IHostApplicationBuilder` retains that interface type.
 
 | Property        | Behavior                                                                            |
 | --------------- | ----------------------------------------------------------------------------------- |

@@ -8,8 +8,34 @@ namespace Kiji.Markdown;
 /// <summary>
 /// Markdown content support for <see cref="IHostApplicationBuilder"/>.
 /// </summary>
-public static class MarkdownStaticSiteBuilderExtensions
+public static class MarkdownHostBuilderExtensions
 {
+    /// <summary>Adds Markdown content and preserves the concrete host builder type.</summary>
+    public static HostApplicationBuilder AddMarkdownContent<TFrontMatter>(this HostApplicationBuilder builder,
+        Action<MarkdownContentOptions>? configure = null)
+        where TFrontMatter : class
+        => (HostApplicationBuilder)AddMarkdownContent<TFrontMatter>((IHostApplicationBuilder)builder, configure);
+
+    /// <summary>Adds projected Markdown content and preserves the concrete host builder type.</summary>
+    public static HostApplicationBuilder AddMarkdownContent<TFrontMatter, TModel>(this HostApplicationBuilder builder,
+        Func<MarkdownContent<TFrontMatter>, TModel> select, Action<MarkdownContentOptions>? configure = null)
+        where TFrontMatter : class
+        where TModel : class
+        => (HostApplicationBuilder)AddMarkdownContent((IHostApplicationBuilder)builder, select, configure);
+
+    /// <summary>Adds keyed Markdown content and preserves the concrete host builder type.</summary>
+    public static HostApplicationBuilder AddKeyedMarkdownContent<TFrontMatter>(this HostApplicationBuilder builder,
+        string serviceKey, Action<MarkdownContentOptions>? configure = null)
+        where TFrontMatter : class
+        => (HostApplicationBuilder)AddKeyedMarkdownContent<TFrontMatter>((IHostApplicationBuilder)builder, serviceKey, configure);
+
+    /// <summary>Adds keyed projected Markdown content and preserves the concrete host builder type.</summary>
+    public static HostApplicationBuilder AddKeyedMarkdownContent<TFrontMatter, TModel>(this HostApplicationBuilder builder,
+        string serviceKey, Func<MarkdownContent<TFrontMatter>, TModel> select, Action<MarkdownContentOptions>? configure = null)
+        where TFrontMatter : class
+        where TModel : class
+        => (HostApplicationBuilder)AddKeyedMarkdownContent((IHostApplicationBuilder)builder, serviceKey, select, configure);
+
     /// <summary>Adds Markdown files as a content collection with parsed front matter and lazily rendered bodies.</summary>
     public static IHostApplicationBuilder AddMarkdownContent<TFrontMatter>(
         this IHostApplicationBuilder builder,

@@ -1,19 +1,21 @@
 using Microsoft.Extensions.Hosting;
+
 namespace Kiji.Feeds;
 
 /// <summary>
 /// RSS feed support for <see cref="IHostApplicationBuilder"/>.
 /// </summary>
-public static class RssFeedStaticSiteBuilderExtensions
+public static class RssFeedHostBuilderExtensions
 {
     /// <summary>Adds an RSS feed preserving the order of the supplied entries.</summary>
     /// <param name="builder">The site builder.</param>
     /// <param name="items">A deferred factory evaluated when the feed is generated.</param>
     /// <param name="path">The output-relative path, defaulting to <c>feed.xml</c>.</param>
-    public static IHostApplicationBuilder AddRssFeed(
-        this IHostApplicationBuilder builder,
+    public static TBuilder AddRssFeed<TBuilder>(
+        this TBuilder builder,
         Func<IServiceProvider, IEnumerable<FeedItem>> items,
         string path = "feed.xml")
+        where TBuilder : IHostApplicationBuilder
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(items);

@@ -295,13 +295,17 @@ public sealed class PageRegistrationTests
 
     private static void RegisterTyped(HostApplicationBuilder builder, Type type, params object[] parameters)
     {
-        typeof(StaticSiteBuilderExtensions).GetMethod(nameof(StaticSiteBuilderExtensions.AddPageParameters))!.MakeGenericMethod(type)
+        typeof(StaticSiteHostBuilderExtensions).GetMethods().Single(static method =>
+            method.Name == nameof(StaticSiteHostBuilderExtensions.AddPageParameters)
+            && method.GetParameters()[0].ParameterType == typeof(IHostApplicationBuilder)).MakeGenericMethod(type)
             .Invoke(null, [builder, new Func<IServiceProvider, IEnumerable<object>>(_ => parameters)]);
     }
 
     private static void RegisterNotFound(HostApplicationBuilder builder, Type type)
     {
-        typeof(StaticSiteBuilderExtensions).GetMethod(nameof(StaticSiteBuilderExtensions.UseNotFoundPage))!.MakeGenericMethod(type).Invoke(null, [builder]);
+        typeof(StaticSiteHostBuilderExtensions).GetMethods().Single(static method =>
+            method.Name == nameof(StaticSiteHostBuilderExtensions.UseNotFoundPage)
+            && method.GetParameters()[0].ParameterType == typeof(IHostApplicationBuilder)).MakeGenericMethod(type).Invoke(null, [builder]);
     }
 
     private static Type CreatePageType(params string[] routes)

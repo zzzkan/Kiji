@@ -57,6 +57,23 @@ public sealed class RunAsyncTests : IDisposable
     }
 
     [Fact]
+    public async Task Serve_MissingAssetCatalog_LogsTheExceptionAndSetsFailureExitCode()
+    {
+        var logs = new RecordingLoggerProvider();
+        var builder = CreateBuilder(outputPath: null);
+        builder.Logging.AddProvider(logs);
+        File.Delete(builder.GetSitePaths().AssetManifestBasePath + ".staticwebassets.runtime.json");
+        var host = builder.Build();
+        var exitCode = (RecordingExitCode)host.Services.GetRequiredService<IProcessExitCode>();
+
+        await host.RunAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(1, exitCode.Value);
+        Assert.Contains(logs.Exceptions, static error => error.Message.Contains("Razor SDK and Kiji targets", StringComparison.Ordinal));
+        Assert.Contains(("Kiji.Build", LogLevel.Error, "Development server failed."), logs.Entries);
+    }
+
+    [Fact]
     public async Task Publish_ResolvesRelativeOutputAgainstProjectRoot()
     {
         await CreateBuilder("out").Build().RunAsync();

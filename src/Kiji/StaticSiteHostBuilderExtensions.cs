@@ -8,11 +8,12 @@ using Microsoft.Extensions.Hosting;
 namespace Kiji;
 
 /// <summary>Registers content, pages and generated files on a Kiji host builder.</summary>
-public static class StaticSiteBuilderExtensions
+public static class StaticSiteHostBuilderExtensions
 {
     /// <summary>Sets the required site metadata. A later call replaces it.</summary>
     /// <remarks>Metadata can be bound with Configuration.GetRequiredSection("Site").Get&lt;SiteInfo&gt;().</remarks>
-    public static IHostApplicationBuilder UseSiteInfo(this IHostApplicationBuilder builder, SiteInfo siteInfo)
+    public static TBuilder UseSiteInfo<TBuilder>(this TBuilder builder, SiteInfo siteInfo)
+        where TBuilder : IHostApplicationBuilder
     {
         var context = SiteBuilderContext.Get(builder);
         ArgumentNullException.ThrowIfNull(siteInfo);
@@ -62,6 +63,22 @@ public static class StaticSiteBuilderExtensions
         return builder;
     }
 
+    /// <summary>Uses a default layout and preserves the concrete host builder type.</summary>
+    public static HostApplicationBuilder UseDefaultLayout<TLayout>(this HostApplicationBuilder builder)
+        where TLayout : LayoutComponentBase
+        => (HostApplicationBuilder)UseDefaultLayout<TLayout>((IHostApplicationBuilder)builder);
+
+    /// <summary>Uses a not-found page and preserves the concrete host builder type.</summary>
+    public static HostApplicationBuilder UseNotFoundPage<TPage>(this HostApplicationBuilder builder)
+        where TPage : IComponent
+        => (HostApplicationBuilder)UseNotFoundPage<TPage>((IHostApplicationBuilder)builder);
+
+    /// <summary>Adds page parameter sets and preserves the concrete host builder type.</summary>
+    public static HostApplicationBuilder AddPageParameters<TPage>(this HostApplicationBuilder builder,
+        Func<IServiceProvider, IEnumerable<object>> parameters)
+        where TPage : IComponent
+        => (HostApplicationBuilder)AddPageParameters<TPage>((IHostApplicationBuilder)builder, parameters);
+
     /// <summary>Uses a default layout for pages without their own <c>@layout</c>.</summary>
     /// <remarks>Without a default layout, pages render directly inside the document body.</remarks>
     public static IHostApplicationBuilder UseDefaultLayout<TLayout>(this IHostApplicationBuilder builder)
@@ -74,7 +91,8 @@ public static class StaticSiteBuilderExtensions
 
     /// <summary>Adds an assembly whose public, non-abstract routed components are discovered as pages.</summary>
     /// <remarks>The entry assembly is included automatically. Repeated registration has no effect.</remarks>
-    public static IHostApplicationBuilder AddPageAssembly(this IHostApplicationBuilder builder, Assembly assembly)
+    public static TBuilder AddPageAssembly<TBuilder>(this TBuilder builder, Assembly assembly)
+        where TBuilder : IHostApplicationBuilder
     {
         var context = SiteBuilderContext.Get(builder);
         ArgumentNullException.ThrowIfNull(assembly);
@@ -121,18 +139,20 @@ public static class StaticSiteBuilderExtensions
     }
 
     /// <summary>Adds a site-wide output file written after all pages are rendered.</summary>
-    public static IHostApplicationBuilder AddArtifact(
-        this IHostApplicationBuilder builder,
+    public static TBuilder AddArtifact<TBuilder>(
+        this TBuilder builder,
         string outputRelativePath,
         Func<Stream, SiteOutputContext, CancellationToken, Task> write)
+        where TBuilder : IHostApplicationBuilder
         => builder.AddArtifact(outputRelativePath, write, preserveUnchangedOutput: false);
 
-    internal static IHostApplicationBuilder AddArtifact(
-        this IHostApplicationBuilder builder,
+    internal static TBuilder AddArtifact<TBuilder>(
+        this TBuilder builder,
         string outputRelativePath,
         Func<Stream, SiteOutputContext, CancellationToken, Task> write,
         bool preserveUnchangedOutput,
         bool independentOfPages = false)
+        where TBuilder : IHostApplicationBuilder
     {
         var context = SiteBuilderContext.Get(builder);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputRelativePath);

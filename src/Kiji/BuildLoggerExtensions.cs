@@ -26,6 +26,9 @@ internal static partial class BuildLoggerExtensions
     [LoggerMessage(6, LogLevel.Error, "Site publishing failed.")]
     internal static partial void PublishingFailed(this ILogger logger, Exception exception);
 
+    [LoggerMessage(7, LogLevel.Error, "Development server failed.")]
+    internal static partial void ServingFailed(this ILogger logger, Exception exception);
+
     [LoggerMessage(10, LogLevel.Debug, "Generated: {Path}")]
     internal static partial void PageGenerated(this ILogger logger, string path);
 

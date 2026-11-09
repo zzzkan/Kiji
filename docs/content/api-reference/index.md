@@ -45,15 +45,27 @@ The resulting `IHost` uses the standard `RunAsync` extension, which disposes it 
 execution ends. It serves during `dotnet watch` and generates during `dotnet publish`.
 Publish failures are logged under `Kiji.Build` and set the process exit code to 1;
 canceling an incomplete publish also sets it to 1. Successful publication sets it to 0.
-`RunAsync` does not return an exit code. Host construction and startup errors can still
+Development server startup or execution failures are also logged under `Kiji.Build`
+and set the process exit code to 1. Cancellation while serving is a normal shutdown.
+`RunAsync` does not return an exit code. Service validation and host startup errors can still
 throw. If you build a host without running it, dispose it yourself.
 
-### `StaticSiteBuilderExtensions`
+### `StaticSiteHostBuilderExtensions`
 
-Kiji's registration methods extend `IHostApplicationBuilder` and return that interface.
+Kiji's registration methods extend `IHostApplicationBuilder` and preserve the concrete
+`HostApplicationBuilder` returned by the factory, so calls can end in `.Build()`.
 Use a builder created by `StaticSite.CreateBuilder`; other builders are rejected so
 machine-specific default configuration does not enter the site unintentionally.
-Keep the concrete builder variable to call its standard `Build()` method.
+
+```csharp
+await StaticSite.CreateBuilder(args).UseSiteInfo(info).Build().RunAsync();
+```
+
+Methods without page or content type arguments return `TBuilder` constrained to
+`IHostApplicationBuilder`. Methods such as `UseDefaultLayout<TLayout>` and
+`AddMarkdownContent<TFrontMatter>` also provide `HostApplicationBuilder` overloads,
+so their existing type arguments remain sufficient. A reference already typed as
+`IHostApplicationBuilder` retains that interface type.
 
 | Property        | Behavior                                                                            |
 | --------------- | ----------------------------------------------------------------------------------- |
@@ -83,9 +95,9 @@ Extension methods in other namespaces register content and generated files:
 
 | Method                                                                                  | Namespace       |
 | --------------------------------------------------------------------------------------- | --------------- |
-| [`AddMarkdownContent`, `AddKeyedMarkdownContent`](#markdownstaticsitebuilderextensions) | `Kiji.Markdown` |
-| [`AddRssFeed`](#rssfeedstaticsitebuilderextensions)                                     | `Kiji.Feeds`    |
-| [`AddSitemap`](#sitemapstaticsitebuilderextensions)                                     | `Kiji.Sitemaps` |
+| [`AddMarkdownContent`, `AddKeyedMarkdownContent`](#markdownhostbuilderextensions)       | `Kiji.Markdown` |
+| [`AddRssFeed`](#rssfeedhostbuilderextensions)                                           | `Kiji.Feeds`    |
+| [`AddSitemap`](#sitemaphostbuilderextensions)                                           | `Kiji.Sitemaps` |
 
 Only `dotnet publish` writes artifacts, feeds, and sitemaps; the development server
 returns 404 for them.
@@ -278,7 +290,7 @@ layout, on every publish. Derived components inherit it. See
 
 See [Markdown and images](../markdown/) for examples.
 
-### `MarkdownStaticSiteBuilderExtensions`
+### `MarkdownHostBuilderExtensions`
 
 Each method loads the `*.md` files of one directory and registers a `ContentCollection<T>`:
 
@@ -391,7 +403,7 @@ to the `outputDirectory` passed to `ProcessAsync`, and `Width` is in pixels.
 
 ## `Kiji.Feeds` namespace
 
-### `RssFeedStaticSiteBuilderExtensions`
+### `RssFeedHostBuilderExtensions`
 
 `AddRssFeed(Func<IServiceProvider, IEnumerable<FeedItem>> items, string path = "feed.xml")`
 writes an RSS 2.0 feed with items in the given order. The channel's title, description,
@@ -422,7 +434,7 @@ describes one item. `RelativePath` is the page path relative to `BaseUrl` withou
 
 ## `Kiji.Sitemaps` namespace
 
-### `SitemapStaticSiteBuilderExtensions`
+### `SitemapHostBuilderExtensions`
 
 `AddSitemap(string path = "sitemap.xml", IEnumerable<string>? excludedPaths = null)` lists
 every generated page except `404.html`. Each excluded path removes only the page with that

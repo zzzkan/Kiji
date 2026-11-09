@@ -18,8 +18,7 @@ public sealed class AppConfigurationTests : IDisposable
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
         builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         var finalInfo = TestArticleContents.CreateSiteInfo();
-        builder.UseSiteInfo(finalInfo);
-        await using var site = builder.BuildSite();
+        await using var site = builder.UseSiteInfo(finalInfo).AddSitemap().BuildSite();
         Assert.Same(finalInfo, site.ServiceProvider.GetRequiredService<SiteInfo>());
     }
 

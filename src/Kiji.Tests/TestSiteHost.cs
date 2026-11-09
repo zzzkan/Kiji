@@ -36,11 +36,5 @@ internal sealed class TestSiteHost(IHost host) : IAsyncDisposable
         return Engine.StartDevServerAsync(args, token, reporter);
     }
 
-    public ValueTask DisposeAsync() => Host is IAsyncDisposable disposable ? disposable.DisposeAsync() : DisposeHost();
-
-    private ValueTask DisposeHost()
-    {
-        Host.Dispose();
-        return ValueTask.CompletedTask;
-    }
+    public ValueTask DisposeAsync() => ((IAsyncDisposable)Host).DisposeAsync();
 }

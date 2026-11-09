@@ -49,7 +49,7 @@ internal sealed class SiteEngine
         ContentRoots = [.. siteOptions.ContentPaths.Select(paths.ResolveAgainstRoot).Distinct(comparer)];
     }
 
-    internal SiteInfo SiteInfo => ServiceProvider.GetService<SiteInfo>() ?? throw new InvalidOperationException("Call UseSiteInfo before running the site.");
+    internal SiteInfo SiteInfo => ServiceProvider.GetRequiredService<SiteInfo>();
     internal SiteExecutionPaths Paths { get; }
     internal string[] ContentRoots { get; }
     internal IServiceProvider ServiceProvider { get; }

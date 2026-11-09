@@ -11,11 +11,7 @@ internal sealed class SiteBuilderContext(IHostApplicationBuilder builder, Static
     internal StaticSiteOptions Options { get; } = options;
     internal ContentRuntime Runtime { get; } = runtime;
     internal SiteExecutionPaths Paths { get; } = paths;
-    internal IHostEnvironment Environment { get; } = builder.Environment;
-    internal string EnvironmentName { get; } = builder.Environment.EnvironmentName;
-    internal string ContentRootPath { get; } = builder.Environment.ContentRootPath;
-    internal List<ServiceDescriptor> ManagedServices { get; } = [.. builder.Services.Where(static descriptor => SiteServiceRegistration.IsManaged(descriptor.ServiceType)
-        || descriptor.ImplementationType == typeof(SitePublishService) || descriptor.ImplementationType == typeof(SiteServeService))];
+    internal List<ServiceDescriptor> ManagedServices { get; } = [.. builder.Services.Where(static descriptor => SiteServiceRegistration.IsManaged(descriptor.ServiceType))];
 
     internal static SiteBuilderContext Get(IHostApplicationBuilder builder)
     {
@@ -28,11 +24,5 @@ internal sealed class SiteBuilderContext(IHostApplicationBuilder builder, Static
         // or changing singleton options, which do not themselves mutate the service collection.
         if (builder.Services.IsReadOnly) { throw new InvalidOperationException("Configure the builder before calling Build."); }
         return context;
-    }
-
-    internal void RefreshSiteInfoRegistration()
-    {
-        ManagedServices.RemoveAll(static descriptor => descriptor.ServiceType == typeof(SiteInfo));
-        ManagedServices.AddRange(builder.Services.Where(static descriptor => descriptor.ServiceType == typeof(SiteInfo)));
     }
 }

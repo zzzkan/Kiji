@@ -73,8 +73,8 @@ public static class StaticSite
             provider.GetRequiredService<IImageProcessor>(),
             provider.GetRequiredService<IOptions<MarkdownOptions>>().Value));
 
-        builder.Services.AddSingleton<SiteInfo>(static _ => throw new InvalidOperationException("Call UseSiteInfo before running the site."));
         var options = new StaticSiteOptions();
+        builder.Services.AddSingleton(_ => options.SiteInfo ?? throw new InvalidOperationException("Call UseSiteInfo before running the site."));
         options.PageAssemblies.Add(entryAssembly);
         var runtime = new ContentRuntime();
         builder.Services.AddSingleton(options);

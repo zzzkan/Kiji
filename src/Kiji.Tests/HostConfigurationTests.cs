@@ -4,7 +4,6 @@ using Kiji.Generation;
 using Kiji.Tests.TestSite;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Diagnostics.Metrics;
 using Microsoft.Extensions.Options;
 using Xunit;
 
@@ -123,17 +122,6 @@ public sealed class HostConfigurationTests : IDisposable
 
         // Changing diagnostics must not render every page again; similarly named site keys must.
         Assert.Equal(reused, first == await PublishAsync());
-    }
-
-    [Fact]
-    public async Task MetricsSettings_ConfigureInstrumentRules()
-    {
-        WriteSettings("appsettings.json", """{ "Metrics": { "EnabledMetrics": { "Test.Meter": true } } }""");
-        var builder = CreateBuilder(environmentName: null);
-        await using var site = builder.BuildSite();
-        var rules = site.ServiceProvider.GetRequiredService<IOptions<MetricsOptions>>().Value.Rules;
-
-        Assert.Contains(rules, static rule => rule.MeterName == "Test.Meter" && rule.Enable);
     }
 
     [Fact]

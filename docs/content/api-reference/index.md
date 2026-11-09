@@ -41,53 +41,25 @@ await builder.Build().RunAsync();
 | `static HostApplicationBuilder CreateBuilder()`              | Creates a builder without development server arguments.                                                                                                      |
 | `static HostApplicationBuilder CreateBuilder(string[] args)` | Creates a builder for the current project. While serving, arguments configure ASP.NET Core, including `--environment` and `--urls`. Publishing ignores them. |
 
-The resulting `IHost` uses the standard `RunAsync` extension, which disposes it when
-execution ends. It serves during `dotnet watch` and generates during `dotnet publish`.
-Publish failures are logged under `Kiji.Build` and set the process exit code to 1;
-canceling an incomplete publish also sets it to 1. Successful publication sets it to 0.
-Development server startup or execution failures are also logged under `Kiji.Build`
-and set the process exit code to 1. ASP.NET Core can also log its own startup failure
-(for example, when a port is already in use), so the same cause may appear twice.
-Cancellation while serving is a normal shutdown.
-`RunAsync` does not return an exit code. Service validation and host startup errors can still
-throw. If you build a host without running it, dispose it yourself.
+It serves during `dotnet watch` and generates during `dotnet publish`. A failed or
+canceled publish logs the error under `Kiji.Build` and sets the process exit code to 1;
+a development server failure does the same.
 
 ### `StaticSiteHostBuilderExtensions`
 
-Kiji's registration methods extend and return `IHostApplicationBuilder`.
-Use a builder created by `StaticSite.CreateBuilder`; other builders are rejected so
-machine-specific default configuration does not enter the site unintentionally.
-Keep the concrete builder variable to call its standard `Build()` method:
-
-```csharp
-var builder = StaticSite.CreateBuilder(args);
-builder.UseSiteInfo(info);
-await builder.Build().RunAsync();
-```
-
-| Property        | Behavior                                                                            |
-| --------------- | ----------------------------------------------------------------------------------- |
-| `Services`      | Standard DI services for components and hosted services. See [Services](#services). |
-| `Environment`   | Host environment. See [Environment](#environment).                                  |
-| `Configuration` | Project-local configuration. See [Configuration](#configuration).                   |
-| `Properties`    | Shared state for host builder extensions.                                           |
-| `Metrics`       | Metrics configuration from the `Metrics` section.                                   |
-| `Logging`       | Logging providers and filters. See [Logging](#logging).                             |
+Registration methods for a builder created by `StaticSite.CreateBuilder`; other builders
+are rejected. Use the builder's standard [Services](#services), [Environment](#environment),
+[Configuration](#configuration), and [Logging](#logging) as well.
 
 | Extension method                                                                                         | Behavior                                                                                                       |
 | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `UseSiteInfo(SiteInfo siteInfo)`                                                                         | Sets required metadata as a singleton. A later call replaces it; missing metadata fails when execution starts. |
+| `UseSiteInfo(SiteInfo siteInfo)`                                                                         | Sets the required site metadata. A later call replaces it.                                                   |
 | `UseDefaultLayout<TLayout>()`                                                                            | Sets the layout for pages without their own `@layout`.                                                         |
 | `AddPageAssembly(Assembly assembly)`                                                                     | Adds pages from another assembly without duplicates. The entry assembly is included automatically.             |
 | `AddPageParameters<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)`                       | Adds parameter sets. See [Page parameters](#page-parameters).                                                  |
 | `UseNotFoundPage<TPage>()`                                                                               | Writes the component as `404.html`. It needs exactly one route and cannot receive page parameters.             |
 | `AddArtifact(string outputRelativePath, Func<Stream, SiteOutputContext, CancellationToken, Task> write)` | Writes a file after all pages. Do not dispose the stream. See [`SiteOutputContext`](#siteoutputcontext).       |
 
-Standard `Build()` validates service registrations and scopes and freezes the service
-collection. Options with `ValidateOnStart` are validated at host startup, before output
-is written; content-reading validators can resolve the already fixed execution paths.
-Kiji requires its service provider factory. Replacing it with `ConfigureContainer`
-is detected at startup and throws `NotSupportedException`.
 
 Extension methods in other namespaces register content and generated files:
 
@@ -113,19 +85,9 @@ builder.Services.AddScoped<RelatedPosts>();
 - Each page render has its own scope, shared by its page, layout, and child components.
 - Page parameter and feed factories and artifact writers cannot resolve scoped services.
 - Kiji's own services, such as `SiteInfo`, `PageInfo`, and `ContentCollection<T>`, cannot
-  be replaced.
-
-`IHostApplicationLifetime` follows the generic host lifecycle. `ApplicationStarted`
-means the host started; it does not guarantee publish initialization or generation
-has completed. SIGINT/SIGTERM, cancellation and `StopApplication()` stop the host.
-Disposing a host that was never started disposes its services without issuing stopping
-or stopped notifications. Put resource cleanup in `Dispose` or `DisposeAsync`.
-
-User `IHostedService` and `BackgroundService` registrations start and stop normally.
-They can run alongside page generation. Their mutable state is not tracked for HTML
-reuse; use `AlwaysRender` on components that read it, as for other untracked state.
-The development server has its own container and lifetime; stopping it also stops
-the site host. Both containers use the site's logger factory.
+  be replaced. Replacing the container with `ConfigureContainer` is not supported.
+- Hosted services run alongside page generation. Their state is not tracked for HTML
+  reuse; use `AlwaysRender` on components that read it.
 
 #### Environment
 
@@ -142,9 +104,7 @@ if (builder.Environment.IsDevelopment())
 
 `dotnet publish` uses `DOTNET_ENVIRONMENT` and defaults to `Production`. `dotnet watch`
 defaults to `Development`. While serving, precedence is `--environment`, then
-`DOTNET_ENVIRONMENT`, then `ASPNETCORE_ENVIRONMENT`. The content root is the project
-directory supplied by MSBuild. Changing the environment name or content root after
-`CreateBuilder` is rejected by `Build`, because configuration and paths are already selected.
+`DOTNET_ENVIRONMENT`, then `ASPNETCORE_ENVIRONMENT`.
 
 #### Configuration
 
@@ -160,19 +120,10 @@ builder.Services.Configure<ImageProcessorOptions>(builder.Configuration.GetSecti
 - Environment variables, command-line arguments, and user secrets are not read. Add a
   source when you need one, such as `builder.Configuration.AddEnvironmentVariables("MYSITE_")`.
 - Restart `dotnet watch` after editing the files.
+- Changing only the `Logging` or `Metrics` section does not regenerate pages on publish.
 - The development server answers only `localhost`, `127.0.0.1`, and `[::1]`. To use
   another hostname, add it to `AllowedHosts` and keep the local entries, for example
   `"AllowedHosts": "localhost;127.0.0.1;[::1];dev.example"` in `appsettings.Development.json`.
-
-#### Metrics
-
-`Metrics` is a standard `IMetricsBuilder`. As in the generic host, the `Metrics`
-configuration section configures meter, instrument, and listener rules. Hosted
-services registered by telemetry extensions participate in the standard host lifecycle.
-
-The `Logging` and `Metrics` sections are excluded from the publish configuration
-fingerprint, so diagnostics changes alone do not regenerate pages. Other sections,
-including similarly named keys such as `MetricsTheme`, still invalidate page reuse.
 
 #### Logging
 

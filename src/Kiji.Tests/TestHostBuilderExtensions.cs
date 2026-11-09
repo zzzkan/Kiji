@@ -7,5 +7,5 @@ internal static class TestHostBuilderExtensions
     internal static SiteExecutionPaths GetSitePaths(this HostApplicationBuilder builder) =>
         (SiteExecutionPaths)builder.Services.Single(descriptor => descriptor.ServiceType == typeof(SiteExecutionPaths)).ImplementationInstance!;
     internal static SiteInfo GetSiteInfo(this HostApplicationBuilder builder) =>
-        (SiteInfo)builder.Services.Single(descriptor => descriptor.ServiceType == typeof(SiteInfo)).ImplementationInstance!;
+        ((StaticSiteOptions)builder.Services.Single(descriptor => descriptor.ServiceType == typeof(StaticSiteOptions)).ImplementationInstance!).SiteInfo!;
 }

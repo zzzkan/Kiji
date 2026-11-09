@@ -25,7 +25,7 @@ internal static class SiteServiceRegistration
 
     internal static void Validate(IServiceCollection services, IReadOnlyList<ServiceDescriptor> managed)
     {
-        var expected = managed.Where(static descriptor => IsManaged(descriptor.ServiceType)).ToLookup(static descriptor => descriptor.ServiceType);
+        var expected = managed.ToLookup(static descriptor => descriptor.ServiceType);
         var actual = services.Where(static descriptor => IsManaged(descriptor.ServiceType))
             .ToLookup(static descriptor => descriptor.ServiceType);
         foreach (var type in expected.Select(static group => group.Key).Concat(actual.Select(static group => group.Key)).Distinct())
@@ -35,16 +35,6 @@ internal static class SiteServiceRegistration
             {
                 throw new InvalidOperationException(
                     $"Service '{type.FullName}' is managed by Kiji and cannot be added, removed or replaced through builder.Services.");
-            }
-        }
-
-        // Other hosted services are welcome, but the Kiji execution service must remain
-        // registered exactly once. Comparing descriptor identity also detects replacement.
-        foreach (var descriptor in managed.Where(static descriptor => descriptor.ServiceType == typeof(IHostedService)))
-        {
-            if (services.Count(actualDescriptor => ReferenceEquals(actualDescriptor, descriptor)) != 1)
-            {
-                throw new InvalidOperationException("The Kiji hosted service is managed by Kiji and cannot be removed, duplicated or replaced through builder.Services.");
             }
         }
 

@@ -10,11 +10,6 @@ internal sealed class KijiServiceProviderFactory(SiteBuilderContext context) : I
 
     public IServiceProvider CreateServiceProvider(IServiceCollection containerBuilder)
     {
-        if (context.Environment.EnvironmentName != context.EnvironmentName
-            || context.Environment.ContentRootPath != context.ContentRootPath)
-        {
-            throw new InvalidOperationException("Do not change the Kiji host environment name or content root after CreateBuilder; they select the project's settings and execution paths.");
-        }
         SiteServiceRegistration.Validate(containerBuilder, context.ManagedServices);
         containerBuilder.AddSingleton(new KijiServiceProviderStamp(SiteServiceRegistration.CollectAssemblies(containerBuilder)));
         var provider = containerBuilder.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });

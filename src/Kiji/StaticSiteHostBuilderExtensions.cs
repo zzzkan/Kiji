@@ -2,7 +2,6 @@ using System.Reflection;
 using Kiji.Hosting;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 
 namespace Kiji;
@@ -23,9 +22,7 @@ public static class StaticSiteHostBuilderExtensions
                 $"SiteInfo.{(siteInfo.BaseUrl is null ? nameof(SiteInfo.BaseUrl) : nameof(SiteInfo.Name))} is required. A SiteInfo bound from configuration lacks it when the section does not set it.",
                 nameof(siteInfo));
         }
-        builder.Services.RemoveAll<SiteInfo>();
-        builder.Services.AddSingleton(siteInfo);
-        context.RefreshSiteInfoRegistration();
+        context.Options.SiteInfo = siteInfo;
         return builder;
     }
 

@@ -123,6 +123,18 @@ public sealed class RunAsyncTests : IDisposable
         Assert.Null(builder.Configuration["PATH"]);
     }
 
+    [Theory]
+    [InlineData("environment")]
+    [InlineData("root")]
+    public void Build_RejectsEnvironmentMutation(string property)
+    {
+        var builder = CreateBuilder(OutputDir);
+        if (property == "environment") { builder.Environment.EnvironmentName = "Changed"; }
+        else { builder.Environment.ContentRootPath = Path.GetTempPath(); }
+        var exception = Assert.Throws<InvalidOperationException>(() => builder.Build());
+        Assert.Contains("Do not change", exception.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Run_RejectsReplacingKijiServiceProviderFactory()
     {

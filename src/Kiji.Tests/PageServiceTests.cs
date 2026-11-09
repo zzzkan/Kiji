@@ -84,6 +84,8 @@ public sealed class PageServiceTests : IDisposable
     [InlineData("lifetime")]
     [InlineData("content")]
     [InlineData("configuration")]
+    [InlineData("hosted-service-remove")]
+    [InlineData("hosted-service-duplicate")]
     [InlineData("keyed-content-remove")]
     [InlineData("keyed-content-replace")]
     public void Build_ValidatesTheFinalManagedRegistrations(string operation)
@@ -93,6 +95,8 @@ public sealed class PageServiceTests : IDisposable
         var services = builder.Services;
         switch (operation)
         {
+            case "hosted-service-remove": services.RemoveAll<IHostedService>(); break;
+            case "hosted-service-duplicate": services.Add(services.Single(descriptor => descriptor.ServiceType == typeof(IHostedService))); break;
             case "duplicate": services.Add(services.Single(descriptor => descriptor.ServiceType == typeof(PageInfo))); break;
             case "remove": services.RemoveAll<PageInfo>(); break;
             case "replace": services.Replace(ServiceDescriptor.Singleton(builder.GetSiteInfo())); break;

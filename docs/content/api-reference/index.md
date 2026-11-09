@@ -41,9 +41,9 @@ await builder.Build().RunAsync();
 | `static HostApplicationBuilder CreateBuilder()`              | Creates a builder without development server arguments.                                                                                                      |
 | `static HostApplicationBuilder CreateBuilder(string[] args)` | Creates a builder for the current project. While serving, arguments configure ASP.NET Core, including `--environment` and `--urls`. Publishing ignores them. |
 
-It serves during `dotnet watch` and generates during `dotnet publish`. A failed or
-canceled publish logs the error under `Kiji.Build` and sets the process exit code to 1;
-a development server failure does the same.
+It serves during `dotnet watch` and generates during `dotnet publish`. A publish or
+development server failure logs the error under `Kiji.Build` and sets the process exit
+code to 1. A canceled publish also sets it to 1 because the output is incomplete.
 
 ### `StaticSiteHostBuilderExtensions`
 
@@ -85,7 +85,7 @@ builder.Services.AddScoped<RelatedPosts>();
 - Each page render has its own scope, shared by its page, layout, and child components.
 - Page parameter and feed factories and artifact writers cannot resolve scoped services.
 - Kiji's own services, such as `SiteInfo`, `PageInfo`, and `ContentCollection<T>`, cannot
-  be replaced. Replacing the container with `ConfigureContainer` is not supported.
+  be replaced, and Kiji's hosted service cannot be removed. Replacing the container with `ConfigureContainer` is not supported.
 - Hosted services run alongside page generation. Their state is not tracked for HTML
   reuse; use `AlwaysRender` on components that read it.
 
@@ -104,7 +104,9 @@ if (builder.Environment.IsDevelopment())
 
 `dotnet publish` uses `DOTNET_ENVIRONMENT` and defaults to `Production`. `dotnet watch`
 defaults to `Development`. While serving, precedence is `--environment`, then
-`DOTNET_ENVIRONMENT`, then `ASPNETCORE_ENVIRONMENT`.
+`DOTNET_ENVIRONMENT`, then `ASPNETCORE_ENVIRONMENT`. Do not change the environment name
+or content root after `CreateBuilder`; `Build` rejects it because the configuration files
+and paths are already selected.
 
 #### Configuration
 

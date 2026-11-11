@@ -37,6 +37,23 @@ public sealed class RunAsyncTests : IDisposable
     }
 
     [Fact]
+    public async Task Publish_StartsAfterUserHostedServicesStart()
+    {
+        var builder = CreateBuilder(OutputDir);
+        var initializer = new SlowHostedService();
+        builder.Services.AddHostedService(_ => initializer);
+        builder.AddArtifact("initialized.txt", (_, _, _) =>
+        {
+            Assert.True(initializer.Started);
+            return Task.CompletedTask;
+        });
+        var host = builder.Build();
+        var exitCode = (RecordingExitCode)host.Services.GetRequiredService<IProcessExitCode>();
+        await host.RunAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(0, exitCode.Value);
+    }
+
+    [Fact]
     public async Task Publish_MissingAssetCatalog_LogsTheExceptionAndFailsWithoutOutput()
     {
         var logs = new RecordingLoggerProvider();

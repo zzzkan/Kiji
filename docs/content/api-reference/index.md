@@ -86,8 +86,8 @@ builder.Services.AddScoped<RelatedPosts>();
 - Page parameter and feed factories and artifact writers cannot resolve scoped services.
 - Kiji's own services, such as `SiteInfo`, `PageInfo`, and `ContentCollection<T>`, cannot
   be replaced, and Kiji's hosted service cannot be removed. Replacing the container with `ConfigureContainer` is not supported.
-- Hosted services run alongside page generation. Their state is not tracked for HTML
-  reuse; use `AlwaysRender` on components that read it.
+- Page generation and the development server start after every hosted service has started.
+  Hosted service state is not tracked for HTML reuse; use `AlwaysRender` on components that read it.
 
 #### Environment
 

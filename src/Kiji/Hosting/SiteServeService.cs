@@ -17,6 +17,7 @@ internal sealed class SiteServeService(IServiceProvider services, IHostApplicati
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, lifetime.ApplicationStopping);
         try
         {
+            await lifetime.WaitForStartedAsync(cancellation.Token);
             var (server, web) = await _services.GetRequiredService<SiteEngine>().StartDevServerAsync(arguments.Args, cancellation.Token);
             await using (server)
             {

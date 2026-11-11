@@ -18,8 +18,8 @@ internal sealed class SitePublishService(IServiceProvider services, IHostApplica
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, lifetime.ApplicationStopping);
         try
         {
+            await lifetime.WaitForStartedAsync(cancellation.Token);
             await _services.GetRequiredService<SiteEngine>().PublishAsync(cancellation.Token);
-            exitCode.Value = 0;
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {

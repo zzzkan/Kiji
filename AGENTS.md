@@ -27,8 +27,8 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
 
 - Follow the .NET host builder shape: CreateBuilder -> builder.Services/Add*/Use* -> Build
   -> RunAsync. StaticSite.CreateBuilder returns HostApplicationBuilder; Kiji registrations are
-  IHostApplicationBuilder extensions stored in DI. Publish and serve are hosted services. Add* adds,
-  Use* sets a single value. Kiji adds no command-line options:
+  IHostApplicationBuilder extensions stored in DI. Publish and serve are hosted services that
+  wait for ApplicationStarted. Add* adds, Use* sets a single value. Kiji adds no command-line options:
   watch serves, publish generates, clean removes the caches and staging directory.
   ASP.NET Core configuration owns the dev server address. Serving reads only the standard
   --environment host argument. Prefer conventions to flags.

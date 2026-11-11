@@ -29,10 +29,7 @@ public sealed class RunAsyncTests : IDisposable
     [Fact]
     public async Task Publish_SucceedsThroughStandardRunAsync()
     {
-        var host = CreateBuilder(OutputDir).Build();
-        var exitCode = (RecordingExitCode)host.Services.GetRequiredService<IProcessExitCode>();
-        await host.RunAsync().WaitAsync(TimeSpan.FromSeconds(10));
-        Assert.Equal(0, exitCode.Value);
+        await CreateBuilder(OutputDir).Build().RunAsync().WaitAsync(TimeSpan.FromSeconds(10));
         Assert.True(File.Exists(Path.Combine(OutputDir, "index.html")));
     }
 
@@ -47,10 +44,8 @@ public sealed class RunAsyncTests : IDisposable
             Assert.True(initializer.Started);
             return Task.CompletedTask;
         });
-        var host = builder.Build();
-        var exitCode = (RecordingExitCode)host.Services.GetRequiredService<IProcessExitCode>();
-        await host.RunAsync().WaitAsync(TimeSpan.FromSeconds(10));
-        Assert.Equal(0, exitCode.Value);
+        await builder.Build().RunAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.True(File.Exists(Path.Combine(OutputDir, "initialized.txt")));
     }
 
     [Fact]
@@ -60,17 +55,15 @@ public sealed class RunAsyncTests : IDisposable
         var builder = CreateBuilder(OutputDir);
         builder.Logging.AddProvider(logs);
         File.Delete(builder.GetSitePaths().AssetManifestBasePath + ".staticwebassets.publish.runtime.json");
-        var host = builder.Build();
-        var exitCode = (RecordingExitCode)host.Services.GetRequiredService<IProcessExitCode>();
-        await host.RunAsync();
-        Assert.Equal(1, exitCode.Value);
-        Assert.Contains(logs.Exceptions, static error => error.Message.Contains("Razor SDK and Kiji targets", StringComparison.Ordinal));
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => builder.Build().RunAsync());
+        Assert.Contains("Razor SDK and Kiji targets", failure.Message, StringComparison.Ordinal);
+        Assert.Contains(failure, logs.Exceptions);
         Assert.Contains(("Kiji.Build", LogLevel.Error, "Site publishing failed."), logs.Entries);
         Assert.False(Directory.Exists(OutputDir));
     }
 
     [Fact]
-    public async Task Serve_OccupiedPort_LogsTheFailureAndSetsFailureExitCode()
+    public async Task Serve_OccupiedPort_LogsTheFailureAndFailsRunAsync()
     {
         using var listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         listener.Bind(new IPEndPoint(IPAddress.Loopback, 0));
@@ -81,14 +74,10 @@ public sealed class RunAsyncTests : IDisposable
             new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")), typeof(StaticSite).Assembly);
         builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         TestSiteAssets.Bind(builder.GetSitePaths(), Path.Combine(_testDir, "static"));
-        builder.Services.AddSingleton<IProcessExitCode, RecordingExitCode>();
         builder.Logging.AddProvider(logs);
-        var host = builder.Build();
-        var exitCode = (RecordingExitCode)host.Services.GetRequiredService<IProcessExitCode>();
 
-        await host.RunAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        await Assert.ThrowsAnyAsync<IOException>(() => builder.Build().RunAsync().WaitAsync(TimeSpan.FromSeconds(10)));
 
-        Assert.Equal(1, exitCode.Value);
         Assert.Contains(("Kiji.Build", LogLevel.Error, "Development server failed."), logs.Entries);
     }
 
@@ -112,10 +101,8 @@ public sealed class RunAsyncTests : IDisposable
             else { context.Services.GetRequiredService<IHostApplicationLifetime>().StopApplication(); }
             await Task.Delay(Timeout.Infinite, token);
         });
-        var host = builder.Build();
-        var exitCode = (RecordingExitCode)host.Services.GetRequiredService<IProcessExitCode>();
-        await host.RunAsync(cancellation.Token).WaitAsync(TimeSpan.FromSeconds(10));
-        Assert.Equal(1, exitCode.Value);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => builder.Build().RunAsync(cancellation.Token).WaitAsync(TimeSpan.FromSeconds(10)));
     }
 
     [Theory]

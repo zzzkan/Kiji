@@ -42,8 +42,9 @@ await builder.Build().RunAsync();
 | `static HostApplicationBuilder CreateBuilder(string[] args)` | Creates a builder for the current project. While serving, arguments configure ASP.NET Core, including `--environment` and `--urls`. Publishing ignores them. |
 
 It serves during `dotnet watch` and generates during `dotnet publish`. A publish or
-development server failure logs the error under `Kiji.Build` and sets the process exit
-code to 1. A canceled publish also sets it to 1 because the output is incomplete.
+development server failure logs the error under `Kiji.Build`, and `RunAsync` then throws
+it, so the process exits with a failure code. A canceled publish throws
+`OperationCanceledException` because the output is incomplete.
 
 ### `StaticSiteHostBuilderExtensions`
 

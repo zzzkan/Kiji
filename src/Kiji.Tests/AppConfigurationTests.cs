@@ -29,11 +29,9 @@ public sealed class AppConfigurationTests : IDisposable
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
         var logs = new RecordingLoggerProvider();
         builder.Logging.AddProvider(logs);
-        var host = builder.Build();
-        var exitCode = (RecordingExitCode)host.Services.GetRequiredService<IProcessExitCode>();
-        await host.RunAsync();
-        Assert.Equal(1, exitCode.Value);
-        Assert.Contains(logs.Exceptions, static error => error.Message.Contains("UseSiteInfo", StringComparison.Ordinal));
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => builder.Build().RunAsync());
+        Assert.Contains("UseSiteInfo", failure.Message, StringComparison.Ordinal);
+        Assert.Contains(failure, logs.Exceptions);
         Assert.False(Directory.Exists(Path.Combine(_root, "dist")));
     }
 

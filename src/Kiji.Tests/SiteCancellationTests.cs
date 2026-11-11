@@ -37,21 +37,19 @@ public sealed class SiteCancellationTests : IDisposable
             },
         };
         var running = CreateApp(processor, runtimeData: name => name == "Kiji.OutputPath" ? output : null);
-        var exitCode = (RecordingExitCode)running.ServiceProvider.GetRequiredService<IProcessExitCode>();
         var run = running.Host.RunAsync(cancellation.Token);
         try
         {
             await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
             cancellation.Cancel();
-            await run.WaitAsync(TimeSpan.FromSeconds(10));
-            Assert.Equal(1, exitCode.Value);
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run.WaitAsync(TimeSpan.FromSeconds(10)));
             Assert.Equal(manifest, File.ReadAllBytes(Path.Combine(cache, "manifest.json")));
             Assert.Equal(originalHtml, File.ReadAllText(htmlPath));
         }
         finally
         {
             release.TrySetResult();
-            await run.WaitAsync(TimeSpan.FromSeconds(10));
+            await Task.WhenAny(run).WaitAsync(TimeSpan.FromSeconds(10));
         }
 
         await using var recovered = CreateApp(new TrackingImageProcessor());

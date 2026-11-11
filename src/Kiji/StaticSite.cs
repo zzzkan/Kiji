@@ -82,7 +82,6 @@ public static class StaticSite
         builder.Services.AddSingleton(paths);
         builder.Services.AddSingleton(settings.Publishing ? paths.ResolveForPublish(settings.OutputPath!) : paths.ResolveForDevelopment());
         builder.Services.AddSingleton(settings);
-        builder.Services.AddSingleton<IProcessExitCode, ProcessExitCode>();
         builder.Services.AddSingleton<SiteEngine>();
         builder.Services.AddSingleton(new SiteServerArguments([.. args]));
         if (settings.Publishing) { builder.Services.AddHostedService<SitePublishService>(); }

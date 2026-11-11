@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using Kiji.Routing;
 
 namespace Kiji.Tests;
@@ -29,7 +28,6 @@ internal static class TestSiteFactory
         {
             omit.MakeGenericMethod(type).Invoke(null, [builder, new Func<IServiceProvider, IEnumerable<object>>(static _ => [])]);
         }
-        builder.Services.AddSingleton<IProcessExitCode, RecordingExitCode>();
         return builder;
     }
 }

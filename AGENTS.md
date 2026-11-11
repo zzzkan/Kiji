@@ -33,9 +33,11 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   ASP.NET Core configuration owns the dev server address. Serving reads only the standard
   --environment host argument. Prefer conventions to flags.
 - All log output goes through the site's ILogger (Kiji's own under Kiji.Build), except the dev
-  server's watch-style status lines. Publish uses the standard console formatter; MSBuild
-  receives every line as a high-importance message and ignores its error/warning format.
-  Only the exit code fails a publish. Log levels come from the Logging section, not MSBuild
+  server's watch-style status lines and the runtime's unhandled exception report. Publish uses
+  the standard console formatter; MSBuild receives every line as a high-importance message and
+  ignores its error/warning format. Only the exit code fails a publish: failed or canceled runs
+  make RunAsync throw from the hosted service's StopAsync (avoiding duplicate host logs); Kiji
+  never sets Environment.ExitCode. Log levels come from the Logging section, not MSBuild
   properties.
 - Dev and publish share SiteEngine.RenderPageAsync. Never emit stale output;
   ambiguous incremental state requires rendering.

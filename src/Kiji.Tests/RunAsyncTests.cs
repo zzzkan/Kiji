@@ -99,12 +99,19 @@ public sealed class RunAsyncTests : IDisposable
             context.Services.GetRequiredService<IHostApplicationLifetime>().StopApplication();
             await release.Task;
         });
+        var host = builder.Build();
+        var publish = host.Services.GetServices<IHostedService>().OfType<BackgroundService>().Single();
         try
         {
             await Assert.ThrowsAnyAsync<OperationCanceledException>(
-                () => builder.Build().RunAsync().WaitAsync(TimeSpan.FromSeconds(10)));
+                () => host.RunAsync().WaitAsync(TimeSpan.FromSeconds(10)));
         }
-        finally { release.SetResult(); }
+        finally
+        {
+            // The abandoned publish still holds the build lock; let it finish before cleanup.
+            release.SetResult();
+            await publish.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(10));
+        }
     }
 
     [Theory]

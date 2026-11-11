@@ -88,6 +88,25 @@ public sealed class RunAsyncTests : IDisposable
         Assert.True(File.Exists(Path.Combine(_testDir, "out", "index.html")));
     }
 
+    [Fact]
+    public async Task Publish_ShutdownTimeoutBeforeCompletion_FailsRunAsync()
+    {
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var builder = CreateBuilder(OutputDir);
+        builder.Services.Configure<HostOptions>(static options => options.ShutdownTimeout = TimeSpan.FromMilliseconds(100));
+        builder.AddArtifact("ignores-cancellation.txt", async (_, context, _) =>
+        {
+            context.Services.GetRequiredService<IHostApplicationLifetime>().StopApplication();
+            await release.Task;
+        });
+        try
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => builder.Build().RunAsync().WaitAsync(TimeSpan.FromSeconds(10)));
+        }
+        finally { release.SetResult(); }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

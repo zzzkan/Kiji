@@ -43,8 +43,9 @@ await builder.Build().RunAsync();
 
 It serves during `dotnet watch` and generates during `dotnet publish`. A publish or
 development server failure logs the error under `Kiji.Build`, and `RunAsync` then throws
-it, so the process exits with a failure code. A canceled publish throws
-`OperationCanceledException` because the output is incomplete.
+it, so the process exits with a failure code. A canceled publish, or one
+still running at the host's shutdown timeout, throws `OperationCanceledException` because
+the output is incomplete.
 
 ### `StaticSiteHostBuilderExtensions`
 

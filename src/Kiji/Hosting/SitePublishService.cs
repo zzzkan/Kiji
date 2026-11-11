@@ -13,6 +13,9 @@ internal sealed class SitePublishService(IServiceProvider services, IHostApplica
     // a replaced factory before a content-reading validator can use an unattached runtime.
     private readonly IServiceProvider _services = SiteServiceRegistration.RequireProvider(services);
     private ExceptionDispatchInfo? _failure;
+    // Only completion proves success: StopAsync can return at the shutdown timeout while
+    // publishing still runs, and a host stopped early may never start ExecuteAsync.
+    private volatile bool _published;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -22,10 +25,11 @@ internal sealed class SitePublishService(IServiceProvider services, IHostApplica
         {
             await lifetime.WaitForStartedAsync(cancellation.Token);
             await _services.GetRequiredService<SiteEngine>().PublishAsync(cancellation.Token);
+            _published = true;
         }
-        catch (OperationCanceledException exception) when (cancellation.IsCancellationRequested)
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
-            _failure = ExceptionDispatchInfo.Capture(exception);
+            // Reported by StopAsync as incomplete output.
         }
         catch (Exception exception)
         {
@@ -41,5 +45,6 @@ internal sealed class SitePublishService(IServiceProvider services, IHostApplica
     {
         await base.StopAsync(cancellationToken);
         _failure?.Throw();
+        if (!_published) { throw new OperationCanceledException("Site publishing did not complete."); }
     }
 }

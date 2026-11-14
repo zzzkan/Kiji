@@ -97,9 +97,9 @@ See [Blazor CSS isolation](https://learn.microsoft.com/aspnet/core/blazor/compon
 
 [`AddRssFeed`](../api-reference/#rssfeedhostbuilderextensions),
 [`AddSitemap`](../api-reference/#sitemaphostbuilderextensions), and
-[`AddArtifact`](../api-reference/#staticsitehostbuilderextensions) write feeds, sitemaps, and other
-site-wide files. Only `dotnet publish` writes these files; the development server returns
-404 for them.
+[`AddArtifact`](../api-reference/#staticsitehostbuilderextensions) write feeds, sitemaps,
+and other site-wide files. Only `dotnet publish` writes these files; the development
+server returns 404 for them.
 
 ## Static output
 

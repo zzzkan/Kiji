@@ -28,7 +28,8 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
 - Follow the .NET host builder shape: CreateBuilder -> builder.Services/Add*/Use* -> Build
   -> RunAsync. StaticSite.CreateBuilder returns HostApplicationBuilder; Kiji registrations are
   IHostApplicationBuilder extensions stored in DI. Publish and serve are hosted services that
-  wait for ApplicationStarted. Add* adds, Use* sets a single value. Kiji adds no command-line options:
+  wait for ApplicationStarted. Add* adds, Use* sets a single value.
+  Kiji adds no command-line options:
   watch serves, publish generates, clean removes the caches and staging directory.
   ASP.NET Core configuration owns the dev server address. Serving reads only the standard
   --environment host argument. Prefer conventions to flags.
@@ -69,13 +70,15 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   project-local (no environment variables, command line or user secrets, which differ between
   machines). The dev server uses standard ASP.NET Core configuration with the same project
   directory and environment. Per-key reads are not tracked, so the environment name and all
-  configuration outside the Logging and Metrics sections are in the publish options fingerprint.
+  configuration outside the Logging and Metrics sections are in the publish options
+  fingerprint.
 - The dev server enforces BaseUrl's path prefix and uses `.kiji/dev-site`.
   Only `.kiji/cache` (pages) and `.kiji/jit` (publish JIT profile) are portable; CI restores
   either or both. Planning creates no output directories.
 - HostApplicationBuilder.Services is standard DI; KijiServiceProviderFactory validates
-  Kiji-owned registrations (including its own hosted service), records code assemblies and enables scope validation in Build.
-  A replaced factory is rejected at startup. Kiji's defaults and managed services are registered
+  Kiji-owned registrations (including its own hosted service), records code assemblies and
+  enables scope validation in Build. A replaced factory is rejected at startup.
+  Kiji's defaults and managed services are registered
   when the builder is created. Each render owns a scope. Loaders, page parameter/feed
   factories and artifacts use the root provider and cannot resolve scoped services.
   User hosted services' state is untracked and may require AlwaysRender.

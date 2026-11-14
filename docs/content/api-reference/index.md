@@ -43,9 +43,9 @@ await builder.Build().RunAsync();
 
 It serves during `dotnet watch` and generates during `dotnet publish`. A publish or
 development server failure logs the error under `Kiji.Build`, and `RunAsync` then throws
-it, so the process exits with a failure code. A canceled publish, or one
-still running at the host's shutdown timeout, throws `OperationCanceledException` because
-the output is incomplete.
+it, so the process exits with a failure code. A canceled publish, or one still running at
+the host's shutdown timeout, throws `OperationCanceledException` because the output is
+incomplete.
 
 ### `StaticSiteHostBuilderExtensions`
 
@@ -53,23 +53,22 @@ Registration methods for a builder created by `StaticSite.CreateBuilder`; other 
 are rejected. Use the builder's standard [Services](#services), [Environment](#environment),
 [Configuration](#configuration), and [Logging](#logging) as well.
 
-| Extension method                                                                                         | Behavior                                                                                                       |
-| -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `UseSiteInfo(SiteInfo siteInfo)`                                                                         | Sets the required site metadata. A later call replaces it.                                                   |
-| `UseDefaultLayout<TLayout>()`                                                                            | Sets the layout for pages without their own `@layout`.                                                         |
-| `AddPageAssembly(Assembly assembly)`                                                                     | Adds pages from another assembly without duplicates. The entry assembly is included automatically.             |
-| `AddPageParameters<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)`                       | Adds parameter sets. See [Page parameters](#page-parameters).                                                  |
-| `UseNotFoundPage<TPage>()`                                                                               | Writes the component as `404.html`. It needs exactly one route and cannot receive page parameters.             |
-| `AddArtifact(string outputRelativePath, Func<Stream, SiteOutputContext, CancellationToken, Task> write)` | Writes a file after all pages. Do not dispose the stream. See [`SiteOutputContext`](#siteoutputcontext).       |
-
+| Extension method                                                                                         | Behavior                                                                                                 |
+| -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `UseSiteInfo(SiteInfo siteInfo)`                                                                         | Sets the required site metadata. A later call replaces it.                                               |
+| `UseDefaultLayout<TLayout>()`                                                                            | Sets the layout for pages without their own `@layout`.                                                   |
+| `AddPageAssembly(Assembly assembly)`                                                                     | Adds pages from another assembly without duplicates. The entry assembly is included automatically.       |
+| `AddPageParameters<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)`                       | Adds parameter sets. See [Page parameters](#page-parameters).                                            |
+| `UseNotFoundPage<TPage>()`                                                                               | Writes the component as `404.html`. It needs exactly one route and cannot receive page parameters.       |
+| `AddArtifact(string outputRelativePath, Func<Stream, SiteOutputContext, CancellationToken, Task> write)` | Writes a file after all pages. Do not dispose the stream. See [`SiteOutputContext`](#siteoutputcontext). |
 
 Extension methods in other namespaces register content and generated files:
 
-| Method                                                                                  | Namespace       |
-| --------------------------------------------------------------------------------------- | --------------- |
-| [`AddMarkdownContent`, `AddKeyedMarkdownContent`](#markdownhostbuilderextensions)       | `Kiji.Markdown` |
-| [`AddRssFeed`](#rssfeedhostbuilderextensions)                                           | `Kiji.Feeds`    |
-| [`AddSitemap`](#sitemaphostbuilderextensions)                                           | `Kiji.Sitemaps` |
+| Method                                                                            | Namespace       |
+| --------------------------------------------------------------------------------- | --------------- |
+| [`AddMarkdownContent`, `AddKeyedMarkdownContent`](#markdownhostbuilderextensions) | `Kiji.Markdown` |
+| [`AddRssFeed`](#rssfeedhostbuilderextensions)                                     | `Kiji.Feeds`    |
+| [`AddSitemap`](#sitemaphostbuilderextensions)                                     | `Kiji.Sitemaps` |
 
 Only `dotnet publish` writes artifacts, feeds, and sitemaps; the development server
 returns 404 for them.
@@ -87,15 +86,17 @@ builder.Services.AddScoped<RelatedPosts>();
 - Each page render has its own scope, shared by its page, layout, and child components.
 - Page parameter and feed factories and artifact writers cannot resolve scoped services.
 - Kiji's own services, such as `SiteInfo`, `PageInfo`, and `ContentCollection<T>`, cannot
-  be replaced, and Kiji's hosted service cannot be removed. Replacing the container with `ConfigureContainer` is not supported.
+  be replaced, and Kiji's hosted service cannot be removed. Replacing the container with
+  `ConfigureContainer` is not supported.
 - Page generation and the development server start after every hosted service has started.
-  Hosted service state is not tracked for HTML reuse; use `AlwaysRender` on components that read it.
+  Hosted service state is not tracked for HTML reuse; use `AlwaysRender` on components
+  that read it.
 
 #### Environment
 
 `Environment` is a standard
 [`IHostEnvironment`](https://learn.microsoft.com/dotnet/core/extensions/generic-host#ihostenvironment),
-also injectable into components. `IsDevelopment()` needs `using Microsoft.Extensions.Hosting;`:
+also injectable into components:
 
 ```csharp
 if (builder.Environment.IsDevelopment())

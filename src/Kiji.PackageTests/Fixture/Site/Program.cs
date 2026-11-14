@@ -1,7 +1,7 @@
-using Microsoft.Extensions.Hosting;
 using Kiji;
 using Kiji.Markdown;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using PackageSite;
 
 var builder = StaticSite.CreateBuilder(args);

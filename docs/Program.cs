@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Hosting;
 using Kiji;
 using Kiji.Docs.Layout;
 using Kiji.Docs.Models;
@@ -6,6 +5,7 @@ using Kiji.Docs.Pages;
 using Kiji.Markdown;
 using Kiji.Sitemaps;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 var builder = StaticSite.CreateBuilder(args);
 builder.UseSiteInfo(new SiteInfo

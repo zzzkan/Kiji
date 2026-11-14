@@ -176,7 +176,7 @@ Create `Layout/MainLayout.razor` for the shared page structure:
 
 Update `Program.cs` to import the layout namespace and register the layout:
 
-{data-line="2,11"}
+{data-line="3,12"}
 
 ```csharp
 using Kiji;
@@ -311,13 +311,13 @@ collection item to render:
 
 Add the required namespaces and registrations to `Program.cs`:
 
-{data-line="2-3,5-6,15-16,19-21"}
+{data-line="2-3,6-7,16-17,19-21"}
 
 ```csharp
 using Kiji;
-using Microsoft.Extensions.Hosting;
 using Kiji.Markdown;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using MySite.Layout;
 using MySite.Models;
 using MySite.Pages;

@@ -38,8 +38,8 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
     [InlineData(true)]
     public async Task PublishAsync_NavigationFailsWithoutPublishingPage(bool refresh)
     {
-        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfoWithBasePath();
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir), outputPath: _outputDir);
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfoWithBasePath());
         void Navigate(NavigationManager navigation)
         {
             if (refresh)
@@ -53,7 +53,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         }
         builder.AddPageParameters<NavigationTestPage>(_ => [new { Id = "original", Navigate = (Action<NavigationManager>)Navigate }]);
 
-        await using var app = builder.Build();
+        await using var app = builder.BuildSite();
         var exception = await Assert.ThrowsAsync<NotSupportedException>(() => app.PublishAsync(_outputDir));
 
         Assert.Contains("NavigationManager", exception.Message, StringComparison.Ordinal);
@@ -64,9 +64,9 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
     [Fact]
     public async Task PublishAsync_WritesDynamicBlogAndTagPagesAndFeed()
     {
-        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
-        TestSiteAssets.Bind(builder.Paths, GetStaticDirectory());
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")), outputPath: _outputDir);
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
+        TestSiteAssets.Bind(builder.GetSitePaths(), GetStaticDirectory());
 
         IReadOnlyList<Post> items =
         [
@@ -95,7 +95,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
                 post.Title, post.Description, post.CreatedAt, RelativePath: $"blog/{post.Slug}/")));
         builder.AddSitemap();
 
-        await using var app = builder.Build();
+        await using var app = builder.BuildSite();
         await app.PublishAsync(_outputDir);
 
         var blogHtml = await File.ReadAllTextAsync(Path.Combine(_outputDir, "blog", "hello-world", "index.html"));
@@ -137,9 +137,9 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
     [Fact]
     public async Task PublishAsync_FeedRunsAfterEarlierArtifacts()
     {
-        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
-        TestSiteAssets.Bind(builder.Paths, GetStaticDirectory());
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")), outputPath: _outputDir);
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
+        TestSiteAssets.Bind(builder.GetSitePaths(), GetStaticDirectory());
         builder.RegisterContent<Post>(_ => []);
         TestArticleContents.MapSite(builder);
 
@@ -153,7 +153,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         });
         builder.AddRssFeed(_ => [new FeedItem(title, "Description", DateTimeOffset.UnixEpoch, "")]);
 
-        await using var app = builder.Build();
+        await using var app = builder.BuildSite();
         await app.PublishAsync(_outputDir);
 
         var feedXml = await File.ReadAllTextAsync(Path.Combine(_outputDir, "feed.xml"));
@@ -180,9 +180,9 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         await CreateTestImageAsync(Path.Combine(postDir, "photo.png"), 800, 600);
         await CreateTestImageAsync(Path.Combine(postDir, "images", "nested.png"), 400, 300);
 
-        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfoWithBasePath();
-        TestSiteAssets.Bind(builder.Paths, GetStaticDirectory());
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")), outputPath: _outputDir);
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfoWithBasePath());
+        TestSiteAssets.Bind(builder.GetSitePaths(), GetStaticDirectory());
 
         builder.AddMarkdownContent<FrontMatter>();
         builder.RegisterContent<Post>(static _ => []);
@@ -191,7 +191,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
             .GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>()
             .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Path), ContentKey = post.Path }));
 
-        await using var app = builder.Build();
+        await using var app = builder.BuildSite();
         await app.PublishAsync(_outputDir);
 
         var pageDir = Path.Combine(_outputDir, "md", "hello-world");
@@ -227,14 +227,14 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
 
         async Task<string> PublishAsync(Action<Kiji.Assets.ImageProcessorOptions>? configure = null)
         {
-            var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir));
-            builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+            var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir), outputPath: _outputDir);
+            builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
             if (configure is not null) { builder.Services.Configure(configure); }
             builder.AddMarkdownContent<FrontMatter>();
             builder.AddPageParameters<MarkdownPostTestPage>(static services => services
                 .GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>()
                 .Select(static post => new { Slug = Path.GetFileNameWithoutExtension(post.Path), ContentKey = post.Path }));
-            await using var app = builder.Build();
+            await using var app = builder.BuildSite();
             await app.PublishAsync(_outputDir);
             return await File.ReadAllTextAsync(Path.Combine(pageDir, "index.html"));
         }

@@ -10,9 +10,10 @@ New-Item -ItemType Directory -Force $site | Out-Null
 "@ | Set-Content (Join-Path $site 'Minimal.csproj')
 @'
 using Kiji;
+using Microsoft.Extensions.Hosting;
 var builder = StaticSite.CreateBuilder(args);
-builder.SiteInfo = new() { Name = "Minimal", BaseUrl = new Uri("https://example.test/") };
-return await builder.Build().RunAsync();
+builder.UseSiteInfo(new SiteInfo { Name = "Minimal", BaseUrl = new Uri("https://example.test/") });
+await builder.Build().RunAsync();
 '@ | Set-Content (Join-Path $site 'Program.cs')
 '@page "/"' + "`n<h1>Minimal site</h1>" | Set-Content (Join-Path $site 'Home.razor')
 

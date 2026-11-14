@@ -38,7 +38,7 @@ public sealed class PageServiceContentTests : IDisposable
         // A different output can restore the portable cache while its manifest exists.
         File.Delete(Path.Combine(_root, ".kiji", "cache", "manifest.json"));
         var full = Path.Combine(_root, "full");
-        await using var fullApp = CreateApp(new RelatedProbe());
+        await using var fullApp = CreateApp(new RelatedProbe(), output: "full");
         await fullApp.PublishAsync(full);
         var expected = ReadHtml(full);
         Assert.Equal(expected.Keys.Order(), incremental.Keys.Order());
@@ -53,7 +53,7 @@ public sealed class PageServiceContentTests : IDisposable
     {
         WritePost("first", "shared");
         WritePost("second", "shared");
-        await using var app = CreateApp(new RelatedProbe());
+        await using var app = CreateApp(new RelatedProbe(), output: null);
         var (server, web) = await app.StartDevServerAsync(TestUrls.EphemeralPort, CancellationToken.None);
         await using (server)
         {
@@ -89,7 +89,7 @@ public sealed class PageServiceContentTests : IDisposable
         WritePost("first", "shared");
         WritePost("second", "shared");
         var includeTags = true;
-        await using var app = CreateApp(new RelatedProbe(), () => includeTags);
+        await using var app = CreateApp(new RelatedProbe(), () => includeTags, output: null);
         var (server, web) = await app.StartDevServerAsync(TestUrls.EphemeralPort, CancellationToken.None);
         await using (server)
         {
@@ -105,11 +105,11 @@ public sealed class PageServiceContentTests : IDisposable
         }
     }
 
-    private StaticSite CreateApp(RelatedProbe probe, Func<bool>? includeTags = null)
+    private TestSiteHost CreateApp(RelatedProbe probe, Func<bool>? includeTags = null, string? output = "dist")
     {
-        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")));
-        builder.SiteInfo = new SiteInfo { Name = "Related", BaseUrl = new Uri("https://example.test/") };
-        TestSite.TestSiteAssets.Bind(builder.Paths, Path.Combine(_root, "wwwroot"));
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")), outputPath: output);
+        builder.UseSiteInfo(new SiteInfo { Name = "Related", BaseUrl = new Uri("https://example.test/") });
+        TestSite.TestSiteAssets.Bind(builder.GetSitePaths(), Path.Combine(_root, "wwwroot"));
         builder.AddMarkdownContent<FrontMatter>();
         builder.Services.AddScoped<IReadOnlyList<RelatedTag>>(provider => includeTags?.Invoke() == false ? []
             : RelatedTag.Collect(provider.GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>(), probe));
@@ -120,7 +120,7 @@ public sealed class PageServiceContentTests : IDisposable
                 Slug = Path.GetFileNameWithoutExtension(post.Path),
                 ContentKey = post.Path,
             }));
-        return builder.Build();
+        return builder.BuildSite();
     }
 
     private void Change(string change)

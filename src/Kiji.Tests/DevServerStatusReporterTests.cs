@@ -1,4 +1,3 @@
-using Kiji.Hosting;
 using Xunit;
 
 namespace Kiji.Tests;

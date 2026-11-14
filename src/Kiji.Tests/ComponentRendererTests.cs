@@ -13,10 +13,9 @@ public sealed class ComponentRendererTests
     public async Task RenderComponentAsync_ErrorBoundaryRendersAsyncFallbackWithoutLoggingProviders()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         builder.Logging.ClearProviders();
-        await using var app = builder.Build();
-        app.UsePlanningOptions();
+        await using var app = builder.BuildSite();
         var renderer = new ComponentRenderer(app.ServiceProvider);
 
         var html = await renderer.RenderComponentAsync<ErrorBoundaryComponent>();
@@ -31,9 +30,9 @@ public sealed class ComponentRendererTests
     public async Task RenderPageAsync_IsolatesNavigationAndNavLinksAcrossRenders(string baseUrl)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.SiteInfo = new SiteInfo { Name = "Navigation", BaseUrl = new Uri(baseUrl) };
+        builder.UseSiteInfo(new SiteInfo { Name = "Navigation", BaseUrl = new Uri(baseUrl) });
         builder.AddPageParameters<NavigationTestPage>(_ => [new { Id = "first" }, new { Id = "日本 語" }]);
-        await using var app = builder.Build();
+        await using var app = builder.BuildSite();
         var pages = app.CreateSnapshot().Pages;
 
         var html = await Task.WhenAll(pages.Select(page => app.RenderPageAsync(page, CancellationToken.None)));
@@ -61,8 +60,8 @@ public sealed class ComponentRendererTests
     public async Task RenderPageAsync_IsolatesHeadAcrossParallelAndSequentialRenders()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
-        await using var app = builder.Build();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
+        await using var app = builder.BuildSite();
         string[] names = ["first", "second"];
 
         var html = await Task.WhenAll(names.Select(RenderAsync));

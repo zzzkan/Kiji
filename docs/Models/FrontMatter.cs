@@ -6,11 +6,11 @@ namespace Kiji.Docs.Models;
 public sealed class FrontMatter
 {
     /// <summary>The page heading and <c>&lt;title&gt;</c>.</summary>
-    public string? Title { get; set; }
+    public required string Title { get; init; }
 
     /// <summary>The meta description, and the blurb shown in the docs index.</summary>
-    public string? Description { get; set; }
+    public required string Description { get; init; }
 
     /// <summary>Position in the navigation. Lower sorts first.</summary>
-    public int Order { get; set; }
+    public int Order { get; init; }
 }

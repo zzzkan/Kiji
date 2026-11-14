@@ -3,7 +3,7 @@ using System.Diagnostics;
 namespace Kiji.Generation;
 
 /// <summary>
-/// Reports how long each stage of <see cref="StaticSite.PublishAsync"/> took, so a
+/// Reports how long each stage of <see cref="Hosting.SiteEngine.PublishAsync"/> took, so a
 /// measurement harness can attribute a build's time without patching the build path.
 /// Nothing listens by default: <see cref="Observer"/> is null and each
 /// <see cref="Mark"/> is a null check.

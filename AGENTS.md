@@ -26,17 +26,20 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
 ## Design
 
 - Follow the .NET host builder shape: CreateBuilder -> builder.Services/Add*/Use* -> Build
-  -> RunAsync. Every registration lives on StaticSiteBuilder; StaticSite only runs. Add* adds,
-  Use* sets a single value. Kiji adds no command-line options:
+  -> RunAsync. StaticSite.CreateBuilder returns HostApplicationBuilder; Kiji registrations are
+  IHostApplicationBuilder extensions stored in DI. Publish and serve are hosted services that
+  wait for ApplicationStarted. Add* adds, Use* sets a single value. Kiji adds no command-line options:
   watch serves, publish generates, clean removes the caches and staging directory.
   ASP.NET Core configuration owns the dev server address. Serving reads only the standard
   --environment host argument. Prefer conventions to flags.
 - All log output goes through the site's ILogger (Kiji's own under Kiji.Build), except the dev
-  server's watch-style status lines. Publish uses the standard console formatter; MSBuild
-  receives every line as a high-importance message and ignores its error/warning format.
-  Only the exit code fails a publish. Log levels come from the Logging section, not MSBuild
+  server's watch-style status lines and the runtime's unhandled exception report. Publish uses
+  the standard console formatter; MSBuild receives every line as a high-importance message and
+  ignores its error/warning format. Only the exit code fails a publish: failed or canceled runs
+  make RunAsync throw from the hosted service's StopAsync (avoiding duplicate host logs); Kiji
+  never sets Environment.ExitCode. Log levels come from the Logging section, not MSBuild
   properties.
-- Dev and publish share StaticSite.RenderPageAsync. Never emit stale output;
+- Dev and publish share SiteEngine.RenderPageAsync. Never emit stale output;
   ambiguous incremental state requires rendering.
 - One type per file. Library components and library test components are hand-written ComponentBase classes;
   docs and the package consumer fixture use .razor files and the Razor SDK.
@@ -56,24 +59,27 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   name writable [Parameter] properties; do not enforce EditorRequired. UseNotFoundPage still
   requires its own route and a registered page assembly.
 - MSBuild supplies the project directory through runtimeconfig; missing metadata is an error.
-  Content becomes accessible through factories/loaders/artifacts only after execution
-  paths settle. Do not expose a provider or content collection on StaticSite. IHostEnvironment
-  is read-only: its name selects the configuration files at creation. Publish takes the name
+  Execution paths are fixed singletons at CreateBuilder. Content loads through
+  factories/loaders/artifacts when execution starts, not while building the host.
+  IHostEnvironment is read-only: its name selects the configuration files and its root the
+  paths at creation, so the provider factory rejects changes. Publish takes the name
   only from DOTNET_ENVIRONMENT, the generic host convention and the one machine-dependent input
   kept, and logs it; serving follows WebApplicationBuilder's order (--environment,
   DOTNET_ENVIRONMENT, ASPNETCORE_ENVIRONMENT). Default configuration sources stay
   project-local (no environment variables, command line or user secrets, which differ between
   machines). The dev server uses standard ASP.NET Core configuration with the same project
   directory and environment. Per-key reads are not tracked, so the environment name and all
-  configuration outside the Logging section are in the publish options fingerprint.
+  configuration outside the Logging and Metrics sections are in the publish options fingerprint.
 - The dev server enforces BaseUrl's path prefix and uses `.kiji/dev-site`.
   Only `.kiji/cache` (pages) and `.kiji/jit` (publish JIT profile) are portable; CI restores
   either or both. Planning creates no output directories.
-- StaticSiteBuilder.Services is standard DI; Build validates it, makes it read-only and
-  builds the provider. Kiji's defaults and managed services are registered when the builder
-  is created. Each render owns a scope. Loaders, page parameter/feed
-  factories and artifacts use the root provider and cannot resolve scoped services. Validate
-  Kiji-owned registrations in Build. Compute derived data during rendering or in scoped services;
+- HostApplicationBuilder.Services is standard DI; KijiServiceProviderFactory validates
+  Kiji-owned registrations (including its own hosted service), records code assemblies and enables scope validation in Build.
+  A replaced factory is rejected at startup. Kiji's defaults and managed services are registered
+  when the builder is created. Each render owns a scope. Loaders, page parameter/feed
+  factories and artifacts use the root provider and cannot resolve scoped services.
+  User hosted services' state is untracked and may require AlwaysRender.
+  Compute derived data during rendering or in scoped services;
   content reload does not recreate singletons. Use AlwaysRender on components reading
   untracked external state. Content items are tracked by source, ID and file; values assigned
   to them after loading are untracked state, documented rather than detected.

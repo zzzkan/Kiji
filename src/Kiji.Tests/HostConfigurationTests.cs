@@ -50,7 +50,7 @@ public sealed class HostConfigurationTests : IDisposable
         // Machine-specific values would make every publish render every page and break the portable cache.
         Assert.NotNull(Environment.GetEnvironmentVariable("PATH"));
         Assert.Null(builder.Configuration["PATH"]);
-        await using var site = builder.Build();
+        await using var site = builder.BuildSite();
         Assert.Same(builder.Configuration, site.ServiceProvider.GetRequiredService<IConfiguration>());
     }
 
@@ -65,7 +65,7 @@ public sealed class HostConfigurationTests : IDisposable
             {
                 builder.Configuration.AddInMemoryCollection([new("Site:Title", overrideTitle)]);
             }
-            await using var site = builder.Build();
+            await using var site = builder.BuildSite();
             await site.PublishAsync(output);
             return await File.ReadAllTextAsync(Path.Combine(output, "configuration", "index.html"));
         }
@@ -85,7 +85,7 @@ public sealed class HostConfigurationTests : IDisposable
         {
             var builder = CreateBuilder(environmentName: null, typeof(FeatureOptionsPage));
             builder.Services.Configure<FeatureOptions>(builder.Configuration.GetSection("Feature"));
-            await using var site = builder.Build();
+            await using var site = builder.BuildSite();
             await site.PublishAsync(output);
             return await File.ReadAllTextAsync(Path.Combine(output, "feature", "index.html"));
         }
@@ -101,13 +101,16 @@ public sealed class HostConfigurationTests : IDisposable
     [Theory]
     [InlineData("""{ "Site": { "Title": "same" }, "Logging": { "LogLevel": { "Kiji.Build": "Debug" } } }""", true)]
     [InlineData("""{ "Site": { "Title": "same" }, "logging": { "Console": { "FormatterName": "simple" } } }""", true)]
+    [InlineData("""{ "Site": { "Title": "same" }, "Metrics": { "EnabledMetrics": { "Test.Meter": true } } }""", true)]
+    [InlineData("""{ "Site": { "Title": "same" }, "metrics": { "EnabledMetrics": { "Test.Meter": false } } }""", true)]
+    [InlineData("""{ "Site": { "Title": "same" }, "MetricsTheme": "dark" }""", false)]
     [InlineData("""{ "Site": { "Title": "same" }, "LoggingTheme": "dark" }""", false)]
-    public async Task Fingerprint_LeavesOutOnlyTheLoggingSection(string changed, bool reused)
+    public async Task Fingerprint_LeavesOutOnlyDiagnosticsSections(string changed, bool reused)
     {
         async Task<string> PublishAsync()
         {
             var builder = CreateBuilder(environmentName: null, typeof(ConfigurationPage));
-            await using var site = builder.Build();
+            await using var site = builder.BuildSite();
             await site.PublishAsync(Path.Combine(_root, "dist"));
             var manifest = await File.ReadAllTextAsync(Path.Combine(_root, ".kiji", "cache", "manifest.json"));
             return JsonSerializer.Deserialize(manifest, BuildManifestJsonContext.Default.BuildManifest)!.OptionsHash;
@@ -117,7 +120,7 @@ public sealed class HostConfigurationTests : IDisposable
         var first = await PublishAsync();
         WriteSettings("appsettings.json", changed);
 
-        // Raising a log level to inspect a build must not render every page again.
+        // Changing diagnostics must not render every page again; similarly named site keys must.
         Assert.Equal(reused, first == await PublishAsync());
     }
 
@@ -128,7 +131,7 @@ public sealed class HostConfigurationTests : IDisposable
         var builder = CreateBuilder(environmentName: null);
         builder.Services.Configure<ImageProcessorOptions>(builder.Configuration.GetSection("Images"));
 
-        await using var site = builder.Build();
+        await using var site = builder.BuildSite();
         var options = site.ServiceProvider.GetRequiredService<IOptions<ImageProcessorOptions>>().Value;
 
         Assert.Equal([480], options.Widths);
@@ -145,16 +148,16 @@ public sealed class HostConfigurationTests : IDisposable
         var builder = CreateBuilder(environmentName: null);
         var info = builder.Configuration.GetRequiredSection("Site").Get<SiteInfo>()!;
 
-        var exception = Assert.Throws<ArgumentException>(() => builder.SiteInfo = info);
+        var exception = Assert.Throws<ArgumentException>(() => builder.UseSiteInfo(info));
 
         Assert.Contains($"SiteInfo.{property} is required", exception.Message, StringComparison.Ordinal);
     }
 
-    private StaticSiteBuilder CreateBuilder(string? environmentName, params Type[] discoveredPages)
+    private HostApplicationBuilder CreateBuilder(string? environmentName, params Type[] discoveredPages)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root),
-            runtimeData: null, environment: name => name == "DOTNET_ENVIRONMENT" ? environmentName : null, discoveredPages);
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+            runtimeData: name => name == "Kiji.OutputPath" ? "dist" : null, environment: name => name == "DOTNET_ENVIRONMENT" ? environmentName : null, discoveredPages);
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         return builder;
     }
 

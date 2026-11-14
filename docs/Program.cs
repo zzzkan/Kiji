@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Hosting;
 using Kiji;
 using Kiji.Docs.Layout;
 using Kiji.Docs.Models;
@@ -7,19 +8,17 @@ using Kiji.Sitemaps;
 using Microsoft.Extensions.DependencyInjection;
 
 var builder = StaticSite.CreateBuilder(args);
-builder.SiteInfo = new()
+builder.UseSiteInfo(new SiteInfo
 {
     BaseUrl = new Uri("https://kiji-docs.zzzkan.workers.dev/"),
     Name = "Kiji",
     Description = "Write Razor. Publish a purely static site. Kiji brings your .NET components and Markdown together in plain HTML, ready for any static host.",
     Language = "en",
     Author = "zzzkan",
-};
-
-builder.AddMarkdownContent<FrontMatter, Article>(
-    select: static content => Article.Create(content));
+});
 builder.UseDefaultLayout<MainLayout>();
 builder.UseNotFoundPage<NotFoundPage>();
+builder.AddMarkdownContent<FrontMatter, Article>(select: static content => new Article(content));
 builder.AddPageParameters<ArticlePage>(static services =>
 {
     var articles = services.GetRequiredService<ContentCollection<Article>>()
@@ -34,4 +33,4 @@ builder.AddPageParameters<ArticlePage>(static services =>
 });
 builder.AddSitemap();
 
-return await builder.Build().RunAsync();
+await builder.Build().RunAsync();

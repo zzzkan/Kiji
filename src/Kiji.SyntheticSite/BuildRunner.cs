@@ -1,10 +1,12 @@
 using System.Diagnostics;
 using Kiji.Feeds;
 using Kiji.Generation;
+using Kiji.Hosting;
 using Kiji.Markdown;
 using Kiji.Sitemaps;
 using Kiji.SyntheticSite.Pages;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Kiji.SyntheticSite;
 
@@ -66,15 +68,15 @@ public static class BuildRunner
     /// </summary>
     public static async Task BuildSiteAsync(string root)
     {
-        var builder = StaticSite.CreateBuilder([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "synthetic")), typeof(BuildRunner).Assembly);
-        builder.SiteInfo = new SiteInfo
+        var builder = StaticSite.CreateBuilder([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "synthetic")), typeof(BuildRunner).Assembly, runtimeData: name => name == "Kiji.OutputPath" ? Path.Combine(root, "dist") : null);
+        builder.UseSiteInfo(new SiteInfo
         {
             BaseUrl = new Uri("https://bench.example.com/"),
             Name = "Kiji Bench",
             Description = "Synthetic benchmark site.",
             Language = "en",
             Author = "bench",
-        };
+        });
 
         builder.AddMarkdownContent<PostFrontMatter>(static options => options.Directory = "contents");
         builder.UseDefaultLayout<MainLayout>();
@@ -93,7 +95,10 @@ public static class BuildRunner
                 RelativePath: $"blog/{PostSlug.From(post.Path)}/")));
         builder.AddSitemap();
 
-        await using var app = builder.Build();
-        await app.PublishAsync(Path.Combine(root, "dist"));
+        using var host = builder.Build();
+        // The direct benchmark runner does not start hosted services. Preserve the
+        // startup validation performed by the former direct PublishAsync API.
+        host.Services.GetService<IStartupValidator>()?.Validate();
+        await host.Services.GetRequiredService<SiteEngine>().PublishAsync();
     }
 }

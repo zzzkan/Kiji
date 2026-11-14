@@ -92,12 +92,12 @@ public sealed class JavaScriptRuntimeTests
         });
     }
 
-    private static StaticSite CreateApp()
+    private static TestSiteHost CreateApp()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         builder.Services.AddScoped<JavaScriptRuntimeService>();
-        return builder.Build();
+        return builder.BuildSite();
     }
 
     private static void AssertGuidance(InvalidOperationException exception)

@@ -20,55 +20,56 @@ order: 100
 
 ### `StaticSite`
 
-Runs a site configured with `StaticSiteBuilder`:
+Creates a standard `HostApplicationBuilder` with Kiji's project-local configuration:
 
 ```csharp
+using Microsoft.Extensions.Hosting;
+
 var builder = StaticSite.CreateBuilder(args);
-builder.SiteInfo = new SiteInfo
+builder.UseSiteInfo(new SiteInfo
 {
     BaseUrl = new Uri("https://example.com/"),
     Name = "My Site",
-};
+});
 
 // builder.Services, Add* and Use* registrations
-
-return await builder.Build().RunAsync();
+await builder.Build().RunAsync();
 ```
 
-| Member                                                              | Behavior                                                                                                                                  |
-| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `static StaticSiteBuilder CreateBuilder(string[] args)`             | Creates a builder for the current project. While serving, `args` can set the environment and development server options such as `--urls`. |
-| `Task<int> RunAsync(CancellationToken cancellationToken = default)` | Serves the site during `dotnet watch` and generates it during `dotnet publish`. Return its result from `Program.cs`.                      |
+| Member                                                       | Behavior                                                                                                                                                     |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `static HostApplicationBuilder CreateBuilder()`              | Creates a builder without development server arguments.                                                                                                      |
+| `static HostApplicationBuilder CreateBuilder(string[] args)` | Creates a builder for the current project. While serving, arguments configure ASP.NET Core, including `--environment` and `--urls`. Publishing ignores them. |
 
-### `StaticSiteBuilder`
+It serves during `dotnet watch` and generates during `dotnet publish`. A publish or
+development server failure logs the error under `Kiji.Build`, and `RunAsync` then throws
+it, so the process exits with a failure code. A canceled publish, or one
+still running at the host's shutdown timeout, throws `OperationCanceledException` because
+the output is incomplete.
 
-Holds every registration for the site. Configure it before calling `Build`. Registration
-methods return the builder, so calls can be chained.
+### `StaticSiteHostBuilderExtensions`
 
-| Property                              | Behavior                                                 |
-| ------------------------------------- | -------------------------------------------------------- |
-| `SiteInfo SiteInfo`                   | Required site metadata. See [`SiteInfo`](#siteinfo).     |
-| `IServiceCollection Services`         | Services for components. See [Services](#services).      |
-| `IHostEnvironment Environment`        | The environment name. See [Environment](#environment).   |
-| `IConfigurationManager Configuration` | Site configuration. See [Configuration](#configuration). |
-| `ILoggingBuilder Logging`             | Logging providers and filters. See [Logging](#logging).  |
+Registration methods for a builder created by `StaticSite.CreateBuilder`; other builders
+are rejected. Use the builder's standard [Services](#services), [Environment](#environment),
+[Configuration](#configuration), and [Logging](#logging) as well.
 
-| Method                                                                                                   | Behavior                                                                                                                                   |
-| -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `UseDefaultLayout<TLayout>()`                                                                            | Sets the layout for pages without their own `@layout`. Without it, pages render directly inside `<body>`.                                  |
-| `AddPageAssembly(Assembly assembly)`                                                                     | Adds pages from another assembly, such as a Razor class library. Pages in the site project are found automatically.                        |
-| `AddPageParameters<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)`                       | Supplies parameter values for a component's pages. See [Page parameters](#page-parameters).                                                |
-| `UseNotFoundPage<TPage>()`                                                                               | Writes the component as `404.html` instead of at its route. The component needs exactly one route and cannot also receive page parameters. |
-| `AddArtifact(string outputRelativePath, Func<Stream, SiteOutputContext, CancellationToken, Task> write)` | Writes a file after all pages. Write to the stream without disposing it. See [`SiteOutputContext`](#siteoutputcontext).                    |
-| `StaticSite Build()`                                                                                     | Validates the services and returns the site. Call it once.                                                                                 |
+| Extension method                                                                                         | Behavior                                                                                                       |
+| -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `UseSiteInfo(SiteInfo siteInfo)`                                                                         | Sets the required site metadata. A later call replaces it.                                                   |
+| `UseDefaultLayout<TLayout>()`                                                                            | Sets the layout for pages without their own `@layout`.                                                         |
+| `AddPageAssembly(Assembly assembly)`                                                                     | Adds pages from another assembly without duplicates. The entry assembly is included automatically.             |
+| `AddPageParameters<TPage>(Func<IServiceProvider, IEnumerable<object>> parameters)`                       | Adds parameter sets. See [Page parameters](#page-parameters).                                                  |
+| `UseNotFoundPage<TPage>()`                                                                               | Writes the component as `404.html`. It needs exactly one route and cannot receive page parameters.             |
+| `AddArtifact(string outputRelativePath, Func<Stream, SiteOutputContext, CancellationToken, Task> write)` | Writes a file after all pages. Do not dispose the stream. See [`SiteOutputContext`](#siteoutputcontext).       |
+
 
 Extension methods in other namespaces register content and generated files:
 
 | Method                                                                                  | Namespace       |
 | --------------------------------------------------------------------------------------- | --------------- |
-| [`AddMarkdownContent`, `AddKeyedMarkdownContent`](#markdownstaticsitebuilderextensions) | `Kiji.Markdown` |
-| [`AddRssFeed`](#rssfeedstaticsitebuilderextensions)                                     | `Kiji.Feeds`    |
-| [`AddSitemap`](#sitemapstaticsitebuilderextensions)                                     | `Kiji.Sitemaps` |
+| [`AddMarkdownContent`, `AddKeyedMarkdownContent`](#markdownhostbuilderextensions)       | `Kiji.Markdown` |
+| [`AddRssFeed`](#rssfeedhostbuilderextensions)                                           | `Kiji.Feeds`    |
+| [`AddSitemap`](#sitemaphostbuilderextensions)                                           | `Kiji.Sitemaps` |
 
 Only `dotnet publish` writes artifacts, feeds, and sitemaps; the development server
 returns 404 for them.
@@ -86,7 +87,9 @@ builder.Services.AddScoped<RelatedPosts>();
 - Each page render has its own scope, shared by its page, layout, and child components.
 - Page parameter and feed factories and artifact writers cannot resolve scoped services.
 - Kiji's own services, such as `SiteInfo`, `PageInfo`, and `ContentCollection<T>`, cannot
-  be replaced.
+  be replaced, and Kiji's hosted service cannot be removed. Replacing the container with `ConfigureContainer` is not supported.
+- Page generation and the development server start after every hosted service has started.
+  Hosted service state is not tracked for HTML reuse; use `AlwaysRender` on components that read it.
 
 #### Environment
 
@@ -102,7 +105,10 @@ if (builder.Environment.IsDevelopment())
 ```
 
 `dotnet publish` uses `DOTNET_ENVIRONMENT` and defaults to `Production`. `dotnet watch`
-defaults to `Development`.
+defaults to `Development`. While serving, precedence is `--environment`, then
+`DOTNET_ENVIRONMENT`, then `ASPNETCORE_ENVIRONMENT`. Do not change the environment name
+or content root after `CreateBuilder`; `Build` rejects it because the configuration files
+and paths are already selected.
 
 #### Configuration
 
@@ -118,6 +124,7 @@ builder.Services.Configure<ImageProcessorOptions>(builder.Configuration.GetSecti
 - Environment variables, command-line arguments, and user secrets are not read. Add a
   source when you need one, such as `builder.Configuration.AddEnvironmentVariables("MYSITE_")`.
 - Restart `dotnet watch` after editing the files.
+- Changing only the `Logging` or `Metrics` section does not regenerate pages on publish.
 - The development server answers only `localhost`, `127.0.0.1`, and `[::1]`. To use
   another hostname, add it to `AllowedHosts` and keep the local entries, for example
   `"AllowedHosts": "localhost;127.0.0.1;[::1];dev.example"` in `appsettings.Development.json`.
@@ -163,7 +170,7 @@ page render on every publish.
 
 ### `SiteInfo`
 
-Site metadata, assigned to `StaticSiteBuilder.SiteInfo` and injectable into components.
+Site metadata, set with `builder.UseSiteInfo(...)` and injectable into components.
 
 | Property             | Default  | Behavior                                                                                             |
 | -------------------- | -------- | ---------------------------------------------------------------------------------------------------- |
@@ -236,7 +243,7 @@ layout, on every publish. Derived components inherit it. See
 
 See [Markdown and images](../markdown/) for examples.
 
-### `MarkdownStaticSiteBuilderExtensions`
+### `MarkdownHostBuilderExtensions`
 
 Each method loads the `*.md` files of one directory and registers a `ContentCollection<T>`:
 
@@ -349,7 +356,7 @@ to the `outputDirectory` passed to `ProcessAsync`, and `Width` is in pixels.
 
 ## `Kiji.Feeds` namespace
 
-### `RssFeedStaticSiteBuilderExtensions`
+### `RssFeedHostBuilderExtensions`
 
 `AddRssFeed(Func<IServiceProvider, IEnumerable<FeedItem>> items, string path = "feed.xml")`
 writes an RSS 2.0 feed with items in the given order. The channel's title, description,
@@ -380,7 +387,7 @@ describes one item. `RelativePath` is the page path relative to `BaseUrl` withou
 
 ## `Kiji.Sitemaps` namespace
 
-### `SitemapStaticSiteBuilderExtensions`
+### `SitemapHostBuilderExtensions`
 
 `AddSitemap(string path = "sitemap.xml", IEnumerable<string>? excludedPaths = null)` lists
 every generated page except `404.html`. Each excluded path removes only the page with that

@@ -16,7 +16,7 @@ namespace Kiji.Hosting;
 /// <c>HtmlRenderer</c> pipeline used by the static build; the only additions are
 /// post-render live-reload script injection and content watching.
 /// </summary>
-internal sealed class DevServer(StaticSite app, DevServerStatusReporter? reporter = null) : IAsyncDisposable
+internal sealed class DevServer(SiteEngine app, DevServerStatusReporter? reporter = null) : IAsyncDisposable
 {
     private const string DefaultUrl = "http://127.0.0.1:8080";
 

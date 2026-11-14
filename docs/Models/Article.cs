@@ -8,39 +8,35 @@ public sealed class Article
 {
     private readonly MarkdownContent<FrontMatter> _content;
 
-    private Article(MarkdownContent<FrontMatter> content, string slug)
+    public Article(MarkdownContent<FrontMatter> content)
     {
-        _content = content;
-        Slug = slug;
-    }
+        ArgumentException.ThrowIfNullOrWhiteSpace(content.Path, nameof(content.Path));
+        ArgumentException.ThrowIfNullOrWhiteSpace(content.FrontMatter.Title, nameof(content.FrontMatter.Title));
+        ArgumentException.ThrowIfNullOrWhiteSpace(content.FrontMatter.Description, nameof(content.FrontMatter.Description));
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(content.FrontMatter.Order, nameof(content.FrontMatter.Order));
 
-    public string Slug { get; }
-
-    public string? Title => _content.FrontMatter.Title;
-
-    public string? Description => _content.FrontMatter.Description;
-
-    public int Order => _content.FrontMatter.Order;
-
-    public ValueTask<string> RenderAsync(CancellationToken cancellationToken = default)
-    {
-        return _content.RenderAsync(cancellationToken);
-    }
-
-    public static Article Create(MarkdownContent<FrontMatter> content)
-    {
-        ArgumentNullException.ThrowIfNull(content);
-
-        var value = string.Equals(Path.GetFileName(content.Path), "index.md", StringComparison.OrdinalIgnoreCase)
+        var slug = string.Equals(Path.GetFileName(content.Path), "index.md", StringComparison.OrdinalIgnoreCase)
             ? Path.GetFileName(Path.GetDirectoryName(content.Path))
             : Path.GetFileNameWithoutExtension(content.Path);
-        if (string.IsNullOrWhiteSpace(value))
+        if (string.IsNullOrWhiteSpace(slug))
         {
             throw new InvalidOperationException($"Cannot determine a slug for '{content.Path}'.");
         }
 
-        return new Article(content, NormalizeSlug(value));
+        _content = content;
+        Slug = NormalizeSlug(slug);
     }
+
+    public string Slug { get; }
+
+    public string Title => _content.FrontMatter.Title;
+
+    public string Description => _content.FrontMatter.Description;
+
+    public int Order => _content.FrontMatter.Order;
+
+    public ValueTask<string> RenderAsync(CancellationToken cancellationToken = default) =>
+        _content.RenderAsync(cancellationToken);
 
     private static string NormalizeSlug(string value)
     {

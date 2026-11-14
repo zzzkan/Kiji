@@ -1,16 +1,18 @@
+using Kiji.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 namespace Kiji.Markdown;
 
 /// <summary>
-/// Markdown content support for <see cref="StaticSiteBuilder"/>.
+/// Markdown content support for <see cref="IHostApplicationBuilder"/>.
 /// </summary>
-public static class MarkdownStaticSiteBuilderExtensions
+public static class MarkdownHostBuilderExtensions
 {
     /// <summary>Adds Markdown files as a content collection with parsed front matter and lazily rendered bodies.</summary>
-    public static StaticSiteBuilder AddMarkdownContent<TFrontMatter>(
-        this StaticSiteBuilder builder,
+    public static IHostApplicationBuilder AddMarkdownContent<TFrontMatter>(
+        this IHostApplicationBuilder builder,
         Action<MarkdownContentOptions>? configure = null)
         where TFrontMatter : class
     {
@@ -21,8 +23,8 @@ public static class MarkdownStaticSiteBuilderExtensions
 
     /// <summary>Adds Markdown files projected into a collection of custom models.</summary>
     /// <param name="select">Projects each parsed file independently; the result must not depend on other items.</param>
-    public static StaticSiteBuilder AddMarkdownContent<TFrontMatter, TModel>(
-        this StaticSiteBuilder builder,
+    public static IHostApplicationBuilder AddMarkdownContent<TFrontMatter, TModel>(
+        this IHostApplicationBuilder builder,
         Func<MarkdownContent<TFrontMatter>, TModel> select,
         Action<MarkdownContentOptions>? configure = null)
         where TFrontMatter : class
@@ -30,8 +32,8 @@ public static class MarkdownStaticSiteBuilderExtensions
         => AddMarkdownContentCore(builder, null, select, configure);
 
     /// <summary>Adds a keyed collection of Markdown files with parsed front matter and lazily rendered bodies.</summary>
-    public static StaticSiteBuilder AddKeyedMarkdownContent<TFrontMatter>(
-        this StaticSiteBuilder builder,
+    public static IHostApplicationBuilder AddKeyedMarkdownContent<TFrontMatter>(
+        this IHostApplicationBuilder builder,
         string serviceKey,
         Action<MarkdownContentOptions>? configure = null)
         where TFrontMatter : class
@@ -43,8 +45,8 @@ public static class MarkdownStaticSiteBuilderExtensions
     /// <param name="serviceKey">A non-empty service key identifying this collection.</param>
     /// <param name="select">Projects each parsed file independently; the result must not depend on other items.</param>
     /// <param name="configure">Selects the source directory and files.</param>
-    public static StaticSiteBuilder AddKeyedMarkdownContent<TFrontMatter, TModel>(
-        this StaticSiteBuilder builder,
+    public static IHostApplicationBuilder AddKeyedMarkdownContent<TFrontMatter, TModel>(
+        this IHostApplicationBuilder builder,
         string serviceKey,
         Func<MarkdownContent<TFrontMatter>, TModel> select,
         Action<MarkdownContentOptions>? configure = null)
@@ -55,8 +57,8 @@ public static class MarkdownStaticSiteBuilderExtensions
         return AddMarkdownContentCore(builder, serviceKey, select, configure);
     }
 
-    private static StaticSiteBuilder AddMarkdownContentCore<TFrontMatter, TModel>(
-        StaticSiteBuilder builder,
+    private static IHostApplicationBuilder AddMarkdownContentCore<TFrontMatter, TModel>(
+        IHostApplicationBuilder builder,
         string? serviceKey,
         Func<MarkdownContent<TFrontMatter>, TModel> select,
         Action<MarkdownContentOptions>? configure)
@@ -64,7 +66,7 @@ public static class MarkdownStaticSiteBuilderExtensions
         where TModel : class
     {
         ArgumentNullException.ThrowIfNull(builder);
-        builder.EnsureConfigurable();
+        var context = SiteBuilderContext.Get(builder);
         ArgumentNullException.ThrowIfNull(select);
 
         var contentOptions = new MarkdownContentOptions();
@@ -81,7 +83,7 @@ public static class MarkdownStaticSiteBuilderExtensions
             {
                 var options = services.GetRequiredService<IOptions<MarkdownOptions>>().Value;
                 var markdownProcessor = services.GetRequiredService<MarkdownProcessor>();
-                var sourceDirectory = builder.Paths.ResolveAgainstRoot(directory);
+                var sourceDirectory = context.Paths.ResolveAgainstRoot(directory);
 
                 var sources = new MarkdownContentsBuilder<TFrontMatter>(
                     sourceDirectory,
@@ -91,7 +93,7 @@ public static class MarkdownStaticSiteBuilderExtensions
                         cancellationToken),
                     options.CreateDeserializer,
                     sourceCache,
-                    builder.Runtime.Files,
+                    context.Runtime.Files,
                     contentOptions.FileFilter)
                     .Build();
 

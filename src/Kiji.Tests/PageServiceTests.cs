@@ -19,7 +19,7 @@ public sealed class PageServiceTests : IDisposable
         var probe = new ServiceProbe { Release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously) };
         var builder = CreateBuilder(probe);
         builder.AddPageParameters<ServicePage>(_ => [new { Key = "first" }, new { Key = "second" }]);
-        await using var app = builder.Build();
+        await using var app = builder.BuildSite();
         var requests = app.CreateSnapshot().Pages;
 
         var renders = requests.Select(request => app.RenderPageAsync(request, CancellationToken.None)).ToArray();
@@ -63,7 +63,7 @@ public sealed class PageServiceTests : IDisposable
         var probe = new ServiceProbe();
         var builder = CreateBuilder(probe);
         builder.AddPageParameters<ServicePage>(_ => [new { Key = "failure", Fail = true }]);
-        await using var app = builder.Build();
+        await using var app = builder.BuildSite();
         var request = Assert.Single(app.CreateSnapshot().Pages);
         await Assert.ThrowsAsync<InvalidOperationException>(() => app.RenderPageAsync(request, CancellationToken.None));
         var service = Assert.Single(probe.Created);
@@ -81,8 +81,11 @@ public sealed class PageServiceTests : IDisposable
     [InlineData("open-generic")]
     [InlineData("provider")]
     [InlineData("environment")]
+    [InlineData("lifetime")]
     [InlineData("content")]
     [InlineData("configuration")]
+    [InlineData("hosted-service-remove")]
+    [InlineData("hosted-service-duplicate")]
     [InlineData("keyed-content-remove")]
     [InlineData("keyed-content-replace")]
     public void Build_ValidatesTheFinalManagedRegistrations(string operation)
@@ -92,14 +95,17 @@ public sealed class PageServiceTests : IDisposable
         var services = builder.Services;
         switch (operation)
         {
+            case "hosted-service-remove": services.RemoveAll<IHostedService>(); break;
+            case "hosted-service-duplicate": services.Add(services.Single(descriptor => descriptor.ServiceType == typeof(IHostedService))); break;
             case "duplicate": services.Add(services.Single(descriptor => descriptor.ServiceType == typeof(PageInfo))); break;
             case "remove": services.RemoveAll<PageInfo>(); break;
-            case "replace": services.Replace(ServiceDescriptor.Singleton(builder.SiteInfo)); break;
+            case "replace": services.Replace(ServiceDescriptor.Singleton(builder.GetSiteInfo())); break;
             case "remove-site": services.RemoveAll<SiteInfo>(); break;
-            case "duplicate-site": services.AddSingleton(builder.SiteInfo); break;
-            case "keyed": services.AddKeyedSingleton("alternate", builder.SiteInfo); break;
+            case "duplicate-site": services.AddSingleton(builder.GetSiteInfo()); break;
+            case "keyed": services.AddKeyedSingleton("alternate", builder.GetSiteInfo()); break;
             case "open-generic": services.AddSingleton(typeof(ContentCollection<>), typeof(ContentCollection<>)); break;
             case "provider": services.AddSingleton<IServiceProvider>(_ => throw new NotSupportedException()); break;
+            case "lifetime": services.RemoveAll<Microsoft.Extensions.Hosting.IHostApplicationLifetime>(); break;
             case "environment": services.Replace(ServiceDescriptor.Singleton(builder.Environment)); break;
             case "content": services.RemoveAll<ContentCollection<object>>(); break;
             case "configuration": services.AddSingleton<Microsoft.Extensions.Configuration.IConfiguration>(new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build()); break;
@@ -110,7 +116,7 @@ public sealed class PageServiceTests : IDisposable
                 services.Add(ServiceDescriptor.KeyedSingleton(keyed.ServiceType, "replacement", keyed.KeyedImplementationInstance!));
                 break;
         }
-        var exception = Assert.Throws<InvalidOperationException>(() => builder.Build());
+        var exception = Assert.Throws<InvalidOperationException>(() => builder.BuildSite());
         Assert.Contains("managed by Kiji", exception.Message, StringComparison.Ordinal);
     }
 
@@ -121,12 +127,12 @@ public sealed class PageServiceTests : IDisposable
         builder.Services.AddSingleton(provider => provider.GetRequiredService<ResolvedSitePaths>().OutputDirectory);
         // Managed registrations are present from the start, so ordinary extension methods see them.
         builder.Services.TryAddSingleton(new SiteInfo { Name = "Replacement", BaseUrl = new Uri("https://replacement.test/") });
-        await using var app = builder.Build();
+        await using var app = builder.BuildSite();
         Assert.Throws<InvalidOperationException>(() => builder.Services.AddSingleton("late"));
 
         app.CreateSnapshot();
-        Assert.Same(builder.SiteInfo, app.ServiceProvider.GetRequiredService<SiteInfo>());
-        Assert.EndsWith(Path.Combine(".kiji", "dev-site"), app.ServiceProvider.GetRequiredService<string>(), StringComparison.Ordinal);
+        Assert.Same(builder.GetSiteInfo(), app.ServiceProvider.GetRequiredService<SiteInfo>());
+        Assert.Equal(Path.Combine(_root, "dist"), app.ServiceProvider.GetRequiredService<string>());
     }
 
     [Fact]
@@ -134,7 +140,7 @@ public sealed class PageServiceTests : IDisposable
     {
         var builder = CreateBuilder();
         builder.Services.AddScoped<object, MissingDependencyService>();
-        var exception = Assert.Throws<AggregateException>(() => builder.Build());
+        var exception = Assert.Throws<AggregateException>(() => builder.BuildSite());
         Assert.Contains(nameof(MissingDependencyService), exception.ToString(), StringComparison.Ordinal);
     }
 
@@ -148,7 +154,7 @@ public sealed class PageServiceTests : IDisposable
         il.Emit(OpCodes.Ret);
         builder.Services.AddSingleton(method.CreateDelegate<Func<IServiceProvider, object>>());
 
-        var exception = Assert.Throws<NotSupportedException>(() => builder.Build());
+        var exception = Assert.Throws<NotSupportedException>(() => builder.BuildSite());
         Assert.Contains("regular C# lambda or method", exception.Message, StringComparison.Ordinal);
     }
 
@@ -178,7 +184,7 @@ public sealed class PageServiceTests : IDisposable
             case "instance": builder.Services.AddSingleton(Activator.CreateInstance(type)!); break;
             case "factory": builder.Services.AddSingleton(type.GetMethod("Create")!.CreateDelegate<Func<IServiceProvider, object>>()); break;
         }
-        await using var app = builder.Build();
+        await using var app = builder.BuildSite();
         var output = Path.Combine(_root, "dist");
         await app.PublishAsync(output);
         Assert.Single(probe.Created);
@@ -220,16 +226,16 @@ public sealed class PageServiceTests : IDisposable
                 });
                 break;
         }
-        await using var app = builder.Build();
+        await using var app = builder.BuildSite();
         var exception = await Assert.ThrowsAnyAsync<Exception>(() => app.PublishAsync(Path.Combine(_root, "dist")));
         Assert.Contains("scoped service", exception.ToString(), StringComparison.OrdinalIgnoreCase);
         Assert.Contains(nameof(IDisposable), exception.ToString(), StringComparison.Ordinal);
     }
 
-    private StaticSiteBuilder CreateBuilder(ServiceProbe? probe = null)
+    private HostApplicationBuilder CreateBuilder(ServiceProbe? probe = null)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
-        builder.SiteInfo = new SiteInfo { Name = "Services", BaseUrl = new Uri("https://example.test/") };
+        builder.UseSiteInfo(new SiteInfo { Name = "Services", BaseUrl = new Uri("https://example.test/") });
         if (probe is not null)
         {
             builder.Services.AddSingleton(probe);

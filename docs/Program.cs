@@ -16,11 +16,9 @@ builder.UseSiteInfo(new SiteInfo
     Language = "en",
     Author = "zzzkan",
 });
-
-builder.AddMarkdownContent<FrontMatter, Article>(
-    select: static content => Article.Create(content));
 builder.UseDefaultLayout<MainLayout>();
 builder.UseNotFoundPage<NotFoundPage>();
+builder.AddMarkdownContent<FrontMatter, Article>(select: static content => new Article(content));
 builder.AddPageParameters<ArticlePage>(static services =>
 {
     var articles = services.GetRequiredService<ContentCollection<Article>>()

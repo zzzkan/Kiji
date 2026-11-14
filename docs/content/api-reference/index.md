@@ -369,8 +369,10 @@ This example publishes `feed.xml` from the `BlogPost` model in
 ```csharp
 builder.AddRssFeed(services => services
     .GetRequiredService<ContentCollection<BlogPost>>()
-    .OrderByDescending(post => post.Date)
-    .Select(post => new FeedItem(post.Title, post.Description, post.Date, post.RelativePath)));
+    .OrderByDescending(post => post.Content.FrontMatter.Date)
+    .ThenBy(post => post.Slug, StringComparer.Ordinal)
+    .Select(post => new FeedItem(post.Content.FrontMatter.Title, post.Content.FrontMatter.Description,
+        post.Content.FrontMatter.Date, $"posts/{Uri.EscapeDataString(post.Slug)}/")));
 ```
 
 Link the feed among the shared head tags so that feed readers can find it:

@@ -58,12 +58,12 @@ builder.AddMarkdownContent<FrontMatter>(options =>
 });
 ```
 
-The default `content/` directory needs no additional project settings. Keep Razor
-components and C# files outside it, since files there are not compiled.
+Kiji keeps `content/` out of the SDK's default items, so it needs no project settings.
+Files there are never compiled, whatever `Directory` is set to; keep Razor components
+and C# files outside it.
 
-If you use a directory outside `content/` but inside the project, such as `articles/`,
-add this to your project file to keep builds and `dotnet watch` from slowing down as
-content grows:
+For another directory inside the project, such as `articles/`, add this to your project
+file to keep builds and `dotnet watch` from slowing down as content grows:
 
 ```xml
 <PropertyGroup>

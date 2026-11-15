@@ -26,8 +26,9 @@ MySite/
 └── dist/             published site
 ```
 
-`content/` is the default Markdown directory and `wwwroot/` holds static assets; organize
-components as you prefer. Add `.kiji/` and `dist/` to `.gitignore`.
+`content/` is the default Markdown directory and `wwwroot/` holds static assets. Files in
+`content/` are never compiled; organize components as you prefer outside it. Add `.kiji/`
+and `dist/` to `.gitignore`.
 
 ## Develop and publish
 

@@ -21,7 +21,7 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
         _markdownProcessor = new MarkdownProcessor(new ResolvedSitePaths
         {
             OutputDirectory = _outputDir,
-        }, new SiteExecutionPaths(_testDir), TestArticleContents.CreateSiteInfo(), new ImageProcessor());
+        }, new SiteExecutionPaths(_testDir), TestArticleContents.CreateSiteInfo(), [_testDir], new ImageProcessor());
     }
 
     public void Dispose()

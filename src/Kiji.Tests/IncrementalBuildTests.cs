@@ -1069,66 +1069,119 @@ public sealed class IncrementalBuildTests : IDisposable
     }
 
     [Fact]
-    public async Task ExternalContentWithImages_RendersWithoutPortablePageRecipes()
+    public async Task SharedCustomImages_KeepCarriedVersionsWhenARecipeIsRegenerated()
+    {
+        var root = CreateSiteRoot("varying-shared-images");
+        await WritePostAsync(root, "stable", "Stable", "![Photo](source.png)");
+        await WritePostAsync(root, "changing", "Changing", "![Photo](source.png)");
+        await File.WriteAllBytesAsync(Path.Combine(root, "content", "source.png"), [1, 2, 3]);
+        var processor = new TestSite.PageServices.VaryingImageProcessor();
+        var renders = 0;
+        var builder = CreateBuilder(root, () => Interlocked.Increment(ref renders));
+        builder.Services.AddSingleton<IImageProcessor>(processor);
+        await using var site = builder.BuildSite();
+        await site.PublishAsync("dist");
+        Assert.Equal(1, processor.Calls);
+        var initial = await ReadCacheManifest(root);
+        var carried = initial.Pages.Single(page => page.RoutePath == "/md/stable/");
+        var oldImage = Assert.Single(carried.AdditionalOutputs);
+        var original = await File.ReadAllBytesAsync(Path.Combine(root, "dist", oldImage.RelativePath));
+        var firstRenders = renders;
+        Directory.Delete(Path.Combine(root, ".kiji", "cache", "image-records"), recursive: true);
+        await WritePostAsync(root, "changing", "Changing", "Updated body.\n\n![Photo](source.png)");
+        await site.PublishAsync("dist");
+        Assert.Equal(firstRenders + 1, renders);
+        Assert.Equal(2, processor.Calls);
+        var updated = await ReadCacheManifest(root);
+        Assert.True(updated.IsValid());
+        var changed = updated.Pages.Single(page => page.RoutePath == "/md/changing/");
+        Assert.NotEqual(oldImage.RelativePath, Assert.Single(changed.AdditionalOutputs).RelativePath);
+        Assert.Equal(original, await File.ReadAllBytesAsync(Path.Combine(root, "dist", oldImage.RelativePath)));
+        foreach (var page in updated.Pages.Where(page => page.AdditionalOutputs.Count > 0))
+        {
+            var html = await File.ReadAllTextAsync(Path.Combine(root, "dist", page.OutputRelativePath));
+            foreach (var output in page.AdditionalOutputs)
+            {
+                Assert.Equal(output.Hash, Generation.BuildFingerprint.HashFile(Path.Combine(root, "dist", output.RelativePath)));
+                Assert.Contains(output.RelativePath.Replace('\\', '/'), html, StringComparison.Ordinal);
+            }
+        }
+        await site.PublishAsync("dist");
+        Assert.Equal(firstRenders + 1, renders);
+        Assert.Equal(2, processor.Calls);
+    }
+
+    [Fact]
+    public async Task ExternalResponsiveImages_FailInsteadOfDisablingPortableCaching()
     {
         var root = CreateSiteRoot("external-site");
         var external = CreateSiteRoot("external-content");
         await WritePostAsync(external, "stable", "External image", "![image](source.png)");
         await File.WriteAllBytesAsync(Path.Combine(external, "content", "source.png"), [1, 2, 3]);
-        var renders = 0;
-        async Task Build()
-        {
-            var builder = CreateBuilder(root, () => Interlocked.Increment(ref renders), Path.Combine(external, "content"));
-            builder.Services.AddSingleton<IImageProcessor, TestSite.PageServices.TrackingImageProcessor>();
-            await using var app = builder.BuildSite();
-            await app.PublishAsync("dist");
-        }
-        await Build();
-        var before = SnapshotDirectory(Path.Combine(root, "dist"));
-        var firstRenders = renders;
-        await Build();
-        Assert.True(renders > firstRenders);
-        var after = SnapshotDirectory(Path.Combine(root, "dist"));
-        Assert.Equal(before.Keys.Order(), after.Keys.Order());
-        foreach (var (path, entry) in before) { Assert.Equal(entry.Bytes, after[path].Bytes); }
-        var manifest = await ReadCacheManifest(root);
-        var imagePage = Assert.Single(manifest.Pages, page => page.AdditionalOutputs.Count > 0);
-        Assert.Null(imagePage.ParametersHash);
-        Assert.Empty(imagePage.ImageRequests);
-        Assert.Equal(0, imagePage.HtmlLength);
+        var builder = CreateBuilder(root, directory: Path.Combine(external, "content"));
+        builder.Services.AddSingleton<IImageProcessor, TestSite.PageServices.TrackingImageProcessor>();
+        await using var site = builder.BuildSite();
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => site.PublishAsync("dist"));
+        Assert.Contains("inside the project", exception.Message, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(root, ".kiji", "cache", "manifest.json")));
     }
 
-    [Fact]
-    public async Task DevelopmentImages_DoNotChangePublishCache()
+    [Theory]
+    [InlineData("/kiji/")]
+    [InlineData("/%E6%97%A5%E6%9C%AC/")]
+    public async Task DevelopmentImages_ReloadSharedVariantsUnderBasePathWithoutChangingPublishCache(string basePath)
     {
         var root = CreateSiteRoot("dev-images");
         await WritePostAsync(root, "stable", "Image", "![image](source.png)");
-        await File.WriteAllBytesAsync(Path.Combine(root, "content", "source.png"), [1, 2, 3]);
+        await WritePostAsync(root, "changing", "Other image", "![image](source.png)");
+        var source = Path.Combine(root, "content", "source.png");
+        WriteImage(SkiaSharp.SKColors.Red);
+        var info = new SiteInfo { Name = "Images", BaseUrl = new Uri("https://example.com" + basePath) };
         var publishingBuilder = CreateBuilder(root);
-        publishingBuilder.Services.AddSingleton<IImageProcessor, TestSite.PageServices.TrackingImageProcessor>();
-        await using (var publishing = publishingBuilder.BuildSite())
-        {
-            await publishing.PublishAsync("dist");
-        }
-        var cache = Path.Combine(root, ".kiji", "cache");
-        var before = SnapshotDirectory(cache);
+        publishingBuilder.UseSiteInfo(info);
+        await using (var publishing = publishingBuilder.BuildSite()) { await publishing.PublishAsync("dist"); }
+        var before = SnapshotDirectory(Path.Combine(root, ".kiji", "cache"));
         var builder = CreateBuilder(root, serve: true);
-        builder.Services.AddSingleton<IImageProcessor, TestSite.PageServices.TrackingImageProcessor>();
+        builder.UseSiteInfo(info);
         await using var app = builder.BuildSite();
         var (server, web) = await app.StartDevServerAsync(TestUrls.EphemeralPort, CancellationToken.None);
         await using (server)
         {
-            using var client = new HttpClient();
-            await client.GetStringAsync(web.Urls.First().TrimEnd('/') + "/md/stable/");
+            using var client = new HttpClient { BaseAddress = new Uri(web.Urls.First()) };
+            var first = ImageSource(await client.GetStringAsync(basePath + "md/stable/"));
+            Assert.StartsWith(basePath + "_images/", first, StringComparison.Ordinal);
+            Assert.Equal(first, ImageSource(await client.GetStringAsync(basePath + "md/changing/")));
+            var original = await client.GetByteArrayAsync(first);
+            using var socket = new System.Net.WebSockets.ClientWebSocket();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            await socket.ConnectAsync(new UriBuilder(client.BaseAddress) { Scheme = "ws", Path = basePath + "_kiji/reload" }.Uri, timeout.Token);
+            var reload = socket.ReceiveAsync(new ArraySegment<byte>(new byte[64]), timeout.Token);
+            WriteImage(SkiaSharp.SKColors.Blue);
+            await reload;
+            var updated = ImageSource(await client.GetStringAsync(basePath + "md/stable/"));
+            Assert.NotEqual(first, updated);
+            Assert.Equal(updated, ImageSource(await client.GetStringAsync(basePath + "md/changing/")));
+            Assert.NotEqual(original, await client.GetByteArrayAsync(updated));
             await web.StopAsync();
         }
-        Assert.NotEmpty(Directory.GetFiles(Path.Combine(root, ".kiji", "dev-site"), "custom.svg", SearchOption.AllDirectories));
-        var after = SnapshotDirectory(cache);
+        var after = SnapshotDirectory(Path.Combine(root, ".kiji", "cache"));
         Assert.Equal(before.Keys.Order(), after.Keys.Order());
         foreach (var (path, entry) in before)
         {
             Assert.Equal(entry.Bytes, after[path].Bytes);
             Assert.Equal(entry.LastWriteTimeUtc, after[path].LastWriteTimeUtc);
+        }
+
+        void WriteImage(SkiaSharp.SKColor color)
+        {
+            using var bitmap = new SkiaSharp.SKBitmap(32, 32);
+            bitmap.Erase(color);
+            using var encoded = bitmap.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100);
+            File.WriteAllBytes(source, encoded.ToArray());
+        }
+        static string ImageSource(string html)
+        {
+            return System.Text.RegularExpressions.Regex.Match(html, "src=\"([^\"]+)\"").Groups[1].Value;
         }
     }
 

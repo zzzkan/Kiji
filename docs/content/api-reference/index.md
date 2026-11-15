@@ -356,6 +356,10 @@ builder.Services.AddSingleton<IImageProcessor, MyImageProcessor>();
 | `Task<ProcessedImageInfo> ProcessAsync(string sourceFilePath, string outputDirectory, CancellationToken cancellationToken = default)` | Writes variants of the source image into `outputDirectory` and describes them.                            |
 | `string? CacheIdentity`                                                                                                               | Lets later publishes reuse generated images while it stays the same. `null`, the default, disables reuse. |
 
+Kiji publishes custom variants at immutable, content-versioned paths so cached pages
+remain valid when another render produces different bytes. `FileName` always remains
+relative to the supplied output directory.
+
 The processor must support concurrent calls and keep no page or content state. Change
 `CacheIdentity` whenever the output would change, including settings and encoder versions.
 

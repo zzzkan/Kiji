@@ -76,6 +76,7 @@ public static class StaticSite
             provider.GetRequiredService<ResolvedSitePaths>(),
             provider.GetRequiredService<SiteExecutionPaths>(),
             provider.GetRequiredService<SiteInfo>(),
+            provider.GetRequiredService<StaticSiteOptions>().ContentPaths.Select(provider.GetRequiredService<SiteExecutionPaths>().ResolveAgainstRoot),
             provider.GetRequiredService<IImageProcessor>(),
             provider.GetRequiredService<IOptions<MarkdownOptions>>().Value));
 

@@ -37,9 +37,9 @@ internal sealed class ImageWorkload : IDisposable
         if (Directory.Exists(Output)) { Directory.Delete(Output, true); }
     }
 
-    internal Task RunAsync(IImageProcessor processor) => Task.WhenAll(_sources.Select((source, i) =>
+    internal Task RunAsync(IImageProcessor processor) => Task.WhenAll(_sources.Select(source =>
         ImageArtifactProcessor.ProcessAsync(processor, source,
-            Path.Combine(Output, i.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+            Path.Combine(Output, Path.GetFileNameWithoutExtension(source)),
             Path.Combine(Cache, "images"), default)));
 
     public void Dispose()

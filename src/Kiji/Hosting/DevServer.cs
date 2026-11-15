@@ -171,7 +171,7 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
             }
         }
 
-        // Page-bundle assets (e.g. optimized images) are materialized into the output
+        // Shared generated assets (e.g. optimized images) are materialized into the output
         // mirror during on-demand page renders and served from there.
         web.UseStaticFiles(new StaticFileOptions
         {
@@ -308,7 +308,7 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
         if (!snapshot.PagesByRoute.TryGetValue(path, out var page))
         {
             // Keep directory-style page URLs canonical and aligned with the generated
-            // route, even though page-bundle asset URLs do not depend on the slash.
+            // route, even though shared image URLs do not depend on the slash.
             if (!path.EndsWith('/') && snapshot.PagesByRoute.TryGetValue(path + "/", out var slashPage))
             {
                 await Results.LocalRedirect(

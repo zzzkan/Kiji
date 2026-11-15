@@ -54,9 +54,10 @@ internal sealed class ResponsiveImageWriter
         }
 
         renderer.Write("<img");
-        if (context.ImageInfoLookup.TryGetValue(referenceKey, out var imageInfo) && imageInfo.Variants.Count > 0)
+        if (context.ImageInfoLookup.TryGetValue(referenceKey, out var asset) && asset.Info.Variants.Count > 0)
         {
-            var publicDirectory = context.BasePath;
+            var imageInfo = asset.Info;
+            var publicDirectory = context.BasePath + EncodeRelativePath(asset.RelativeDirectory) + "/";
             var variants = imageInfo.Variants;
             var largest = variants[^1];
             var width = TryGetAttribute(attributes, "width", out var explicitWidth)
@@ -104,7 +105,7 @@ internal sealed class ResponsiveImageWriter
 
     private static string EncodeRelativePath(string path)
     {
-        return string.Join('/', path.Split('/').Select(Uri.EscapeDataString));
+        return string.Join('/', path.Split(['/', '\\']).Select(Uri.EscapeDataString));
     }
 
     private static bool TryGetAttribute(HtmlAttributes? attributes, string name, out string? value)

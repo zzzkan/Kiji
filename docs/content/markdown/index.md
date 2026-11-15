@@ -203,11 +203,15 @@ Both articles can use:
 ```
 
 Kiji gives each source a directory under `_images/`, identified by a hash of its
-project-relative path. All articles referencing that source use the same generated
+project-relative path (a 16-character identifier). All articles referencing that source use the same generated
 variants and URLs, regardless of their routes. Different sources with the same file
 name remain separate. Generated URLs include the site's deployment base path.
 
 Image edits invalidate every referring page. Incremental publishing restores missing
 variants, and removes unused variants after the last reference disappears.
-A missing image fails the render.
+Sources must be inside the project and a registered content directory, such as the
+default `content/`. Parent references can cross article directories within those roots.
+Absolute filesystem paths, symbolic links, junctions, and references outside these roots
+fail the render instead of publishing files whose changes cannot be watched. Missing
+images also fail the render.
 To replace the image processor, see [`IImageProcessor`](../api-reference/#iimageprocessor).

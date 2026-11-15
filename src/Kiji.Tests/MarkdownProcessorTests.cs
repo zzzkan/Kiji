@@ -99,25 +99,27 @@ public sealed class MarkdownProcessorTests : IDisposable
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task SeparateArticleDirectories_ShareParentImageAndHonorBasePath(bool tracked)
+    [InlineData("/kiji/", false)]
+    [InlineData("/kiji/", true)]
+    [InlineData("/%E6%97%A5%E6%9C%AC/", false)]
+    [InlineData("/%E6%97%A5%E6%9C%AC/", true)]
+    public async Task SeparateArticleDirectories_ShareParentImageAndHonorBasePath(string basePath, bool tracked)
     {
         var first = CreateMarkdownFile("a/index.md", "![Photo](../shared/my%20photo.png)");
         var second = CreateMarkdownFile("b/index.md", "![Photo](../shared/./my%20photo.png?version=1#preview)");
         Directory.CreateDirectory(Path.Combine(_testFilesDir, "shared"));
         await CreateTestImageAsync(Path.Combine(_testFilesDir, "shared", "my photo.png"), 1200, 800);
-        var processor = CreateProcessor(TestArticleContents.CreateSiteInfoWithBasePath());
+        var processor = CreateProcessor(new SiteInfo { Name = "Images", BaseUrl = new Uri("https://example.com" + basePath) });
         var results = await Task.WhenAll(
             WithPageContextAsync("/a/", () => ProcessFileAsync(processor, first), tracked),
             WithPageContextAsync("/b/", () => ProcessFileAsync(processor, second), tracked));
         Assert.Equal(results[0], results[1]);
-        Assert.StartsWith("/kiji/_images/", ImageSource(results[0]), StringComparison.Ordinal);
+        Assert.StartsWith(basePath + "_images/", ImageSource(results[0]), StringComparison.Ordinal);
         var variants = Directory.GetFiles(_outputDir, "*.webp", SearchOption.AllDirectories);
         Assert.Equal(4, variants.Length);
-        Assert.Single(variants.Select(Path.GetDirectoryName).Distinct());
+        Assert.Equal(16, new DirectoryInfo(Assert.Single(variants.Select(Path.GetDirectoryName).Distinct())!).Name.Length);
         Assert.All(variants, path => Assert.Contains(
-            "/kiji/" + string.Join('/', Path.GetRelativePath(_outputDir, path).Split(Path.DirectorySeparatorChar).Select(Uri.EscapeDataString)),
+            basePath + string.Join('/', Path.GetRelativePath(_outputDir, path).Split(Path.DirectorySeparatorChar).Select(Uri.EscapeDataString)),
             results[0], StringComparison.Ordinal));
     }
 
@@ -134,6 +136,64 @@ public sealed class MarkdownProcessorTests : IDisposable
             WithPageContextAsync("/b/", () => ProcessFileAsync(processor, second)));
         Assert.NotEqual(ImageSource(results[0]), ImageSource(results[1]));
         Assert.Equal(2, Directory.GetFiles(_outputDir, "custom.svg", SearchOption.AllDirectories).Length);
+    }
+
+    [Theory]
+    [InlineData("../unwatched.png")]
+    [InlineData("../../outside.png")]
+    [InlineData("%5Csrv%5Cshared%5Clogo.png")]
+    [InlineData(@"\srv\shared\logo.png")]
+    [InlineData("%2Fetc%2Flogo.png")]
+    public async Task ImagesOutsideWatchedProjectRoots_FailBeforePublishing(string url)
+    {
+        await File.WriteAllBytesAsync(Path.Combine(_testDir, "unwatched.png"), [1, 2, 3]);
+        var markdown = CreateMarkdownFile("invalid.md", $"![Invalid]({url})");
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            WithPageContextAsync("/invalid/", () => ProcessFileAsync(CreateProcessor(), markdown)));
+        Assert.Contains("invalid.md", exception.Message, StringComparison.Ordinal);
+        Assert.Empty(Directory.GetFiles(_outputDir, "*", SearchOption.AllDirectories));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ImageLinksCannotEscapeWatchedRoots(bool directoryLink)
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Creating symbolic links requires privileges on Windows.");
+        var outside = Path.Combine(_testDir, "outside");
+        Directory.CreateDirectory(outside);
+        await File.WriteAllBytesAsync(Path.Combine(outside, "photo.png"), [1, 2, 3]);
+        var link = Path.Combine(_testFilesDir, directoryLink ? "linked" : "linked.png");
+        if (directoryLink) { Directory.CreateSymbolicLink(link, outside); }
+        else { File.CreateSymbolicLink(link, Path.Combine(outside, "photo.png")); }
+        var markdown = CreateMarkdownFile("linked.md", $"![Link]({(directoryLink ? "linked/photo.png" : "linked.png")})");
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            WithPageContextAsync("/links/", () => ProcessFileAsync(CreateProcessor(), markdown)));
+        Assert.Contains("symbolic links", exception.Message, StringComparison.Ordinal);
+        Assert.Empty(Directory.GetFiles(_outputDir, "*", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task RelativeMarkdownFilename_ResolvesFromTheProjectRoot()
+    {
+        await CreateTestImageAsync(Path.Combine(_testFilesDir, "photo.png"), 32, 32);
+        var html = await WithPageContextAsync("/relative/", () =>
+            CreateProcessor().ProcessBodyAsync("post.md", "![Photo](files/photo.png)"));
+        Assert.StartsWith("/_images/", ImageSource(html), StringComparison.Ordinal);
+        Assert.Single(Directory.GetFiles(_outputDir, "*.webp", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task CaseAliasesOnInsensitiveFilesystems_ShareOneImageFamily()
+    {
+        await CreateTestImageAsync(Path.Combine(_testFilesDir, "Photo.png"), 32, 32);
+        Assert.SkipUnless(File.Exists(Path.Combine(_testFilesDir, "photo.png")), "Requires a case-insensitive filesystem.");
+        var markdown = CreateMarkdownFile("cases.md", "![First](Photo.png)\n\n![Second](photo.png)");
+        var html = await WithPageContextAsync("/cases/", () => ProcessFileAsync(CreateProcessor(), markdown));
+        var urls = Regex.Matches(html, "src=\"([^\"]+)\"").Select(match => match.Groups[1].Value).ToArray();
+        Assert.Equal(2, urls.Length);
+        Assert.Equal(urls[0], urls[1]);
+        Assert.Single(Directory.GetFiles(_outputDir, "*.webp", SearchOption.AllDirectories));
     }
 
     [Fact]
@@ -154,7 +214,7 @@ public sealed class MarkdownProcessorTests : IDisposable
         {
             OutputDirectory = _outputDir,
             ImageCacheDirectory = _cacheDir,
-        }, new SiteExecutionPaths(_testDir), site ?? TestArticleContents.CreateSiteInfo(), imageProcessor ?? new ImageProcessor());
+        }, new SiteExecutionPaths(_testDir), site ?? TestArticleContents.CreateSiteInfo(), [_testFilesDir], imageProcessor ?? new ImageProcessor());
     }
 
     private static Task<string> ProcessFileAsync(MarkdownProcessor processor, string path)

@@ -37,7 +37,10 @@ not built with conflicting global properties.
   snapshot items. Parsed front matter can return in a later snapshot. Strings hash by value;
   an instance shared by several items is unidentified.
 - Images record source bytes, processor identity, repair requests and variants.
-  Keep public image URLs in the page bundle and recipes sufficient for cache-only repair.
+  Shared images live under `_images/`; every referring page records its immutable outputs
+  and recipes sufficient for cache-only repair. Reused pages may retain older custom
+  processor results while newly rendered pages reference another immutable version.
+  Responsive sources must stay inside the project and registered, watched content roots.
 - AlwaysRender marks pages, layouts or child components that read untracked external
   state. Any output page rendering one is uncacheable, including nested/dynamic children.
   AlwaysRender does not add external watchers or clear image processing caches.

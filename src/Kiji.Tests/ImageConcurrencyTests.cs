@@ -59,7 +59,7 @@ public sealed class ImageConcurrencyTests : IDisposable
         release.SetResult();
         await Task.WhenAll(first, second);
         Assert.Equal(2, processor.Calls);
-        Assert.Single(Directory.GetFiles(output));
+        Assert.Single(Directory.GetFiles(output, "custom.svg", SearchOption.AllDirectories));
     }
 
     [Fact]

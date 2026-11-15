@@ -10,28 +10,28 @@ internal static class ImageArtifactProcessor
     internal static async Task<ProcessedImageInfo> ProcessAsync(IImageProcessor processor,
         string source, string output, string? cacheDirectory, CancellationToken cancellationToken)
     {
-        // Pages can materialize the same shared output concurrently, including in
-        // development and with custom processors that do not support cache reuse.
         using var outputLease = await ImageGenerationLock.AcquireAsync(output, cancellationToken);
-        if (cacheDirectory is null && PageRenderContext.Current?.Dependencies is null)
-        {
-            return await processor.ProcessAsync(source, output, cancellationToken);
-        }
         var sourceBytes = await File.ReadAllBytesAsync(source, cancellationToken);
         var sourceHash = BuildFingerprint.HashBytes(sourceBytes);
-        PageRenderContext.Current?.Dependencies?.AddFile(source, sourceHash);
-        var identity = ImageProcessorIdentity.Get(processor);
-        PageRenderContext.Current?.Dependencies?.AddValue("image-processor", identity);
-        PageRenderContext.Current?.Dependencies?.AddImageRequest(source, output);
+        var dependencies = PageRenderContext.Current?.Dependencies;
+        dependencies?.AddFile(source, sourceHash);
+        var identity = cacheDirectory is null && dependencies is null ? null : ImageProcessorIdentity.Get(processor);
+        dependencies?.AddValue("image-processor", identity);
+        dependencies?.AddImageRequest(source, output);
         if (cacheDirectory is null || identity is null)
         {
-            PageRenderContext.Current?.Dependencies?.DisableCache();
-            return await processor.ProcessAsync(source, output, cancellationToken);
+            dependencies?.DisableCache();
+            if (processor is ImageProcessor builtIn)
+            {
+                // Development can reuse the deterministic built-in variants already on disk.
+                return await builtIn.ProcessBytesAsync(sourceBytes, Path.GetFileName(source), sourceHash, output, cancellationToken);
+            }
+            return await GenerateAsync(processor, source, sourceBytes, sourceHash, output, null, null, cancellationToken);
         }
         var root = Path.GetDirectoryName(cacheDirectory)!;
         var cache = new ArtifactCache(root);
         var key = BuildFingerprint.HashText(identity + ":" + Path.GetFileName(source) + ":" + sourceHash);
-        PageRenderContext.Current?.Dependencies?.AddImage(key);
+        dependencies?.AddImage(key);
         var recordPath = Path.Combine(root, "image-records", key + ".json");
         using var generation = await ImageGenerationLock.AcquireAsync(recordPath, cancellationToken);
         try
@@ -55,7 +55,15 @@ internal static class ImageArtifactProcessor
         }
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException) { }
 
-        var work = Path.Combine(root, "work", Guid.NewGuid().ToString("N"));
+        return await GenerateAsync(processor, source, sourceBytes, sourceHash, output, cache, recordPath, cancellationToken);
+    }
+
+    private static async Task<ProcessedImageInfo> GenerateAsync(IImageProcessor processor, string source,
+        byte[] sourceBytes, string sourceHash, string output, ArtifactCache? cache, string? recordPath, CancellationToken cancellationToken)
+    {
+        var work = recordPath is null
+            ? Path.Combine(output, ".work-" + Guid.NewGuid().ToString("N"))
+            : Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(recordPath))!, "work", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(work);
         try
         {
@@ -64,37 +72,60 @@ internal static class ImageArtifactProcessor
             ProcessedImageInfo info;
             if (processor is ImageProcessor builtIn)
             {
-                // The built-in encoder can consume the exact bytes already hashed.
                 info = await builtIn.ProcessBytesAsync(sourceBytes, Path.GetFileName(source), sourceHash, generated, cancellationToken);
             }
             else
             {
-                // Path-based custom encoders receive an isolated source snapshot.
                 var sourceCopy = Path.Combine(work, "source", Path.GetFileName(source));
                 Directory.CreateDirectory(Path.GetDirectoryName(sourceCopy)!);
                 await File.WriteAllBytesAsync(sourceCopy, sourceBytes, cancellationToken);
                 info = await processor.ProcessAsync(sourceCopy, generated, cancellationToken);
+                // Custom processors may change bytes without changing their filenames.
+                // Immutable destinations preserve the versions used by carried pages.
+                info = info with { Variants = [.. info.Variants.Select(variant => FreezeVariant(generated, variant))] };
             }
             cancellationToken.ThrowIfCancellationRequested();
             var outputs = info.Variants.Select(variant =>
             {
-                return !BuildManifest.IsRelativeOutput(variant.FileName)
-                    ? throw new InvalidDataException("Invalid image variant path.")
-                    : new BuildManifestOutput(variant.FileName, cache.Store(Path.Combine(generated, variant.FileName)));
+                if (!BuildManifest.IsRelativeOutput(variant.FileName)) { throw new InvalidDataException("Invalid image variant path."); }
+                var path = Path.Combine(generated, variant.FileName);
+                return new BuildManifestOutput(variant.FileName, cache?.Store(path) ?? BuildFingerprint.HashFile(path));
             }).ToArray();
             foreach (var artifact in outputs)
             {
-                if (!cache.Restore(artifact.Hash, Path.Combine(output, artifact.RelativePath)))
+                var destination = Path.Combine(output, artifact.RelativePath);
+                if (cache is null)
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                    File.Copy(Path.Combine(generated, artifact.RelativePath), destination, overwrite: true);
+                }
+                else if (!cache.Restore(artifact.Hash, destination))
                 {
                     throw new IOException("Cannot materialize a generated image.");
                 }
             }
             cancellationToken.ThrowIfCancellationRequested();
-            var payload = JsonSerializer.Serialize(new CachedImageResult(info, outputs), ImageCacheJsonContext.Default.CachedImageResult);
-            ArtifactCache.WriteAtomic(recordPath, JsonSerializer.SerializeToUtf8Bytes(
-                new ImageCacheEnvelope(BuildFingerprint.HashText(payload), payload), ImageCacheJsonContext.Default.ImageCacheEnvelope));
+            if (recordPath is not null)
+            {
+                var payload = JsonSerializer.Serialize(new CachedImageResult(info, outputs), ImageCacheJsonContext.Default.CachedImageResult);
+                ArtifactCache.WriteAtomic(recordPath, JsonSerializer.SerializeToUtf8Bytes(
+                    new ImageCacheEnvelope(BuildFingerprint.HashText(payload), payload), ImageCacheJsonContext.Default.ImageCacheEnvelope));
+            }
             return info;
         }
         finally { Directory.Delete(work, recursive: true); }
+    }
+
+    private static ImageVariant FreezeVariant(string directory, ImageVariant variant)
+    {
+        if (!BuildManifest.IsRelativeOutput(variant.FileName)) { throw new InvalidDataException("Invalid image variant path."); }
+        var source = Path.Combine(directory, variant.FileName);
+        var hash = BuildFingerprint.HashFile(source);
+        if (!ArtifactCache.IsHash(hash)) { throw new IOException($"Cannot read generated image variant '{variant.FileName}'."); }
+        var name = Path.Combine(hash[..16], variant.FileName);
+        var destination = Path.Combine(directory, name);
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        File.Move(source, destination, overwrite: true);
+        return variant with { FileName = name };
     }
 }

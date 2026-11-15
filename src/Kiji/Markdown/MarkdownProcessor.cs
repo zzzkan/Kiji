@@ -23,16 +23,19 @@ internal sealed class MarkdownProcessor
     private readonly string? _imageCachePath;
     private readonly string _projectDirectory;
     private readonly string _basePath;
+    private readonly string[] _contentRoots;
 
     /// <param name="options">The resolved site paths.</param>
     /// <param name="paths">The project root used for portable source identities.</param>
     /// <param name="site">The site's public deployment base path.</param>
+    /// <param name="contentRoots">Registered directories watched for content changes.</param>
     /// <param name="imageProcessor">The image backend used to process referenced local images.</param>
     /// <param name="contentOptions">Site-wide pipeline configuration.</param>
     public MarkdownProcessor(
         ResolvedSitePaths options,
         SiteExecutionPaths paths,
         SiteInfo site,
+        IEnumerable<string> contentRoots,
         IImageProcessor imageProcessor,
         MarkdownOptions? contentOptions = null)
     {
@@ -44,6 +47,7 @@ internal sealed class MarkdownProcessor
         _imageCachePath = options.ImageCacheDirectory;
         _projectDirectory = paths.ProjectDirectory;
         _basePath = site.BaseUrl.AbsolutePath;
+        _contentRoots = [.. contentRoots.Select(Path.GetFullPath)];
         _pipeline = BuildPipeline(contentOptions);
     }
 
@@ -58,6 +62,7 @@ internal sealed class MarkdownProcessor
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         ArgumentNullException.ThrowIfNull(markdownBody);
+        filePath = Path.GetFullPath(filePath, _projectDirectory);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -77,12 +82,12 @@ internal sealed class MarkdownProcessor
         return html;
     }
 
-    private async Task<IReadOnlyDictionary<string, ProcessedImageInfo>> MaterializeReferencedImagesAsync(
+    private async Task<IReadOnlyDictionary<string, ImageAsset>> MaterializeReferencedImagesAsync(
         string filePath,
         MarkdownDocument document,
         CancellationToken cancellationToken)
     {
-        var imageInfoLookup = new Dictionary<string, ProcessedImageInfo>(StringComparer.Ordinal);
+        var imageInfoLookup = new Dictionary<string, ImageAsset>(StringComparer.Ordinal);
         var imageUrls = CollectLocalImageUrls(document);
         if (imageUrls.Count == 0)
         {
@@ -104,8 +109,8 @@ internal sealed class MarkdownProcessor
 
             // Source identity is independent of the referring page and checkout location.
             // Isolate each source so custom processors can use simple variant filenames.
-            var sourcePath = Path.GetRelativePath(_projectDirectory, sourceFile).Replace('\\', '/');
-            var relativeDirectory = "_images/" + BuildFingerprint.HashText(sourcePath);
+            var sourcePath = ProjectPath.GetRelativePath(_projectDirectory, sourceFile)!;
+            var relativeDirectory = "_images/" + BuildFingerprint.HashText(sourcePath)[..16];
             var outputDirectory = Path.Combine(_outputPath, relativeDirectory);
             var cacheDirectory = pageContext.Dependencies is null ? null : _imageCachePath;
 
@@ -123,30 +128,34 @@ internal sealed class MarkdownProcessor
                 }
             }
 
-            imageInfoLookup[referenceKey] = processed with
-            {
-                Variants = [.. processed.Variants.Select(variant =>
-                    variant with { FileName = relativeDirectory + "/" + variant.FileName.Replace('\\', '/') })],
-            };
+            imageInfoLookup[referenceKey] = new ImageAsset(processed, relativeDirectory);
         }
 
         return imageInfoLookup;
     }
 
-    private static string ResolveSourceFile(string filePath, string url, string referenceKey, string sourceRoot)
+    private string ResolveSourceFile(string filePath, string url, string referenceKey, string sourceRoot)
     {
-        if (referenceKey.Length == 0)
+        if (referenceKey.Length == 0 || Path.IsPathRooted(referenceKey) || referenceKey.Contains(':', StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
                 $"Image reference '{url}' in '{filePath}' is not a resolvable relative path.");
         }
 
-        var sourceFile = Path.GetFullPath(referenceKey.Replace('/', Path.DirectorySeparatorChar), sourceRoot);
-
-        return !File.Exists(sourceFile)
-            ? throw new InvalidOperationException(
-                $"Image '{url}' referenced by '{filePath}' was not found at '{sourceFile}'.")
-            : sourceFile;
+        try
+        {
+            var sourceFile = ProjectPath.ResolveFile(_projectDirectory,
+                Path.GetFullPath(referenceKey.Replace('/', Path.DirectorySeparatorChar), sourceRoot));
+            if (!_contentRoots.Any(root => ProjectPath.GetRelativePath(root, sourceFile) is not null))
+            {
+                throw new InvalidOperationException("Image sources must be inside a registered content directory.");
+            }
+            return sourceFile;
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or IOException)
+        {
+            throw new InvalidOperationException($"Image '{url}' referenced by '{filePath}' cannot be resolved. {exception.Message}", exception);
+        }
     }
 
     private string Render(MarkdownDocument document, ResponsiveImageContext imageContext)

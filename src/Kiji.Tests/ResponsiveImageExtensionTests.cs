@@ -119,7 +119,7 @@ public sealed class ResponsiveImageExtensionTests
     {
         var document = global::Markdig.Markdown.Parse(markdown, Pipeline);
         return PooledMarkdigRenderer.Create(Pipeline).Render(
-            document, new ResponsiveImageContext(imageInfoLookup, basePath));
+            document, new ResponsiveImageContext(imageInfoLookup.ToDictionary(pair => pair.Key, pair => new ImageAsset(pair.Value, "_images/source")), basePath));
     }
 
     private static ProcessedImageInfo CreateImageInfo(
@@ -134,7 +134,7 @@ public sealed class ResponsiveImageExtensionTests
         {
             OriginalWidth = width,
             OriginalHeight = height,
-            Variants = [.. widths.Select(w => new ImageVariant($"_images/source/{fileName}.{hash}.{w}w.webp", w))],
+            Variants = [.. widths.Select(w => new ImageVariant($"{fileName}.{hash}.{w}w.webp", w))],
         };
     }
 

@@ -301,7 +301,7 @@ internal sealed class IncrementalBuildPlanner(
         while (directories.Length > 0)
         {
             // Scan independent directories together. A recursive enumerator opens
-            // every page bundle serially even when no output needs changing.
+            // every output directory serially even when no output needs changing.
             var children = new ConcurrentBag<DirectoryInfo>();
             Parallel.ForEach(directories, directory =>
             {
@@ -633,9 +633,7 @@ internal sealed class IncrementalBuildPlanner(
     private string ToDependencyKey(string absolutePath)
     {
         var fullPath = Path.GetFullPath(absolutePath);
-        return fullPath.StartsWith(_rootPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-            ? Path.GetRelativePath(_rootPath, fullPath).Replace('\\', '/')
-            : fullPath;
+        return ProjectPath.GetRelativePath(_rootPath, fullPath) ?? fullPath;
     }
 
     private string ResolveDependencyPath(string key)

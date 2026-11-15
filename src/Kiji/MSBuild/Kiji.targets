@@ -36,9 +36,13 @@
     <StaticWebAssetBasePath>/</StaticWebAssetBasePath>
     <CustomAfterStaticWebAssetsSdkTargets>$(MSBuildThisFileDirectory)Kiji.StaticWebAssets.targets</CustomAfterStaticWebAssetsSdkTargets>
 
-    <!-- Kiji loads and watches content itself; keep it and the documented -o dist output
-         out of the SDK's default items. -->
-    <DefaultItemExcludes>$(DefaultItemExcludes);content/**;dist/**</DefaultItemExcludes>
+    <KijiContentExcludeDirectory Condition="'$(KijiContentExcludeDirectory)' == ''">content</KijiContentExcludeDirectory>
+    <KijiOutputExcludeDirectory Condition="'$(KijiOutputExcludeDirectory)' == ''">dist</KijiOutputExcludeDirectory>
+    <KijiEnableDefaultItemExcludes Condition="'$(KijiEnableDefaultItemExcludes)' == ''">true</KijiEnableDefaultItemExcludes>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(_KijiIsSiteApp)' == 'true' and '$(KijiEnableDefaultItemExcludes)' == 'true'">
+    <DefaultItemExcludes>$(DefaultItemExcludes);$(KijiContentExcludeDirectory)/**;$(KijiOutputExcludeDirectory)/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <!-- Runtime metadata keeps checkout paths out of code identity. -->

@@ -8,6 +8,10 @@ order: 50
 static host. Before publishing, set `SiteInfo.BaseUrl` to the site's final public URL;
 Kiji uses it for page, feed, sitemap, and image URLs.
 
+If you publish inside the project to a directory other than `dist/`, update the
+[project settings](../api-reference/#project-settings) to exclude that directory from
+builds and `dotnet watch`.
+
 ## Publish under a subpath
 
 When the site is not at the domain root, such as a GitHub Pages project site, include the

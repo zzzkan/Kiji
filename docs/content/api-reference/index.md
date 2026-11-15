@@ -1,6 +1,6 @@
 ---
 title: API reference
-description: Types and members of the Kiji package, and the MSBuild property it reads.
+description: Types and members of the Kiji package, and site project settings.
 order: 100
 ---
 
@@ -15,6 +15,30 @@ order: 100
 - [`Kiji.Feeds` namespace](#kijifeeds-namespace): RSS feeds
 - [`Kiji.Sitemaps` namespace](#kijisitemaps-namespace): sitemaps
 - [Blazor APIs](#blazor-apis): ASP.NET Core components and services in static pages
+
+## Project settings
+
+Set these properties in your site project's `<PropertyGroup>`:
+
+| Property | Default | Behavior |
+| --- | --- | --- |
+| `KijiContentExcludeDirectory` | `content` | Content directory to exclude from compilation and `dotnet watch`. |
+| `KijiOutputExcludeDirectory` | `dist` | Output directory to exclude from compilation and `dotnet watch`. |
+| `KijiEnableDefaultItemExcludes` | `true` | Set to `false` to disable Kiji's directory exclusions. |
+
+For example, to use exclusions for `articles/` and `public/`:
+
+```xml
+<KijiContentExcludeDirectory>articles</KijiContentExcludeDirectory>
+<KijiOutputExcludeDirectory>public</KijiOutputExcludeDirectory>
+```
+
+Directory paths are relative to the site project, or absolute. These properties only
+control exclusions. Set Markdown's `Directory` to choose where content is loaded, and
+use `dotnet publish -o public` to choose the publish destination. Markdown edits still
+reload in the development server.
+Keep compiled Razor components and C# files outside the excluded directories, or
+set `KijiEnableDefaultItemExcludes` to `false` to compile files there.
 
 ## `Kiji` namespace
 

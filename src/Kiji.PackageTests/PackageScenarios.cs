@@ -25,11 +25,39 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         Assert.False(File.Exists(Path.Combine(fixture.Site, "dist", "index.html")));
     });
 
+    [Theory]
+    [InlineData("Microsoft.NET.Sdk.Razor", true)]
+    [InlineData("Microsoft.NET.Sdk.Web", true)]
+    [InlineData("Microsoft.NET.Sdk.Razor", false)]
+    [InlineData("Microsoft.NET.Sdk.Web", false)]
+    public Task Build_ConfiguresDirectoryExclusions(string sdk, bool enabled) => fixture.ScenarioAsync(async () =>
+    {
+        fixture.Replace("Site/PackageSite.csproj", "<OutputType>Exe</OutputType>", $"""
+            <OutputType>Exe</OutputType>
+            <KijiContentExcludeDirectory>articles/</KijiContentExcludeDirectory>
+            <KijiOutputExcludeDirectory>site output/</KijiOutputExcludeDirectory>
+            <KijiEnableDefaultItemExcludes>{enabled.ToString().ToLowerInvariant()}</KijiEnableDefaultItemExcludes>
+            <DefaultItemExcludes>$(DefaultItemExcludes);manual/**</DefaultItemExcludes>
+            """);
+        fixture.Write("Site/manual/ignored.cs", "This is not valid C#.");
+        fixture.Write("Site/content/IncludedContent.cs", "internal sealed class IncludedContent { }");
+        fixture.Write("Site/dist/IncludedOutput.cs", "internal sealed class IncludedOutput { }");
+        fixture.Write("Site/articles/nested/ArticleSource.cs",
+            enabled ? "This is not valid C#." : "internal sealed class ArticleSource { }");
+        fixture.Write("Site/site output/OutputSource.razor",
+            enabled ? "@code { This is not valid C#. }" : "@namespace PackageSite\n@code { public const bool Included = true; }");
+        var references = "_ = typeof(IncludedContent); _ = typeof(IncludedOutput);";
+        if (!enabled) { references += " _ = typeof(ArticleSource); _ = PackageSite.OutputSource.Included;"; }
+        fixture.Replace("Site/Program.cs", "return await", references + "\nreturn await");
+        await fixture.DotnetAsync("build", "Site/PackageSite.csproj", "-c", "Release");
+    }, sdk);
+
     [Fact]
     public Task Publish_Edit_AndClean() => fixture.ScenarioAsync(async () =>
     {
         // Content sources must not become SDK compilation inputs; nested public content stays an asset.
         fixture.Write("Site/content/nested/source.cs", "This content is not valid C#.");
+        fixture.Write("Site/dist/nested/source.cs", "This output is not valid C#.");
         fixture.Write("Site/content/nested/Source.razor", "@code { This content is not valid C#. }");
         fixture.Write("Site/wwwroot/content/public.txt", "Public content asset");
         fixture.Write("Site/wwwroot/selected.txt", "All-kind fallback");

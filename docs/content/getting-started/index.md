@@ -64,18 +64,14 @@ Open `MySite.csproj` and change its first line to use the Razor SDK:
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 ```
 
-In its `<PropertyGroup>`, add these settings:
+In its `<PropertyGroup>`, add this setting:
 
 ```xml
 <UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier>
-<DefaultItemExcludes>$(DefaultItemExcludes);content/**</DefaultItemExcludes>
 ```
 
-- Without `UseCurrentRuntimeIdentifier`, every build copies Kiji's native image library
-  for every platform into `bin/`, several hundred megabytes in total.
-- `DefaultItemExcludes` keeps the SDK from scanning `content/`, where the posts will live.
-  Kiji loads and watches them itself; without it, builds and `dotnet watch` slow down as
-  posts accumulate. The SDK no longer compiles files there, so keep components outside.
+Without `UseCurrentRuntimeIdentifier`, every build copies Kiji's native image library
+for every platform into `bin/`, several hundred megabytes in total.
 
 ### Build the smallest site
 

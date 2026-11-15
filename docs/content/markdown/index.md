@@ -58,17 +58,18 @@ builder.AddMarkdownContent<FrontMatter>(options =>
 });
 ```
 
-When the content directory is inside the project, exclude it from the SDK's default items
-so that builds and `dotnet watch` do not scan it. Kiji still loads and watches the files.
-The SDK no longer compiles files there, so keep components outside the directory:
+The default `content/` directory needs no additional project settings. Keep Razor
+components and C# files outside it, since files there are not compiled.
+
+If you use a directory outside `content/` but inside the project, such as `articles/`,
+add this to your project file to keep builds and `dotnet watch` from slowing down as
+content grows:
 
 ```xml
 <PropertyGroup>
-  <DefaultItemExcludes>$(DefaultItemExcludes);content/**</DefaultItemExcludes>
+  <DefaultItemExcludes>$(DefaultItemExcludes);articles/**</DefaultItemExcludes>
 </PropertyGroup>
 ```
-
-The pattern is relative to the project, so `content/**` does not exclude `wwwroot/content/`.
 
 ## Use a site-specific model
 

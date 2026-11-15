@@ -28,6 +28,10 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
     [Fact]
     public Task Publish_Edit_AndClean() => fixture.ScenarioAsync(async () =>
     {
+        // Content sources must not become SDK compilation inputs; nested public content stays an asset.
+        fixture.Write("Site/content/nested/source.cs", "This content is not valid C#.");
+        fixture.Write("Site/content/nested/Source.razor", "@code { This content is not valid C#. }");
+        fixture.Write("Site/wwwroot/content/public.txt", "Public content asset");
         fixture.Write("Site/wwwroot/selected.txt", "All-kind fallback");
         fixture.Write("Site/wwwroot/publish-variant.txt", "Publish-kind replacement");
         fixture.Write("Site/Directory.Build.targets", """
@@ -75,6 +79,7 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         Assert.Matches("<p b-[a-z0-9]+>Hello</p>", html);
         Assert.Contains("color: teal", Read("PackageSite.styles.css"), StringComparison.Ordinal);
         Assert.Contains("Linked asset original.", Read("nested/linked.txt"), StringComparison.Ordinal);
+        Assert.Equal("Public content asset", Read("content/public.txt"));
         // Never on the selected publish variant must not expose the All-kind fallback.
         Assert.False(File.Exists(Path.Combine(fixture.Site, "dist", "selected.txt")));
         var rclCss = Regex.Match(Read("PackageSite.styles.css"), "@import '([^']+)'").Groups[1].Value;

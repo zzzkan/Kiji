@@ -41,6 +41,26 @@
     <DefaultItemExcludes>$(DefaultItemExcludes);content/**;dist/**</DefaultItemExcludes>
   </PropertyGroup>
 
+  <!-- Do not infer a RID from the package: NuGet excludes package imports when restoring.
+       Limit only SkiaSharp's native copies; other packages keep the SDK's asset selection. -->
+  <Target Name="KijiSelectNativeImageAssets" BeforeTargets="ResolveLockFileCopyLocalFiles"
+          DependsOnTargets="ResolvePackageAssets"
+          Condition="'$(_KijiIsSiteApp)' == 'true' and '$(RuntimeIdentifier)' == '' and '$(RuntimeIdentifiers)' == '' and
+                     ('$(PlatformTarget)' == '' or '$(PlatformTarget)' == 'AnyCPU') and
+                     '$(UseCurrentRuntimeIdentifier)' != 'false' and '$(IsRidAgnostic)' != 'true'">
+    <ItemGroup>
+      <_KijiNativeImageAsset Include="@(RuntimeTargetsCopyLocalItems)"
+                             Condition="$([System.String]::Copy('%(NuGetPackageId)').StartsWith('SkiaSharp.NativeAssets.'))" />
+      <_KijiHostImageAsset Include="@(_KijiNativeImageAsset)"
+                           Condition="'%(RuntimeIdentifier)' == '$(NETCoreSdkPortableRuntimeIdentifier)' or
+                                      ('%(RuntimeIdentifier)' == 'osx' and $(NETCoreSdkPortableRuntimeIdentifier.StartsWith('osx-')))" />
+      <!-- Retain SDK behavior when the package has no exact host asset or universal macOS asset. -->
+      <_KijiUnusedImageAsset Include="@(_KijiNativeImageAsset)" Exclude="@(_KijiHostImageAsset)"
+                             Condition="'@(_KijiHostImageAsset)' != ''" />
+      <RuntimeTargetsCopyLocalItems Remove="@(_KijiUnusedImageAsset)" />
+    </ItemGroup>
+  </Target>
+
   <!-- Runtime metadata keeps checkout paths out of code identity. -->
   <ItemGroup Condition="'$(_KijiIsSiteApp)' == 'true'">
     <RuntimeHostConfigurationOption Include="Kiji.ProjectDirectory" Value="$(MSBuildProjectDirectory)" />

@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Net;
 using System.Net.WebSockets;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -15,14 +16,52 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
     public Task Publish_UsesSdkDefaultDestination() => fixture.ScenarioAsync(async () =>
     {
         const string project = "Site/PackageSite.csproj";
-        fixture.Replace(project, "<UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier>",
-            "<UseCurrentRuntimeIdentifier>false</UseCurrentRuntimeIdentifier>");
+        fixture.Replace(project, "<OutputType>Exe</OutputType>",
+            "<OutputType>Exe</OutputType><UseCurrentRuntimeIdentifier>false</UseCurrentRuntimeIdentifier>");
         fixture.Write("Site/dist/previous.json", "{}");
         await fixture.DotnetAsync("publish", project, "-c", "Release");
         var buildDirectory = Path.Combine(fixture.Site, "bin", "Release", "net10.0");
         Assert.True(File.Exists(Path.Combine(buildDirectory, "publish", "index.html")));
+        Assert.True(Directory.GetFiles(buildDirectory, "libSkiaSharp.*", SearchOption.AllDirectories)
+            .Count(path => Path.GetExtension(path) is ".dll" or ".so" or ".dylib") > 1);
         Assert.False(File.Exists(Path.Combine(buildDirectory, "dist", "previous.json")));
         Assert.False(File.Exists(Path.Combine(fixture.Site, "dist", "index.html")));
+    });
+
+    [Theory]
+    [InlineData("UseCurrentRuntimeIdentifier")]
+    [InlineData("RuntimeIdentifier")]
+    public Task Publish_RespectsExplicitRuntimeSelection(string property) => fixture.ScenarioAsync(async () =>
+    {
+        var value = property == "RuntimeIdentifier" ? RuntimeInformation.RuntimeIdentifier : "true";
+        await fixture.PublishAsync($"-p:{property}={value}");
+        var buildDirectory = Path.Combine(fixture.Site, "bin", "Release", "net10.0", RuntimeInformation.RuntimeIdentifier);
+        Assert.True(File.Exists(Path.Combine(buildDirectory, "PackageSite.dll")));
+        Assert.Contains("Original body.", Read("index.html"), StringComparison.Ordinal);
+        Assert.NotEmpty(Directory.GetFiles(Path.Combine(fixture.Site, "dist"), "*.webp", SearchOption.AllDirectories));
+    });
+
+    [Fact]
+    public Task Build_PreservesNativeAssetsForExplicitArchitecture() => fixture.ScenarioAsync(async () =>
+    {
+        await fixture.DotnetAsync("build", "Site/PackageSite.csproj", "-c", "Release",
+            "-p:PlatformTarget=x86", "-p:UseAppHost=false");
+        var buildDirectory = Path.Combine(fixture.Site, "bin", "Release", "net10.0");
+        Assert.True(File.Exists(Path.Combine(buildDirectory, "PackageSite.dll")));
+        Assert.True(Directory.GetFiles(buildDirectory, "libSkiaSharp.*", SearchOption.AllDirectories)
+            .Count(path => Path.GetExtension(path) is ".dll" or ".so" or ".dylib") > 1);
+    });
+
+    [Fact]
+    public Task Build_KeepsDirectLibraryConsumerPortable() => fixture.ScenarioAsync(async () =>
+    {
+        fixture.Replace("Library/Library.csproj", "<ItemGroup>", """
+            <ItemGroup>
+                <PackageReference Include="Kiji" Version="$(KijiPackageVersion)" />
+            """);
+        await fixture.DotnetAsync("build", "Library/Library.csproj", "-c", "Release");
+        var buildDirectory = Path.Combine(Path.GetDirectoryName(fixture.Site)!, "Library", "bin", "Release", "net10.0");
+        Assert.True(File.Exists(Path.Combine(buildDirectory, "Library.dll")));
     });
 
     [Fact]
@@ -65,6 +104,9 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
             """);
 
         var output = await fixture.PublishAsync();
+        var nativeLibraries = Directory.GetFiles(Path.Combine(fixture.Site, "bin", "Release", "net10.0"),
+            "libSkiaSharp.*", SearchOption.AllDirectories).Where(path => Path.GetExtension(path) is ".dll" or ".so" or ".dylib");
+        Assert.Single(nativeLibraries);
 
         Assert.Contains("Unhandled exception rendering component: boundary-publish-warning", output, StringComparison.Ordinal);
         Assert.DoesNotContain("boundary-publish-information", output, StringComparison.Ordinal);

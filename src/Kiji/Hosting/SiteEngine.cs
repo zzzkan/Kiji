@@ -219,19 +219,20 @@ internal sealed class SiteEngine
     /// </param>
     /// <param name="cancellationToken">Stops the server.</param>
     /// <param name="reporter">Overrides the console reporter. For tests.</param>
+    /// <param name="statusOutput">Overrides the output writer for the default reporter. For tests.</param>
     internal async Task<(DevServer DevServer, WebApplication WebApplication)> StartDevServerAsync(
         string[] args,
         CancellationToken cancellationToken,
-        DevServerStatusReporter? reporter = null)
+        DevServerStatusReporter? reporter = null, TextWriter? statusOutput = null)
     {
         _ = SiteInfo;
         var options = _options;
         OutputPathValidator.ValidateInputs(options.OutputDirectory, ContentRoots);
 
-        var devServer = new DevServer(this, reporter);
+        var devServer = DevServer.Create(this, args, reporter, statusOutput);
         try
         {
-            var web = await devServer.StartAsync(options, args, cancellationToken);
+            var web = await devServer.StartAsync(options, cancellationToken);
             return (devServer, web);
         }
         catch

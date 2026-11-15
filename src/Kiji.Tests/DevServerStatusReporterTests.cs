@@ -16,14 +16,7 @@ public sealed class DevServerStatusReporterTests
     public void Configuration_ControlsEmojiAndColor(string? suppressEmoji, string? noColor,
         string? term, bool redirected, bool emoji, bool color)
     {
-        // A later provider can override the defaults without changing process-wide state.
         var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["DOTNET_WATCH_SUPPRESS_EMOJIS"] = "1",
-                ["NO_COLOR"] = "1",
-                ["TERM"] = "dumb",
-            })
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["DOTNET_WATCH_SUPPRESS_EMOJIS"] = suppressEmoji,

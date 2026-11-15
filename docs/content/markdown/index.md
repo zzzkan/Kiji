@@ -209,9 +209,10 @@ name remain separate. Generated URLs include the site's deployment base path.
 
 Image edits invalidate every referring page. Incremental publishing restores missing
 variants, and removes unused variants after the last reference disappears.
-Sources must be inside the project and a registered content directory, such as the
-default `content/`. Parent references can cross article directories within those roots.
-Absolute filesystem paths, symbolic links, junctions, and references outside these roots
-fail the render instead of publishing files whose changes cannot be watched. Missing
-images also fail the render.
+For responsive processing, use relative filesystem references to project files inside a
+registered content directory, such as the default `content/`. Parent references can cross
+article directories within those roots. Local references that escape these roots, become
+rooted after path normalization, or traverse symbolic links or junctions fail the render.
+Missing images also fail the render. Site-root and remote URLs remain unprocessed as
+described above.
 To replace the image processor, see [`IImageProcessor`](../api-reference/#iimageprocessor).

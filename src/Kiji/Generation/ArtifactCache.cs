@@ -66,14 +66,14 @@ internal sealed class ArtifactCache(string root)
         }
     }
 
-    internal static void WriteAtomic(string path, ReadOnlySpan<byte> bytes)
+    internal static void WriteAtomic(string path, ReadOnlySpan<byte> bytes, bool overwrite = true)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
             File.WriteAllBytes(temporary, bytes);
-            File.Move(temporary, path, overwrite: true);
+            File.Move(temporary, path, overwrite);
         }
         finally { File.Delete(temporary); }
     }

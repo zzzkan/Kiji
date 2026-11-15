@@ -117,7 +117,7 @@ public sealed class MarkdownProcessorTests : IDisposable
         Assert.StartsWith(basePath + "_images/", ImageSource(results[0]), StringComparison.Ordinal);
         var variants = Directory.GetFiles(_outputDir, "*.webp", SearchOption.AllDirectories);
         Assert.Equal(4, variants.Length);
-        Assert.Equal(16, new DirectoryInfo(Assert.Single(variants.Select(Path.GetDirectoryName).Distinct())!).Name.Length);
+        Assert.Equal(Path.Combine(_outputDir, "_images"), Assert.Single(variants.Select(Path.GetDirectoryName).Distinct()));
         Assert.All(variants, path => Assert.Contains(
             basePath + string.Join('/', Path.GetRelativePath(_outputDir, path).Split(Path.DirectorySeparatorChar).Select(Uri.EscapeDataString)),
             results[0], StringComparison.Ordinal));
@@ -130,12 +130,12 @@ public sealed class MarkdownProcessorTests : IDisposable
         var second = CreateMarkdownFile("b/index.md", "![Photo](photo.png)");
         await File.WriteAllBytesAsync(Path.Combine(_testFilesDir, "a", "photo.png"), [1]);
         await File.WriteAllBytesAsync(Path.Combine(_testFilesDir, "b", "photo.png"), [2]);
-        var processor = CreateProcessor(imageProcessor: new TestSite.PageServices.TrackingImageProcessor());
+        var processor = CreateProcessor(imageProcessor: new TestSite.PageServices.VaryingImageProcessor());
         var results = await Task.WhenAll(
             WithPageContextAsync("/a/", () => ProcessFileAsync(processor, first)),
             WithPageContextAsync("/b/", () => ProcessFileAsync(processor, second)));
         Assert.NotEqual(ImageSource(results[0]), ImageSource(results[1]));
-        Assert.Equal(2, Directory.GetFiles(_outputDir, "custom.svg", SearchOption.AllDirectories).Length);
+        Assert.Equal(2, Directory.GetFiles(_outputDir, "image.svg", SearchOption.AllDirectories).Length);
     }
 
     [Theory]

@@ -21,7 +21,7 @@ internal static class ProjectPath
         foreach (var segment in relative.Split('/'))
         {
             var entries = new DirectoryInfo(current).EnumerateFileSystemInfos(segment,
-                new EnumerationOptions { AttributesToSkip = 0, MatchCasing = MatchCasing.CaseInsensitive, MatchType = MatchType.Simple }).ToArray();
+                new EnumerationOptions { AttributesToSkip = 0, MatchCasing = MatchCasing.CaseInsensitive, MatchType = MatchType.Simple });
             var entry = entries.FirstOrDefault(item => item.Name == segment)
                 ?? entries.Single(item => string.Equals(item.Name, segment, StringComparison.OrdinalIgnoreCase));
             // Watching an alias does not watch its target. Reject links rather than

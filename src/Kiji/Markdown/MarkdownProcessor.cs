@@ -43,10 +43,10 @@ internal sealed class MarkdownProcessor
         ArgumentNullException.ThrowIfNull(imageProcessor);
 
         _imageProcessor = imageProcessor;
-        _outputPath = options.OutputDirectory;
+        _outputPath = Path.Combine(options.OutputDirectory, "_images");
         _imageCachePath = options.ImageCacheDirectory;
         _projectDirectory = paths.ProjectDirectory;
-        _basePath = site.BaseUrl.AbsolutePath;
+        _basePath = new Uri(site.BaseUrl, "_images/").AbsolutePath;
         _contentRoots = [.. contentRoots.Select(Path.GetFullPath)];
         _pipeline = BuildPipeline(contentOptions);
     }
@@ -82,12 +82,12 @@ internal sealed class MarkdownProcessor
         return html;
     }
 
-    private async Task<IReadOnlyDictionary<string, ImageAsset>> MaterializeReferencedImagesAsync(
+    private async Task<IReadOnlyDictionary<string, ProcessedImageInfo>> MaterializeReferencedImagesAsync(
         string filePath,
         MarkdownDocument document,
         CancellationToken cancellationToken)
     {
-        var imageInfoLookup = new Dictionary<string, ImageAsset>(StringComparer.Ordinal);
+        var imageInfoLookup = new Dictionary<string, ProcessedImageInfo>(StringComparer.Ordinal);
         var imageUrls = CollectLocalImageUrls(document);
         if (imageUrls.Count == 0)
         {
@@ -107,11 +107,7 @@ internal sealed class MarkdownProcessor
             var referenceKey = ImageReferenceKey.FromMarkdownUrl(url);
             var sourceFile = ResolveSourceFile(filePath, url, referenceKey, sourceDirectory);
 
-            // Source identity is independent of the referring page and checkout location.
-            // Isolate each source so custom processors can use simple variant filenames.
-            var sourcePath = ProjectPath.GetRelativePath(_projectDirectory, sourceFile)!;
-            var relativeDirectory = "_images/" + BuildFingerprint.HashText(sourcePath)[..16];
-            var outputDirectory = Path.Combine(_outputPath, relativeDirectory);
+            var outputDirectory = _outputPath;
             var cacheDirectory = pageContext.Dependencies is null ? null : _imageCachePath;
 
             var processed = await ImageArtifactProcessor.ProcessAsync(
@@ -128,7 +124,7 @@ internal sealed class MarkdownProcessor
                 }
             }
 
-            imageInfoLookup[referenceKey] = new ImageAsset(processed, relativeDirectory);
+            imageInfoLookup[referenceKey] = processed;
         }
 
         return imageInfoLookup;

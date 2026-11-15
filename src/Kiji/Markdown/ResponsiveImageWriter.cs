@@ -54,10 +54,9 @@ internal sealed class ResponsiveImageWriter
         }
 
         renderer.Write("<img");
-        if (context.ImageInfoLookup.TryGetValue(referenceKey, out var asset) && asset.Info.Variants.Count > 0)
+        if (context.ImageInfoLookup.TryGetValue(referenceKey, out var imageInfo) && imageInfo.Variants.Count > 0)
         {
-            var imageInfo = asset.Info;
-            var publicDirectory = context.BasePath + EncodeRelativePath(asset.RelativeDirectory) + "/";
+            var publicDirectory = context.BasePath;
             var variants = imageInfo.Variants;
             var largest = variants[^1];
             var width = TryGetAttribute(attributes, "width", out var explicitWidth)

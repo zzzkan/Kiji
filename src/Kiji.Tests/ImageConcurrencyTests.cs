@@ -42,24 +42,31 @@ public sealed class ImageConcurrencyTests : IDisposable
     }
 
     [Fact]
-    public async Task SharedOutput_SerializesCustomProcessorsWithoutPersistentCache()
+    public async Task SharedCustomResults_PublishConcurrentlyWithoutCorruptingImmutableFiles()
     {
         var source = await Source("custom");
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var writers = 0;
         await using var processor = new TestSite.PageServices.TrackingImageProcessor
         {
-            BeforeWriteAsync = async ct => { entered.TrySetResult(); await release.Task.WaitAsync(ct); },
+            BeforeWriteAsync = async ct =>
+            {
+                if (Interlocked.Increment(ref writers) == 2) { entered.TrySetResult(); }
+                await release.Task.WaitAsync(ct);
+            },
         };
         var output = Path.Combine(_root, "shared");
         var first = ImageArtifactProcessor.ProcessAsync(processor, source, output, null, default);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
         var second = ImageArtifactProcessor.ProcessAsync(processor, source, output, null, default);
-        Assert.Equal(1, processor.Calls);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
         release.SetResult();
-        await Task.WhenAll(first, second);
+        var results = await Task.WhenAll(first, second);
         Assert.Equal(2, processor.Calls);
-        Assert.Single(Directory.GetFiles(output, "custom.svg", SearchOption.AllDirectories));
+        var image = Assert.Single(Directory.GetFiles(output, "custom.svg", SearchOption.AllDirectories));
+        Assert.Equal(results[0].Variants, results[1].Variants);
+        Assert.EndsWith("</svg>", await File.ReadAllTextAsync(image), StringComparison.Ordinal);
+        Assert.Empty(Directory.GetFiles(output, "*.tmp", SearchOption.AllDirectories));
     }
 
     [Fact]
@@ -78,8 +85,10 @@ public sealed class ImageConcurrencyTests : IDisposable
                 await both.Task.WaitAsync(TimeSpan.FromSeconds(10), ct);
             },
         };
-        await Task.WhenAll(processor.ProcessAsync(a, Path.Combine(_root, "out")),
-            processor.ProcessAsync(b, Path.Combine(_root, "out")));
+        await Task.WhenAll(ImageArtifactProcessor.ProcessAsync(processor, a, Path.Combine(_root, "out"),
+                Path.Combine(_root, "cache", "images"), default),
+            ImageArtifactProcessor.ProcessAsync(processor, b, Path.Combine(_root, "out"),
+                Path.Combine(_root, "cache", "images"), default));
         Assert.Equal(2, count);
     }
 

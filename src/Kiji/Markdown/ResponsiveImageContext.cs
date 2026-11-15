@@ -3,13 +3,13 @@ using Kiji.Assets;
 namespace Kiji.Markdown;
 
 /// <summary>
-/// Per-document shared image lookup and deployment base path.
+/// Per-document image lookup and the shared image directory's public URL.
 /// </summary>
 internal sealed class ResponsiveImageContext(
-    IReadOnlyDictionary<string, ImageAsset> imageInfoLookup,
+    IReadOnlyDictionary<string, ProcessedImageInfo> imageInfoLookup,
     string basePath)
 {
-    public IReadOnlyDictionary<string, ImageAsset> ImageInfoLookup { get; } = imageInfoLookup;
+    public IReadOnlyDictionary<string, ProcessedImageInfo> ImageInfoLookup { get; } = imageInfoLookup;
 
     public string BasePath { get; } = basePath;
 

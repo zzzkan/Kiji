@@ -10,7 +10,6 @@ internal static class ImageArtifactProcessor
     internal static async Task<ProcessedImageInfo> ProcessAsync(IImageProcessor processor,
         string source, string output, string? cacheDirectory, CancellationToken cancellationToken)
     {
-        using var outputLease = await ImageGenerationLock.AcquireAsync(output, cancellationToken);
         var sourceBytes = await File.ReadAllBytesAsync(source, cancellationToken);
         var sourceHash = BuildFingerprint.HashBytes(sourceBytes);
         var dependencies = PageRenderContext.Current?.Dependencies;
@@ -96,8 +95,17 @@ internal static class ImageArtifactProcessor
                 var destination = Path.Combine(output, artifact.RelativePath);
                 if (cache is null)
                 {
-                    Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-                    File.Copy(Path.Combine(generated, artifact.RelativePath), destination, overwrite: true);
+                    var existing = BuildFingerprint.HashFile(destination);
+                    if (existing == artifact.Hash) { continue; }
+                    try
+                    {
+                        ArtifactCache.WriteAtomic(destination, await File.ReadAllBytesAsync(
+                            Path.Combine(generated, artifact.RelativePath), cancellationToken), overwrite: existing != BuildFingerprint.Missing);
+                    }
+                    catch (IOException) when (BuildFingerprint.HashFile(destination) == artifact.Hash)
+                    {
+                        // Another writer published the same immutable bytes first.
+                    }
                 }
                 else if (!cache.Restore(artifact.Hash, destination))
                 {

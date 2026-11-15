@@ -115,11 +115,11 @@ public sealed class ResponsiveImageExtensionTests
     private static string Render(
         string markdown,
         IReadOnlyDictionary<string, ProcessedImageInfo> imageInfoLookup,
-        string basePath = "/kiji/")
+        string basePath = "/kiji/_images/")
     {
         var document = global::Markdig.Markdown.Parse(markdown, Pipeline);
         return PooledMarkdigRenderer.Create(Pipeline).Render(
-            document, new ResponsiveImageContext(imageInfoLookup.ToDictionary(pair => pair.Key, pair => new ImageAsset(pair.Value, "_images/source")), basePath));
+            document, new ResponsiveImageContext(imageInfoLookup, basePath));
     }
 
     private static ProcessedImageInfo CreateImageInfo(
@@ -149,10 +149,10 @@ public sealed class ResponsiveImageExtensionTests
 
         var html = Render(markdown, imageInfoLookup);
 
-        Assert.Contains("src=\"/kiji/_images/source/test-image.png.abc12345.1920w.webp\"", html);
+        Assert.Contains("src=\"/kiji/_images/test-image.png.abc12345.1920w.webp\"", html);
         Assert.Contains("srcset=\"", html);
-        Assert.Contains("/kiji/_images/source/test-image.png.abc12345.320w.webp 320w", html);
-        Assert.Contains("/kiji/_images/source/test-image.png.abc12345.1920w.webp 1920w", html);
+        Assert.Contains("/kiji/_images/test-image.png.abc12345.320w.webp 320w", html);
+        Assert.Contains("/kiji/_images/test-image.png.abc12345.1920w.webp 1920w", html);
         Assert.Contains("sizes=\"(max-width: 1920px) 100vw, 1920px\"", html);
         Assert.Contains("width=\"1920\"", html);
         Assert.Contains("height=\"1080\"", html);
@@ -211,8 +211,8 @@ public sealed class ResponsiveImageExtensionTests
 
         var html = Render(markdown, imageInfoLookup);
 
-        Assert.Contains("/kiji/_images/source/foo.jpg.jpg12345.", html);
-        Assert.Contains("/kiji/_images/source/foo.png.png67890.", html);
+        Assert.Contains("/kiji/_images/foo.jpg.jpg12345.", html);
+        Assert.Contains("/kiji/_images/foo.png.png67890.", html);
     }
 
 }

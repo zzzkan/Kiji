@@ -442,13 +442,9 @@ internal sealed class SiteEngine
     private PageRenderContext CreatePageRenderContext(PageRenderRequest request, BuildDependencyRecorder? dependencies,
         SharedRenderLifetime? sharedRenders, CancellationToken cancellationToken)
     {
-        var outputRelativeDirectory = Path.GetDirectoryName(request.OutputRelativePath) ?? string.Empty;
-
         return new PageRenderContext
         {
             RoutePath = request.RoutePath,
-            OutputRelativeDirectory = outputRelativeDirectory,
-            OutputUrlDirectory = PageRenderContext.CreateOutputUrlDirectory(SiteInfo.BaseUrl, outputRelativeDirectory),
             Dependencies = dependencies,
             CancellationToken = cancellationToken,
             SharedRenders = sharedRenders,

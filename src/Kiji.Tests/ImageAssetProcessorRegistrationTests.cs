@@ -36,10 +36,10 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
             Assert.Equal(1, processor.Calls);
             var html = File.ReadAllText(Path.Combine(output, "md", "post", "index.html"));
             Assert.Contains("custom.svg", html, StringComparison.Ordinal);
-            Assert.True(File.Exists(Path.Combine(output, "md", "post", "custom.svg")));
+            Assert.Single(Directory.GetFiles(Path.Combine(output, "_images"), "custom.svg", SearchOption.AllDirectories));
             await app.PublishAsync(output);
             Assert.Equal(1, processor.Calls);
-            Assert.True(File.Exists(Path.Combine(output, "md", "post", "custom.svg")));
+            Assert.Single(Directory.GetFiles(Path.Combine(output, "_images"), "custom.svg", SearchOption.AllDirectories));
             Assert.Equal(0, processor.DisposeCount);
         }
         Assert.Equal(callerOwned ? 0 : 1, processor.DisposeCount);

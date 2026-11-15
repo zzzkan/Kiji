@@ -39,7 +39,7 @@ public sealed class MarkdownOptionsTests : IDisposable
     {
         var options = new MarkdownOptions();
         options.Pipeline.UseCustomContainers();
-        var processor = new MarkdownProcessor(new ResolvedSitePaths { OutputDirectory = _testDir }, new ImageProcessor(), options);
+        var processor = new MarkdownProcessor(new ResolvedSitePaths { OutputDirectory = _testDir }, new SiteExecutionPaths(_testDir), TestArticleContents.CreateSiteInfo(), new ImageProcessor(), options);
 
         var html = await processor.ProcessBodyAsync("post.md", "::: note {#tip}\nBody\n:::");
 
@@ -88,6 +88,8 @@ public sealed class MarkdownOptionsTests : IDisposable
             {
                 OutputDirectory = _testDir,
             },
+            new SiteExecutionPaths(_testDir),
+            TestArticleContents.CreateSiteInfo(),
             new ImageProcessor(),
             contentOptions);
     }

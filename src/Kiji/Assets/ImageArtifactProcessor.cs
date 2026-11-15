@@ -10,6 +10,9 @@ internal static class ImageArtifactProcessor
     internal static async Task<ProcessedImageInfo> ProcessAsync(IImageProcessor processor,
         string source, string output, string? cacheDirectory, CancellationToken cancellationToken)
     {
+        // Pages can materialize the same shared output concurrently, including in
+        // development and with custom processors that do not support cache reuse.
+        using var outputLease = await ImageGenerationLock.AcquireAsync(output, cancellationToken);
         if (cacheDirectory is null && PageRenderContext.Current?.Dependencies is null)
         {
             return await processor.ProcessAsync(source, output, cancellationToken);

@@ -161,7 +161,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
     }
 
     [Fact]
-    public async Task PublishAsync_MarkdownImages_BundledWithPageAndRootRelativeUrls()
+    public async Task PublishAsync_MarkdownImages_SharedOutputAndRootRelativeUrls()
     {
         var postDir = Path.Combine(_contentsDir, "hello");
         Directory.CreateDirectory(Path.Combine(postDir, "images"));
@@ -202,12 +202,14 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         Assert.Contains("href=\"/kiji/css/app.css\"", home, StringComparison.Ordinal);
         Assert.Contains("href=\"https://example.com/kiji/\"", home, StringComparison.Ordinal);
 
-        // Page-bundle layout: variants stay beside index.html and their URLs include the deployment base path.
-        Assert.Contains("src=\"/kiji/md/hello-world/photo.png.", html, StringComparison.Ordinal);
-        Assert.Contains("src=\"/kiji/md/hello-world/images/nested.png.", html, StringComparison.Ordinal);
-        Assert.DoesNotContain("/_assets/", html, StringComparison.Ordinal);
-        Assert.NotEmpty(Directory.GetFiles(pageDir, "photo.png.*.webp"));
-        Assert.NotEmpty(Directory.GetFiles(Path.Combine(pageDir, "images"), "nested.png.*.webp"));
+        // Shared variants use the deployment base path and never live beside the page.
+        Assert.Contains("src=\"/kiji/_images/", html, StringComparison.Ordinal);
+        var variants = Directory.GetFiles(Path.Combine(_outputDir, "_images"), "*.webp", SearchOption.AllDirectories);
+        Assert.Contains(variants, path => Path.GetFileName(path).StartsWith("photo.png.", StringComparison.Ordinal));
+        Assert.Contains(variants, path => Path.GetFileName(path).StartsWith("nested.png.", StringComparison.Ordinal));
+        Assert.All(variants, path => Assert.Contains(
+            "/kiji/" + Path.GetRelativePath(_outputDir, path).Replace('\\', '/'), html, StringComparison.Ordinal));
+        Assert.Empty(Directory.GetFiles(pageDir, "*.webp", SearchOption.AllDirectories));
 
         // Encoded variants are kept in the persistent cache under .kiji/cache.
         var imageCacheDir = Path.Combine(_testDir, ".kiji", "cache", "images");
@@ -241,13 +243,13 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
 
         var original = await PublishAsync();
         Assert.Contains(" 1280w", original, StringComparison.Ordinal);
-        Assert.Equal(5, Directory.GetFiles(pageDir, "photo.png.*.webp").Length);
+        Assert.Equal(5, Directory.GetFiles(Path.Combine(_outputDir, "_images"), "photo.png.*.webp", SearchOption.AllDirectories).Length);
 
         var configured = await PublishAsync(static options => { options.Widths = [480]; options.MaxWidth = 900; });
         Assert.Contains(" 480w, ", configured, StringComparison.Ordinal);
         Assert.Contains(" 900w\"", configured, StringComparison.Ordinal);
         Assert.DoesNotContain(" 1280w", configured, StringComparison.Ordinal);
-        Assert.Equal(["480w", "900w"], Directory.GetFiles(pageDir, "photo.png.*.webp")
+        Assert.Equal(["480w", "900w"], Directory.GetFiles(Path.Combine(_outputDir, "_images"), "photo.png.*.webp", SearchOption.AllDirectories)
             .Select(static file => Path.GetFileNameWithoutExtension(file).Split('.')[^1]).Order(StringComparer.Ordinal));
     }
 

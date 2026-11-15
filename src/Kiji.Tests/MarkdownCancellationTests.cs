@@ -116,7 +116,7 @@ public sealed class MarkdownCancellationTests
         var processor = new MarkdownProcessor(new ResolvedSitePaths
         {
             OutputDirectory = root,
-        }, new ImageProcessor(), options);
+        }, new SiteExecutionPaths(root), TestArticleContents.CreateSiteInfo(), new ImageProcessor(), options);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => processor.ProcessBodyAsync(
             Path.Combine(root, "post.md"), "# heading", cancellation.Token));
     }
@@ -131,8 +131,6 @@ public sealed class MarkdownCancellationTests
         SharedRenderLifetime? lifetime = null, bool tracked = false) => new()
         {
             RoutePath = "/post/",
-            OutputRelativeDirectory = "post",
-            OutputUrlDirectory = "/post/",
             CancellationToken = cancellationToken,
             SharedRenders = lifetime,
             Dependencies = tracked ? new BuildDependencyRecorder() : null,

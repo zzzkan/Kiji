@@ -4,14 +4,15 @@ using Markdig.Extensions.GenericAttributes;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
 using Kiji.Assets;
+using Kiji.Generation;
 using Kiji.Rendering;
 
 namespace Kiji.Markdown;
 
 /// <summary>
 /// Processes markdown bodies into HTML through a shared Markdig pipeline. Referenced
-/// local images are materialized into the output directory of the page being rendered
-/// (see <see cref="PageRenderContext"/>) and rewritten to root-relative public URLs.
+/// local images are materialized into shared site output and rewritten to
+/// root-relative public URLs.
 /// </summary>
 internal sealed class MarkdownProcessor
 {
@@ -20,12 +21,18 @@ internal sealed class MarkdownProcessor
     private readonly IImageProcessor _imageProcessor;
     private readonly string _outputPath;
     private readonly string? _imageCachePath;
+    private readonly string _projectDirectory;
+    private readonly string _basePath;
 
     /// <param name="options">The resolved site paths.</param>
+    /// <param name="paths">The project root used for portable source identities.</param>
+    /// <param name="site">The site's public deployment base path.</param>
     /// <param name="imageProcessor">The image backend used to process referenced local images.</param>
     /// <param name="contentOptions">Site-wide pipeline configuration.</param>
     public MarkdownProcessor(
         ResolvedSitePaths options,
+        SiteExecutionPaths paths,
+        SiteInfo site,
         IImageProcessor imageProcessor,
         MarkdownOptions? contentOptions = null)
     {
@@ -35,6 +42,8 @@ internal sealed class MarkdownProcessor
         _imageProcessor = imageProcessor;
         _outputPath = options.OutputDirectory;
         _imageCachePath = options.ImageCacheDirectory;
+        _projectDirectory = paths.ProjectDirectory;
+        _basePath = site.BaseUrl.AbsolutePath;
         _pipeline = BuildPipeline(contentOptions);
     }
 
@@ -60,9 +69,7 @@ internal sealed class MarkdownProcessor
 
         var imageInfoLookup = await MaterializeReferencedImagesAsync(filePath, document, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
-        var imageContext = new ResponsiveImageContext(
-            imageInfoLookup,
-            PageRenderContext.Current?.OutputUrlDirectory ?? "/");
+        var imageContext = new ResponsiveImageContext(imageInfoLookup, _basePath);
 
         var html = Render(document, imageContext);
 
@@ -88,17 +95,18 @@ internal sealed class MarkdownProcessor
 
         var sourceDirectory = Path.GetDirectoryName(filePath)
             ?? throw new InvalidOperationException($"Cannot determine source directory for markdown file: {filePath}");
-        var sourceRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(sourceDirectory));
-        var pageOutputDirectory = Path.Combine(_outputPath, pageContext.OutputRelativeDirectory);
 
         foreach (var url in imageUrls)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var referenceKey = ImageReferenceKey.FromMarkdownUrl(url);
-            var sourceFile = ResolveSourceFile(filePath, url, referenceKey, sourceRoot);
+            var sourceFile = ResolveSourceFile(filePath, url, referenceKey, sourceDirectory);
 
-            var relativeDirectory = GetDirectoryPart(referenceKey);
-            var outputDirectory = Path.Combine(pageOutputDirectory, relativeDirectory.Replace('/', Path.DirectorySeparatorChar));
+            // Source identity is independent of the referring page and checkout location.
+            // Isolate each source so custom processors can use simple variant filenames.
+            var sourcePath = Path.GetRelativePath(_projectDirectory, sourceFile).Replace('\\', '/');
+            var relativeDirectory = "_images/" + BuildFingerprint.HashText(sourcePath);
+            var outputDirectory = Path.Combine(_outputPath, relativeDirectory);
             var cacheDirectory = pageContext.Dependencies is null ? null : _imageCachePath;
 
             var processed = await ImageArtifactProcessor.ProcessAsync(
@@ -115,7 +123,11 @@ internal sealed class MarkdownProcessor
                 }
             }
 
-            imageInfoLookup[referenceKey] = processed;
+            imageInfoLookup[referenceKey] = processed with
+            {
+                Variants = [.. processed.Variants.Select(variant =>
+                    variant with { FileName = relativeDirectory + "/" + variant.FileName.Replace('\\', '/') })],
+            };
         }
 
         return imageInfoLookup;
@@ -129,25 +141,12 @@ internal sealed class MarkdownProcessor
                 $"Image reference '{url}' in '{filePath}' is not a resolvable relative path.");
         }
 
-        var sourceFile = Path.GetFullPath(Path.Combine(sourceRoot, referenceKey.Replace('/', Path.DirectorySeparatorChar)));
-
-        if (!sourceFile.StartsWith(sourceRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                $"Image reference '{url}' in '{filePath}' resolves outside the markdown file's directory. " +
-                "Place images beside the markdown file (or in a subdirectory next to it).");
-        }
+        var sourceFile = Path.GetFullPath(referenceKey.Replace('/', Path.DirectorySeparatorChar), sourceRoot);
 
         return !File.Exists(sourceFile)
             ? throw new InvalidOperationException(
                 $"Image '{url}' referenced by '{filePath}' was not found at '{sourceFile}'.")
             : sourceFile;
-    }
-
-    private static string GetDirectoryPart(string referenceKey)
-    {
-        var separatorIndex = referenceKey.LastIndexOf('/');
-        return separatorIndex >= 0 ? referenceKey[..separatorIndex] : string.Empty;
     }
 
     private string Render(MarkdownDocument document, ResponsiveImageContext imageContext)

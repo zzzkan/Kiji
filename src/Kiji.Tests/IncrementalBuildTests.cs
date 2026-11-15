@@ -1000,6 +1000,75 @@ public sealed class IncrementalBuildTests : IDisposable
     }
 
     [Fact]
+    public async Task SharedImages_TrackAllReferrersRestoreRepairAndCollectOnlyAfterLastReference()
+    {
+        var root = CreateSiteRoot("shared-images");
+        var imagePath = Path.Combine(root, "content", "shared", "photo.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
+        Directory.CreateDirectory(Path.Combine(root, "content", "a"));
+        Directory.CreateDirectory(Path.Combine(root, "content", "b"));
+        await WritePostAsync(root, "a/first", "First", "![Photo](../shared/photo.png)");
+        await WritePostAsync(root, "b/second", "Second", "![Photo](../shared/./photo.png)");
+        WriteImage(SkiaSharp.SKColors.Red);
+        var renders = 0;
+        await using var site = CreateBuilder(root, () => Interlocked.Increment(ref renders)).BuildSite();
+        await site.PublishAsync("dist");
+        var initialRenders = renders;
+        var manifest = await ReadCacheManifest(root);
+        var pages = manifest.Pages.Where(page => page.AdditionalOutputs.Count > 0).ToArray();
+        Assert.Equal(2, pages.Length);
+        Assert.Equal(pages[0].AdditionalOutputs.Select(output => output.RelativePath),
+            pages[1].AdditionalOutputs.Select(output => output.RelativePath));
+        Assert.Equal(4, Directory.GetFiles(Path.Combine(root, "dist"), "*.webp", SearchOption.AllDirectories).Length);
+        var oldPaths = pages[0].AdditionalOutputs.Select(output => Path.Combine(root, "dist", output.RelativePath)).ToArray();
+        foreach (var page in pages)
+        {
+            var html = await File.ReadAllTextAsync(Path.Combine(root, "dist", page.OutputRelativePath));
+            Assert.All(page.AdditionalOutputs, output =>
+                Assert.Contains("/" + output.RelativePath.Replace('\\', '/'), html, StringComparison.Ordinal));
+        }
+        await site.PublishAsync("dist");
+        Assert.Equal(initialRenders, renders);
+        var initialOutput = SnapshotDirectory(Path.Combine(root, "dist"));
+        // Force cache-only restoration and encoder repair of one damaged blob.
+        var damaged = pages[0].AdditionalOutputs[0];
+        await File.WriteAllTextAsync(Path.Combine(root, ".kiji", "cache", "images", damaged.Hash), "broken");
+        Directory.Delete(Path.Combine(root, "dist"), recursive: true);
+        await site.PublishAsync("dist");
+        Assert.Equal(initialRenders, renders);
+        var restored = SnapshotDirectory(Path.Combine(root, "dist"));
+        Assert.Equal(initialOutput.Keys.Order(), restored.Keys.Order());
+        foreach (var (path, entry) in initialOutput) { Assert.Equal(entry.Bytes, restored[path].Bytes); }
+
+        WriteImage(SkiaSharp.SKColors.Blue);
+        await site.PublishAsync("dist");
+        Assert.Equal(initialRenders + 2, renders);
+        Assert.All(oldPaths, path => Assert.False(File.Exists(path)));
+        Assert.Equal(4, Directory.GetFiles(Path.Combine(root, "dist"), "*.webp", SearchOption.AllDirectories).Length);
+        var updated = SnapshotDirectory(Path.Combine(root, "dist"));
+        Directory.Delete(Path.Combine(root, ".kiji", "cache"), recursive: true);
+        await site.PublishAsync("dist");
+        var clean = SnapshotDirectory(Path.Combine(root, "dist"));
+        Assert.Equal(updated.Keys.Order(), clean.Keys.Order());
+        foreach (var (path, entry) in updated) { Assert.Equal(entry.Bytes, clean[path].Bytes); }
+
+        File.Delete(Path.Combine(root, "content", "a", "first.md"));
+        await site.PublishAsync("dist");
+        Assert.Equal(4, Directory.GetFiles(Path.Combine(root, "dist"), "*.webp", SearchOption.AllDirectories).Length);
+        File.Delete(Path.Combine(root, "content", "b", "second.md"));
+        await site.PublishAsync("dist");
+        Assert.Empty(Directory.GetFiles(Path.Combine(root, "dist"), "*.webp", SearchOption.AllDirectories));
+
+        void WriteImage(SkiaSharp.SKColor color)
+        {
+            using var bitmap = new SkiaSharp.SKBitmap(1200, 800);
+            bitmap.Erase(color);
+            using var encoded = bitmap.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100);
+            File.WriteAllBytes(imagePath, encoded.ToArray());
+        }
+    }
+
+    [Fact]
     public async Task ExternalContentWithImages_RendersWithoutPortablePageRecipes()
     {
         var root = CreateSiteRoot("external-site");

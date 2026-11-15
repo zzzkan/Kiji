@@ -305,7 +305,7 @@ One Markdown file in a collection.
 | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
 | `string Path`                                                                  | The path relative to the content directory, using `/`. Also the collection ID.                               |
 | `TFrontMatter FrontMatter`                                                     | The parsed front matter.                                                                                     |
-| `ValueTask<string> RenderAsync(CancellationToken cancellationToken = default)` | Renders the body to HTML. Call it while rendering a page, because local images are written beside that page. |
+| `ValueTask<string> RenderAsync(CancellationToken cancellationToken = default)` | Renders the body to HTML. Call it while rendering a page so Kiji can track its dependencies and shared image outputs. |
 
 ### `MarkdownBody<TFrontMatter>`
 

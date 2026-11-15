@@ -8,9 +8,8 @@ public sealed class MarkdownContent<TFrontMatter>
 {
     private readonly Func<MarkdownContent<TFrontMatter>, CancellationToken, Task<string>> _renderAsync;
 
-    // Rendered HTML is cached per page route: local-image URLs and materialized variants
-    // belong to the rendering page's output directory, so each page that embeds this
-    // content must run the pipeline once.
+    // Keep custom Markdown extensions that read the current route isolated per page.
+    // Tracked renders bypass this cache to record each page's inputs and outputs.
     private ConcurrentDictionary<string, Lazy<Task<string>>>? _renderTasksByRoute;
     private string? _frontMatterDependencyKey;
     private int _rendered;
@@ -76,7 +75,7 @@ public sealed class MarkdownContent<TFrontMatter>
         }
     }
 
-    /// <summary>Renders the Markdown body as HTML and writes referenced image variants beside the current page.</summary>
+    /// <summary>Renders the Markdown body as HTML and materializes shared image variants.</summary>
     public async ValueTask<string> RenderAsync(CancellationToken cancellationToken = default)
     {
         Interlocked.Exchange(ref _rendered, 1);

@@ -138,8 +138,6 @@ public sealed class ContentCollectionTests
         PageRenderContext.SetCurrent(new PageRenderContext
         {
             RoutePath = "/",
-            OutputRelativeDirectory = "",
-            OutputUrlDirectory = "/",
             Dependencies = recorder,
         });
         try

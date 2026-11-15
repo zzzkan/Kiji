@@ -19,7 +19,7 @@ public sealed class ImageConcurrencyTests : IDisposable
     }
 
     [Fact]
-    public async Task SharedImageGeneratesOnceAndCopiesToEveryPage()
+    public async Task SharedImageGeneratesOnceForConcurrentReferrers()
     {
         var source = await Source("one");
         var count = 0;
@@ -29,19 +29,37 @@ public sealed class ImageConcurrencyTests : IDisposable
         {
             BeforeEncodeAsync = async (_, ct) => { Interlocked.Increment(ref count); entered.TrySetResult(); await release.Task.WaitAsync(ct); },
         };
-        var first = ImageArtifactProcessor.ProcessAsync(processor, source, Path.Combine(_root, "a"), Path.Combine(_root, "cache"), default);
+        var first = ImageArtifactProcessor.ProcessAsync(processor, source, Path.Combine(_root, "shared"), Path.Combine(_root, "cache"), default);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        var others = Enumerable.Range(0, 12).Select(i => ImageArtifactProcessor.ProcessAsync(processor, source,
-            Path.Combine(_root, "page" + i), Path.Combine(_root, "cache"), default)).ToArray();
+        var others = Enumerable.Range(0, 12).Select(_ => ImageArtifactProcessor.ProcessAsync(processor, source,
+            Path.Combine(_root, "shared"), Path.Combine(_root, "cache"), default)).ToArray();
         release.SetResult();
         var info = await first;
-        await Task.WhenAll(others);
+        var results = await Task.WhenAll(others);
         Assert.Equal(1, count);
-        for (var i = 0; i < others.Length; i++)
+        Assert.All(results, result => Assert.Equal(info.Variants, result.Variants));
+        Assert.Single(Directory.GetFiles(Path.Combine(_root, "shared"), "*.webp"));
+    }
+
+    [Fact]
+    public async Task SharedOutput_SerializesCustomProcessorsWithoutPersistentCache()
+    {
+        var source = await Source("custom");
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var processor = new TestSite.PageServices.TrackingImageProcessor
         {
-            Assert.Equal(File.ReadAllBytes(Path.Combine(_root, "a", info.Variants[0].FileName)),
-                File.ReadAllBytes(Path.Combine(_root, "page" + i, info.Variants[0].FileName)));
-        }
+            BeforeWriteAsync = async ct => { entered.TrySetResult(); await release.Task.WaitAsync(ct); },
+        };
+        var output = Path.Combine(_root, "shared");
+        var first = ImageArtifactProcessor.ProcessAsync(processor, source, output, null, default);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var second = ImageArtifactProcessor.ProcessAsync(processor, source, output, null, default);
+        Assert.Equal(1, processor.Calls);
+        release.SetResult();
+        await Task.WhenAll(first, second);
+        Assert.Equal(2, processor.Calls);
+        Assert.Single(Directory.GetFiles(output));
     }
 
     [Fact]

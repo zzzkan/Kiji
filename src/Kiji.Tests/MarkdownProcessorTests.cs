@@ -3,6 +3,7 @@ using Kiji.Assets;
 using Kiji.Rendering;
 using SkiaSharp;
 using Xunit;
+using System.Text.RegularExpressions;
 
 namespace Kiji.Tests;
 
@@ -32,26 +33,27 @@ public sealed class MarkdownProcessorTests : IDisposable
     }
 
     [Fact]
-    public async Task SequentialDocuments_ResetFirstImageLoadingAndKeepPageUrlsIsolated()
+    public async Task SequentialDocuments_ResetFirstImageLoadingAndShareImageUrls()
     {
         var processor = CreateProcessor();
         var first = CreateMarkdownFile("first.md", "![First](a.png)\n\n![Second](a.png)");
         var second = CreateMarkdownFile("second.md", "![Next](a.png)");
         await CreateTestImageAsync(Path.Combine(_testFilesDir, "a.png"), 32, 32);
-        var firstHtml = await WithPageContextAsync("/first/", "first", () => ProcessFileAsync(processor, first));
-        var secondHtml = await WithPageContextAsync("/second/", "second", () => ProcessFileAsync(processor, second));
+        var firstHtml = await WithPageContextAsync("/first/", () => ProcessFileAsync(processor, first));
+        var secondHtml = await WithPageContextAsync("/second/", () => ProcessFileAsync(processor, second));
         Assert.Contains("loading=\"eager\"", firstHtml, StringComparison.Ordinal);
         Assert.Contains("loading=\"lazy\"", firstHtml, StringComparison.Ordinal);
         Assert.Contains("sizes=\"auto, ", firstHtml, StringComparison.Ordinal);
-        Assert.Contains("src=\"/first/a.png.", firstHtml, StringComparison.Ordinal);
+        Assert.Equal(ImageSource(firstHtml), ImageSource(secondHtml));
+        Assert.StartsWith("/_images/", ImageSource(firstHtml), StringComparison.Ordinal);
         Assert.Contains("loading=\"eager\"", secondHtml, StringComparison.Ordinal);
         Assert.DoesNotContain("loading=\"lazy\"", secondHtml, StringComparison.Ordinal);
         Assert.DoesNotContain("sizes=\"auto, ", secondHtml, StringComparison.Ordinal);
-        Assert.Contains("src=\"/second/a.png.", secondHtml, StringComparison.Ordinal);
+        Assert.Single(Directory.GetFiles(_outputDir, "*.webp", SearchOption.AllDirectories));
     }
 
     [Fact]
-    public async Task ProcessAsync_ReferencedImage_MaterializedIntoPageOutputWithRootRelativeUrl()
+    public async Task ProcessAsync_ReferencedImage_MaterializedIntoSharedOutputWithRootRelativeUrl()
     {
         var mdPath = CreateMarkdownFile("with-image.md", "![Used](used.png)");
         await CreateTestImageAsync(Path.Combine(_testFilesDir, "used.png"), 1200, 800);
@@ -59,16 +61,15 @@ public sealed class MarkdownProcessorTests : IDisposable
 
         var htmlContent = await WithPageContextAsync(
             "/blog/with-image/",
-            Path.Combine("blog", "with-image"),
             () => ProcessFileAsync(CreateProcessor(), mdPath));
 
-        var pageOutputDir = Path.Combine(_outputDir, "blog", "with-image");
-        var generatedFiles = Directory.GetFiles(pageOutputDir, "*.webp")
+        var generatedFiles = Directory.GetFiles(Path.Combine(_outputDir, "_images"), "*.webp", SearchOption.AllDirectories)
             .Select(Path.GetFileName)
             .Cast<string>()
             .ToArray();
 
-        Assert.Contains("src=\"/blog/with-image/used.png.", htmlContent, StringComparison.Ordinal);
+        Assert.StartsWith("/_images/", ImageSource(htmlContent), StringComparison.Ordinal);
+        Assert.False(Directory.Exists(Path.Combine(_outputDir, "blog")));
         Assert.Contains(generatedFiles, static fileName => fileName.StartsWith("used.png.", StringComparison.Ordinal));
         Assert.DoesNotContain(generatedFiles, static fileName => fileName.StartsWith("unused.png.", StringComparison.Ordinal));
     }
@@ -78,10 +79,11 @@ public sealed class MarkdownProcessorTests : IDisposable
     {
         var mdPath = CreateMarkdownFile("encoded.md", "![Photo](my%20photo.png?v=1#preview)");
         await CreateTestImageAsync(Path.Combine(_testFilesDir, "my photo.png"), 100, 60);
-        var html = await WithPageContextAsync("/encoded/", "encoded", () => ProcessFileAsync(CreateProcessor(), mdPath));
-        Assert.Contains("src=\"/encoded/my%20photo.png.", html, StringComparison.Ordinal);
-        Assert.Contains("srcset=\"/encoded/my%20photo.png.", html, StringComparison.Ordinal);
-        Assert.NotEmpty(Directory.GetFiles(Path.Combine(_outputDir, "encoded"), "my photo.png.*.webp"));
+        var html = await WithPageContextAsync("/encoded/", () => ProcessFileAsync(CreateProcessor(), mdPath));
+        Assert.StartsWith("/_images/", ImageSource(html), StringComparison.Ordinal);
+        Assert.Contains("/my%20photo.png.", html, StringComparison.Ordinal);
+        Assert.Contains("srcset=\"/_images/", html, StringComparison.Ordinal);
+        Assert.NotEmpty(Directory.GetFiles(_outputDir, "my photo.png.*.webp", SearchOption.AllDirectories));
     }
 
     [Fact]
@@ -90,22 +92,48 @@ public sealed class MarkdownProcessorTests : IDisposable
         var mdPath = CreateMarkdownFile("broken.md", "![Missing](missing.png)");
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => WithPageContextAsync("/p/", "p", () => ProcessFileAsync(CreateProcessor(), mdPath)));
+            () => WithPageContextAsync("/p/", () => ProcessFileAsync(CreateProcessor(), mdPath)));
 
         Assert.Contains("missing.png", exception.Message, StringComparison.Ordinal);
         Assert.Contains("broken.md", exception.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task ProcessAsync_ImageOutsideContentDirectory_Throws()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SeparateArticleDirectories_ShareParentImageAndHonorBasePath(bool tracked)
     {
-        var mdPath = CreateMarkdownFile("escape.md", "![Escape](../escape.png)");
-        await CreateTestImageAsync(Path.Combine(_testDir, "escape.png"), 320, 240);
+        var first = CreateMarkdownFile("a/index.md", "![Photo](../shared/my%20photo.png)");
+        var second = CreateMarkdownFile("b/index.md", "![Photo](../shared/./my%20photo.png?version=1#preview)");
+        Directory.CreateDirectory(Path.Combine(_testFilesDir, "shared"));
+        await CreateTestImageAsync(Path.Combine(_testFilesDir, "shared", "my photo.png"), 1200, 800);
+        var processor = CreateProcessor(TestArticleContents.CreateSiteInfoWithBasePath());
+        var results = await Task.WhenAll(
+            WithPageContextAsync("/a/", () => ProcessFileAsync(processor, first), tracked),
+            WithPageContextAsync("/b/", () => ProcessFileAsync(processor, second), tracked));
+        Assert.Equal(results[0], results[1]);
+        Assert.StartsWith("/kiji/_images/", ImageSource(results[0]), StringComparison.Ordinal);
+        var variants = Directory.GetFiles(_outputDir, "*.webp", SearchOption.AllDirectories);
+        Assert.Equal(4, variants.Length);
+        Assert.Single(variants.Select(Path.GetDirectoryName).Distinct());
+        Assert.All(variants, path => Assert.Contains(
+            "/kiji/" + string.Join('/', Path.GetRelativePath(_outputDir, path).Split(Path.DirectorySeparatorChar).Select(Uri.EscapeDataString)),
+            results[0], StringComparison.Ordinal));
+    }
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => WithPageContextAsync("/p/", "p", () => ProcessFileAsync(CreateProcessor(), mdPath)));
-
-        Assert.Contains("resolves outside", exception.Message, StringComparison.Ordinal);
+    [Fact]
+    public async Task SameNamedSources_CustomProcessorOutputsDoNotCollide()
+    {
+        var first = CreateMarkdownFile("a/index.md", "![Photo](photo.png)");
+        var second = CreateMarkdownFile("b/index.md", "![Photo](photo.png)");
+        await File.WriteAllBytesAsync(Path.Combine(_testFilesDir, "a", "photo.png"), [1]);
+        await File.WriteAllBytesAsync(Path.Combine(_testFilesDir, "b", "photo.png"), [2]);
+        var processor = CreateProcessor(imageProcessor: new TestSite.PageServices.TrackingImageProcessor());
+        var results = await Task.WhenAll(
+            WithPageContextAsync("/a/", () => ProcessFileAsync(processor, first)),
+            WithPageContextAsync("/b/", () => ProcessFileAsync(processor, second)));
+        Assert.NotEqual(ImageSource(results[0]), ImageSource(results[1]));
+        Assert.Equal(2, Directory.GetFiles(_outputDir, "custom.svg", SearchOption.AllDirectories).Length);
     }
 
     [Fact]
@@ -120,13 +148,13 @@ public sealed class MarkdownProcessorTests : IDisposable
         Assert.Contains("page render", exception.Message, StringComparison.Ordinal);
     }
 
-    private MarkdownProcessor CreateProcessor()
+    private MarkdownProcessor CreateProcessor(SiteInfo? site = null, IImageProcessor? imageProcessor = null)
     {
         return new MarkdownProcessor(new ResolvedSitePaths
         {
             OutputDirectory = _outputDir,
             ImageCacheDirectory = _cacheDir,
-        }, new ImageProcessor());
+        }, new SiteExecutionPaths(_testDir), site ?? TestArticleContents.CreateSiteInfo(), imageProcessor ?? new ImageProcessor());
     }
 
     private static Task<string> ProcessFileAsync(MarkdownProcessor processor, string path)
@@ -147,19 +175,17 @@ public sealed class MarkdownProcessorTests : IDisposable
             """;
 
         var path = Path.Combine(_testFilesDir, fileName);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, content);
         return path;
     }
 
-    private static async Task<T> WithPageContextAsync<T>(string routePath, string outputRelativeDirectory, Func<Task<T>> action)
+    private static async Task<T> WithPageContextAsync<T>(string routePath, Func<Task<T>> action, bool tracked = false)
     {
         PageRenderContext.SetCurrent(new PageRenderContext
         {
             RoutePath = routePath,
-            OutputRelativeDirectory = outputRelativeDirectory,
-            OutputUrlDirectory = outputRelativeDirectory.Length == 0
-                ? "/"
-                : "/" + outputRelativeDirectory.Replace('\\', '/').Trim('/') + "/",
+            Dependencies = tracked ? new Kiji.Generation.BuildDependencyRecorder() : null,
         });
 
         try
@@ -171,6 +197,8 @@ public sealed class MarkdownProcessorTests : IDisposable
             PageRenderContext.SetCurrent(null);
         }
     }
+
+    private static string ImageSource(string html) => Regex.Match(html, "src=\"([^\"]+)\"").Groups[1].Value;
 
     private static async Task CreateTestImageAsync(string path, int width, int height)
     {

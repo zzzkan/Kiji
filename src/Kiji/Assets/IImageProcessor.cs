@@ -1,6 +1,6 @@
 namespace Kiji.Assets;
 
-/// <summary>Generates optimized image variants in a page output directory.</summary>
+/// <summary>Generates optimized image variants in the supplied output directory.</summary>
 /// <remarks>
 /// Register a singleton in builder.Services to replace the default processor.
 /// Implementations must support concurrent calls and retain no page or content state.

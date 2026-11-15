@@ -74,6 +74,8 @@ public static class StaticSite
         builder.Services.AddOptions<MarkdownOptions>();
         builder.Services.AddSingleton(static provider => new MarkdownProcessor(
             provider.GetRequiredService<ResolvedSitePaths>(),
+            provider.GetRequiredService<SiteExecutionPaths>(),
+            provider.GetRequiredService<SiteInfo>(),
             provider.GetRequiredService<IImageProcessor>(),
             provider.GetRequiredService<IOptions<MarkdownOptions>>().Value));
 

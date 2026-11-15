@@ -166,8 +166,8 @@ content/
 ![A description](photo.jpg)
 ```
 
-For `.jpg`, `.jpeg`, `.png`, `.gif`, and `.webp` files, Kiji writes WebP versions beside
-the page's `index.html`: 320, 640, 960, and 1280 pixels wide when the source is wider,
+For `.jpg`, `.jpeg`, `.png`, `.gif`, and `.webp` files, Kiji writes WebP versions under
+the site's `_images/` directory: 320, 640, 960, and 1280 pixels wide when the source is wider,
 plus one at the source width, up to 1920 pixels. The `<img>` gets a `srcset` and the source
 dimensions, and every image after the first loads lazily. To change the widths or the
 quality, see [`ImageProcessorOptions`](../api-reference/#imageprocessoroptions).
@@ -182,5 +182,32 @@ portrait phone photos stay upright. To keep an image as is, put it in `wwwroot/`
 reference it as a static asset. Remote images, paths starting with `/`, and `<img>` written
 in HTML are left unchanged.
 
-A missing image, or a path outside the Markdown file's directory tree, fails the render.
+### Share an image between articles
+
+Relative image paths are resolved from the Markdown file, including `../` paths:
+
+```text
+content/
+├── shared/
+│   └── photo.jpg
+├── first/
+│   └── index.md
+└── second/
+    └── index.md
+```
+
+Both articles can use:
+
+```markdown
+![A description](../shared/photo.jpg)
+```
+
+Kiji gives each source a directory under `_images/`, identified by a hash of its
+project-relative path. All articles referencing that source use the same generated
+variants and URLs, regardless of their routes. Different sources with the same file
+name remain separate. Generated URLs include the site's deployment base path.
+
+Image edits invalidate every referring page. Incremental publishing restores missing
+variants, and removes unused variants after the last reference disappears.
+A missing image fails the render.
 To replace the image processor, see [`IImageProcessor`](../api-reference/#iimageprocessor).

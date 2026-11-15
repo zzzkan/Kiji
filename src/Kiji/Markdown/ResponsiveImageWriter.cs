@@ -8,8 +8,8 @@ namespace Kiji.Markdown;
 
 /// <summary>
 /// Renders local markdown images as responsive images with lazy loading and CLS
-/// optimization. Variants live in the page's own output directory, so URLs are
-/// rooted at that directory beneath the site's deployment base path. Attached per
+/// optimization. Variant paths are relative to the site, beneath the deployment
+/// base path. Attached per
 /// renderer (not per pipeline) because its state is per document.
 /// </summary>
 internal sealed class ResponsiveImageWriter
@@ -56,9 +56,7 @@ internal sealed class ResponsiveImageWriter
         renderer.Write("<img");
         if (context.ImageInfoLookup.TryGetValue(referenceKey, out var imageInfo) && imageInfo.Variants.Count > 0)
         {
-            // Variants sit beside the page output, mirroring the reference's directory part.
-            var directory = GetDirectoryPrefix(referenceKey);
-            var publicDirectory = context.OutputUrlDirectory + EncodeRelativePath(directory);
+            var publicDirectory = context.BasePath;
             var variants = imageInfo.Variants;
             var largest = variants[^1];
             var width = TryGetAttribute(attributes, "width", out var explicitWidth)
@@ -95,12 +93,6 @@ internal sealed class ResponsiveImageWriter
         if (!string.IsNullOrEmpty(title)) { WriteAttribute(renderer, attributes, "title", title); }
         renderer.WriteAttributes(link);
         renderer.Write(">");
-    }
-
-    private static string GetDirectoryPrefix(string referenceKey)
-    {
-        var separatorIndex = referenceKey.LastIndexOf('/');
-        return separatorIndex >= 0 ? referenceKey[..(separatorIndex + 1)] : string.Empty;
     }
 
     private static string CreateVariantUrl(string publicDirectory, string fileName)

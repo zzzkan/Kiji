@@ -3,7 +3,6 @@
     <OutputType>Exe</OutputType>
     <UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier>
     <ServiceWorkerAssetsManifest>service-worker-assets.js</ServiceWorkerAssetsManifest>
-    <DefaultItemExcludes>$(DefaultItemExcludes);content/**</DefaultItemExcludes>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Kiji" Version="$(KijiPackageVersion)" />

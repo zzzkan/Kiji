@@ -26,6 +26,7 @@ public static class StaticSite
         var runtimeMetadata = SiteRuntimeMetadata.Read(AppContext.GetData);
         PublishJitProfile.Start(runtimeMetadata);
         var entryAssembly = Assembly.GetEntryAssembly() ?? throw new InvalidOperationException("No entry assembly is available. Run the site project as an application.");
+        // Read environment variables through configuration providers, not direct process APIs.
         using var hostConfiguration = new ConfigurationManager();
         hostConfiguration.AddEnvironmentVariables();
         return CreateBuilder(args, SiteExecutionPaths.FromRuntimeMetadata(runtimeMetadata, entryAssembly),

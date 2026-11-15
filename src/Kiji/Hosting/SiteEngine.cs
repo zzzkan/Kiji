@@ -220,16 +220,17 @@ internal sealed class SiteEngine
     /// <param name="cancellationToken">Stops the server.</param>
     /// <param name="reporter">Overrides the console reporter. For tests.</param>
     /// <param name="statusOutput">Overrides the output writer for the default reporter. For tests.</param>
+    /// <param name="isOutputRedirected">Overrides redirection detection. For tests.</param>
     internal async Task<(DevServer DevServer, WebApplication WebApplication)> StartDevServerAsync(
         string[] args,
         CancellationToken cancellationToken,
-        DevServerStatusReporter? reporter = null, TextWriter? statusOutput = null)
+        DevServerStatusReporter? reporter = null, TextWriter? statusOutput = null, bool? isOutputRedirected = null)
     {
         _ = SiteInfo;
         var options = _options;
         OutputPathValidator.ValidateInputs(options.OutputDirectory, ContentRoots);
 
-        var devServer = DevServer.Create(this, args, reporter, statusOutput);
+        var devServer = DevServer.Create(this, args, reporter, statusOutput, isOutputRedirected);
         try
         {
             var web = await devServer.StartAsync(options, cancellationToken);

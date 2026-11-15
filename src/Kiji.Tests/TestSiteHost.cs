@@ -30,10 +30,10 @@ internal sealed class TestSiteHost(IHost host) : IAsyncDisposable
     }
 
     internal Task<(DevServer DevServer, WebApplication WebApplication)> StartDevServerAsync(string[] args,
-        CancellationToken token, DevServerStatusReporter? reporter = null, TextWriter? statusOutput = null)
+        CancellationToken token, DevServerStatusReporter? reporter = null, TextWriter? statusOutput = null, bool? isOutputRedirected = null)
     {
         ServiceProvider.GetService<IStartupValidator>()?.Validate();
-        return Engine.StartDevServerAsync(args, token, reporter, statusOutput);
+        return Engine.StartDevServerAsync(args, token, reporter, statusOutput, isOutputRedirected);
     }
 
     public ValueTask DisposeAsync() => ((IAsyncDisposable)Host).DisposeAsync();

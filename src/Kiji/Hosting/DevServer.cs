@@ -44,7 +44,7 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
     private bool _disposed;
 
     internal static DevServer Create(SiteEngine app, string[] args,
-        DevServerStatusReporter? reporter = null, TextWriter? statusOutput = null)
+        DevServerStatusReporter? reporter = null, TextWriter? statusOutput = null, bool? isOutputRedirected = null)
     {
         // Kiji owns browser refresh, including content invalidation and BaseUrl.
         // The slim host does not run hosting startups, so dotnet watch's browser
@@ -60,7 +60,8 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
             ContentRootPath = environment.ContentRootPath,
         });
         return new DevServer(app, builder, reporter ?? DevServerStatusReporter.Create(
-            builder.Configuration, statusOutput ?? Console.Out, Console.IsOutputRedirected));
+            builder.Configuration, statusOutput ?? Console.Out,
+            isOutputRedirected ?? (statusOutput is not null || Console.IsOutputRedirected)));
     }
 
     internal async Task<WebApplication> StartAsync(ResolvedSitePaths options, CancellationToken cancellationToken)

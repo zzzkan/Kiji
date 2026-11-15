@@ -40,9 +40,11 @@ public sealed class DevServerTests : IAsyncDisposable
     }
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task Serve_DefaultReporterUsesTheWebHostConfiguration(bool suppressEmoji)
+    [InlineData(true, null, false)]
+    [InlineData(false, false, true)]
+    [InlineData(false, true, false)]
+    public async Task Serve_DefaultReporterUsesTheWebHostConfiguration(
+        bool suppressEmoji, bool? redirected, bool color)
     {
         await File.WriteAllTextAsync(Path.Combine(_testDir, "appsettings.Development.json"), """
             { "DOTNET_WATCH_SUPPRESS_EMOJIS": true, "NO_COLOR": true, "TERM": "dumb" }
@@ -55,10 +57,11 @@ public sealed class DevServerTests : IAsyncDisposable
         using var output = new StringWriter();
         string[] args = [.. TestUrls.EphemeralPort,
             "--DOTNET_WATCH_SUPPRESS_EMOJIS", suppressEmoji ? "true" : "false",
-            "--NO_COLOR", "true", "--TERM", "dumb"];
+            "--NO_COLOR", "false", "--TERM", "xterm"];
 
-        // Use the production factory, replacing only its writer and leaving the reporter unset.
-        var (server, web) = await _app.StartDevServerAsync(args, CancellationToken.None, statusOutput: output);
+        // Use the production factory without supplying a reporter.
+        var (server, web) = await _app.StartDevServerAsync(args, CancellationToken.None,
+            statusOutput: output, isOutputRedirected: redirected);
         await using (server)
         {
             var log = output.ToString();
@@ -66,7 +69,7 @@ public sealed class DevServerTests : IAsyncDisposable
             Assert.Contains(web.Urls.First(), log, StringComparison.Ordinal);
             Assert.Equal(!suppressEmoji, log.Contains("🚀", StringComparison.Ordinal));
             Assert.Equal(suppressEmoji, log.Contains("[Started]", StringComparison.Ordinal));
-            Assert.DoesNotContain('\u001b', log);
+            Assert.Equal(color, log.Contains('\u001b'));
         }
     }
 

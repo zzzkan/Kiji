@@ -25,6 +25,7 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
 
 ## Design
 
+- Read environment variables through IConfiguration providers, not Environment.GetEnvironmentVariable.
 - Follow the .NET host builder shape: CreateBuilder -> builder.Services/Add*/Use* -> Build
   -> RunAsync. StaticSite.CreateBuilder returns HostApplicationBuilder; Kiji registrations are
   IHostApplicationBuilder extensions stored in DI. Publish and serve are hosted services that

@@ -45,6 +45,7 @@ public sealed class PackageFixture : IAsyncLifetime
             await DeleteGeneratedFilesAsync(); // Also recover an interrupted previous run.
             var feed = Path.Combine(_root, "feed");
             Directory.CreateDirectory(feed);
+            // Read environment variables through configuration providers, not direct process APIs.
             using var configuration = new ConfigurationManager();
             configuration.AddEnvironmentVariables();
             string package;

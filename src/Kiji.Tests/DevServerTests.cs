@@ -39,6 +39,40 @@ public sealed class DevServerTests : IAsyncDisposable
         }
     }
 
+    [Theory]
+    [InlineData(true, null, false)]
+    [InlineData(false, false, true)]
+    [InlineData(false, true, false)]
+    public async Task Serve_DefaultReporterUsesTheWebHostConfiguration(
+        bool suppressEmoji, bool? redirected, bool color)
+    {
+        await File.WriteAllTextAsync(Path.Combine(_testDir, "appsettings.Development.json"), """
+            { "DOTNET_WATCH_SUPPRESS_EMOJIS": true, "NO_COLOR": true, "TERM": "dumb" }
+            """);
+        var builder = TestSiteFactory.CreateBuilder(
+            new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")), outputPath: null);
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
+        TestSiteAssets.Bind(builder.GetSitePaths(), _staticDir);
+        _app = builder.BuildSite();
+        using var output = new StringWriter();
+        string[] args = [.. TestUrls.EphemeralPort,
+            "--DOTNET_WATCH_SUPPRESS_EMOJIS", suppressEmoji ? "true" : "false",
+            "--NO_COLOR", "false", "--TERM", "xterm"];
+
+        // Use the production factory without supplying a reporter.
+        var (server, web) = await _app.StartDevServerAsync(args, CancellationToken.None,
+            statusOutput: output, isOutputRedirected: redirected);
+        await using (server)
+        {
+            var log = output.ToString();
+            Assert.Contains("Dev server started at", log, StringComparison.Ordinal);
+            Assert.Contains(web.Urls.First(), log, StringComparison.Ordinal);
+            Assert.Equal(!suppressEmoji, log.Contains("🚀", StringComparison.Ordinal));
+            Assert.Equal(suppressEmoji, log.Contains("[Started]", StringComparison.Ordinal));
+            Assert.Equal(color, log.Contains('\u001b'));
+        }
+    }
+
     [Fact]
     public async Task Serve_RendersPageOnDemandWithLiveReloadScript()
     {
@@ -543,7 +577,7 @@ public sealed class DevServerTests : IAsyncDisposable
     public async Task Serve_WebHostUsesTheSiteEnvironmentAndLogging()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(Path.Combine(_testDir, "site")),
-            runtimeData: null, environment: name => name == "DOTNET_ENVIRONMENT" ? "Staging" : null);
+            runtimeMetadata: null, hostConfiguration: TestSiteFactory.HostConfiguration(("DOTNET_ENVIRONMENT", "Staging")));
         builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         var logs = new RecordingLoggerProvider();
         builder.Logging.AddProvider(logs);

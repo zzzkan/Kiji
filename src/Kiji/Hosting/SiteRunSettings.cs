@@ -8,31 +8,28 @@ namespace Kiji.Hosting;
 /// <param name="EnvironmentName">The host environment name.</param>
 internal sealed record SiteRunSettings(string? OutputPath, string EnvironmentName)
 {
-    /// <summary>Where to generate the site. Set by Kiji's MSBuild targets on publish.</summary>
-    private const string OutputPathProperty = "Kiji.OutputPath";
-
     /// <summary>The environment name variable read by the .NET generic host.</summary>
     private const string EnvironmentNameVariable = "DOTNET_ENVIRONMENT";
 
     internal bool Publishing => OutputPath is not null;
 
-    /// <param name="environment">
-    /// Reads an environment variable. Injected so tests can exercise both modes without
-    /// mutating the process environment, which parallel test classes share.
+    /// <param name="hostConfiguration">
+    /// Host configuration, separate from project-local site settings. Tests can supply
+    /// in-memory configuration without mutating process-wide state.
     /// </param>
-    /// <param name="runtimeData">Reads process-local runtimeconfig properties supplied for this invocation.</param>
+    /// <param name="runtimeMetadata">Typed runtimeconfig metadata supplied for this invocation.</param>
     /// <param name="args">Command-line arguments. Only <c>--environment</c> is read, and only while serving.</param>
-    internal static SiteRunSettings FromExecutionContext(Func<string, string?> environment,
-        Func<string, object?> runtimeData, string[]? args = null)
+    internal static SiteRunSettings FromExecutionContext(IConfiguration hostConfiguration,
+        SiteRuntimeMetadata runtimeMetadata, string[]? args = null)
     {
-        ArgumentNullException.ThrowIfNull(environment);
-        ArgumentNullException.ThrowIfNull(runtimeData);
-        var outputPath = runtimeData(OutputPathProperty) as string;
+        ArgumentNullException.ThrowIfNull(hostConfiguration);
+        ArgumentNullException.ThrowIfNull(runtimeMetadata);
+        var outputPath = runtimeMetadata.OutputPath;
         var publishing = !string.IsNullOrWhiteSpace(outputPath);
-        var environmentName = environment(EnvironmentNameVariable);
+        var environmentName = hostConfiguration[EnvironmentNameVariable];
         if (!publishing && string.IsNullOrWhiteSpace(environmentName))
         {
-            environmentName = environment("ASPNETCORE_ENVIRONMENT");
+            environmentName = hostConfiguration["ASPNETCORE_ENVIRONMENT"];
         }
         if (!publishing && args is { Length: > 0 })
         {

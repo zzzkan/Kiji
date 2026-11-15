@@ -130,6 +130,25 @@ builder.Services.Configure<ImageProcessorOptions>(builder.Configuration.GetSecti
   another hostname, add it to `AllowedHosts` and keep the local entries, for example
   `"AllowedHosts": "localhost;127.0.0.1;[::1];dev.example"` in `appsettings.Development.json`.
 
+The development server reads its own standard ASP.NET Core configuration, including
+project settings files, environment variables, and command-line arguments. Its `kiji`
+status lines support these settings:
+
+| Key | Effect |
+| --- | --- |
+| `DOTNET_WATCH_SUPPRESS_EMOJIS` | `1` or `true` replaces emoji markers with text markers. |
+| `NO_COLOR` | `1` or `true` disables ANSI colors. |
+| `TERM` | `dumb` disables ANSI colors (case-insensitive). |
+
+Colors are also disabled when output is redirected. These settings affect only Kiji's
+status lines, not `dotnet watch` output or `ILogger` formatting. For example, add
+`"DOTNET_WATCH_SUPPRESS_EMOJIS": true` to `appsettings.Development.json` to use text markers
+while developing. Restart the server after changing the file.
+
+Prefer environment variables or development-only settings for terminal preferences.
+If these keys are included in the configuration used by publish, changing them
+invalidates page reuse, just like other settings outside `Logging` and `Metrics`.
+
 #### Logging
 
 `Logging` is a standard

@@ -23,17 +23,21 @@ public static class StaticSite
     {
         ArgumentNullException.ThrowIfNull(args);
         // Start early so the host and rendering pipeline can use background-compiled methods.
-        PublishJitProfile.Start(AppContext.GetData);
+        var runtimeMetadata = SiteRuntimeMetadata.Read(AppContext.GetData);
+        PublishJitProfile.Start(runtimeMetadata);
         var entryAssembly = Assembly.GetEntryAssembly() ?? throw new InvalidOperationException("No entry assembly is available. Run the site project as an application.");
-        return CreateBuilder(args, SiteExecutionPaths.FromRuntimeMetadata(AppContext.GetData("Kiji.ProjectDirectory"), entryAssembly),
-            entryAssembly, Environment.GetEnvironmentVariable, AppContext.GetData);
+        // Read environment variables through configuration providers, not direct process APIs.
+        using var hostConfiguration = new ConfigurationManager();
+        hostConfiguration.AddEnvironmentVariables();
+        return CreateBuilder(args, SiteExecutionPaths.FromRuntimeMetadata(runtimeMetadata, entryAssembly),
+            entryAssembly, hostConfiguration, runtimeMetadata);
     }
 
     internal static HostApplicationBuilder CreateBuilder(string[] args, SiteExecutionPaths paths, Assembly entryAssembly,
-        Func<string, string?>? environment = null, Func<string, object?>? runtimeData = null)
+        IConfiguration? hostConfiguration = null, SiteRuntimeMetadata? runtimeMetadata = null)
     {
         ArgumentNullException.ThrowIfNull(args);
-        var settings = SiteRunSettings.FromExecutionContext(environment ?? (static _ => null), runtimeData ?? (static _ => null), args);
+        var settings = SiteRunSettings.FromExecutionContext(hostConfiguration ?? new ConfigurationBuilder().Build(), runtimeMetadata ?? new SiteRuntimeMetadata(), args);
         var builder = new HostApplicationBuilder(new HostApplicationBuilderSettings
         {
             DisableDefaults = true,

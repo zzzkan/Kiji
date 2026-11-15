@@ -12,7 +12,9 @@ public sealed class SiteExecutionPathsTests
     [InlineData("relative/project")]
     public void MissingOrInvalidMetadata_DoesNotFallBackToWorkingDirectory(object? value)
     {
-        var exception = Assert.Throws<InvalidOperationException>(() => SiteExecutionPaths.FromRuntimeMetadata(value, typeof(SiteExecutionPathsTests).Assembly));
+        var metadata = SiteRuntimeMetadata.Read(name => name == "Kiji.ProjectDirectory" ? value : null);
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            SiteExecutionPaths.FromRuntimeMetadata(metadata, typeof(SiteExecutionPathsTests).Assembly));
         Assert.Contains("Kiji.ProjectDirectory", exception.Message, StringComparison.Ordinal);
         Assert.Contains("rebuild", exception.Message, StringComparison.Ordinal);
     }
@@ -21,7 +23,8 @@ public sealed class SiteExecutionPathsTests
     public void RemovedProject_RequiresRebuild()
     {
         var missing = Path.Combine(Path.GetTempPath(), $"KijiMissing_{Guid.NewGuid():N}");
-        Assert.Throws<InvalidOperationException>(() => SiteExecutionPaths.FromRuntimeMetadata(missing, typeof(SiteExecutionPathsTests).Assembly));
+        Assert.Throws<InvalidOperationException>(() => SiteExecutionPaths.FromRuntimeMetadata(
+            new SiteRuntimeMetadata(ProjectDirectory: missing), typeof(SiteExecutionPathsTests).Assembly));
         Assert.False(Directory.Exists(missing));
     }
 }

@@ -16,7 +16,7 @@ namespace Kiji.Hosting;
 /// <c>HtmlRenderer</c> pipeline used by the static build; the only additions are
 /// post-render live-reload script injection and content watching.
 /// </summary>
-internal sealed class DevServer(SiteEngine app, DevServerStatusReporter? reporter = null) : IAsyncDisposable
+internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder, DevServerStatusReporter reporter) : IAsyncDisposable
 {
     private const string DefaultUrl = "http://127.0.0.1:8080";
 
@@ -27,7 +27,8 @@ internal sealed class DevServer(SiteEngine app, DevServerStatusReporter? reporte
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<DevServer, byte> ActiveServers = new();
 
     private readonly LiveReloadHub _hub = new();
-    private readonly DevServerStatusReporter _reporter = reporter ?? DevServerStatusReporter.CreateForCurrentProcess();
+    private readonly WebApplicationBuilder _builder = webBuilder;
+    private readonly DevServerStatusReporter _reporter = reporter;
     private readonly string _displayRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Directory.GetCurrentDirectory()));
     private readonly Lock _snapshotLock = new();
     private readonly List<FileSystemWatcher> _watchers = [];
@@ -42,10 +43,9 @@ internal sealed class DevServer(SiteEngine app, DevServerStatusReporter? reporte
     private SharedRenderLifetime? _sharedRenders;
     private bool _disposed;
 
-    internal async Task<WebApplication> StartAsync(ResolvedSitePaths options, string[] args, CancellationToken cancellationToken)
+    internal static DevServer Create(SiteEngine app, string[] args,
+        DevServerStatusReporter? reporter = null, TextWriter? statusOutput = null, bool? isOutputRedirected = null)
     {
-        Directory.CreateDirectory(options.OutputDirectory);
-
         // Kiji owns browser refresh, including content invalidation and BaseUrl.
         // The slim host does not run hosting startups, so dotnet watch's browser
         // refresh middleware is not injected. Watch still applies code updates
@@ -59,6 +59,15 @@ internal sealed class DevServer(SiteEngine app, DevServerStatusReporter? reporte
             EnvironmentName = environment.EnvironmentName,
             ContentRootPath = environment.ContentRootPath,
         });
+        return new DevServer(app, builder, reporter ?? DevServerStatusReporter.Create(
+            builder.Configuration, statusOutput ?? Console.Out,
+            isOutputRedirected ?? (statusOutput is not null || Console.IsOutputRedirected)));
+    }
+
+    internal async Task<WebApplication> StartAsync(ResolvedSitePaths options, CancellationToken cancellationToken)
+    {
+        Directory.CreateDirectory(options.OutputDirectory);
+        var builder = _builder;
         // The standard Host Filtering middleware reads AllowedHosts. Supply only a
         // fallback; appsettings, environment variables and command line stay in control.
         builder.Configuration.Sources.Insert(0, new MemoryConfigurationSource

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using Kiji.Markdown;
 using Kiji.Tests.TestSite;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xunit;
@@ -136,6 +137,9 @@ public sealed class RunAsyncTests : IDisposable
     [InlineData(false, null, "Staging", null, "Staging")]
     [InlineData(false, "Production", "Staging", null, "Production")]
     [InlineData(false, "Production", "Development", "Staging", "Staging")]
+    [InlineData(false, "", "Staging", null, "Staging")]
+    [InlineData(false, "  ", null, null, "Development")]
+    [InlineData(true, "  ", "Development", "Development", "Production")]
     [InlineData(true, null, "Development", "Development", "Production")]
     [InlineData(true, "Staging", "Development", "Development", "Staging")]
     public void Environment_SelectsOnlyProjectSettingsForTheExecutionMode(
@@ -144,13 +148,26 @@ public sealed class RunAsyncTests : IDisposable
         File.WriteAllText(Path.Combine(_testDir, $"appsettings.{expected}.json"), """{ "Selected": "yes" }""");
         string[] args = argument is null ? [] : ["--environment", argument, "--Selected", "no"];
         var builder = StaticSite.CreateBuilder(args, new SiteExecutionPaths(_testDir), typeof(StaticSite).Assembly,
-            environment: name => name switch { "DOTNET_ENVIRONMENT" => dotnet, "ASPNETCORE_ENVIRONMENT" => aspnet, _ => null },
-            runtimeData: name => name == "Kiji.OutputPath" && publish ? OutputDir : null);
+            hostConfiguration: TestSiteFactory.HostConfiguration(("DOTNET_ENVIRONMENT", dotnet), ("ASPNETCORE_ENVIRONMENT", aspnet)),
+            runtimeMetadata: new SiteRuntimeMetadata(OutputPath: publish ? OutputDir : null));
         using var host = builder.Build();
         Assert.Equal(expected, builder.Environment.EnvironmentName);
         Assert.Equal(Path.GetFullPath(_testDir), builder.Environment.ContentRootPath);
         Assert.Equal("yes", builder.Configuration["Selected"]);
         Assert.Null(builder.Configuration["PATH"]);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(42)]
+    [InlineData(true)]
+    public void InvalidOutputMetadata_DoesNotSelectPublishMode(object? value)
+    {
+        var metadata = SiteRuntimeMetadata.Read(name => name == "Kiji.OutputPath" ? value : null);
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir), metadata);
+        using var host = builder.Build();
+
+        Assert.False(host.Services.GetRequiredService<SiteRunSettings>().Publishing);
     }
 
     [Theory]
@@ -199,7 +216,7 @@ public sealed class RunAsyncTests : IDisposable
                 $$"""{ "Logging": { "LogLevel": { "Kiji.Build": "{{configuredLevel}}" } } }""");
         }
         var logs = new RecordingLoggerProvider();
-        var builder = CreateBuilder(OutputDir, environment: name => name == "DOTNET_ENVIRONMENT" ? "Staging" : null);
+        var builder = CreateBuilder(OutputDir, hostConfiguration: TestSiteFactory.HostConfiguration(("DOTNET_ENVIRONMENT", "Staging")));
         builder.Logging.AddProvider(logs);
         await builder.Build().RunAsync();
         Assert.Contains(("Kiji.Build", LogLevel.Information, "Publishing for environment 'Staging'."), logs.Entries);
@@ -213,8 +230,8 @@ public sealed class RunAsyncTests : IDisposable
         async Task<string> PublishAsync(string? environment)
         {
             var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir),
-                runtimeData: name => name == "Kiji.OutputPath" ? OutputDir : null,
-                environment: name => name == "DOTNET_ENVIRONMENT" ? environment : null,
+                runtimeMetadata: new SiteRuntimeMetadata(OutputPath: OutputDir),
+                hostConfiguration: TestSiteFactory.HostConfiguration(("DOTNET_ENVIRONMENT", environment)),
                 discoveredPages: typeof(HostEnvironmentPage));
             builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
             await builder.Build().RunAsync();
@@ -249,10 +266,10 @@ public sealed class RunAsyncTests : IDisposable
 
     private sealed class ScopedDependency;
 
-    private HostApplicationBuilder CreateBuilder(string? outputPath, Func<string, string?>? environment = null)
+    private HostApplicationBuilder CreateBuilder(string? outputPath, IConfiguration? hostConfiguration = null)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir, Path.Combine(_testDir, "obj", "site")),
-            runtimeData: name => name == "Kiji.OutputPath" ? outputPath : null, environment: environment);
+            runtimeMetadata: new SiteRuntimeMetadata(OutputPath: outputPath), hostConfiguration: hostConfiguration);
         builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         TestSiteAssets.Bind(builder.GetSitePaths(), Path.Combine(_testDir, "static"));
         builder.RegisterContent<Post>(static _ => []);

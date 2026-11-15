@@ -1,9 +1,38 @@
+using Microsoft.Extensions.Configuration;
 using Xunit;
 
 namespace Kiji.Tests;
 
 public sealed class DevServerStatusReporterTests
 {
+    [Theory]
+    [InlineData(null, null, null, false, true, true)]
+    [InlineData("1", null, null, false, false, true)]
+    [InlineData("true", null, null, false, false, true)]
+    [InlineData("false", "0", "xterm", false, true, true)]
+    [InlineData(null, "1", null, false, true, false)]
+    [InlineData(null, null, "DUMB", false, true, false)]
+    [InlineData(null, null, null, true, true, false)]
+    public void Configuration_ControlsEmojiAndColor(string? suppressEmoji, string? noColor,
+        string? term, bool redirected, bool emoji, bool color)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["DOTNET_WATCH_SUPPRESS_EMOJIS"] = suppressEmoji,
+                ["NO_COLOR"] = noColor,
+                ["TERM"] = term,
+            }).Build();
+        using var output = new StringWriter();
+        var reporter = DevServerStatusReporter.Create(configuration, output, redirected);
+
+        reporter.DevServerStarted(new Uri("http://localhost/"), [], watchesStaticAssets: false);
+
+        var log = output.ToString();
+        Assert.Equal(emoji, log.Contains("🚀", StringComparison.Ordinal));
+        Assert.Equal(color, log.Contains('\u001b'));
+    }
+
     [Fact]
     public void PlainOutput_ReportsAddressAndWatcherFailureWithoutAnsi()
     {

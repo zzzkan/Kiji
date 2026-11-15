@@ -1,4 +1,5 @@
 using System.Reflection;
+using Kiji.Hosting;
 
 namespace Kiji;
 
@@ -14,9 +15,9 @@ internal sealed class SiteExecutionPaths
     internal string ProjectDirectory { get; }
     internal string? AssetManifestBasePath { get; }
 
-    internal static SiteExecutionPaths FromRuntimeMetadata(object? value, Assembly entryAssembly)
+    internal static SiteExecutionPaths FromRuntimeMetadata(SiteRuntimeMetadata runtimeMetadata, Assembly entryAssembly)
     {
-        if (value is not string directory || string.IsNullOrWhiteSpace(directory)
+        if (runtimeMetadata.ProjectDirectory is not string directory || string.IsNullOrWhiteSpace(directory)
             || !Path.IsPathFullyQualified(directory) || !Directory.Exists(directory))
         {
             throw new InvalidOperationException(

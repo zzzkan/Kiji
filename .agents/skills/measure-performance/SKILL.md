@@ -31,6 +31,9 @@ rejected experiments belong in ignored `artifacts`.
    SyntheticSite site definition frozen; integration fixtures belong in Tests.
 3. Alternate baseline/candidate for at least three rounds, `--runs 5 --full`.
    Discard run 1 of **each invocation** for JIT warmup; compare remaining medians.
+   Inspect samples for drift: one discarded run does not guarantee steady state.
+   If times keep declining, extend warmup equally for both saved versions and
+   preserve the preliminary reports. Do not mix transient and steady-state samples.
 4. Confirm with SiteBuildBenchmarks. For a BDN saved-binary comparison, load both
    versions through equivalent AssemblyLoadContexts and verify identical output
    in setup. A project reference to the working tree is not a saved baseline.

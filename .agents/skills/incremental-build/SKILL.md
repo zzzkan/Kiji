@@ -45,7 +45,7 @@ not built with conflicting global properties.
   state. Any output page rendering one is uncacheable, including nested/dynamic children.
   AlwaysRender does not add external watchers or clear image processing caches.
   Do not reintroduce per-input registration APIs.
-- Invalidate content, file hashes and value resolutions before each publish/dev reload.
+- Invalidate content, directory-name lookups, file hashes and value resolutions before each publish/dev reload.
   Verify inputs before manifest publication, including joining verification on failure.
   Conflicting reads within one build must fail.
 

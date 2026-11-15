@@ -1204,7 +1204,19 @@ public sealed class IncrementalBuildTests : IDisposable
             var updated = ImageSource(await client.GetStringAsync(basePath + "md/stable/"));
             Assert.NotEqual(first, updated);
             Assert.Equal(updated, ImageSource(await client.GetStringAsync(basePath + "md/changing/")));
-            Assert.NotEqual(original, await client.GetByteArrayAsync(updated));
+            var updatedBytes = await client.GetByteArrayAsync(updated);
+            Assert.NotEqual(original, updatedBytes);
+
+            // Replacing a name must invalidate directory lookups as well as HTML.
+            reload = socket.ReceiveAsync(new ArraySegment<byte>(new byte[64]), timeout.Token);
+            File.Move(source, Path.Combine(root, "content", "renamed.png"));
+            await WritePostAsync(root, "stable", "Image", "![image](renamed.png)");
+            await WritePostAsync(root, "changing", "Other image", "![image](renamed.png)");
+            await reload;
+            var renamed = ImageSource(await client.GetStringAsync(basePath + "md/stable/"));
+            Assert.NotEqual(updated, renamed);
+            Assert.Equal(renamed, ImageSource(await client.GetStringAsync(basePath + "md/changing/")));
+            Assert.Equal(updatedBytes, await client.GetByteArrayAsync(renamed));
             await web.StopAsync();
         }
         var after = SnapshotDirectory(Path.Combine(root, ".kiji", "cache"));

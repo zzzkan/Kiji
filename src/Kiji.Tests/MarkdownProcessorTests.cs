@@ -1,3 +1,4 @@
+using Kiji.Generation;
 using Kiji.Markdown;
 using Kiji.Assets;
 using Kiji.Rendering;
@@ -183,6 +184,39 @@ public sealed class MarkdownProcessorTests : IDisposable
         Assert.Single(Directory.GetFiles(_outputDir, "*.webp", SearchOption.AllDirectories));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CachedNames_StillRejectReplacementWithSymbolicLinks(bool directoryLink)
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Creating symbolic links requires privileges on Windows.");
+        var shared = Path.Combine(_testFilesDir, "shared");
+        var outside = Path.Combine(_testDir, "outside");
+        Directory.CreateDirectory(shared);
+        Directory.CreateDirectory(outside);
+        var image = Path.Combine(shared, "photo.png");
+        await CreateTestImageAsync(image, 32, 32);
+        await CreateTestImageAsync(Path.Combine(outside, "photo.png"), 32, 32);
+        var markdown = CreateMarkdownFile("cached.md", "![Photo](shared/photo.png)");
+        var processor = CreateProcessor();
+        await WithPageContextAsync("/cached/", () => ProcessFileAsync(processor, markdown));
+
+        if (directoryLink)
+        {
+            Directory.Delete(shared, recursive: true);
+            Directory.CreateSymbolicLink(shared, outside);
+        }
+        else
+        {
+            File.Delete(image);
+            File.CreateSymbolicLink(image, Path.Combine(outside, "photo.png"));
+        }
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            WithPageContextAsync("/cached/", () => ProcessFileAsync(processor, markdown)));
+        Assert.Contains("symbolic links", exception.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task CaseAliasesOnInsensitiveFilesystems_ShareOneImageFamily()
     {
@@ -214,7 +248,7 @@ public sealed class MarkdownProcessorTests : IDisposable
         {
             OutputDirectory = _outputDir,
             ImageCacheDirectory = _cacheDir,
-        }, new SiteExecutionPaths(_testDir), site ?? TestArticleContents.CreateSiteInfo(), [_testFilesDir], imageProcessor ?? new ImageProcessor());
+        }, new SiteExecutionPaths(_testDir), site ?? TestArticleContents.CreateSiteInfo(), [_testFilesDir], new ProjectPath(), imageProcessor ?? new ImageProcessor());
     }
 
     private static Task<string> ProcessFileAsync(MarkdownProcessor processor, string path)

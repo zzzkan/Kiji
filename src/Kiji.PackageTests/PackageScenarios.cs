@@ -30,13 +30,11 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
     [InlineData("Microsoft.NET.Sdk.Web", true)]
     [InlineData("Microsoft.NET.Sdk.Razor", false)]
     [InlineData("Microsoft.NET.Sdk.Web", false)]
-    public Task Build_ConfiguresDirectoryExclusions(string sdk, bool enabled) => fixture.ScenarioAsync(async () =>
+    public Task Build_ConfiguresDefaultItemExcludes(string sdk, bool enabled) => fixture.ScenarioAsync(async () =>
     {
         fixture.Replace("Site/PackageSite.csproj", "<OutputType>Exe</OutputType>", $"""
             <OutputType>Exe</OutputType>
-            <KijiContentExcludeDirectory>articles/</KijiContentExcludeDirectory>
-            <KijiOutputExcludeDirectory>site output/</KijiOutputExcludeDirectory>
-            <KijiEnableDefaultItemExcludes>{enabled.ToString().ToLowerInvariant()}</KijiEnableDefaultItemExcludes>
+            <KijiDefaultItemExcludes>{(enabled ? "articles/**;site output/**" : "")}</KijiDefaultItemExcludes>
             <DefaultItemExcludes>$(DefaultItemExcludes);manual/**</DefaultItemExcludes>
             """);
         fixture.Write("Site/manual/ignored.cs", "This is not valid C#.");
@@ -49,6 +47,26 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         var references = "_ = typeof(IncludedContent); _ = typeof(IncludedOutput);";
         if (!enabled) { references += " _ = typeof(ArticleSource); _ = PackageSite.OutputSource.Included;"; }
         fixture.Replace("Site/Program.cs", "return await", references + "\nreturn await");
+        await fixture.DotnetAsync("build", "Site/PackageSite.csproj", "-c", "Release");
+    }, sdk);
+
+    [Theory]
+    [InlineData("Microsoft.NET.Sdk.Razor")]
+    [InlineData("Microsoft.NET.Sdk.Web")]
+    public Task Build_CanOverrideDefaultItemExcludesAfterPackageImports(string sdk) => fixture.ScenarioAsync(async () =>
+    {
+        fixture.Write("Site/Directory.Build.targets", """
+            <Project>
+              <PropertyGroup>
+                <DefaultItemExcludes>$(DefaultItemExcludes.Replace('content/**', '').Replace('dist/**', ''));manual/**</DefaultItemExcludes>
+              </PropertyGroup>
+            </Project>
+            """);
+        fixture.Write("Site/manual/ignored.cs", "This is not valid C#.");
+        fixture.Write("Site/content/IncludedContent.cs", "internal sealed class IncludedContent { }");
+        fixture.Write("Site/dist/IncludedOutput.cs", "internal sealed class IncludedOutput { }");
+        fixture.Replace("Site/Program.cs", "return await",
+            "_ = typeof(IncludedContent); _ = typeof(IncludedOutput);\nreturn await");
         await fixture.DotnetAsync("build", "Site/PackageSite.csproj", "-c", "Release");
     }, sdk);
 

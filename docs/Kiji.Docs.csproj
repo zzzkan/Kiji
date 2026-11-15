@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 
+  <Import Project="../src/Kiji/MSBuild/Kiji.props" />
+
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <RootNamespace>Kiji.Docs</RootNamespace>

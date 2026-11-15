@@ -18,27 +18,26 @@ order: 100
 
 ## Project settings
 
-Set these properties in your site project's `<PropertyGroup>`:
+Kiji excludes `content/**` and `dist/**` from compilation and `dotnet watch` by default.
+Markdown edits still reload in the development server.
 
-| Property | Default | Behavior |
-| --- | --- | --- |
-| `KijiContentExcludeDirectory` | `content` | Content directory to exclude from compilation and `dotnet watch`. |
-| `KijiOutputExcludeDirectory` | `dist` | Output directory to exclude from compilation and `dotnet watch`. |
-| `KijiEnableDefaultItemExcludes` | `true` | Set to `false` to disable Kiji's directory exclusions. |
-
-For example, to use exclusions for `articles/` and `public/`:
+To choose different exclusions, set `KijiDefaultItemExcludes` in your site project's
+`<PropertyGroup>`. For example:
 
 ```xml
-<KijiContentExcludeDirectory>articles</KijiContentExcludeDirectory>
-<KijiOutputExcludeDirectory>public</KijiOutputExcludeDirectory>
+<KijiDefaultItemExcludes>articles/**;public/**</KijiDefaultItemExcludes>
 ```
 
-Directory paths are relative to the site project, or absolute. These properties only
-control exclusions. Set Markdown's `Directory` to choose where content is loaded, and
-use `dotnet publish -o public` to choose the publish destination. Markdown edits still
-reload in the development server.
-Keep compiled Razor components and C# files outside the excluded directories, or
-set `KijiEnableDefaultItemExcludes` to `false` to compile files there.
+To disable Kiji's exclusions:
+
+```xml
+<KijiDefaultItemExcludes></KijiDefaultItemExcludes>
+```
+
+These patterns only control exclusions. Set Markdown's `Directory` to choose where
+content is loaded, and use `dotnet publish -o public` to choose the publish destination.
+Keep compiled Razor components and C# files outside excluded directories, or adjust
+these patterns to include them in compilation.
 
 ## `Kiji` namespace
 

@@ -67,7 +67,7 @@ content grows:
 
 ```xml
 <PropertyGroup>
-  <KijiContentExcludeDirectory>articles</KijiContentExcludeDirectory>
+  <KijiDefaultItemExcludes>articles/**;dist/**</KijiDefaultItemExcludes>
 </PropertyGroup>
 ```
 

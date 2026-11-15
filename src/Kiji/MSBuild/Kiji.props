@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup>
+    <KijiDefaultItemExcludes Condition="'$(KijiDefaultItemExcludes)' == ''">content/**;dist/**</KijiDefaultItemExcludes>
+  </PropertyGroup>
+</Project>

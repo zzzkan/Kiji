@@ -15,9 +15,6 @@ namespace Kiji.Hosting;
 /// </remarks>
 internal static class PublishJitProfile
 {
-    /// <summary>A machine-local directory set by Kiji's MSBuild targets for publish only.</summary>
-    internal const string DirectoryProperty = "Kiji.JitProfileDirectory";
-
     internal const string FileName = "publish.jitprofile";
 
     // The runtime replays and records the same file name, so each publish records into a copy
@@ -28,15 +25,15 @@ internal static class PublishJitProfile
 
     internal static string PortablePath(string kijiDirectory) => Path.Combine(kijiDirectory, "jit", FileName);
 
-    internal static void Start(Func<string, object?> runtimeData)
+    internal static void Start(SiteRuntimeMetadata runtimeMetadata)
     {
-        if (runtimeData(DirectoryProperty) is not string directory || !Path.IsPathFullyQualified(directory))
+        if (runtimeMetadata.JitProfileDirectory is not string directory || !Path.IsPathFullyQualified(directory))
         {
             return;
         }
 
         var kept = Path.Combine(directory, FileName);
-        if (runtimeData("Kiji.ProjectDirectory") is string project && Path.IsPathFullyQualified(project)
+        if (runtimeMetadata.ProjectDirectory is string project && Path.IsPathFullyQualified(project)
             && !File.Exists(kept))
         {
             // A restored portable profile seeds a staging directory that has none.

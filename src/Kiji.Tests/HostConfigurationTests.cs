@@ -48,7 +48,9 @@ public sealed class HostConfigurationTests : IDisposable
         Assert.Equal(expected, builder.Configuration["Site:Title"]);
         Assert.Equal("yes", builder.Configuration["Site:Kept"]);
         // Machine-specific values would make every publish render every page and break the portable cache.
-        Assert.NotNull(Environment.GetEnvironmentVariable("PATH"));
+        using var hostConfiguration = new ConfigurationManager();
+        hostConfiguration.AddEnvironmentVariables();
+        Assert.NotNull(hostConfiguration["PATH"]);
         Assert.Null(builder.Configuration["PATH"]);
         await using var site = builder.BuildSite();
         Assert.Same(builder.Configuration, site.ServiceProvider.GetRequiredService<IConfiguration>());
@@ -156,7 +158,7 @@ public sealed class HostConfigurationTests : IDisposable
     private HostApplicationBuilder CreateBuilder(string? environmentName, params Type[] discoveredPages)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root),
-            runtimeData: name => name == "Kiji.OutputPath" ? "dist" : null, environment: name => name == "DOTNET_ENVIRONMENT" ? environmentName : null, discoveredPages);
+            runtimeMetadata: new SiteRuntimeMetadata(OutputPath: "dist"), hostConfiguration: TestSiteFactory.HostConfiguration(("DOTNET_ENVIRONMENT", environmentName)), discoveredPages);
         builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         return builder;
     }

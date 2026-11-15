@@ -1,6 +1,6 @@
 namespace Kiji;
 
-/// <summary>Interprets environment variable flags for the dev server's status output.</summary>
+/// <summary>Interprets configuration flags for the dev server's status output.</summary>
 internal static class FlagValue
 {
     /// <summary>Returns true for <c>1</c> or <c>true</c> (case-insensitive).</summary>

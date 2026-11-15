@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Reflection;
 using System.Security;
 using System.Xml.Linq;
+using Microsoft.Extensions.Configuration;
 using Xunit;
 
 namespace Kiji.PackageTests;
@@ -44,8 +45,10 @@ public sealed class PackageFixture : IAsyncLifetime
             await DeleteGeneratedFilesAsync(); // Also recover an interrupted previous run.
             var feed = Path.Combine(_root, "feed");
             Directory.CreateDirectory(feed);
+            using var configuration = new ConfigurationManager();
+            configuration.AddEnvironmentVariables();
             string package;
-            if (Environment.GetEnvironmentVariable("KIJI_TEST_PACKAGE") is { Length: > 0 } supplied)
+            if (configuration["KIJI_TEST_PACKAGE"] is { Length: > 0 } supplied)
             {
                 // CI supplies the exact package it will release; never select an old glob match.
                 package = Path.Combine(feed, Path.GetFileName(supplied));
@@ -53,8 +56,8 @@ public sealed class PackageFixture : IAsyncLifetime
             }
             else
             {
-                var configuration = typeof(PackageFixture).Assembly.GetCustomAttribute<AssemblyConfigurationAttribute>()!.Configuration;
-                await RunningCommand.RunAsync(_repository, "pack", "src/Kiji", "-c", configuration, "--no-build", "-o", feed);
+                var buildConfiguration = typeof(PackageFixture).Assembly.GetCustomAttribute<AssemblyConfigurationAttribute>()!.Configuration;
+                await RunningCommand.RunAsync(_repository, "pack", "src/Kiji", "-c", buildConfiguration, "--no-build", "-o", feed);
                 package = Directory.GetFiles(feed, "*.nupkg").Single();
             }
             using var archive = ZipFile.OpenRead(package);

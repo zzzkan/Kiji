@@ -36,7 +36,7 @@ public sealed class SiteCancellationTests : IDisposable
                 await release.Task.WaitAsync(token);
             },
         };
-        var running = CreateApp(processor, runtimeData: name => name == "Kiji.OutputPath" ? output : null);
+        var running = CreateApp(processor, runtimeMetadata: new SiteRuntimeMetadata(OutputPath: output));
         var run = running.Host.RunAsync(cancellation.Token);
         try
         {
@@ -121,9 +121,9 @@ public sealed class SiteCancellationTests : IDisposable
         }
     }
 
-    private TestSiteHost CreateApp(TrackingImageProcessor processor, Func<string, object?>? runtimeData = null, bool serve = false)
+    private TestSiteHost CreateApp(TrackingImageProcessor processor, SiteRuntimeMetadata? runtimeMetadata = null, bool serve = false)
     {
-        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")), runtimeData ?? (name => name == "Kiji.OutputPath" && !serve ? "dist" : null));
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")), runtimeMetadata ?? new SiteRuntimeMetadata(OutputPath: serve ? null : "dist"));
         builder.UseSiteInfo(new SiteInfo { Name = "Cancellation", BaseUrl = new Uri("https://example.test/") });
         TestSite.TestSiteAssets.Bind(builder.GetSitePaths(), Path.Combine(_root, "wwwroot"));
         builder.Services.AddSingleton<IImageProcessor>(_ => processor);

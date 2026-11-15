@@ -68,7 +68,7 @@ public static class BuildRunner
     /// </summary>
     public static async Task BuildSiteAsync(string root)
     {
-        var builder = StaticSite.CreateBuilder([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "synthetic")), typeof(BuildRunner).Assembly, runtimeData: name => name == "Kiji.OutputPath" ? Path.Combine(root, "dist") : null);
+        var builder = StaticSite.CreateBuilder([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "synthetic")), typeof(BuildRunner).Assembly, runtimeMetadata: new SiteRuntimeMetadata(OutputPath: Path.Combine(root, "dist")));
         builder.UseSiteInfo(new SiteInfo
         {
             BaseUrl = new Uri("https://bench.example.com/"),

@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Configuration;
+
 namespace Kiji.Hosting;
 
 internal sealed class DevServerStatusReporter
@@ -28,14 +30,16 @@ internal sealed class DevServerStatusReporter
         _useAnsiColor = useAnsiColor;
     }
 
-    internal static DevServerStatusReporter CreateForCurrentProcess()
+    internal static DevServerStatusReporter Create(
+        IConfiguration configuration, TextWriter output, bool isOutputRedirected)
     {
-        var useEmoji = !FlagValue.IsTruthy(Environment.GetEnvironmentVariable("DOTNET_WATCH_SUPPRESS_EMOJIS"));
-        var useAnsiColor = !Console.IsOutputRedirected &&
-            !FlagValue.IsTruthy(Environment.GetEnvironmentVariable("NO_COLOR")) &&
-            !string.Equals(Environment.GetEnvironmentVariable("TERM"), "dumb", StringComparison.OrdinalIgnoreCase);
+        ArgumentNullException.ThrowIfNull(configuration);
+        var useEmoji = !FlagValue.IsTruthy(configuration["DOTNET_WATCH_SUPPRESS_EMOJIS"]);
+        var useAnsiColor = !isOutputRedirected &&
+            !FlagValue.IsTruthy(configuration["NO_COLOR"]) &&
+            !string.Equals(configuration["TERM"], "dumb", StringComparison.OrdinalIgnoreCase);
 
-        return new DevServerStatusReporter(Console.Out, KijiPrefix, useEmoji, useAnsiColor);
+        return new DevServerStatusReporter(output, KijiPrefix, useEmoji, useAnsiColor);
     }
 
     internal void DevServerStarted(

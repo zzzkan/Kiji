@@ -27,7 +27,8 @@ internal sealed class DevServer(SiteEngine app, DevServerStatusReporter? reporte
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<DevServer, byte> ActiveServers = new();
 
     private readonly LiveReloadHub _hub = new();
-    private readonly DevServerStatusReporter _reporter = reporter ?? DevServerStatusReporter.CreateForCurrentProcess();
+    // Initialized from the web host configuration before watchers or requests start.
+    private DevServerStatusReporter _reporter = null!;
     private readonly string _displayRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Directory.GetCurrentDirectory()));
     private readonly Lock _snapshotLock = new();
     private readonly List<FileSystemWatcher> _watchers = [];
@@ -59,6 +60,8 @@ internal sealed class DevServer(SiteEngine app, DevServerStatusReporter? reporte
             EnvironmentName = environment.EnvironmentName,
             ContentRootPath = environment.ContentRootPath,
         });
+        _reporter = reporter ?? DevServerStatusReporter.Create(
+            builder.Configuration, Console.Out, Console.IsOutputRedirected);
         // The standard Host Filtering middleware reads AllowedHosts. Supply only a
         // fallback; appsettings, environment variables and command line stay in control.
         builder.Configuration.Sources.Insert(0, new MemoryConfigurationSource

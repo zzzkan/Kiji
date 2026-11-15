@@ -13,7 +13,7 @@ public sealed class ContentCollectionTests
     public async Task ConcurrentReaders_MaterializeContentOnlyOnce()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         var calls = 0;
         using var entered = new ManualResetEventSlim();
         using var release = new ManualResetEventSlim();
@@ -24,7 +24,7 @@ public sealed class ContentCollectionTests
             Assert.True(release.Wait(TimeSpan.FromSeconds(10)));
             return [("shared", new Item("shared", 1), "stable")];
         });
-        await using var app = builder.Build();
+        await using var app = builder.BuildSite();
         var collection = app.ServiceProvider.GetRequiredService<ContentCollection<Item>>();
         var first = Task.Run(() => collection["shared"]);
         Task<Item>? second = null;
@@ -105,14 +105,14 @@ public sealed class ContentCollectionTests
     {
         var loads = 0;
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         builder.RegisterContent<Item>(
             _ =>
             {
                 loads++;
                 return [("a", new Item("a", 1), "stable")];
             });
-        var app = builder.Build();
+        var app = builder.BuildSite();
         var collection = app.ServiceProvider.GetRequiredService<ContentCollection<Item>>();
 
         Assert.Equal(0, loads);
@@ -130,9 +130,9 @@ public sealed class ContentCollectionTests
     public async Task Reads_RecordCollectionOrItemDependencies(string operation, bool itemDependency)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         builder.RegisterContent<Item>(_ => [("one", new Item("one", 1), "first")]);
-        await using var site = builder.Build();
+        await using var site = builder.BuildSite();
         var collection = site.ServiceProvider.GetRequiredService<ContentCollection<Item>>();
         var recorder = new BuildDependencyRecorder();
         PageRenderContext.SetCurrent(new PageRenderContext

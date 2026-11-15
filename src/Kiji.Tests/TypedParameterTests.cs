@@ -2,7 +2,6 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Collections.Frozen;
 using System.Collections.ObjectModel;
 using System.Text.Json.Nodes;
-using Kiji.Hosting;
 using Kiji.Routing;
 using Kiji.Tests.TestSite.TypedParameters;
 using Xunit;
@@ -30,7 +29,7 @@ public sealed class TypedParameterTests : IDisposable
         string[] tags = ["dotnet", "kiji"];
         var builder = CreateBuilder("render", log);
         builder.AddPageParameters<TypedParameterPage>(_ => [new { Id = 42, Featured = true, Kind = DayOfWeek.Friday, Count = count, Summary = summary, Tags = tags, Model = model, Resource = model }]);
-        await using (var site = builder.Build())
+        await using (var site = builder.BuildSite())
         {
             var page = Assert.Single(site.CreateSnapshot().Pages);
             Assert.Equal("/typed/42/", page.RoutePath);
@@ -59,7 +58,7 @@ public sealed class TypedParameterTests : IDisposable
             new Dictionary<string, object?> { ["Id"] = 2 }.ToFrozenDictionary(),
             new ReadOnlyDictionary<string, object?>(new Dictionary<string, object?> { ["Id"] = 3 }),
         ]);
-        await using var site = builder.Build();
+        await using var site = builder.BuildSite();
         var pages = site.CreateSnapshot().Pages;
         mutable["Id"] = 99;
         Assert.Equal(1, pages[0].Parameters["Id"]);
@@ -74,7 +73,7 @@ public sealed class TypedParameterTests : IDisposable
         builder.AddPageParameters<TypedParameterPage>(_ =>
             [new Dictionary<string, object?>(StringComparer.Ordinal) { ["Id"] = 1, ["id"] = 2 }]);
 
-        await using var site = builder.Build();
+        await using var site = builder.BuildSite();
         Assert.Throws<ArgumentException>(() => site.CreateSnapshot());
     }
 
@@ -87,7 +86,7 @@ public sealed class TypedParameterTests : IDisposable
         var builder = CreateBuilder("parameter-casing", log);
         builder.AddPageParameters<TypedParameterPage>(_ => [new { id = 42, COUNT = count, sUMMARY = "mixed case" }]);
 
-        await using var site = builder.Build();
+        await using var site = builder.BuildSite();
         var page = Assert.Single(site.CreateSnapshot().Pages);
         Assert.Equal("/typed/42/", page.RoutePath);
         await site.RenderPageAsync(page, CancellationToken.None);
@@ -108,7 +107,7 @@ public sealed class TypedParameterTests : IDisposable
         var builder = CreateBuilder("invalid", new ParameterRenderLog());
         var values = new Dictionary<string, object?> { ["Id"] = 42, [name] = value };
         builder.AddPageParameters<TypedParameterPage>(_ => [values]);
-        await using var site = builder.Build();
+        await using var site = builder.BuildSite();
         var error = Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
         Assert.Contains(typeof(TypedParameterPage).FullName!, error.Message, StringComparison.Ordinal);
         Assert.Contains("/typed/{Id}/", error.Message, StringComparison.Ordinal);
@@ -123,7 +122,7 @@ public sealed class TypedParameterTests : IDisposable
         var builder = CreateBuilder("getter", new ParameterRenderLog());
         var input = new ParameterInput();
         builder.AddPageParameters<TypedParameterPage>(_ => [input]);
-        await using var site = builder.Build();
+        await using var site = builder.BuildSite();
         var page = Assert.Single(site.CreateSnapshot().Pages);
         await site.RenderPageAsync(page, CancellationToken.None);
         await site.RenderPageAsync(page, CancellationToken.None);
@@ -135,7 +134,7 @@ public sealed class TypedParameterTests : IDisposable
     {
         var builder = CreateBuilder("setter", new ParameterRenderLog());
         builder.AddPageParameters<ReadOnlyParameterPage>(_ => [new { Id = 1, Value = "text" }]);
-        await using var site = builder.Build();
+        await using var site = builder.BuildSite();
         var error = Assert.Throws<InvalidOperationException>(() => site.CreateSnapshot());
         Assert.Contains("public setter", error.Message, StringComparison.Ordinal);
         var before = PageDiscovery.Parameters(typeof(ReadOnlyParameterPage));
@@ -155,7 +154,7 @@ public sealed class TypedParameterTests : IDisposable
         {
             var builder = CreateBuilder(directory, observer);
             builder.AddPageParameters<TypedParameterPage>(_ => [new { Id = 1, Model = model }, new { Id = 2, Summary = "stable" }]);
-            await using var site = builder.Build();
+            await using var site = builder.BuildSite();
             await site.PublishAsync("dist");
         }
         await Build("incremental", log);
@@ -189,12 +188,12 @@ public sealed class TypedParameterTests : IDisposable
     {
         var publishing = CreateBuilder("publish", new ParameterRenderLog());
         publishing.AddPageParameters<TypedParameterPage>(_ => [new { Id = 42, Count = (int?)7, Featured = true }]);
-        await using var published = publishing.Build();
+        await using var published = publishing.BuildSite();
         await published.PublishAsync("dist");
         var html = await File.ReadAllTextAsync(Path.Combine(_root, "publish", "dist", "typed", "42", "index.html"));
         var serving = CreateBuilder("serve", new ParameterRenderLog());
         serving.AddPageParameters<TypedParameterPage>(_ => [new { Id = 42, Count = (int?)7, Featured = true }]);
-        await using var served = serving.Build();
+        await using var served = serving.BuildSite();
         var (server, web) = await served.StartDevServerAsync(TestUrls.EphemeralPort, CancellationToken.None);
         await using (server)
         {
@@ -204,12 +203,12 @@ public sealed class TypedParameterTests : IDisposable
         }
     }
 
-    private StaticSiteBuilder CreateBuilder(string directory, ParameterRenderLog log)
+    private HostApplicationBuilder CreateBuilder(string directory, ParameterRenderLog log)
     {
-        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(Path.Combine(_root, directory)));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
-        Directory.CreateDirectory(Path.Combine(builder.Paths.ProjectDirectory, "content"));
-        Directory.CreateDirectory(Path.Combine(builder.Paths.ProjectDirectory, "wwwroot"));
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(Path.Combine(_root, directory)), outputPath: directory == "serve" ? null : "dist");
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
+        Directory.CreateDirectory(Path.Combine(builder.GetSitePaths().ProjectDirectory, "content"));
+        Directory.CreateDirectory(Path.Combine(builder.GetSitePaths().ProjectDirectory, "wwwroot"));
         builder.Services.AddSingleton(log);
         return builder;
     }

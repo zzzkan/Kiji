@@ -88,7 +88,7 @@
     <Right>lib/net10.0/Kiji.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
-  <!-- Services are registered on StaticSiteBuilder.Services, a standard IServiceCollection. -->
+  <!-- Services are registered on builder.Services, a standard IServiceCollection. -->
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:Kiji.StaticSite.AddPageService``1</Target>
@@ -147,7 +147,7 @@
     <Right>lib/net10.0/Kiji.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
-  <!-- Configuration moved to StaticSiteBuilder: CreateBuilder, Services, Environment, Add*/Use* and Build. -->
+  <!-- Configuration moved to the host builder: CreateBuilder, Services, Environment, Add*/Use* and Build. -->
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:Kiji.StaticSite.Create(System.String[])</Target>
@@ -236,6 +236,14 @@
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:Kiji.Markdown.MarkdownContent`1.get_FileInfo</Target>
+    <Left>lib/net10.0/Kiji.dll</Left>
+    <Right>lib/net10.0/Kiji.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <!-- Execution now uses the standard IHost.RunAsync extension. -->
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Kiji.StaticSite.RunAsync(System.Threading.CancellationToken)</Target>
     <Left>lib/net10.0/Kiji.dll</Left>
     <Right>lib/net10.0/Kiji.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>

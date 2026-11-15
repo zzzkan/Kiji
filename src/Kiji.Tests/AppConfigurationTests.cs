@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Kiji.Markdown;
 using Kiji.Sitemaps;
 using Kiji.Tests.TestSite;
@@ -15,26 +16,23 @@ public sealed class AppConfigurationTests : IDisposable
     public async Task Build_ResolvesLastAssignedSiteInfo()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         var finalInfo = TestArticleContents.CreateSiteInfo();
-        builder.SiteInfo = finalInfo;
-        await using var site = builder.Build();
+        builder.UseSiteInfo(finalInfo);
+        await using var site = builder.BuildSite();
         Assert.Same(finalInfo, site.ServiceProvider.GetRequiredService<SiteInfo>());
     }
 
     [Fact]
-    public async Task MissingSite_FailsBuildBeforeCreatingOutput_AndCanBeCorrected()
+    public async Task MissingSite_FailsAtExecutionBeforeCreatingOutput()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
-
-        var exception = Assert.Throws<InvalidOperationException>(() => builder.Build());
-
-        Assert.Contains("StaticSiteBuilder.SiteInfo", exception.Message, StringComparison.Ordinal);
-        Assert.False(Directory.Exists(_root));
-        Assert.Throws<InvalidOperationException>(() => builder.SiteInfo);
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
-        builder.Services.AddScoped<object>();
-        await using var site = builder.Build();
+        var logs = new RecordingLoggerProvider();
+        builder.Logging.AddProvider(logs);
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => builder.Build().RunAsync());
+        Assert.Contains("UseSiteInfo", failure.Message, StringComparison.Ordinal);
+        Assert.Contains(failure, logs.Exceptions);
+        Assert.False(Directory.Exists(Path.Combine(_root, "dist")));
     }
 
     [Theory]
@@ -42,8 +40,8 @@ public sealed class AppConfigurationTests : IDisposable
     [InlineData(true)]
     public async Task Build_FreezesRegistrations_AndLoadsContentOnlyAfterPathsSettle(bool serve)
     {
-        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root), outputPath: serve ? null : "output");
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         builder.Services.AddScoped<object>();
         var loads = 0;
         var routeCalls = 0;
@@ -65,11 +63,11 @@ public sealed class AppConfigurationTests : IDisposable
             return [];
         });
 
-        await using var app = builder.Build();
+        await using var app = builder.BuildSite();
         AssertFrozen();
         Assert.Equal(0, loads);
         Assert.Equal(0, routeCalls);
-        Assert.False(Directory.Exists(_root));
+        Assert.False(Directory.Exists(Path.Combine(_root, "output")));
 
         var output = Path.Combine(_root, "output");
         if (serve)
@@ -97,9 +95,9 @@ public sealed class AppConfigurationTests : IDisposable
 
         void AssertFrozen()
         {
-            Assert.Throws<InvalidOperationException>(() => builder.Build());
+            Assert.Throws<InvalidOperationException>(() => builder.BuildSite());
             Assert.Throws<InvalidOperationException>(() => builder.Services.AddScoped<object>());
-            Assert.Throws<InvalidOperationException>(() => builder.SiteInfo = TestArticleContents.CreateSiteInfo());
+            Assert.Throws<InvalidOperationException>(() => builder.UseSiteInfo(TestArticleContents.CreateSiteInfo()));
             Assert.Throws<InvalidOperationException>(() => builder.RegisterContent<object>(static _ => []));
             Assert.Throws<InvalidOperationException>(() => builder.AddMarkdownContent<FrontMatter>(
                 _ => throw new Xunit.Sdk.XunitException("Configuration callback must not run after the site is built.")));

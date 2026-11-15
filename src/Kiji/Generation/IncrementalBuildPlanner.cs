@@ -544,10 +544,9 @@ internal sealed class IncrementalBuildPlanner(
         // Which values a page reads is not tracked, so any configuration change renders
         // every page. Null values count: binding a key set to null differs from a missing
         // key. The manifest keeps only this SHA-256 digest, not the values.
-        // The Logging section configures logging, not output, so raising a log level to
-        // inspect a build keeps its reuse.
+        // Logging and Metrics configure diagnostics, not output; changing them keeps reuse.
         foreach (var (key, value) in configuration.AsEnumerable()
-            .Where(static pair => !IsLoggingKey(pair.Key))
+            .Where(static pair => !IsDiagnosticsKey(pair.Key))
             .OrderBy(static pair => pair.Key, StringComparer.Ordinal))
         {
             BuildFingerprint.AppendPart(builder, key);
@@ -557,12 +556,12 @@ internal sealed class IncrementalBuildPlanner(
         return BuildFingerprint.HashText(builder.ToString());
     }
 
-    // Configuration keys ignore case, so "logging:..." from a JSON file is the same section.
-    private static bool IsLoggingKey(string key) =>
-        key.StartsWith(LoggingSection, StringComparison.OrdinalIgnoreCase)
-        && (key.Length == LoggingSection.Length || key[LoggingSection.Length] == ConfigurationPath.KeyDelimiter[0]);
+    // Match whole sections, ignoring case, without excluding keys such as MetricsTheme.
+    private static bool IsDiagnosticsKey(string key) => IsSection(key, "Logging") || IsSection(key, "Metrics");
 
-    private const string LoggingSection = "Logging";
+    private static bool IsSection(string key, string section) =>
+        key.StartsWith(section, StringComparison.OrdinalIgnoreCase)
+        && (key.Length == section.Length || key[section.Length] == ConfigurationPath.KeyDelimiter[0]);
 
     internal static IReadOnlyList<string> CollectCodeDependencies(IEnumerable<Assembly> roots)
     {

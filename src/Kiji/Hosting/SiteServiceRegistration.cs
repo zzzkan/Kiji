@@ -12,8 +12,11 @@ namespace Kiji.Hosting;
 internal static class SiteServiceRegistration
 {
     internal static bool IsManaged(Type type) =>
-        type == typeof(SiteInfo) || type == typeof(PageInfo) || type == typeof(ResolvedSitePaths)
-        || type == typeof(IHostEnvironment) || type == typeof(IConfiguration)
+        type == typeof(StaticSiteOptions) || type == typeof(ContentRuntime) || type == typeof(SiteExecutionPaths)
+        || type == typeof(SiteEngine) || type == typeof(SiteRunSettings) || type == typeof(SiteServerArguments)
+        || type == typeof(KijiServiceProviderStamp) || type == typeof(SiteInfo) || type == typeof(PageInfo)
+        || type == typeof(ResolvedSitePaths)
+        || type == typeof(IHostApplicationLifetime) || type == typeof(IHostEnvironment) || type == typeof(IConfiguration)
         || type == typeof(NavigationManager)
         || type == typeof(IJSRuntime) || type == typeof(IComponentActivator)
         || type == typeof(IServiceProvider) || type == typeof(IServiceScopeFactory)
@@ -31,7 +34,7 @@ internal static class SiteServiceRegistration
             if (!expected[type].SequenceEqual(actual[type]))
             {
                 throw new InvalidOperationException(
-                    $"Service '{type.FullName}' is managed by Kiji and cannot be added, removed or replaced through StaticSiteBuilder.Services.");
+                    $"Service '{type.FullName}' is managed by Kiji and cannot be added, removed or replaced through builder.Services.");
             }
         }
 
@@ -40,8 +43,17 @@ internal static class SiteServiceRegistration
         if (imageProcessor?.Lifetime != ServiceLifetime.Singleton)
         {
             throw new InvalidOperationException(
-                "IImageProcessor requires an unkeyed Singleton registration. Register it with AddSingleton on StaticSiteBuilder.Services.");
+                "IImageProcessor requires an unkeyed Singleton registration. Register it with AddSingleton on builder.Services.");
         }
+    }
+
+    internal static IServiceProvider RequireProvider(IServiceProvider services)
+    {
+        if (services.GetService<KijiServiceProviderStamp>() is null)
+        {
+            throw new NotSupportedException("Kiji requires its service provider factory. Custom containers are not supported.");
+        }
+        return services;
     }
 
     internal static IReadOnlyCollection<Assembly> CollectAssemblies(IServiceCollection services)

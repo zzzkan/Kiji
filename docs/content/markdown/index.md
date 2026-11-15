@@ -72,16 +72,16 @@ The pattern is relative to the project, so `content/**` does not exclude `wwwroo
 
 ## Use a site-specific model
 
-To give pages a model with a slug or validated values, project each file:
+To give pages a model with a slug, project each file. Keep the content itself and read
+front matter through it; validate required fields in the projection:
 
 ```csharp
-public sealed record Post(string Slug, string Title, MarkdownContent<FrontMatter> Content);
+public sealed record Post(string Slug, MarkdownContent<FrontMatter> Content);
 ```
 
 ```csharp
 builder.AddMarkdownContent<FrontMatter, Post>(content => new Post(
     Slug: Path.GetFileName(Path.GetDirectoryName(content.Path))!,
-    Title: content.FrontMatter.Title ?? "Untitled",
     Content: content));
 ```
 

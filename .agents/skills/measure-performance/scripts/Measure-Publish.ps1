@@ -186,10 +186,15 @@ foreach ($variant in $variants) {
     }
     $runner = Join-Path $site 'BuildRunner.cs'
     $code = [IO.File]::ReadAllText($runner)
-    $createLine = 'StaticSite.CreateBuilder([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "synthetic")), typeof(BuildRunner).Assembly)'
-    $publishLine = 'await app.PublishAsync(Path.Combine(root, "dist"));'
+    $createLine = 'StaticSite.CreateBuilder([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "synthetic")), typeof(BuildRunner).Assembly, runtimeData: name => name == "Kiji.OutputPath" ? Path.Combine(root, "dist") : null)'
+    $publishLine = 'await host.Services.GetRequiredService<SiteEngine>().PublishAsync();'
     if (!$code.Contains($createLine) -or !$code.Contains($publishLine)) { throw 'Frozen harness adapter no longer matches. Review it before measuring.' }
-    [IO.File]::WriteAllText($runner, $code.Replace($createLine, 'StaticSite.CreateBuilder([])').Replace($publishLine, 'await app.RunAsync();'))
+    $code = $code.Replace($createLine, 'StaticSite.CreateBuilder([])').Replace($publishLine, 'await app.RunAsync();')
+    $code = $code.Replace('using var host = builder.Build();', 'var app = builder.Build();')
+    $code = $code.Replace('using Kiji.Hosting;', 'using Microsoft.Extensions.Hosting;')
+    # The real host validates options at startup; only the direct runner needs the explicit call.
+    $code = $code.Replace('        host.Services.GetService<IStartupValidator>()?.Validate();', '')
+    [IO.File]::WriteAllText($runner, $code)
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PublishEntry.cs') -Destination (Join-Path $site 'Program.cs')
     '<Project><PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup></Project>' | Set-Content -LiteralPath (Join-Path $site 'Directory.Build.props')
     '<Project />' | Set-Content -LiteralPath (Join-Path $site 'Directory.Build.targets')
@@ -309,6 +314,10 @@ $summary = foreach ($scenario in $Scenarios) {
     foreach ($variant in $variants) {
         $runs = @($results | Where-Object { $_.Variant -eq $variant -and $_.Scenario -eq $scenario -and $_.Measured })
         $sorted = @($runs.ElapsedMs | Sort-Object)
+        $middle = [int][math]::Floor($sorted.Count / 2)
+        $median = if ($sorted.Count % 2 -eq 0) {
+            ($sorted[$middle - 1] + $sorted[$middle]) / 2
+        } else { $sorted[$middle] }
         $meanCategories = @{}
         foreach ($name in @($runs | ForEach-Object { $_.Categories.Keys } | Sort-Object -Unique)) {
             $meanCategories[$name] = ($runs | ForEach-Object { [double] $_.Categories[$name] } | Measure-Object -Average).Average
@@ -318,7 +327,7 @@ $summary = foreach ($scenario in $Scenarios) {
             $phaseMeans[$name] = ($runs | ForEach-Object { @($_.Kiji.Phases | Where-Object Phase -EQ $name | Measure-Object ElapsedMs -Sum).Sum } | Measure-Object -Average).Average
         }
         [pscustomobject]@{
-            Scenario=$scenario; Variant=$variant; MedianMs=$sorted[[int][math]::Floor($sorted.Count/2)]
+            Scenario=$scenario; Variant=$variant; MedianMs=$median
             MeanMs=($runs.ElapsedMs | Measure-Object -Average).Average
             MinMs=$sorted[0]; MaxMs=$sorted[-1]; MeanCategories=$meanCategories; MeanKijiPhases=$phaseMeans
             MeanKijiEntryMs=($runs.Kiji.EntryMilliseconds | Measure-Object -Average).Average

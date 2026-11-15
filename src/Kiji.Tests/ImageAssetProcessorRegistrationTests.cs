@@ -29,7 +29,7 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
         builder.AddMarkdownContent<FrontMatter>();
         builder.AddPageParameters<MarkdownPostTestPage>(provider => provider.GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>()
             .Select(post => new { Slug = Path.GetFileNameWithoutExtension(post.Path), ContentKey = post.Path }));
-        await using (var app = builder.Build())
+        await using (var app = builder.BuildSite())
         {
             var output = Path.Combine(_root, "dist");
             await app.PublishAsync(output);
@@ -54,10 +54,10 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
         var invalid = CreateBuilder();
         invalid.Services.Add(new ServiceDescriptor(typeof(IImageProcessor),
             _ => throw new InvalidOperationException("Factory must not run."), lifetime));
-        var exception = Assert.Throws<InvalidOperationException>(() => invalid.Build());
+        var exception = Assert.Throws<InvalidOperationException>(() => invalid.BuildSite());
         Assert.Contains(nameof(IImageProcessor), exception.Message, StringComparison.Ordinal);
         Assert.Contains("Singleton", exception.Message, StringComparison.Ordinal);
-        Assert.False(Directory.Exists(_root));
+        Assert.False(Directory.Exists(Path.Combine(_root, "dist")));
     }
 
     [Fact]
@@ -66,7 +66,7 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
         var invalid = CreateBuilder();
         invalid.Services.RemoveAll<IImageProcessor>();
         invalid.Services.AddKeyedSingleton<IImageProcessor, TrackingImageProcessor>("other");
-        var exception = Assert.Throws<InvalidOperationException>(() => invalid.Build());
+        var exception = Assert.Throws<InvalidOperationException>(() => invalid.BuildSite());
         Assert.Contains(nameof(IImageProcessor), exception.Message, StringComparison.Ordinal);
         Assert.Contains("unkeyed", exception.Message, StringComparison.Ordinal);
     }
@@ -82,11 +82,11 @@ public sealed class ImageAssetProcessorRegistrationTests : IDisposable
         Assert.False(Directory.Exists(Path.Combine(_root, "dist")));
     }
 
-    private StaticSiteBuilder CreateBuilder(string? output = null)
+    private HostApplicationBuilder CreateBuilder(string? output = "dist")
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root),
             runtimeData: name => name == "Kiji.OutputPath" ? output : null);
-        builder.SiteInfo = new SiteInfo { Name = "Images", BaseUrl = new Uri("https://example.test/") };
+        builder.UseSiteInfo(new SiteInfo { Name = "Images", BaseUrl = new Uri("https://example.test/") });
         return builder;
     }
 

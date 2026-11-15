@@ -83,15 +83,16 @@ Replace `Program.cs` with the site definition:
 
 ```csharp
 using Kiji;
+using Microsoft.Extensions.Hosting;
 
 var builder = StaticSite.CreateBuilder(args);
-builder.SiteInfo = new SiteInfo
+builder.UseSiteInfo(new SiteInfo
 {
     BaseUrl = new Uri("https://example.com/"),
     Name = "My Site",
-};
+});
 
-return await builder.Build().RunAsync();
+await builder.Build().RunAsync();
 ```
 
 Create `Pages/Home.razor`:
@@ -135,37 +136,46 @@ body {
 }
 ```
 
-Create `Components/PageHead.razor` for the page title and shared head tags:
+Create `_Imports.razor` at the project root. Its `@using` directives apply to every
+component in the project:
 
 ```razor
 @using Kiji
 @using Microsoft.AspNetCore.Components.Web
+@using MySite.Components
+```
+
+Create `Components/PageHead.razor` for the page title and shared head tags:
+
+```razor
 @inject SiteInfo Site
 
 <PageTitle>@Title - @Site.Name</PageTitle>
 
 <HeadContent>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet" href="@Assets["css/app.css"]" />
-    @ChildContent
+    @if (!string.IsNullOrWhiteSpace(Description))
+    {
+        <meta name="description" content="@Description" />
+    }
 </HeadContent>
 
 @code {
-    [Parameter] public string Title { get; set; } = string.Empty;
-    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public string? Description { get; set; }
 }
 ```
 
 Create `Layout/MainLayout.razor` for the shared page structure:
 
 ```razor
-@using Kiji
 @inherits LayoutComponentBase
 @inject SiteInfo Site
 
 <header>
-    <a href="@Site.BaseUrl.AbsolutePath">@Site.Name</a>
+    <a href="@Site.ResolveUrl("").AbsolutePath">@Site.Name</a>
 </header>
 
 <main>
@@ -175,31 +185,31 @@ Create `Layout/MainLayout.razor` for the shared page structure:
 
 Update `Program.cs` to import the layout namespace and register the layout:
 
-{data-line="2,11"}
+{data-line="3,12"}
 
 ```csharp
 using Kiji;
+using Microsoft.Extensions.Hosting;
 using MySite.Layout;
 
 var builder = StaticSite.CreateBuilder(args);
-builder.SiteInfo = new SiteInfo
+builder.UseSiteInfo(new SiteInfo
 {
     BaseUrl = new Uri("https://example.com/"),
     Name = "My Site",
-};
+});
 
 builder.UseDefaultLayout<MainLayout>();
 
-return await builder.Build().RunAsync();
+await builder.Build().RunAsync();
 ```
 
 Add `PageHead` to `Pages/Home.razor`:
 
-{data-line="2,4"}
+{data-line="3"}
 
 ```razor
 @page "/"
-@using MySite.Components
 
 <PageHead Title="Home" />
 
@@ -207,15 +217,12 @@ Add `PageHead` to `Pages/Home.razor`:
 <p>This page is a Razor component rendered to static HTML.</p>
 ```
 
-Use `PageHead` once in each page, and put page-specific tags between `<PageHead>` and
-`</PageHead>`. A separate `HeadContent` in a page would replace these shared tags.
+Use `PageHead` once in each page. A separate `HeadContent` in a page would replace these
+shared tags, so add page-specific tags to `PageHead` as parameters.
 
 Restart `dotnet watch` with `Ctrl+R` to apply the `Program.cs` change.
 
 ![Add a layout and CSS](./add-layout-css.png)
-
-This walkthrough adds `@using` directives to each file. To share them, put them in
-`_Imports.razor` at the project root, as the rest of this documentation assumes.
 
 ### Add a Markdown page
 
@@ -226,9 +233,9 @@ namespace MySite.Models;
 
 public sealed class PostFrontMatter
 {
-    public string Title { get; set; } = string.Empty;
-    public string Description { get; set; } = string.Empty;
-    public DateTimeOffset? Date { get; set; }
+    public string Title { get; init; } = string.Empty;
+    public string Description { get; init; } = string.Empty;
+    public DateTimeOffset Date { get; init; }
 }
 ```
 
@@ -245,86 +252,83 @@ This page is written in Markdown.
 ```
 
 Create `Models/BlogPost.cs` to represent a post. It uses the post's directory name as its
-slug, requires a title and date, and keeps the Markdown content for rendering:
+slug, requires a title and date, and keeps the Markdown content and front matter:
 
 ```csharp
 using Kiji.Markdown;
 
 namespace MySite.Models;
 
-public sealed record BlogPost(
-    string Slug, string Title, string Description, DateTimeOffset Date,
-    MarkdownContent<PostFrontMatter> Content)
+public sealed record BlogPost(string Slug, MarkdownContent<PostFrontMatter> Content)
 {
-    public string RelativePath => $"posts/{Uri.EscapeDataString(Slug)}/";
-
     public static BlogPost Create(MarkdownContent<PostFrontMatter> content)
     {
-        if (string.IsNullOrWhiteSpace(content.FrontMatter.Title) || content.FrontMatter.Date is null)
+        if (string.IsNullOrWhiteSpace(content.FrontMatter.Title) || content.FrontMatter.Date == default)
         {
             throw new InvalidOperationException($"{content.Path}: posts require a title and date.");
         }
 
-        return new BlogPost(Path.GetFileName(Path.GetDirectoryName(content.Path))!,
-            content.FrontMatter.Title, content.FrontMatter.Description,
-            content.FrontMatter.Date.Value, content);
+        return new BlogPost(Path.GetFileName(Path.GetDirectoryName(content.Path))!, content);
     }
 }
 ```
 
-Create `Pages/PostPage.razor`. `Slug` supplies the route value, and `Post` carries the
-collection item to render:
+Add the namespaces that posts use to `_Imports.razor`:
+
+{data-line="1,3,6"}
+
+```razor
+@using System.Globalization
+@using Kiji
+@using Kiji.Markdown
+@using Microsoft.AspNetCore.Components.Web
+@using MySite.Components
+@using MySite.Models
+```
+
+Create `Pages/PostPage.razor`. `Slug` supplies the route value, `Post` carries the
+collection item, and `MarkdownBody` renders its HTML:
 
 ```razor
 @page "/posts/{Slug}/"
-@using Kiji
-@using MySite.Components
-@using MySite.Models
-
-@if (Post is not null)
-{
-    <PageHead Title="@Post.Title">
-        <meta name="description" content="@Post.Description" />
-    </PageHead>
-
-    <article>
-        <h1>@Post.Title</h1>
-        <time datetime="@Post.Date.ToString("yyyy-MM-dd")">@Post.Date.ToString("yyyy-MM-dd")</time>
-        <div>@((MarkupString)_html)</div>
-    </article>
+@{
+    var frontMatter = Post.Content.FrontMatter;
+    var date = frontMatter.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 }
+
+<PageHead Title="@frontMatter.Title" Description="@frontMatter.Description" />
+
+<article>
+    <h1>@frontMatter.Title</h1>
+    <time datetime="@date">@date</time>
+    <MarkdownBody Content="Post.Content" />
+</article>
 
 @code {
     [Parameter] public string Slug { get; set; } = string.Empty;
     [Parameter] public BlogPost Post { get; set; } = default!;
-
-    private string _html = string.Empty;
-
-    protected override async Task OnParametersSetAsync()
-    {
-        _html = await Post.Content.RenderAsync();
-    }
 }
 ```
 
 Add the required namespaces and registrations to `Program.cs`:
 
-{data-line="2-3,5-6,15-16,19-21"}
+{data-line="2-3,6-7,16-17,19-21"}
 
 ```csharp
 using Kiji;
 using Kiji.Markdown;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using MySite.Layout;
 using MySite.Models;
 using MySite.Pages;
 
 var builder = StaticSite.CreateBuilder(args);
-builder.SiteInfo = new SiteInfo
+builder.UseSiteInfo(new SiteInfo
 {
     BaseUrl = new Uri("https://example.com/"),
     Name = "My Site",
-};
+});
 
 builder.AddMarkdownContent<PostFrontMatter, BlogPost>(BlogPost.Create,
     options => options.Directory = "content/posts");
@@ -333,7 +337,7 @@ builder.AddPageParameters<PostPage>(services => services
     .GetRequiredService<ContentCollection<BlogPost>>()
     .Select(post => new { post.Slug, Post = post }));
 
-return await builder.Build().RunAsync();
+await builder.Build().RunAsync();
 ```
 
 `AddMarkdownContent` calls `BlogPost.Create` for each Markdown file and registers
@@ -346,13 +350,11 @@ Restart `dotnet watch` and open <http://localhost:8080/posts/hello-kiji/>:
 
 ### List the posts
 
-Replace `Pages/Home.razor` with a list of posts, newest first:
+Replace `Pages/Home.razor` with a list of posts, newest first. Posts with the same date
+are ordered by slug so that the list is the same on every build:
 
 ```razor
 @page "/"
-@using Kiji
-@using MySite.Components
-@using MySite.Models
 @inject SiteInfo Site
 @inject ContentCollection<BlogPost> Posts
 
@@ -360,11 +362,13 @@ Replace `Pages/Home.razor` with a list of posts, newest first:
 
 <h1>@Site.Name</h1>
 <ul>
-    @foreach (var post in Posts.OrderByDescending(post => post.Date))
+    @foreach (var post in Posts.OrderByDescending(post => post.Content.FrontMatter.Date)
+        .ThenBy(post => post.Slug, StringComparer.Ordinal))
     {
+        var date = post.Content.FrontMatter.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         <li>
-            <time datetime="@post.Date.ToString("yyyy-MM-dd")">@post.Date.ToString("yyyy-MM-dd")</time>
-            <a href="@Site.ResolveUrl(post.RelativePath).AbsolutePath">@post.Title</a>
+            <time datetime="@date">@date</time>
+            <a href="@Site.ResolveUrl($"posts/{Uri.EscapeDataString(post.Slug)}/").AbsolutePath">@post.Content.FrontMatter.Title</a>
         </li>
     }
 </ul>

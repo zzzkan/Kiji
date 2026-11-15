@@ -6,7 +6,7 @@ using Xunit;
 namespace Kiji.Tests;
 
 /// <summary>
-/// Tests for page discovery and route mapping through <see cref="StaticSite"/>.
+/// Tests for page discovery and route mapping through <see cref="TestSiteHost"/>.
 /// </summary>
 public sealed class PageDiscoveryTests
 {
@@ -28,8 +28,8 @@ public sealed class PageDiscoveryTests
     public void Create_DiscoversFixedRoutesWithoutRegistration()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory), typeof(HomePage), typeof(AboutPage));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
-        var app = builder.Build();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
+        var app = builder.BuildSite();
 
         Assert.Equal(["/", "/about/"], app.CreateSnapshot().Pages.Select(static page => page.RoutePath).Order(StringComparer.Ordinal));
     }
@@ -70,7 +70,7 @@ public sealed class PageDiscoveryTests
     public void CreateSnapshot_UnregisteredParameterizedRoute_FailsWithPageAndRoute()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory), typeof(TagsPage));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         builder.RegisterContent<Post>(static _ => []);
         builder.UseDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(builder);
@@ -78,7 +78,7 @@ public sealed class PageDiscoveryTests
         builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentCollection<Post>>()
             .Select(static post => new { post.Slug, ContentKey = post.Id }));
         // No mapping for the dynamic /tags/{TagSlug}/ template.
-        var app = builder.Build();
+        var app = builder.BuildSite();
 
         var error = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());
         Assert.Contains(nameof(TagsPage), error.Message, StringComparison.Ordinal);
@@ -142,21 +142,21 @@ public sealed class PageDiscoveryTests
     public void CreateSnapshot_UseNotFoundPageWithoutPageTemplate_ThrowsInformativeException()
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         builder.UseDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(builder);
         builder.UseNotFoundPage<PostListComponent>();
-        var app = builder.Build();
+        var app = builder.BuildSite();
 
         var exception = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());
 
         Assert.Contains("does not declare a '@page' route template", exception.Message, StringComparison.Ordinal);
     }
 
-    private static (StaticSite App, ContentCollection<Post> Posts) CreateAppWithTagRoutes(Func<IEnumerable<object>> tagRoutes)
+    private static (TestSiteHost App, ContentCollection<Post> Posts) CreateAppWithTagRoutes(Func<IEnumerable<object>> tagRoutes)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.SiteInfo = TestArticleContents.CreateSiteInfo();
+        builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());
         builder.RegisterContent<Post>(static _ => []);
         builder.UseDefaultLayout<MainLayout>();
         TestArticleContents.MapTestAssemblyPages(builder);
@@ -164,7 +164,7 @@ public sealed class PageDiscoveryTests
         builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentCollection<Post>>()
             .Select(static post => new { post.Slug, ContentKey = post.Id }));
         builder.AddPageParameters<TagsPage>(_ => tagRoutes());
-        var app = builder.Build();
+        var app = builder.BuildSite();
         return (app, app.ServiceProvider.GetRequiredService<ContentCollection<Post>>());
     }
 }

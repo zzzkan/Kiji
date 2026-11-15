@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Text;
-using Kiji.Hosting;
 using Xunit;
 
 namespace Kiji.Tests;

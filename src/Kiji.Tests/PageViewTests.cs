@@ -62,13 +62,13 @@ public sealed class PageViewTests
         Assert.DoesNotContain("site-header", html, StringComparison.Ordinal);
     }
 
-    private static StaticSite CreateApp()
+    private static TestSiteHost CreateApp()
     {
         var siteInfo = TestArticleContents.CreateSiteInfo();
 
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
-        builder.SiteInfo = siteInfo;
-        return builder.Build();
+        builder.UseSiteInfo(siteInfo);
+        return builder.BuildSite();
     }
 
     private static Dictionary<string, object?> CreateRootParameters(Type pageType, Type? defaultLayout)

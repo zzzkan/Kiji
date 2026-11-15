@@ -40,7 +40,7 @@ internal sealed class IncrementalBuildPlanner(
     private readonly string _outputDirectoryHash = BuildFingerprint.HashText(Path.GetFullPath(options.OutputDirectory));
     private bool _stampsChanged;
     internal bool OutputStampsValid { get; private set; }
-    private readonly ConcurrentDictionary<string, Lazy<string>> _fileFingerprints = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, Lazy<string>> _fileFingerprints = new(StringComparer.Ordinal);
 
     internal async Task<IncrementalBuildPlan> CreatePlanAsync(
         IReadOnlyList<PageRenderRequest> pages,
@@ -184,7 +184,7 @@ internal sealed class IncrementalBuildPlanner(
         // A deterministic dependency order makes cache records reproducible.
         var dependencies = new List<BuildManifestDependency>();
 
-        foreach (var (file, recorded) in recorder.FileInputs.OrderBy(static entry => entry.Key, StringComparer.OrdinalIgnoreCase))
+        foreach (var (file, recorded) in recorder.FileInputs.OrderBy(static entry => entry.Key, StringComparer.Ordinal))
         {
             var key = ToDependencyKey(file);
             if (!BuildManifest.IsRelativeOutput(key)) { recorder.DisableCache(); }
@@ -473,7 +473,7 @@ internal sealed class IncrementalBuildPlanner(
     // thousands of files; parallelizing by file also keeps a one-page edit cheap.
     internal static void VerifyInputs(IEnumerable<BuildDependencyRecorder> recorders)
     {
-        var inputs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var inputs = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var recorder in recorders)
         {
             foreach (var (path, digest) in recorder.FileInputs)

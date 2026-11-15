@@ -1068,6 +1068,49 @@ public sealed class IncrementalBuildTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData("Photo.png", "photo.png")]
+    [InlineData("σ.png", "ς.png")]
+    public async Task CaseDistinctImageInputs_InvalidateIndependentlyAndShareIdenticalVariants(string firstName, string secondName)
+    {
+        var root = CreateSiteRoot("case-distinct-images");
+        var upper = Path.Combine(root, "content", firstName);
+        var lower = Path.Combine(root, "content", secondName);
+        WriteImage(upper, SkiaSharp.SKColors.Red);
+        Assert.SkipWhen(File.Exists(lower), "This filesystem aliases the two image names.");
+        WriteImage(lower, SkiaSharp.SKColors.Red);
+        await WritePostAsync(root, "stable", "Images", $"![First]({firstName})\n\n![Second]({secondName})");
+        var renders = 0;
+        await using var site = CreateBuilder(root, () => Interlocked.Increment(ref renders)).BuildSite();
+        await site.PublishAsync("dist");
+        var firstRenders = renders;
+        var manifest = await ReadCacheManifest(root);
+        var page = manifest.Pages.Single(page => page.RoutePath == "/md/stable/");
+        Assert.Contains(page.Dependencies, dependency => dependency.Key == "content/" + firstName);
+        Assert.Contains(page.Dependencies, dependency => dependency.Key == "content/" + secondName);
+        Assert.Single(page.AdditionalOutputs);
+        WriteImage(lower, SkiaSharp.SKColors.Blue);
+        await site.PublishAsync("dist");
+        Assert.Equal(firstRenders + 1, renders);
+        page = (await ReadCacheManifest(root)).Pages.Single(page => page.RoutePath == "/md/stable/");
+        Assert.Equal(2, page.AdditionalOutputs.Count);
+        var expected = SnapshotDirectory(Path.Combine(root, "dist"));
+        Directory.Delete(Path.Combine(root, ".kiji", "cache"), recursive: true);
+        Directory.Delete(Path.Combine(root, "dist"), recursive: true);
+        await site.PublishAsync("dist");
+        var clean = SnapshotDirectory(Path.Combine(root, "dist"));
+        Assert.Equal(expected.Keys.Order(), clean.Keys.Order());
+        foreach (var (path, entry) in expected) { Assert.Equal(entry.Bytes, clean[path].Bytes); }
+
+        static void WriteImage(string path, SkiaSharp.SKColor color)
+        {
+            using var bitmap = new SkiaSharp.SKBitmap(32, 32);
+            bitmap.Erase(color);
+            using var encoded = bitmap.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100);
+            File.WriteAllBytes(path, encoded.ToArray());
+        }
+    }
+
     [Fact]
     public async Task SharedCustomImages_KeepCarriedVersionsWhenARecipeIsRegenerated()
     {

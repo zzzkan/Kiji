@@ -205,8 +205,8 @@ Both articles can use:
 Kiji publishes responsive variants directly under `_images/`, using filenames that
 identify the source bytes and processing settings. Articles referencing the same image
 share the generated files and URLs, regardless of their routes. Images with the same
-filename and different content remain distinct. Generated URLs include the site's
-deployment base path.
+filename and different content remain distinct. Generated filenames use a consistent
+casing across platforms. Generated URLs include the site's deployment base path.
 
 Image edits invalidate every referring page. Incremental publishing restores missing
 variants, and removes unused variants after the last reference disappears.

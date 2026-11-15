@@ -12,6 +12,7 @@ internal static class ImageArtifactProcessor
     {
         var sourceBytes = await File.ReadAllBytesAsync(source, cancellationToken);
         var sourceHash = BuildFingerprint.HashBytes(sourceBytes);
+        var sourceName = processor is ImageProcessor ? NormalizeCasing(Path.GetFileName(source)) : Path.GetFileName(source);
         var dependencies = PageRenderContext.Current?.Dependencies;
         dependencies?.AddFile(source, sourceHash);
         var identity = cacheDirectory is null && dependencies is null ? null : ImageProcessorIdentity.Get(processor);
@@ -23,13 +24,13 @@ internal static class ImageArtifactProcessor
             if (processor is ImageProcessor builtIn)
             {
                 // Development can reuse the deterministic built-in variants already on disk.
-                return await builtIn.ProcessBytesAsync(sourceBytes, Path.GetFileName(source), sourceHash, output, cancellationToken);
+                return await builtIn.ProcessBytesAsync(sourceBytes, sourceName, sourceHash, output, cancellationToken);
             }
             return await GenerateAsync(processor, source, sourceBytes, sourceHash, output, null, null, cancellationToken);
         }
         var root = Path.GetDirectoryName(cacheDirectory)!;
         var cache = new ArtifactCache(root);
-        var key = BuildFingerprint.HashText(identity + ":" + Path.GetFileName(source) + ":" + sourceHash);
+        var key = BuildFingerprint.HashText(identity + ":" + sourceName + ":" + sourceHash);
         dependencies?.AddImage(key);
         var recordPath = Path.Combine(root, "image-records", key + ".json");
         using var generation = await ImageGenerationLock.AcquireAsync(recordPath, cancellationToken);
@@ -71,7 +72,7 @@ internal static class ImageArtifactProcessor
             ProcessedImageInfo info;
             if (processor is ImageProcessor builtIn)
             {
-                info = await builtIn.ProcessBytesAsync(sourceBytes, Path.GetFileName(source), sourceHash, generated, cancellationToken);
+                info = await builtIn.ProcessBytesAsync(sourceBytes, NormalizeCasing(Path.GetFileName(source)), sourceHash, generated, cancellationToken);
             }
             else
             {
@@ -124,13 +125,17 @@ internal static class ImageArtifactProcessor
         finally { Directory.Delete(work, recursive: true); }
     }
 
+    // Fold through uppercase before choosing lowercase URI spelling, so simple
+    // case aliases (including the Greek sigma forms) publish the same filename.
+    private static string NormalizeCasing(string path) => path.ToUpperInvariant().ToLowerInvariant();
+
     private static ImageVariant FreezeVariant(string directory, ImageVariant variant)
     {
         if (!BuildManifest.IsRelativeOutput(variant.FileName)) { throw new InvalidDataException("Invalid image variant path."); }
         var source = Path.Combine(directory, variant.FileName);
         var hash = BuildFingerprint.HashFile(source);
         if (!ArtifactCache.IsHash(hash)) { throw new IOException($"Cannot read generated image variant '{variant.FileName}'."); }
-        var name = Path.Combine(hash[..16], variant.FileName);
+        var name = Path.Combine(hash[..16], NormalizeCasing(variant.FileName));
         var destination = Path.Combine(directory, name);
         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
         File.Move(source, destination, overwrite: true);

@@ -6,7 +6,7 @@ internal sealed class BuildDependencyRecorder
     // Concurrent work within one page shares a lock; separate pages never contend.
     // Pages without images allocate no image collections.
     private readonly Lock _gate = new();
-    private readonly Dictionary<string, string> _files = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _files = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (string Digest, string Hash)> _values = new(StringComparer.Ordinal);
     private HashSet<BuildManifestImage>? _imageRequests;
     private HashSet<string>? _images;
@@ -71,7 +71,7 @@ internal sealed class BuildDependencyRecorder
 
     internal void AddOutput(string absolutePath)
     {
-        lock (_gate) { (_outputs ??= new(StringComparer.OrdinalIgnoreCase)).Add(absolutePath); }
+        lock (_gate) { (_outputs ??= new(StringComparer.Ordinal)).Add(absolutePath); }
     }
 
     internal IEnumerable<KeyValuePair<string, string>> FileInputs => _files;
@@ -79,5 +79,5 @@ internal sealed class BuildDependencyRecorder
         .Select(p => new BuildManifestDependency("value", p.Key, p.Value.Hash));
     internal IEnumerable<BuildManifestImage> ImageRequests => _imageRequests ?? [];
     internal string[] Images => _images is null ? [] : [.. _images.Order(StringComparer.Ordinal)];
-    internal string[] AdditionalOutputs => _outputs is null ? [] : [.. _outputs.Order(StringComparer.OrdinalIgnoreCase)];
+    internal string[] AdditionalOutputs => _outputs is null ? [] : [.. _outputs.Order(StringComparer.Ordinal)];
 }

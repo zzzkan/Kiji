@@ -64,6 +64,15 @@ Open `MySite.csproj` and change its first line to use the Razor SDK:
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 ```
 
+In its `<PropertyGroup>`, add this setting:
+
+```xml
+<UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier>
+```
+
+Without `UseCurrentRuntimeIdentifier`, every build copies Kiji's native image library
+for every platform into `bin/`, several hundred megabytes in total.
+
 ### Build the smallest site
 
 Replace `Program.cs` with the site definition:

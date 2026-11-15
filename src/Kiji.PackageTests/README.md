@@ -8,7 +8,6 @@ and HTTP on Windows and Linux.
 | Scenario | What it checks | Why a package test? |
 | --- | --- | --- |
 | Publish, edit, clean | Razor/Markdown/images, library assets, updated output, service-worker hashes, uncompressed default and opt-in compressed HTML, boundary warnings, logs that never fail a publish, and regeneration after clean | Exercises the shipped MSBuild targets, console output and native dependencies in a real consumer. |
-| Native image libraries | Default builds copy only the host image library; explicit runtime choices and opting out still work; library consumers stay portable | Requires the packed targets and SDK restore/build integration. |
 | Watch and reload (Razor/Web SDKs) | Markdown edits, additions and deletions update article lists/routes; JS, Razor and scoped CSS edits reach the browser with one reload; Razor compilation errors appear on open and newly opened same-origin pages and clear with one reload after the fix; default Host/Origin restrictions block foreign/opaque origins and rebinding hosts | Requires the SDK's `dotnet watch` integration and generated asset manifests; content outside the SDK's items must still reload exactly once. Compilation errors rely on an undocumented `dotnet watch` protocol that SDK updates can change. |
 | Windows cleanup | Cleanup waits for a held file lock to be released | Covers the workspace cleanup used after stopping the consumer's process tree. |
 

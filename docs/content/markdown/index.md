@@ -67,12 +67,9 @@ content grows:
 
 ```xml
 <PropertyGroup>
-  <KijiDefaultItemExcludes>articles/**;dist/**</KijiDefaultItemExcludes>
+  <DefaultItemExcludes>$(DefaultItemExcludes);articles/**</DefaultItemExcludes>
 </PropertyGroup>
 ```
-
-See [project settings](../api-reference/#project-settings) to change the output directory
-exclusion or disable automatic exclusions.
 
 ## Use a site-specific model
 

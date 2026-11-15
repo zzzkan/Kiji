@@ -1,6 +1,6 @@
 ---
 title: API reference
-description: Types and members of the Kiji package, and site project settings.
+description: Types and members of the Kiji package, and the MSBuild property it reads.
 order: 100
 ---
 
@@ -15,29 +15,6 @@ order: 100
 - [`Kiji.Feeds` namespace](#kijifeeds-namespace): RSS feeds
 - [`Kiji.Sitemaps` namespace](#kijisitemaps-namespace): sitemaps
 - [Blazor APIs](#blazor-apis): ASP.NET Core components and services in static pages
-
-## Project settings
-
-Kiji excludes `content/**` and `dist/**` from compilation and `dotnet watch` by default.
-Markdown edits still reload in the development server.
-
-To choose different exclusions, set `KijiDefaultItemExcludes` in your site project's
-`<PropertyGroup>`. For example:
-
-```xml
-<KijiDefaultItemExcludes>articles/**;public/**</KijiDefaultItemExcludes>
-```
-
-To disable Kiji's exclusions:
-
-```xml
-<KijiDefaultItemExcludes></KijiDefaultItemExcludes>
-```
-
-These patterns only control exclusions. Set Markdown's `Directory` to choose where
-content is loaded, and use `dotnet publish -o public` to choose the publish destination.
-Keep compiled Razor components and C# files outside excluded directories, or adjust
-these patterns to include them in compilation.
 
 ## `Kiji` namespace
 

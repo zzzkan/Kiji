@@ -151,6 +151,9 @@ and Kiji's summary. `Debug` lists each generated file:
 { "Logging": { "LogLevel": { "Kiji.Build": "Debug" } } }
 ```
 
+- Kiji's summary is logged at `Information` under `Kiji.Build`. It is shown by default; a
+  `Default` level in `Logging:LogLevel` applies to `Kiji.Build` like any other category, so
+  `"Default": "Warning"` hides the summary and `"Default": "Debug"` lists each file.
 - Logs never fail a publish. To stop a publish, throw an exception that no error boundary
   catches.
 - In a terminal, `dotnet publish` shows Kiji's messages only with `-v d`, which also shows

@@ -53,7 +53,16 @@ public static class StaticSite
         builder.Configuration.AddJsonFile("appsettings.json", optional: true, reloadOnChange: false);
         builder.Configuration.AddJsonFile($"appsettings.{settings.EnvironmentName}.json", optional: true, reloadOnChange: false);
         builder.Logging.SetMinimumLevel(LogLevel.Warning);
-        builder.Logging.AddFilter(BuildLoggerExtensions.CategoryName, LogLevel.Information);
+        // Kiji's summary is a default, so a configured Default level governs it as it does every
+        // other category. A category rule added here would outrank that level. Read lazily: the
+        // site may add configuration sources after the builder is created.
+        builder.Services.AddOptions<LoggerFilterOptions>().Configure<IConfiguration>(static (options, configuration) =>
+        {
+            if (configuration["Logging:LogLevel:Default"] is null)
+            {
+                options.Rules.Add(new LoggerFilterRule(null, BuildLoggerExtensions.CategoryName, LogLevel.Information, null));
+            }
+        });
         builder.Logging.AddConfiguration(builder.Configuration.GetSection("Logging"));
         builder.Logging.AddConsole(static options => options.LogToStandardErrorThreshold = LogLevel.Warning);
         builder.Metrics.AddConfiguration(builder.Configuration.GetSection("Metrics"));

@@ -62,6 +62,9 @@ builder.AddMarkdownContent<FrontMatter>(options =>
 });
 ```
 
+The directory may be a symbolic link itself. The build fails when a directory or a
+Markdown file below it is a symbolic link or junction, instead of following it.
+
 Kiji keeps `content/` out of the SDK's default items, so it needs no project settings.
 Files there are never compiled, whatever `Directory` is set to; keep Razor components
 and C# files outside it.

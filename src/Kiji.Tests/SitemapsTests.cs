@@ -76,9 +76,33 @@ public sealed class SitemapsTests
     }
 
     [Fact]
-    public void Constructor_RejectsInvalidExcludedPath()
+    public async Task WriteAsync_ExcludesPagesWithEncodedRouteValues_InEitherSpelling()
     {
-        Assert.Throws<ArgumentException>(() => new SitemapArtifact(excludedPaths: ["/preview/"]));
+        // Route parameter values reach the page path percent-encoded; literal segments do not.
+        var context = CreateContext([
+            new SitePageInfo("posts/%E6%97%A5%E6%9C%AC%E8%AA%9E/", "posts/日本語/index.html"),
+            new SitePageInfo("posts/my%20post/", "posts/my post/index.html"),
+            new SitePageInfo("下書き/", "下書き/index.html"),
+            new SitePageInfo("posts/a%2Fb/", "posts/a/b/index.html"),
+            new SitePageInfo("posts/a/b/", "posts/a/b/index.html"),
+        ], "https://example.com/kiji/");
+
+        var document = await WriteSitemapAsync(context,
+            ["posts/日本語/", "posts/my%20post/", "%E4%B8%8B%E6%9B%B8%E3%81%8D/", "posts/a/b/"]);
+
+        XNamespace ns = "http://www.sitemaps.org/schemas/sitemap/0.9";
+        var loc = Assert.Single(document.Root!.Elements(ns + "url")).Elements().First().Value;
+        Assert.Equal("https://example.com/kiji/posts/a%2Fb/", loc);
+    }
+
+    [Theory]
+    [InlineData("/preview/")]
+    [InlineData("preview/../internal/")]
+    [InlineData(" preview/")]
+    public void Constructor_RejectsInvalidExcludedPath(string path)
+    {
+        var exception = Assert.Throws<ArgumentException>(() => new SitemapArtifact(excludedPaths: [path]));
+        Assert.Equal("excludedPaths", exception.ParamName);
     }
 
 }

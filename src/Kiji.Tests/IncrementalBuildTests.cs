@@ -1432,6 +1432,18 @@ public sealed class IncrementalBuildTests : IDisposable
                 await WritePostAsync(replacement, "stable", "Retargeted edit", "Retargeted edit body.\n\n![image](source.png)");
                 await reload;
                 Assert.Contains("Retargeted edit", await client.GetStringAsync(basePath + "md/stable/"), StringComparison.Ordinal);
+                reload = socket.ReceiveAsync(new ArraySegment<byte>(new byte[64]), timeout.Token);
+                var oldTarget = Path.Combine(replacement, "old-content");
+                Directory.Move(Path.Combine(replacement, "content"), oldTarget);
+                Directory.CreateDirectory(Path.Combine(replacement, "content"));
+                File.Copy(Path.Combine(oldTarget, "source.png"), Path.Combine(replacement, "content", "source.png"));
+                await WritePostAsync(replacement, "stable", "Replaced target", "Replaced target body.\n\n![image](source.png)");
+                await reload;
+                Assert.Contains("Replaced target body", await client.GetStringAsync(basePath + "md/stable/"), StringComparison.Ordinal);
+                reload = socket.ReceiveAsync(new ArraySegment<byte>(new byte[64]), timeout.Token);
+                await WritePostAsync(replacement, "stable", "Replaced target edit", "Replaced target edit body.\n\n![image](source.png)");
+                await reload;
+                Assert.Contains("Replaced target edit body", await client.GetStringAsync(basePath + "md/stable/"), StringComparison.Ordinal);
             }
             await socket.CloseAsync(System.Net.WebSockets.WebSocketCloseStatus.NormalClosure, null, timeout.Token);
             await web.StopAsync();

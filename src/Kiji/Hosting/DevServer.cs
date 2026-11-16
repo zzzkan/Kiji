@@ -466,7 +466,10 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
         }
         if (target is not null && Directory.Exists(target))
         {
-            _linkedWatchers.Add(input, (target, StartWatcher(input.Path, [input])));
+            // Watch the physical target from its parent, so replacing that directory
+            // at the same path cannot strand a watcher on the retired inode.
+            var physical = new WatchedPath(target, input.Source, affectsAsset: null);
+            _linkedWatchers.Add(input, (target, StartWatcher(physical.WatchRoot, [physical])));
         }
     }
 

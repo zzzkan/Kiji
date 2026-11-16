@@ -1275,6 +1275,17 @@ public sealed class IncrementalBuildTests : IDisposable
                 await server.ReloadAfterCodeUpdateAsync();
                 Assert.Equal(first, await client.GetStringAsync(basePath + "md/stable/"));
                 Assert.Equal(expectedCount, count);
+                using var socket = new System.Net.WebSockets.ClientWebSocket();
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                await socket.ConnectAsync(new UriBuilder(client.BaseAddress) { Scheme = "ws", Path = basePath + "_kiji/reload" }.Uri, timeout.Token);
+                var reload = socket.ReceiveAsync(new ArraySegment<byte>(new byte[64]), timeout.Token);
+                await WritePostAsync(root, "stable", "Image", $"Saved {start}.\n\n![Image](source.png)");
+                await reload;
+                var saved = await client.GetStringAsync(basePath + "md/stable/");
+                Assert.Contains($"Saved {start}.", saved, StringComparison.Ordinal);
+                Assert.Equal(ImageSource(first), ImageSource(saved));
+                Assert.Equal(expectedCount, count);
+                await socket.CloseAsync(System.Net.WebSockets.WebSocketCloseStatus.NormalClosure, null, timeout.Token);
                 foreach (var (path, entry) in stamps)
                 { Assert.Equal(entry.LastWriteTimeUtc, File.GetLastWriteTimeUtc(Path.Combine(root, ".kiji", "dev-site", "_images", path))); }
                 await web.StopAsync();
@@ -1409,7 +1420,7 @@ public sealed class IncrementalBuildTests : IDisposable
             if (rootKind == "linked")
             {
                 var replacement = CreateSiteRoot("retargeted-content");
-                await WritePostAsync(replacement, "stable", "Retargeted", "![image](source.png)");
+                await WritePostAsync(replacement, "stable", "Retargeted", "Retargeted body.\n\n![image](source.png)");
                 File.Copy(Path.Combine(contentSite, "content", "renamed.png"), Path.Combine(replacement, "content", "source.png"));
                 reload = socket.ReceiveAsync(new ArraySegment<byte>(new byte[64]), timeout.Token);
                 Directory.Delete(directory);
@@ -1418,7 +1429,7 @@ public sealed class IncrementalBuildTests : IDisposable
                 Assert.Contains("Retargeted", await client.GetStringAsync(basePath + "md/stable/"), StringComparison.Ordinal);
                 // The direct watcher must follow the new target after a retarget.
                 reload = socket.ReceiveAsync(new ArraySegment<byte>(new byte[64]), timeout.Token);
-                await WritePostAsync(replacement, "stable", "Retargeted edit", "![image](source.png)");
+                await WritePostAsync(replacement, "stable", "Retargeted edit", "Retargeted edit body.\n\n![image](source.png)");
                 await reload;
                 Assert.Contains("Retargeted edit", await client.GetStringAsync(basePath + "md/stable/"), StringComparison.Ordinal);
             }

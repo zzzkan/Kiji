@@ -270,15 +270,16 @@ public sealed class MarkdownProcessorTests : IDisposable
     }
 
     [Fact]
-    public async Task UnpairedSurrogateName_CanBePublishedOnWindows()
+    public async Task UnpairedSurrogateName_CanBeRenderedOnWindows()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "NTFS supports unpaired UTF-16 surrogates.");
         var name = "photo\uD800.png";
         await CreateTestImageAsync(Path.Combine(_testFilesDir, name), 32, 32);
         var processor = CreateProcessor();
-        // Prime the name cache so lookup must normalize a nonmatching entry too.
-        var markdown = CreateMarkdownFile("surrogate.md", $"![Photo]({name.ToUpperInvariant()})");
-        var html = await WithPageContextAsync("/surrogate/", () => ProcessFileAsync(processor, markdown));
+        // UTF-8 Markdown cannot store an unpaired surrogate. The already-read body
+        // entry point still exercises both NTFS alias lookup and URI-safe output.
+        var html = await WithPageContextAsync("/surrogate/", () => processor.ProcessBodyAsync(
+            Path.Combine(_testFilesDir, "surrogate.md"), $"![Photo]({name.ToUpperInvariant()})"));
         Assert.Contains("photo%25d800.png.", html, StringComparison.Ordinal);
         Assert.Single(Directory.GetFiles(_outputDir, "*.webp", SearchOption.AllDirectories));
     }

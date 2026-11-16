@@ -148,7 +148,7 @@ internal static class ImageArtifactProcessor
         var source = Path.Combine(directory, fileName);
         var hash = BuildFingerprint.HashFile(source);
         if (!ArtifactCache.IsHash(hash)) { throw new IOException($"Cannot read generated image variant '{fileName}'."); }
-        var name = hash[..16] + "/" + NormalizeCasing(fileName.Replace(Path.DirectorySeparatorChar, '/'));
+        var name = hash[..16] + "/" + NormalizeCasing(fileName.Replace('\\', '/'));
         var destination = Path.Combine(directory, name);
         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
         File.Move(source, destination, overwrite: true);

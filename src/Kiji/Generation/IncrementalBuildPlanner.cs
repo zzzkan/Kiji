@@ -324,7 +324,7 @@ internal sealed class IncrementalBuildPlanner(
                 {
                     if (entry is DirectoryInfo child) { children.Add(child); continue; }
                     var file = (FileInfo)entry;
-                    var relativePath = Path.GetRelativePath(options.OutputDirectory, file.FullName);
+                    var relativePath = Path.GetRelativePath(options.OutputDirectory, file.FullName).Replace(Path.DirectorySeparatorChar, '/');
                     if (expected.TryGetValue(relativePath, out var page))
                     {
                         // Enumeration already supplies size and time; no second stat.
@@ -514,21 +514,21 @@ internal sealed class IncrementalBuildPlanner(
         var paths = new Dictionary<string, BuildManifestPage?>(StringComparer.OrdinalIgnoreCase);
         foreach (var page in manifest.Pages)
         {
-            paths.Add(page.OutputRelativePath, page);
+            paths.Add(page.OutputRelativePath.Replace(Path.DirectorySeparatorChar, '/'), page);
             foreach (var additionalOutput in page.AdditionalOutputs)
             {
-                paths.TryAdd(additionalOutput.RelativePath, null);
+                paths.TryAdd(additionalOutput.RelativePath.Replace(Path.DirectorySeparatorChar, '/'), null);
             }
         }
 
         foreach (var staticFile in manifest.StaticFiles)
         {
-            paths.TryAdd(staticFile, null);
+            paths.TryAdd(staticFile.Replace(Path.DirectorySeparatorChar, '/'), null);
         }
 
         foreach (var artifact in manifest.Artifacts)
         {
-            paths.TryAdd(artifact, null);
+            paths.TryAdd(artifact.Replace(Path.DirectorySeparatorChar, '/'), null);
         }
 
         return paths;

@@ -1,22 +1,44 @@
-﻿@page "/docs/{Slug}/"
+@page "/docs/{Slug}/"
 @inject SiteInfo Site
 
 <PageHead Title="@(Article.Title ?? string.Empty)" Description="@(Article.Description ?? string.Empty)" />
 
-<article class="doc">
-    <h1>@Article.Title</h1>
-    <div class="doc-content">@((MarkupString)_html)</div>
-</article>
-<nav class="article-navigation" aria-label="Documentation pages">
-    @if (Previous is not null)
+<div class="doc-layout">
+    <div class="doc-main">
+        <article class="doc">
+            <h1>@Article.Title</h1>
+            <div class="doc-content">@((MarkupString)_html)</div>
+        </article>
+        <nav class="article-navigation" aria-label="Documentation pages">
+            @if (Previous is not null)
+            {
+                <a class="previous" href="@Site.ResolveUrl($"docs/{Previous.Slug}/").AbsolutePath" rel="prev">
+                    <span class="direction">Previous</span>
+                    <span class="title">@Previous.Title</span>
+                </a>
+            }
+            @if (Next is not null)
+            {
+                <a class="next" href="@Site.ResolveUrl($"docs/{Next.Slug}/").AbsolutePath" rel="next">
+                    <span class="direction">Next</span>
+                    <span class="title">@Next.Title</span>
+                </a>
+            }
+        </nav>
+    </div>
+    @if (_outline.Count > 0)
     {
-        <a class="previous" href="@Site.ResolveUrl($"docs/{Previous.Slug}/").AbsolutePath" rel="prev">@Previous.Title</a>
+        <nav class="outline" aria-labelledby="outline-title">
+            <p class="outline-title" id="outline-title">On this page</p>
+            <ul>
+                @foreach (var item in _outline)
+                {
+                    <li class="@(item.Level == 3 ? "nested" : null)"><a href="#@item.Id">@item.Title</a></li>
+                }
+            </ul>
+        </nav>
     }
-    @if (Next is not null)
-    {
-        <a class="next" href="@Site.ResolveUrl($"docs/{Next.Slug}/").AbsolutePath" rel="next">@Next.Title</a>
-    }
-</nav>
+</div>
 
 @code {
     [Parameter] public string Slug { get; set; } = string.Empty;
@@ -25,9 +47,11 @@
     [Parameter] public Article? Next { get; set; }
 
     private string _html = string.Empty;
+    private IReadOnlyList<OutlineItem> _outline = [];
 
     protected override async Task OnParametersSetAsync()
     {
         _html = await Article.RenderAsync();
+        _outline = Outline.Parse(_html);
     }
 }

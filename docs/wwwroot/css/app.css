@@ -1,27 +1,55 @@
 :root {
     color-scheme: light dark;
     scrollbar-gutter: stable;
+    scroll-padding-top: calc(var(--header-height) + 1.5rem);
 
-    --plane: #fbfbfa;
+    --header-height: 3.75rem;
+    --page-width: 90rem;
+
+    --plane: #ffffff;
     --surface: #ffffff;
-    --sunk: #f2f2ef;
-    --ink: #16181d;
-    --ink-2: #4a5160;
-    --ink-muted: #767d8c;
-    --rule: #e3e3dd;
-    --accent: #2a5db0;
+    --sunk: #f4f4f6;
+    --ink: #1b1d24;
+    --ink-2: #474c59;
+    --ink-muted: #6c7180;
+    --rule: #e4e4e9;
+    --accent: #3451d1;
+    --accent-2: #8b5cf6;
+    --accent-hover: #2a42b3;
+    --accent-soft: #eef1fd;
+    --on-accent: #ffffff;
+
+    --code-bg: #f6f6f8;
+    --code-comment: #6b7280;
+    --code-keyword: #cf222e;
+    --code-string: #0a5c36;
+    --code-function: #8250df;
+    --code-type: #953800;
+    --code-value: #0550ae;
 }
 
 @media (prefers-color-scheme: dark) {
     :root {
-        --plane: #101216;
-        --surface: #171a20;
-        --sunk: #1d2027;
-        --ink: #f1f2f5;
-        --ink-2: #b8bfcc;
-        --ink-muted: #8b93a3;
-        --rule: #2a2e37;
-        --accent: #7fa9ec;
+        --plane: #15161a;
+        --surface: #1b1c22;
+        --sunk: #23252d;
+        --ink: #eceef2;
+        --ink-2: #b7bcc8;
+        --ink-muted: #8a90a0;
+        --rule: #2c2e37;
+        --accent: #9db1ff;
+        --accent-2: #c4a5ff;
+        --accent-hover: #b6c5ff;
+        --accent-soft: #232a47;
+        --on-accent: #12141c;
+
+        --code-bg: #1b1c22;
+        --code-comment: #8b93a3;
+        --code-keyword: #ff8f88;
+        --code-string: #8ddb8c;
+        --code-function: #d2a8ff;
+        --code-type: #ffb86b;
+        --code-value: #8cc4ff;
     }
 }
 
@@ -30,65 +58,95 @@
 }
 
 body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
     margin: 0;
     background: var(--plane);
     color: var(--ink);
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    line-height: 1.7;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
 }
 
 a {
     color: var(--accent);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
 }
 
-code {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 0.9em;
-    background: var(--sunk);
-    padding: 0.1em 0.35em;
-    border-radius: 3px;
-    overflow-wrap: anywhere;
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
 }
 
-pre,
-pre[class*="language-"] {
-    overflow-x: auto;
-    padding: 0.9rem 1.1rem;
-    background: var(--surface);
-    border: 1px solid var(--rule);
-    border-radius: 5px;
-    font-size: 0.875rem;
+/* ---------- headings ---------- */
+
+h1,
+h2,
+h3,
+h4 {
+    color: var(--ink);
+    font-weight: 600;
+    text-wrap: balance;
 }
 
-pre code {
-    background: none;
-    padding: 0;
-    overflow-wrap: normal;
+h1 {
+    margin: 0 0 1.5rem;
+    font-size: clamp(1.75rem, 4vw, 2.25rem);
+    letter-spacing: -0.025em;
+    line-height: 1.2;
 }
 
-pre[data-line] .line-highlight {
-    margin-top: 0.9rem;
-    background: color-mix(in srgb, var(--accent) 15%, transparent);
-    border-left: 3px solid var(--accent);
+h2 {
+    margin: 2.5rem 0 1rem;
+    font-size: 1.5rem;
+    letter-spacing: -0.02em;
+    line-height: 1.3;
 }
 
-pre[data-line] .line-highlight::before,
-pre[data-line] .line-highlight::after {
-    content: none;
+h3 {
+    margin: 2rem 0 0.75rem;
+    font-size: 1.25rem;
+    letter-spacing: -0.01em;
+    line-height: 1.4;
 }
 
-@media (max-width: 52rem) {
-
-    pre,
-    pre[class*="language-"] {
-        font-size: 0.8125rem;
-    }
+h4 {
+    margin: 1.5rem 0 0.5rem;
+    font-size: 1.0625rem;
+    line-height: 1.5;
 }
 
-@media (prefers-color-scheme: dark) {
-    pre[class*="language-"] {
-        background: var(--surface);
-    }
+/* ---------- text ---------- */
+
+p,
+ul,
+ol {
+    margin: 1rem 0;
+}
+
+ul,
+ol {
+    padding-left: 1.25rem;
+}
+
+li + li {
+    margin-top: 0.375rem;
+}
+
+li > ul,
+li > ol {
+    margin: 0.375rem 0 0;
+}
+
+hr {
+    margin: 2rem 0;
+    border: 0;
+    border-top: 1px solid var(--rule);
 }
 
 blockquote {
@@ -98,40 +156,210 @@ blockquote {
     color: var(--ink-2);
 }
 
+img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+}
+
+/* ---------- code ---------- */
+
+code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 0.875em;
+    background: var(--sunk);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    overflow-wrap: anywhere;
+}
+
+a > code {
+    color: inherit;
+}
+
+h1 code,
+h2 code,
+h3 code,
+h4 code {
+    padding: 0;
+    background: none;
+    font-size: 0.9em;
+}
+
+pre {
+    position: relative;
+    margin: 1.25rem 0;
+    overflow-x: auto;
+    padding: 1rem 1.25rem;
+    background: var(--code-bg);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    color: var(--ink);
+    font-size: 0.875rem;
+    line-height: 1.7;
+    tab-size: 4;
+}
+
+pre code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+    font-size: inherit;
+    overflow-wrap: normal;
+    white-space: pre;
+}
+
+.code-block {
+    position: relative;
+    margin: 1.25rem 0;
+}
+
+.code-block pre {
+    margin: 0;
+}
+
+.copy-code {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    padding: 0.2rem 0.6rem;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--ink-2);
+    font: inherit;
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.code-block:hover .copy-code,
+.copy-code:focus-visible {
+    opacity: 1;
+}
+
+.copy-code:hover {
+    color: var(--ink);
+    border-color: var(--ink-muted);
+}
+
+@media (hover: none) {
+    .copy-code {
+        opacity: 1;
+    }
+}
+
+pre[data-line] .line-highlight {
+    margin-top: 1rem;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    border-left: 3px solid var(--accent);
+}
+
+pre[data-line] .line-highlight::before,
+pre[data-line] .line-highlight::after {
+    content: none;
+}
+
+/* Prism tokens */
+
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+    color: var(--code-comment);
+    font-style: italic;
+}
+
+.token.punctuation,
+.token.operator {
+    color: var(--ink-2);
+}
+
+.token.keyword,
+.token.atrule,
+.token.important,
+.token.directive,
+.token.razor-delimiter {
+    color: var(--code-keyword);
+}
+
+.token.string,
+.token.char,
+.token.attr-value,
+.token.inserted {
+    color: var(--code-string);
+}
+
+.token.function,
+.token.selector {
+    color: var(--code-function);
+}
+
+.token.class-name,
+.token.tag,
+.token.namespace {
+    color: var(--code-type);
+}
+
+.token.number,
+.token.boolean,
+.token.constant,
+.token.symbol,
+.token.property,
+.token.attr-name,
+.token.variable,
+.token.builtin {
+    color: var(--code-value);
+}
+
+.token.attr-value > .token.punctuation,
+.token.tag > .token.punctuation {
+    color: inherit;
+}
+
+.token.bold,
+.token.title {
+    font-weight: 600;
+}
+
+.token.italic {
+    font-style: italic;
+}
+
+/* ---------- tables ---------- */
+
 table {
-    width: 100%;
+    display: block;
+    max-width: 100%;
+    margin: 1.25rem 0;
+    overflow-x: auto;
     border-collapse: collapse;
     font-size: 0.875rem;
+    line-height: 1.6;
 }
 
 th,
 td {
     text-align: left;
-    padding: 0.55rem 0.7rem;
-    border-bottom: 1px solid var(--rule);
+    padding: 0.6rem 0.9rem;
+    border: 1px solid var(--rule);
     vertical-align: top;
 }
 
 th {
-    color: var(--ink-muted);
-    font-size: 0.82rem;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    background: var(--sunk);
+    font-weight: 600;
+    white-space: nowrap;
 }
 
-img {
-    max-width: 100%;
-    height: auto;
+td code {
+    overflow-wrap: normal;
 }
 
-h1 {
-    font-size: clamp(1.7rem, 4vw, 2.3rem);
-    line-height: 1.25;
-    text-wrap: balance;
-}
-
-h2 {
-    margin-top: 2.5rem;
-    line-height: 1.35;
-    text-wrap: balance;
+@media (max-width: 60rem) {
+    pre {
+        font-size: 0.8125rem;
+    }
 }

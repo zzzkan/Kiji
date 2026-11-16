@@ -1,27 +1,13 @@
 @inject SiteInfo Site
+@inject PageInfo Page
 @inject ContentCollection<Article> Articles
 
-<p class="nav-title">@KijiVersion</p>
 <ul>
     @foreach (var doc in Articles.OrderBy(doc => doc.Order))
     {
+        var path = Site.ResolveUrl($"docs/{doc.Slug}/").AbsolutePath;
         <li>
-            <a href="@(Site.ResolveUrl($"docs/{doc.Slug}/").AbsolutePath)">
-                @doc.Title
-            </a>
+            <a href="@path" aria-current="@(path == Page.Url.AbsolutePath ? "page" : null)">@doc.Title</a>
         </li>
     }
 </ul>
-
-@code {
-    private static readonly string KijiVersion = GetKijiVersion();
-
-    private static string GetKijiVersion()
-    {
-        var informationalVersion = System.Reflection.CustomAttributeExtensions
-            .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(SiteInfo).Assembly)
-            ?.InformationalVersion;
-
-        return $"v{informationalVersion?.Split('+')[0] ?? "unknown"}";
-    }
-}

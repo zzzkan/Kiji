@@ -1399,9 +1399,22 @@ public sealed class IncrementalBuildTests : IDisposable
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             await socket.ConnectAsync(new UriBuilder(client.BaseAddress) { Scheme = "ws", Path = basePath + "_kiji/reload" }.Uri, timeout.Token);
             var reload = socket.ReceiveAsync(new ArraySegment<byte>(new byte[64]), timeout.Token);
+            async Task<string> ReloadedPageAsync(Func<System.Net.HttpStatusCode, string, bool> matches)
+            {
+                while (true)
+                {
+                    await reload;
+                    using var response = await client.GetAsync(basePath + "md/stable/", timeout.Token);
+                    var body = await response.Content.ReadAsStringAsync(timeout.Token);
+                    if (matches(response.StatusCode, body)) { return body; }
+                    // Native events can arrive in several batches. A prior change's
+                    // notification must not stand in for the edit under examination.
+                    reload = socket.ReceiveAsync(new ArraySegment<byte>(new byte[64]), timeout.Token);
+                }
+            }
             WriteImage(SkiaSharp.SKColors.Blue);
-            await reload;
-            var updated = ImageSource(await client.GetStringAsync(basePath + "md/stable/"));
+            var updated = ImageSource(await ReloadedPageAsync((status, body) =>
+                status == System.Net.HttpStatusCode.OK && ImageSource(body) != first));
             Assert.NotEqual(first, updated);
             Assert.Equal(updated, ImageSource(await client.GetStringAsync(basePath + "md/changing/")));
             var updatedBytes = await client.GetByteArrayAsync(updated);
@@ -1412,8 +1425,8 @@ public sealed class IncrementalBuildTests : IDisposable
             File.Move(source, Path.Combine(contentSite, "content", "renamed.png"));
             await WritePostAsync(contentSite, "stable", "Image", "![image](renamed.png)");
             await WritePostAsync(contentSite, "changing", "Other image", "![image](renamed.png)");
-            await reload;
-            var renamed = ImageSource(await client.GetStringAsync(basePath + "md/stable/"));
+            var renamed = ImageSource(await ReloadedPageAsync((status, body) =>
+                status == System.Net.HttpStatusCode.OK && ImageSource(body) != updated));
             Assert.NotEqual(updated, renamed);
             Assert.Equal(renamed, ImageSource(await client.GetStringAsync(basePath + "md/changing/")));
             Assert.Equal(updatedBytes, await client.GetByteArrayAsync(renamed));
@@ -1425,28 +1438,24 @@ public sealed class IncrementalBuildTests : IDisposable
                 reload = socket.ReceiveAsync(new ArraySegment<byte>(new byte[64]), timeout.Token);
                 Directory.Delete(directory);
                 Directory.CreateSymbolicLink(directory, Path.Combine(replacement, "content"));
-                await reload;
-                Assert.Contains("Retargeted", await client.GetStringAsync(basePath + "md/stable/"), StringComparison.Ordinal);
+                await ReloadedPageAsync((status, body) => status == System.Net.HttpStatusCode.OK && body.Contains("Retargeted body.", StringComparison.Ordinal));
                 // The direct watcher must follow the new target after a retarget.
                 reload = socket.ReceiveAsync(new ArraySegment<byte>(new byte[64]), timeout.Token);
                 await WritePostAsync(replacement, "stable", "Retargeted edit", "Retargeted edit body.\n\n![image](source.png)");
-                await reload;
-                Assert.Contains("Retargeted edit", await client.GetStringAsync(basePath + "md/stable/"), StringComparison.Ordinal);
+                await ReloadedPageAsync((status, body) => status == System.Net.HttpStatusCode.OK && body.Contains("Retargeted edit body.", StringComparison.Ordinal));
                 reload = socket.ReceiveAsync(new ArraySegment<byte>(new byte[64]), timeout.Token);
                 var oldTarget = Path.Combine(replacement, "old-content");
                 Directory.Move(Path.Combine(replacement, "content"), oldTarget);
-                await reload;
-                Assert.Equal(System.Net.HttpStatusCode.NotFound, (await client.GetAsync(basePath + "md/stable/")).StatusCode);
+                var missing = await ReloadedPageAsync((status, _) => status == System.Net.HttpStatusCode.InternalServerError);
+                Assert.Contains("Contents directory not found", missing, StringComparison.Ordinal);
                 reload = socket.ReceiveAsync(new ArraySegment<byte>(new byte[64]), timeout.Token);
                 Directory.CreateDirectory(Path.Combine(replacement, "content"));
                 File.Copy(Path.Combine(oldTarget, "source.png"), Path.Combine(replacement, "content", "source.png"));
                 await WritePostAsync(replacement, "stable", "Replaced target", "Replaced target body.\n\n![image](source.png)");
-                await reload;
-                Assert.Contains("Replaced target body", await client.GetStringAsync(basePath + "md/stable/"), StringComparison.Ordinal);
+                await ReloadedPageAsync((status, body) => status == System.Net.HttpStatusCode.OK && body.Contains("Replaced target body.", StringComparison.Ordinal));
                 reload = socket.ReceiveAsync(new ArraySegment<byte>(new byte[64]), timeout.Token);
                 await WritePostAsync(replacement, "stable", "Replaced target edit", "Replaced target edit body.\n\n![image](source.png)");
-                await reload;
-                Assert.Contains("Replaced target edit body", await client.GetStringAsync(basePath + "md/stable/"), StringComparison.Ordinal);
+                await ReloadedPageAsync((status, body) => status == System.Net.HttpStatusCode.OK && body.Contains("Replaced target edit body.", StringComparison.Ordinal));
             }
             await socket.CloseAsync(System.Net.WebSockets.WebSocketCloseStatus.NormalClosure, null, timeout.Token);
             await web.StopAsync();

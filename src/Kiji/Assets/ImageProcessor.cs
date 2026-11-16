@@ -69,7 +69,10 @@ internal sealed class ImageProcessor : IImageProcessor
         string outputDirectory, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var contentHash = BuildFingerprint.HashText(CacheIdentity + ":" + sourceHash);
+        // The source name already separates unrelated images, so 64 bits identify
+        // a version. A full digest left too little of the 255-byte file name limit
+        // for long names, which multi-byte scripts reach quickly.
+        var contentHash = BuildFingerprint.HashText(CacheIdentity + ":" + sourceHash)[..16];
         using var source = new MemoryStream(bytes, writable: false);
         using var codec = SKCodec.Create(source) ?? throw new InvalidDataException($"Cannot read image '{fileNameBase}'.");
         // Report and generate the displayed orientation, as browsers show the source.
@@ -239,7 +242,8 @@ internal sealed class ImageProcessor : IImageProcessor
     {
         // Write to a temp file and move into place so concurrent renders of the same
         // image never observe a partially written variant.
-        var temporaryPath = $"{destinationPath}.{Guid.NewGuid():N}.tmp";
+        // The temporary name omits the variant's, which may already be near the limit.
+        var temporaryPath = Path.Combine(Path.GetDirectoryName(destinationPath)!, $"{Guid.NewGuid():N}.tmp");
         try
         {
             cancellationToken.ThrowIfCancellationRequested();

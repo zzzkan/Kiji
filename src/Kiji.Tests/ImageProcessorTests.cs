@@ -67,6 +67,19 @@ public sealed class ImageProcessorTests : IDisposable
         Assert.Equal([320, 640, 960, 1280, 1920], info.Variants.Select(static variant => variant.Width));
     }
 
+    [Fact]
+    public async Task ProcessImage_LongMultiByteName_FitsTheFileNameLimit()
+    {
+        // 184 UTF-8 bytes: a valid source name that must leave room for the variant suffix.
+        var imagePath = Path.Combine(_sourceDir, new string('写', 60) + ".png");
+        await CreateTestImageAsync(imagePath, 500, 300);
+
+        var info = await _processor.ProcessAsync(imagePath, _outputDir);
+
+        Assert.All(info.Variants, variant => Assert.True(File.Exists(Path.Combine(_outputDir, variant.FileName))));
+        Assert.Empty(Directory.GetFiles(_outputDir, "*.tmp"));
+    }
+
     [Theory]
     [InlineData(400, 17000, 1920, new[] { 320, 385 })]
     [InlineData(17000, 8, 20000, new[] { 320, 640, 960, 1280, 16383 })]

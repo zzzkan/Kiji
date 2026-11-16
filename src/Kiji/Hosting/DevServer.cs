@@ -251,6 +251,7 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
     {
         lock (_snapshotLock)
         {
+            if (_disposed) { return; }
             QueueContentRefresh();
         }
         await _refreshTask;
@@ -268,11 +269,6 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
             _disposed = true;
         }
 
-        foreach (var watcher in _watchers)
-        {
-            watcher.Dispose();
-        }
-
         if (_debounceTimer is not null)
         {
             await _debounceTimer.DisposeAsync();
@@ -280,6 +276,7 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
 
         if (_serverStopping is not null) { await _serverStopping.CancelAsync(); }
         await _refreshTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        foreach (var watcher in _watchers) { watcher.Dispose(); }
         if (_sharedRenders is not null) { await _sharedRenders.DisposeAsync(); }
 
         if (_webApplication is not null)
@@ -597,11 +594,13 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
                 if (Directory.Exists(_imageOutput)) { Directory.Delete(_imageOutput, recursive: true); }
                 app.InvalidateContent();
                 _snapshot = null;
-                foreach (var watcher in _watchers) { watcher.Dispose(); }
-                _watchers.Clear();
-                StartWatchers();
                 _sharedRenders = new SharedRenderLifetime(_serverStopping!.Token, CancellationToken.None);
             }
+            // Native watcher shutdown may join a callback that needs _snapshotLock.
+            // Requests still wait for this refresh; server disposal joins it as well.
+            foreach (var watcher in _watchers) { watcher.Dispose(); }
+            _watchers.Clear();
+            StartWatchers();
         });
     }
 

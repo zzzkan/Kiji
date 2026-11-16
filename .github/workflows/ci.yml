@@ -51,6 +51,7 @@ jobs:
           "KIJI_TEST_PACKAGE=$($packages[0].FullName)" >> $env:GITHUB_ENV
 
       - name: Package scenarios
+        timeout-minutes: 10
         working-directory: src/Kiji.PackageTests
         run: dotnet test -c Release
 

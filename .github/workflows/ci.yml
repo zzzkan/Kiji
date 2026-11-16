@@ -54,7 +54,18 @@ jobs:
       - name: Package scenarios
         timeout-minutes: 10
         working-directory: src/Kiji.PackageTests
-        run: dotnet test -c Release
+        shell: bash
+        env:
+          KIJI_TEST_TRACE: ${{ runner.temp }}/package-scenarios.log
+        # Passed tests print nothing until the run ends. Follow the scenario trace so a
+        # stalled run shows its last step; the tests end themselves before the timeout.
+        run: |
+          : > "$KIJI_TEST_TRACE"
+          tail -f "$KIJI_TEST_TRACE" &
+          code=0
+          dotnet test -c Release || code=$?
+          kill $!
+          exit $code
 
       - name: Build docs
         if: matrix.os == 'ubuntu-latest'

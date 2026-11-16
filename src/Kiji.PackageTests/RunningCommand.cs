@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -8,6 +9,8 @@ namespace Kiji.PackageTests;
 // Only this instance's process tree is ever terminated.
 internal sealed class RunningCommand : IAsyncDisposable
 {
+    private static readonly ConcurrentDictionary<RunningCommand, byte> Running = new();
+    internal static Action<string>? Trace { get; set; }
     private readonly Process _process;
     private readonly string _description;
     private readonly StringBuilder _tail = new();
@@ -31,6 +34,8 @@ internal sealed class RunningCommand : IAsyncDisposable
         start.Environment["DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER"] = "0";
         start.Environment["DOTNET_WATCH_SUPPRESS_BROWSER_REFRESH"] = "0";
         _process = Process.Start(start)!;
+        Running.TryAdd(this, 0);
+        Trace?.Invoke($"start pid {_process.Id}: {_description}");
         _drain = Task.WhenAll(ReadAsync(_process.StandardOutput), ReadAsync(_process.StandardError));
     }
 
@@ -74,9 +79,27 @@ internal sealed class RunningCommand : IAsyncDisposable
 
     internal async Task StopAsync()
     {
-        if (!_process.HasExited) { _process.Kill(entireProcessTree: true); }
+        if (!_process.HasExited)
+        {
+            Trace?.Invoke($"kill tree of pid {_process.Id}");
+            _process.Kill(entireProcessTree: true);
+            Trace?.Invoke($"killed tree of pid {_process.Id}");
+        }
         await _process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
         await DrainAsync();
+        if (Running.TryRemove(this, out _)) { Trace?.Invoke($"ended pid {_process.Id} with exit code {_process.ExitCode}"); }
+    }
+
+    internal static string DescribeRunning() => string.Join("\n", Running.Keys.Select(command =>
+        $"Still running: pid {command._process.Id}: {command._description}\n{command.Output}"));
+
+    internal static void KillRunning()
+    {
+        foreach (var command in Running.Keys)
+        {
+            try { command._process.Kill(entireProcessTree: true); }
+            catch (Exception exception) when (exception is InvalidOperationException or AggregateException or System.ComponentModel.Win32Exception) { }
+        }
     }
 
     // The pipes close only when every process holding them has exited. A descendant
@@ -89,6 +112,7 @@ internal sealed class RunningCommand : IAsyncDisposable
         catch (TimeoutException)
         {
             lock (_gate) { _tail.AppendLine("[A process outliving the command still holds its output.]"); }
+            Trace?.Invoke($"output of pid {_process.Id} is still held by another process");
         }
     }
 

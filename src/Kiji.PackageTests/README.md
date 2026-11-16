@@ -16,6 +16,9 @@ the consumer and cleans up. `Fixture/` holds its source template.
 `RunningCommand` runs `dotnet`, includes a bounded log tail in failures and
 stops the processes it started. Its waits are bounded: a process that outlives
 the command and keeps its output open is noted in the log tail, never awaited.
+`ScenarioWatchdog` writes each scenario and command to the file named by
+`KIJI_TEST_TRACE`, which CI follows, and ends a run that exceeds six minutes
+with the running commands' output and the process list.
 
 All scenarios run serially in `artifacts/package-tests/work`. A file lock also
 prevents separate test runs from using it at the same time. Work, the local feed

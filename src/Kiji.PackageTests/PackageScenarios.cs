@@ -175,7 +175,16 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
     [Theory]
     [InlineData("Microsoft.NET.Sdk.Razor")]
     [InlineData("Microsoft.NET.Sdk.Web")]
-    public Task Watch_ReloadsChanges_AndShowsCompilationErrors(string sdk) => fixture.ScenarioAsync(async () =>
+    public Task Watch_ReloadsChanges_AndShowsCompilationErrors(string sdk)
+    {
+        // On GitHub's macOS runners this scenario stops the whole runner once dotnet watch
+        // reports the compilation error: output ends, and neither the step timeout nor a
+        // cancellation is honored. The cause is unknown, so the scenario is not run there.
+        Assert.SkipWhen(OperatingSystem.IsMacOS(), "dotnet watch stalls GitHub's macOS runners; see the README.");
+        return WatchScenarioAsync(sdk);
+    }
+
+    private Task WatchScenarioAsync(string sdk) => fixture.ScenarioAsync(async () =>
     {
         await fixture.WatchAsync(async client =>
         {
@@ -231,7 +240,7 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
             }
             Assert.Contains("Fixed Razor", await client.GetStringAsync("/kiji/"), StringComparison.Ordinal);
         });
-    }, sdk);
+    }, sdk, nameof(Watch_ReloadsChanges_AndShowsCompilationErrors));
 
     [Fact]
     public async Task Cleanup_WaitsForFileLockRelease()

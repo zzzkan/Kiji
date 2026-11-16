@@ -3,7 +3,10 @@
 Run `dotnet test -c Release` here for package tests, or at the repository root
 for both test projects. `Kiji.Tests` checks library behavior without building
 consumer projects. `Kiji.PackageTests` checks the NuGet package through `dotnet`
-and HTTP on Windows, Linux and macOS.
+and HTTP on Windows, Linux and macOS. The watch scenario is skipped on macOS:
+on GitHub's runners it stopped the whole runner after `dotnet watch` reported
+the compilation error, for a reason not yet found. Run it locally on macOS to
+investigate; `KIJI_TEST_TRACE` shows the last step reached.
 
 | Scenario | What it checks | Why a package test? |
 | --- | --- | --- |

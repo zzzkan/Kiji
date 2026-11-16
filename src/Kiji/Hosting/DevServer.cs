@@ -456,15 +456,16 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
 
     private void RefreshLinkedWatcher(WatchedPath input)
     {
-        var target = Directory.Exists(input.Path)
-            ? new DirectoryInfo(input.Path).ResolveLinkTarget(returnFinalTarget: true)?.FullName : null;
+        var directory = new DirectoryInfo(input.Path);
+        var target = directory.LinkTarget is not null
+            ? directory.ResolveLinkTarget(returnFinalTarget: true)?.FullName : null;
         if (_linkedWatchers.TryGetValue(input, out var existing))
         {
             if (existing.Target == target) { return; }
             existing.Watcher.Dispose();
             _linkedWatchers.Remove(input);
         }
-        if (target is not null && Directory.Exists(target))
+        if (target is not null)
         {
             // Watch the physical target from its parent, so replacing that directory
             // at the same path cannot strand a watcher on the retired inode.

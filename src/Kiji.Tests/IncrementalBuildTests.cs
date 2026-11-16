@@ -1435,6 +1435,9 @@ public sealed class IncrementalBuildTests : IDisposable
                 reload = socket.ReceiveAsync(new ArraySegment<byte>(new byte[64]), timeout.Token);
                 var oldTarget = Path.Combine(replacement, "old-content");
                 Directory.Move(Path.Combine(replacement, "content"), oldTarget);
+                await reload;
+                Assert.Equal(System.Net.HttpStatusCode.NotFound, (await client.GetAsync(basePath + "md/stable/")).StatusCode);
+                reload = socket.ReceiveAsync(new ArraySegment<byte>(new byte[64]), timeout.Token);
                 Directory.CreateDirectory(Path.Combine(replacement, "content"));
                 File.Copy(Path.Combine(oldTarget, "source.png"), Path.Combine(replacement, "content", "source.png"));
                 await WritePostAsync(replacement, "stable", "Replaced target", "Replaced target body.\n\n![image](source.png)");

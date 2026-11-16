@@ -150,6 +150,37 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
             Assert.Single(third, static item => Path.GetFileNameWithoutExtension(item.Path) == "stable").FrontMatter);
     }
 
+    [Theory]
+    [InlineData("post.md", "Post.md")]
+    [InlineData("notes/2024.md", @"notes\2024.md")]
+    public async Task Build_ReportsBothFilesThatShareAContentId(string first, string second)
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Backslashes are Windows path separators.");
+        var paths = new[] { Path.Combine(_contentsDir, first), Path.Combine(_contentsDir, second) };
+        Directory.CreateDirectory(Path.GetDirectoryName(paths[0])!);
+        await File.WriteAllTextAsync(paths[0], CreateValidMarkdown("First", new DateTime(2024, 1, 15)));
+        Assert.SkipWhen(File.Exists(paths[1]), "Requires a case-sensitive filesystem.");
+        await File.WriteAllTextAsync(paths[1], CreateValidMarkdown("Second", new DateTime(2024, 1, 15)));
+
+        var exception = Assert.Throws<InvalidOperationException>(() => CreateBuilder().Build());
+
+        Assert.Contains(paths[0], exception.Message, StringComparison.Ordinal);
+        Assert.Contains(paths[1], exception.Message, StringComparison.Ordinal);
+        Assert.Contains("content ID", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Build_FilteredOutFileDoesNotConflictWithALoadedContentId()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Backslashes are Windows path separators.");
+        Directory.CreateDirectory(Path.Combine(_contentsDir, "notes"));
+        await File.WriteAllTextAsync(Path.Combine(_contentsDir, "notes", "2024.md"), CreateValidMarkdown("Kept", new DateTime(2024, 1, 15)));
+        await File.WriteAllTextAsync(Path.Combine(_contentsDir, @"notes\2024.md"), CreateValidMarkdown("Skipped", new DateTime(2024, 1, 15)));
+        var builder = new MarkdownContentsBuilder<FrontMatter>(_contentsDir, RenderAsync, filter: static file => !file.Name.Contains('\\'));
+
+        Assert.Equal("Kept", Assert.Single(builder.Build()).FrontMatter.Title);
+    }
+
     private MarkdownContentsBuilder<FrontMatter> CreateBuilder()
     {
         return new MarkdownContentsBuilder<FrontMatter>(_contentsDir, RenderAsync);

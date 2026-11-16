@@ -264,6 +264,7 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
         ActiveServers.TryRemove(this, out _);
         lock (_snapshotLock)
         {
+            if (_disposed) { return; }
             _disposed = true;
         }
 

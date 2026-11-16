@@ -11,7 +11,8 @@ public sealed class ImageProcessorOptions
     /// <summary>Widths in pixels of the smaller variants, or <see langword="null"/> for 320, 640, 960 and 1280.</summary>
     /// <remarks>
     /// Widths at or above the source width or <see cref="MaxWidth"/> are skipped. Every image also gets
-    /// a variant at its own width, capped at <see cref="MaxWidth"/>.
+    /// a variant at its own width, capped at <see cref="MaxWidth"/> and at the width that keeps both sides
+    /// within WebP's 16383 pixels.
     /// </remarks>
     public IReadOnlyList<int>? Widths { get; set; }
 

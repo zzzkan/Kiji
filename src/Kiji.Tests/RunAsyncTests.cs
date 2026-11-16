@@ -224,6 +224,21 @@ public sealed class RunAsyncTests : IDisposable
         Assert.Equal(details, logs.Entries.Contains(("Kiji.Build", LogLevel.Debug, $"Generated: {Path.Combine(OutputDir, "index.html")}")));
     }
 
+    [Theory]
+    [InlineData("Warning", false, false)]
+    [InlineData("Debug", true, true)]
+    public async Task Publish_DefaultLogLevelGovernsProgressLogs(string defaultLevel, bool summary, bool details)
+    {
+        await File.WriteAllTextAsync(Path.Combine(_testDir, "appsettings.json"),
+            $$"""{ "Logging": { "LogLevel": { "Default": "{{defaultLevel}}" } } }""");
+        var logs = new RecordingLoggerProvider();
+        var builder = CreateBuilder(OutputDir);
+        builder.Logging.AddProvider(logs);
+        await builder.Build().RunAsync();
+        Assert.Equal(summary, logs.Entries.Any(static entry => entry.Category == "Kiji.Build" && entry.Level == LogLevel.Information));
+        Assert.Equal(details, logs.Entries.Contains(("Kiji.Build", LogLevel.Debug, $"Generated: {Path.Combine(OutputDir, "index.html")}")));
+    }
+
     [Fact]
     public async Task Publish_RendersAgainWhenEnvironmentChanges()
     {

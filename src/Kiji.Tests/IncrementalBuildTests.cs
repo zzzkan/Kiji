@@ -337,6 +337,20 @@ public sealed class IncrementalBuildTests : IDisposable
     }
 
     [Fact]
+    public async Task ProjectionRenderingABodyWithLocalImages_FailsInsteadOfBlockingThePublish()
+    {
+        var root = CreateSiteRoot("projection-images");
+        await WritePostAsync(root, "stable", "Stable Post", "![Photo](photo.png)");
+        await File.WriteAllBytesAsync(Path.Combine(root, "content", "photo.png"), [1, 2, 3]);
+        // The list pages, not a parameter factory, read the collection first.
+        var builder = CreateArticleBuilder(root, new ContentRenderLog(), mapPages: false, projectionRendersBody: true);
+        builder.AddPageParameters<ContentArticleListPage>(_ => [new { Kind = "metadata" }, new { Kind = "front-matter" }]);
+        await using var site = builder.BuildSite();
+        var error = await Assert.ThrowsAnyAsync<Exception>(() => site.PublishAsync("dist").WaitAsync(TimeSpan.FromSeconds(60)));
+        Assert.Contains("within a page render", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task MappedStaticAssets_AreRetainedRepairedAndRetiredByPublicPath()
     {
         var source = Path.Combine(_testDir, "library.css");

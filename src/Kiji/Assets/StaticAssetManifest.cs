@@ -56,8 +56,7 @@ internal sealed class StaticAssetManifest
                 {
                     hashes[source.Source] = Convert.ToHexStringLower(Convert.FromBase64String(integrity[7..]));
                 }
-                var url = baseUrl is null ? route : new Uri(baseUrl, string.Join('/', route.Split('/').Select(Uri.EscapeDataString))).AbsolutePath;
-                resources.Add(new ResourceAsset(url, properties));
+                resources.Add(new ResourceAsset(ToPublicUrl(route), properties));
             }
             for (var index = 0; index < assets.Count; index++)
             {
@@ -73,8 +72,14 @@ internal sealed class StaticAssetManifest
             ContentRoots = roots,
             DiscoveryRoots = [.. discoveryRoots],
             DiscoveryPatterns = [.. discoveryPatterns],
-            Resources = resources.Count == 0 ? AssetResources.Empty : new AssetResources(new ResourceAssetCollection(resources)),
+            Resources = resources.Count == 0 ? AssetResources.Empty : new AssetResources(new ResourceAssetCollection(resources), baseUrl is null ? null : ToPublicUrl),
         };
+
+        string ToPublicUrl(string route)
+        {
+            return baseUrl is null ? route
+                : new Uri(baseUrl, string.Join('/', route.Split('/').Select(Uri.EscapeDataString))).AbsolutePath;
+        }
 
         void ReadNode(JsonElement node, string target)
         {

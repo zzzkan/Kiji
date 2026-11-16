@@ -98,7 +98,7 @@ internal sealed class MarkdownProcessor
 
         var pageContext = PageRenderContext.Current
             ?? throw new InvalidOperationException(
-                $"Markdown file '{filePath}' references local images and must be rendered within a page render.");
+                $"Markdown file '{filePath}' references local images and must be rendered within a page render, not in a content projection or a factory.");
 
         var sourceDirectory = Path.GetDirectoryName(filePath)
             ?? throw new InvalidOperationException($"Cannot determine source directory for markdown file: {filePath}");

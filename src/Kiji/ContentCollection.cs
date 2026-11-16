@@ -122,7 +122,17 @@ public sealed class ContentCollection<T> : IReadOnlyCollection<T>
 
     private MaterializedContent Materialize(IServiceProvider services)
     {
-        var loaded = _load(services, _sourceId);
+        // The collection belongs to the snapshot, not to the page whose read happened to load it.
+        // A projection that renders a body must not materialize images against that page: the
+        // other pages reading the result would not record them, and a later publish that loads
+        // the collection while planning has no page at all. With no ambient page, such a render
+        // fails the same way everywhere instead of waiting, under the materialization lock, for
+        // work that needs the blocked renderer.
+        var page = PageRenderContext.Current;
+        PageRenderContext.SetCurrent(null);
+        IReadOnlyList<(string Id, T Item, string? Digest, string? ProjectionDigest, string? FrontMatterDigest)> loaded;
+        try { loaded = _load(services, _sourceId); }
+        finally { PageRenderContext.SetCurrent(page); }
 
         var index = new Dictionary<string, (T Item, string? Digest, string? FrontMatterDigest)>(loaded.Count, StringComparer.OrdinalIgnoreCase);
         var entries = new T[loaded.Count];

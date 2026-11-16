@@ -62,6 +62,9 @@ builder.AddMarkdownContent<FrontMatter>(options =>
 });
 ```
 
+The directory may be a symbolic link itself. The build fails when a directory or a
+Markdown file below it is a symbolic link or junction, instead of following it.
+
 Kiji keeps `content/` out of the SDK's default items, so it needs no project settings.
 Files there are never compiled, whatever `Directory` is set to; keep Razor components
 and C# files outside it.
@@ -182,7 +185,8 @@ the source aspect ratio: for a 1920×1080 source, `width=300` gives `height="169
 
 The output is static: animated images keep only their first frame, metadata such as EXIF
 is removed, and colors are converted to sRGB. Kiji applies the EXIF orientation first, so
-portrait phone photos stay upright. To keep an image as is, put it in `wwwroot/` and
+portrait phone photos stay upright. WebP holds at most 16383 pixels per side, so the largest
+version of a very long image, such as a full-page screenshot, is narrower than its source. To keep an image as is, put it in `wwwroot/` and
 reference it as a static asset. Remote images, paths starting with `/`, and `<img>` written
 in HTML are left unchanged.
 

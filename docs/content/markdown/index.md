@@ -206,23 +206,20 @@ Both articles can use:
 ![A description](../shared/photo.jpg)
 ```
 
-Kiji publishes responsive variants directly under `_images/`, using filenames that
-identify the source bytes and processing settings. Articles referencing the same image
-share the generated files and URLs, regardless of their routes. Images with the same
-filename and different content remain distinct. Generated filenames use a consistent
-casing across platforms. Generated URLs include the site's deployment base path.
+Kiji writes the variants once under `_images/`, with file names derived from the source
+bytes and the processing settings. Articles that reference the same image share its files
+and URLs whatever their routes, and images with the same name but different content stay
+separate. The URLs include the site's [subpath](../deployment/#publish-under-a-subpath).
 
-Image edits invalidate every referring page. Incremental publishing restores missing
-variants, and removes unused variants after the last reference disappears.
-For responsive processing, use filesystem references relative to the Markdown file,
-inside a registered content directory, such as the default `content/`. Parent references
-can cross article directories within those roots. Content roots may be outside the project
-or reached through a symbolic link, just as with Markdown loading. External files render
-normally; pages reading files outside the project are rerendered on each publish rather
-than stored as portable page recipes.
-Local references that escape the registered roots, become rooted after path normalization,
-or traverse symbolic links or junctions below a root fail the render. OneDrive placeholders
-and deduplicated files are supported. Missing images fail with the resolved search path.
-Development reloads reuse unchanged built-in variants without re-encoding. Retired custom-processor variants are removed after pending renders stop; files temporarily in use are retried on the next reload. Site-root and remote URLs remain unprocessed as
-described above.
+Editing an image rerenders every page that uses it. A publish restores missing variants
+and removes a variant once no page references it.
+
+The image must be inside a content directory registered with `AddMarkdownContent`, such
+as the default `content/`. A content directory may be outside the project or be a symbolic
+link itself; pages that read files outside the project are rendered on every publish. The
+render fails when the image is missing, when the path leaves the content directories, or
+when it passes through a symbolic link or junction below one.
+
+During development, unchanged images are not encoded again after a reload.
+
 To replace the image processor, see [`IImageProcessor`](../api-assets/#iimageprocessor).

@@ -59,6 +59,14 @@ internal static class ImageArtifactProcessor
         return await GenerateAsync(processor, sourceBytes, sourceHash, output, cache, recordPath, sourceName, workDirectory, cancellationToken);
     }
 
+    // Abandoned work is private and uniquely named, so a leftover a scanner still
+    // holds is harmless: it must not fail startup, and the next run retries.
+    internal static void ClearWork(string workDirectory)
+    {
+        try { Directory.Delete(workDirectory, recursive: true); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
+    }
+
     private static async Task<ProcessedImageInfo> GenerateAsync(IImageProcessor processor,
         byte[] sourceBytes, string sourceHash, string output, ArtifactCache? cache, string? recordPath, string sourceName, string workDirectory, CancellationToken cancellationToken)
     {
@@ -139,9 +147,8 @@ internal static class ImageArtifactProcessor
         finally
         {
             // A scanner or encoder handle can briefly hold a generated file on Windows.
-            // The next run clears the work directory; never replace the result with a cleanup error.
-            try { Directory.Delete(work, recursive: true); }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
+            // Never replace the result with a cleanup error.
+            ClearWork(work);
         }
     }
 

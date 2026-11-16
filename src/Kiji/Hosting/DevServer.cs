@@ -83,8 +83,7 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
             }
             CollectRetiredImages();
         }
-        var work = Path.Combine(app.Paths.ResolveKijiPath(), "dev-work");
-        if (Directory.Exists(work)) { Directory.Delete(work, recursive: true); }
+        Assets.ImageArtifactProcessor.ClearWork(app.Paths.ResolveImageWorkPath(options));
         var builder = _builder;
         // The standard Host Filtering middleware reads AllowedHosts. Supply only a
         // fallback; appsettings, environment variables and command line stay in control.

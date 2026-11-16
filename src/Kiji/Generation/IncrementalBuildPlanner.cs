@@ -146,8 +146,7 @@ internal sealed class IncrementalBuildPlanner(
         {
             try
             {
-                _ = _imageSources.GetOrAdd(image.Source, static (source, planner) => new Lazy<string>(() => planner.ResolveImageSource(source)),
-                    this).Value;
+                _ = ResolveImageSource(image.Source);
             }
             catch (Exception exception) when (exception is InvalidOperationException or IOException or UnauthorizedAccessException or ArgumentException)
             {
@@ -161,7 +160,7 @@ internal sealed class IncrementalBuildPlanner(
             if (imageProcessor is null) { return false; }
             foreach (var image in oldPage.ImageRequests)
             {
-                await ImageArtifactProcessor.ProcessAsync(imageProcessor, ResolveDependencyPath(image.Source),
+                await ImageArtifactProcessor.ProcessAsync(imageProcessor, ResolveImageSource(image.Source),
                     Path.Combine(options.OutputDirectory, image.OutputDirectory), options.ImageCacheDirectory, Path.Combine(cacheDirectory, "work"), cancellationToken);
             }
             if (!oldPage.AdditionalOutputs.All(output =>
@@ -187,8 +186,9 @@ internal sealed class IncrementalBuildPlanner(
         return true;
     }
 
-    private string ResolveImageSource(string source) =>
-        contentPaths?.ResolveFile(ResolveDependencyPath(source)) ?? ResolveDependencyPath(source);
+    // Many pages share one image; validate each source once per plan.
+    private string ResolveImageSource(string source) => _imageSources.GetOrAdd(source, source => new Lazy<string>(() =>
+        contentPaths?.ResolveFile(ResolveDependencyPath(source)) ?? ResolveDependencyPath(source))).Value;
 
     private bool RestoreImageOutput(BuildManifestOutput output)
     {

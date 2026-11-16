@@ -64,8 +64,7 @@ internal sealed class SiteEngine
 
         await using var cacheLease = await CacheLease.AcquireAsync(Paths.ResolveCachePath(), cancellationToken);
         var options = _options;
-        var work = Path.Combine(Paths.ResolveCachePath(), "work");
-        if (Directory.Exists(work)) { Directory.Delete(work, recursive: true); }
+        ImageArtifactProcessor.ClearWork(Paths.ResolveImageWorkPath(options));
         var assetManifest = options.AssetManifestPath is null ? new StaticAssetManifest { Assets = [] }
             : StaticAssetManifest.Load(options.AssetManifestPath, options.AssetEndpointsPath, SiteInfo.BaseUrl);
         UseAssetResources(assetManifest.Resources);
@@ -253,10 +252,7 @@ internal sealed class SiteEngine
         return output.ToString();
     }
 
-    internal void InvalidateContent()
-    {
-        _runtime.Invalidate();
-    }
+    internal void InvalidateContent() => _runtime.Invalidate();
 
     internal SiteSnapshot CreateSnapshot()
     {

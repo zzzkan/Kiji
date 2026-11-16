@@ -48,7 +48,7 @@ internal sealed class MarkdownProcessor
         _outputPath = Path.Combine(options.OutputDirectory, "_images");
         _imageCachePath = options.ImageCacheDirectory;
         _projectDirectory = paths.ProjectDirectory;
-        _workDirectory = options.ImageCacheDirectory is null ? Path.Combine(paths.ResolveKijiPath(), "dev-work") : Path.Combine(paths.ResolveCachePath(), "work");
+        _workDirectory = paths.ResolveImageWorkPath(options);
         _basePath = new Uri(site.BaseUrl, "_images/").AbsolutePath;
         _pipeline = BuildPipeline(contentOptions);
     }

@@ -1,13 +1,47 @@
 ---
 title: Concepts
-description: The building blocks of a Kiji site.
+description: The building blocks of a Kiji site, and when Kiji fits.
 order: 20
+section: Introduction
 ---
 
 A Kiji site is a .NET project. Razor components define pages, and `Program.cs` creates a
 builder with `StaticSite.CreateBuilder`, registers content and settings, builds the site,
 and calls `RunAsync`. Kiji renders each page to HTML with Blazor's
 [`HtmlRenderer`](https://learn.microsoft.com/aspnet/core/blazor/components/render-components-outside-of-aspnetcore).
+
+## When Kiji fits
+
+- Blogs, documentation, and project or landing pages whose content is known when you
+  publish.
+- Teams that already use C# and Razor and want to share models, components, and Razor
+  class libraries with the site.
+- Sites hosted as static files, for example on GitHub Pages or a CDN.
+
+## When to choose something else
+
+- **Pages that depend on the request**, such as sign-in, per-user content, or form
+  handling on the server. Use ASP.NET Core, for example a Blazor Web App.
+- **Applications driven by Razor event handlers.** Kiji's output has no Blazor runtime,
+  so `@onclick` and similar handlers never run. Add browser behavior with JavaScript, or
+  use Blazor WebAssembly for an application that runs in the browser.
+- **Routes that are not known in advance.** Kiji writes one file per page, so optional,
+  constrained, and catch-all route parameters are rejected. See
+  [Route limits](../routing/#route-limits).
+- **Projects without .NET.** Building a site needs the .NET 10 SDK or later.
+
+Kiji is in preview, so its APIs can still change between releases.
+
+## Compared with Blazor hosting models
+
+Kiji uses Blazor's components and renderer, but not its hosting models:
+
+|                               | Kiji            | Blazor Web App (static server rendering)  | Blazor WebAssembly  |
+| ----------------------------- | --------------- | ----------------------------------------- | ------------------- |
+| When HTML is rendered         | At publish      | On each request                           | In the browser      |
+| What serves the site          | Any static host | An ASP.NET Core server                    | Any static host     |
+| .NET runtime in the browser   | No              | No                                        | Yes                 |
+| Event handlers like `@onclick` | Never run      | Run only with an interactive render mode  | Run                 |
 
 ## Project structure
 
@@ -42,7 +76,7 @@ Changes to `Program.cs` apply only after a restart: press `Ctrl+R` in the `dotne
 terminal. To use another address, for example when port 8080
 is in use:
 
-```pwsh
+```powershell
 dotnet watch -- --urls http://127.0.0.1:5000
 ```
 
@@ -96,14 +130,14 @@ See [Blazor CSS isolation](https://learn.microsoft.com/aspnet/core/blazor/compon
 
 ## Generated files
 
-[`AddRssFeed`](../api-reference/#rssfeedhostbuilderextensions),
-[`AddSitemap`](../api-reference/#sitemaphostbuilderextensions), and
-[`AddArtifact`](../api-reference/#staticsitehostbuilderextensions) write feeds, sitemaps,
+[`AddRssFeed`](../api-feeds/#rssfeedhostbuilderextensions),
+[`AddSitemap`](../api-sitemaps/#sitemaphostbuilderextensions), and
+[`AddArtifact`](../api-kiji/#staticsitehostbuilderextensions) write feeds, sitemaps,
 and other site-wide files. Only `dotnet publish` writes these files; the development
-server returns 404 for them.
+server returns 404 for them. See [Recipes](../recipes/#rss-feed).
 
 ## Static output
 
 The output has no Blazor runtime, so event handlers such as `@onclick` and methods such as
 `OnAfterRenderAsync` never run. Add browser behavior with JavaScript in `wwwroot/`. See
-[Blazor APIs](../api-reference/#blazor-apis).
+[Blazor APIs](../api-blazor/).

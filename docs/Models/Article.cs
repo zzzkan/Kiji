@@ -14,6 +14,7 @@ public sealed class Article
         ArgumentException.ThrowIfNullOrWhiteSpace(content.FrontMatter.Title, nameof(content.FrontMatter.Title));
         ArgumentException.ThrowIfNullOrWhiteSpace(content.FrontMatter.Description, nameof(content.FrontMatter.Description));
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(content.FrontMatter.Order, nameof(content.FrontMatter.Order));
+        ArgumentException.ThrowIfNullOrWhiteSpace(content.FrontMatter.Section, nameof(content.FrontMatter.Section));
 
         var slug = string.Equals(Path.GetFileName(content.Path), "index.md", StringComparison.OrdinalIgnoreCase)
             ? Path.GetFileName(Path.GetDirectoryName(content.Path))
@@ -31,9 +32,16 @@ public sealed class Article
 
     public string Title => _content.FrontMatter.Title;
 
+    public string NavTitle => _content.FrontMatter.NavTitle ?? Title;
+
     public string Description => _content.FrontMatter.Description;
 
     public int Order => _content.FrontMatter.Order;
+
+    public string Section => _content.FrontMatter.Section;
+
+    /// <summary>The Markdown file's path relative to the content directory.</summary>
+    public string SourcePath => _content.Path;
 
     public ValueTask<string> RenderAsync(CancellationToken cancellationToken = default) =>
         _content.RenderAsync(cancellationToken);

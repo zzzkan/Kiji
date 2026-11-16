@@ -2,7 +2,11 @@
 title: Markdown and images
 description: Load Markdown with YAML front matter and publish responsive local images.
 order: 40
+section: Guides
 ---
+
+Kiji loads Markdown files into a typed collection that pages list and render, and
+publishes the images beside them as responsive images.
 
 ## Register Markdown content
 
@@ -170,7 +174,7 @@ For `.jpg`, `.jpeg`, `.png`, `.gif`, and `.webp` files, Kiji writes WebP version
 the page's `index.html`: 320, 640, 960, and 1280 pixels wide when the source is wider,
 plus one at the source width, up to 1920 pixels. The `<img>` gets a `srcset` and the source
 dimensions, and every image after the first loads lazily. To change the widths or the
-quality, see [`ImageProcessorOptions`](../api-reference/#imageprocessoroptions).
+quality, see [`ImageProcessorOptions`](../api-assets/#imageprocessoroptions).
 
 Attributes such as `![Photo](photo.jpg){width=300 loading=eager}` replace the ones Kiji
 generates. When only `width` or `height` is a positive integer, Kiji computes the other from
@@ -183,4 +187,4 @@ reference it as a static asset. Remote images, paths starting with `/`, and `<im
 in HTML are left unchanged.
 
 A missing image, or a path outside the Markdown file's directory tree, fails the render.
-To replace the image processor, see [`IImageProcessor`](../api-reference/#iimageprocessor).
+To replace the image processor, see [`IImageProcessor`](../api-assets/#iimageprocessor).

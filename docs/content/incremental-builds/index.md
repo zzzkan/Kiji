@@ -2,6 +2,7 @@
 title: Incremental builds
 description: Reuse unchanged pages and control page rendering.
 order: 60
+section: Guides
 ---
 
 The first `dotnet publish` renders every page. Later publishes reuse a page's HTML when
@@ -16,7 +17,7 @@ nothing it depends on has changed, and always produce a complete site.
 | Page parameters change | The affected pages. |
 | A local image changes | Pages that use it. |
 | A static asset is added, removed, or changed | Every page that uses `Assets` or `ImportMap`. |
-| Code, packages, `SiteInfo`, the environment name, or [configuration](../api-reference/#configuration) changes | All pages. |
+| Code, packages, `SiteInfo`, the environment name, or [configuration](../api-kiji/#configuration) changes | All pages. |
 
 Pages that contain an `AlwaysRender` component or an error boundary render on every
 publish, so an error boundary in a shared layout affects every page that uses it. Feeds,
@@ -43,7 +44,7 @@ builder.AddPageParameters<PostPage>(services =>
 
 Each page renders again when its post or a neighboring post changes. Values created in the
 factory, such as arrays or record copies made with `with`, make the page render on every
-publish; see the [reusable parameter types](../api-reference/#page-parameters).
+publish; see the [reusable parameter types](../api-kiji/#page-parameters).
 
 Kiji does not track values assigned to an item after loading, so a reused page can show
 old values. For example, if the factory sets `post.Next`, adding a post between two others
@@ -73,7 +74,7 @@ regenerate images from scratch. Clean removes the build output, Kiji's staging
 directory, and `.kiji`, including the publish and image caches. Clean the Release
 configuration to match the default used by `dotnet publish` on .NET 10.
 
-```pwsh
+```powershell
 dotnet clean -c Release
 dotnet publish -o dist
 
@@ -82,7 +83,7 @@ dotnet publish -o dist -v d
 ```
 
 For a message per page, set `Kiji.Build` to `Debug` in the
-[Logging](../api-reference/#logging) section. Changing that section keeps the cache.
+[Logging](../api-kiji/#logging) section. Changing that section keeps the cache.
 
 Publishing keeps two portable caches that CI can restore independently:
 

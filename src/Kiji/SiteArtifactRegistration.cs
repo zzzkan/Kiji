@@ -8,7 +8,8 @@ namespace Kiji;
 /// <param name="WriteAsync">Writes the artifact's bytes.</param>
 /// <param name="PreserveUnchangedOutput">Keeps an existing file whose bytes are unchanged.</param>
 /// <param name="IndependentOfPages">
-/// The writer runs no site code and reads only the page list, so it runs while pages render.
+/// The writer runs no site code and reads only the page list, so it runs while pages render;
+/// its bytes still reach the output directory only after every page has rendered.
 /// Writers that run site code, such as custom artifacts and feed factories, run after all
 /// pages in registration order.
 /// </param>
@@ -18,10 +19,21 @@ internal sealed record SiteArtifactRegistration(
     bool PreserveUnchangedOutput = false,
     bool IndependentOfPages = false)
 {
-    internal async Task WriteFileAsync(string path, SiteOutputContext context, CancellationToken cancellationToken)
+    /// <param name="path">The artifact's full output path.</param>
+    /// <param name="context">The site metadata and pages handed to the writer.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <param name="pagesRendered">
+    /// Completes when every page has rendered. A buffered writer runs ahead of it, but the
+    /// output directory is touched only afterwards, so a failed build leaves the previous file.
+    /// </param>
+    internal async Task WriteFileAsync(string path, SiteOutputContext context, CancellationToken cancellationToken,
+        Task? pagesRendered = null)
     {
+        var directory = Path.GetDirectoryName(path)!;
         if (!PreserveUnchangedOutput)
         {
+            if (pagesRendered is not null) { await pagesRendered; }
+            Directory.CreateDirectory(directory);
             await using var output = OpenOutput(path);
             await WriteAsync(output, context, cancellationToken);
             return;
@@ -29,15 +41,18 @@ internal sealed record SiteArtifactRegistration(
 
         // Built-in feeds always regenerate. Buffering avoids rewriting identical
         // bytes and retriggering SDK compression. Larger feeds spill to disk.
-        await using var buffer = new FileBufferingWriteStream(1024 * 1024, null, () => Path.GetDirectoryName(path)!);
+        // Only a spill needs the directory before the pages finish.
+        await using var buffer = new FileBufferingWriteStream(1024 * 1024, null, () => Directory.CreateDirectory(directory).FullName);
         using var hash = SHA256.Create();
         await using (var hashing = new CryptoStream(buffer, hash, CryptoStreamMode.Write, leaveOpen: true))
         {
             await WriteAsync(hashing, context, cancellationToken);
             await hashing.FlushFinalBlockAsync(cancellationToken);
         }
+        if (pagesRendered is not null) { await pagesRendered; }
         if (BuildFingerprint.HashFile(path) == Convert.ToHexStringLower(hash.Hash!)) { return; }
 
+        Directory.CreateDirectory(directory);
         await using var changedOutput = OpenOutput(path);
         await buffer.DrainBufferAsync(changedOutput, cancellationToken);
     }

@@ -14,6 +14,8 @@
         <a class="action primary" href="@Site.ResolveUrl($"docs/{Articles.MinBy(static article => article.Order)?.Slug}/").AbsolutePath">Get started</a>
         <a class="action" href="https://github.com/zzzkan/kiji">GitHub</a>
     </p>
+    <pre class="install"><code class="language-powershell">dotnet new install Kiji.Templates
+dotnet new kiji-blog -o MyBlog</code></pre>
 </div>
 
 <section class="pitch">

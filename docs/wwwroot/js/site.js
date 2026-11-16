@@ -1,6 +1,6 @@
 // Copy buttons for code blocks.
 if (navigator.clipboard) {
-    for (const pre of document.querySelectorAll('.doc-content pre')) {
+    for (const pre of document.querySelectorAll('pre')) {
         const block = document.createElement('div');
         block.className = 'code-block';
         pre.replaceWith(block);

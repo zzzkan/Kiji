@@ -218,6 +218,16 @@ pre code {
     margin: 0;
 }
 
+.code-block:has(> .install) {
+    width: fit-content;
+    max-width: 100%;
+    margin-bottom: 0;
+}
+
+.code-block > .install {
+    padding-right: 5rem;
+}
+
 .copy-code {
     position: absolute;
     top: 0.5rem;

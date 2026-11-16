@@ -45,7 +45,7 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   ambiguous incremental state requires rendering.
 - One type per file. Library components and library test components are hand-written ComponentBase classes;
   docs and the package consumer fixture use .razor files and the Razor SDK.
-- Update `docs/content/api-reference/index.md` for author-facing API changes.
+- Update the `docs/content/api-*` pages (one per namespace) for author-facing API changes.
   Keep pack's baseline validation enabled; intentional breaks get only their specific
   entries in `src/Kiji/CompatibilitySuppressions.xml`.
 - Tests must catch realistic regressions, not repeat library guarantees or visibility

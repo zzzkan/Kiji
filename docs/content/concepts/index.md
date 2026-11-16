@@ -2,6 +2,7 @@
 title: Concepts
 description: The building blocks of a Kiji site.
 order: 20
+section: Guides
 ---
 
 A Kiji site is a .NET project. Razor components define pages, and `Program.cs` creates a
@@ -96,9 +97,9 @@ See [Blazor CSS isolation](https://learn.microsoft.com/aspnet/core/blazor/compon
 
 ## Generated files
 
-[`AddRssFeed`](../api-reference/#rssfeedhostbuilderextensions),
-[`AddSitemap`](../api-reference/#sitemaphostbuilderextensions), and
-[`AddArtifact`](../api-reference/#staticsitehostbuilderextensions) write feeds, sitemaps,
+[`AddRssFeed`](../api-feeds/#rssfeedhostbuilderextensions),
+[`AddSitemap`](../api-sitemaps/#sitemaphostbuilderextensions), and
+[`AddArtifact`](../api-kiji/#staticsitehostbuilderextensions) write feeds, sitemaps,
 and other site-wide files. Only `dotnet publish` writes these files; the development
 server returns 404 for them.
 
@@ -106,4 +107,4 @@ server returns 404 for them.
 
 The output has no Blazor runtime, so event handlers such as `@onclick` and methods such as
 `OnAfterRenderAsync` never run. Add browser behavior with JavaScript in `wwwroot/`. See
-[Blazor APIs](../api-reference/#blazor-apis).
+[Blazor APIs](../api-blazor/).

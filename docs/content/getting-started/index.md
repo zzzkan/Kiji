@@ -2,6 +2,7 @@
 title: Getting started
 description: Start with the Kiji Blog template or build a minimal blog with Razor, Markdown, and CSS from scratch.
 order: 10
+section: Introduction
 ---
 
 Start with the Blog template for a ready-to-customize site, or build a minimal blog from

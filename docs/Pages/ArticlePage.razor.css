@@ -26,11 +26,25 @@
 
 /* ---------- previous / next ---------- */
 
+.edit-link {
+    margin: 4rem 0 0;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.edit-link a {
+    text-decoration: none;
+}
+
+.edit-link a:hover {
+    text-decoration: underline;
+}
+
 .article-navigation {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 1rem;
-    margin-top: 4rem;
+    margin-top: 1rem;
     padding-top: 1.5rem;
     border-top: 1px solid var(--rule);
 }

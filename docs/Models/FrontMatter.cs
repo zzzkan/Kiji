@@ -13,4 +13,7 @@ public sealed class FrontMatter
 
     /// <summary>Position in the navigation. Lower sorts first.</summary>
     public int Order { get; init; }
+
+    /// <summary>The navigation group. Groups appear in the order of their first page.</summary>
+    public required string Section { get; init; }
 }

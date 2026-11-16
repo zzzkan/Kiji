@@ -74,6 +74,19 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
             ExceptionDispatchInfo.Capture(firstError).Throw();
         }
 
+        // The collection compares IDs case-insensitively and '\' becomes '/', so distinct
+        // files can share one. Name both instead of failing later without either path.
+        var ids = new Dictionary<string, MarkdownContent<TFrontMatter>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in items)
+        {
+            if (item is not null && !ids.TryAdd(item.Path, item))
+            {
+                throw new InvalidOperationException(
+                    $"Markdown files '{ids[item.Path].SourcePath}' and '{item.SourcePath}' share the content ID '{item.Path}'. "
+                    + "IDs ignore case and use '/' separators; rename one of the files.");
+            }
+        }
+
         sourceCache?.Prune(markdownFiles.Select(static file => file.FullName).ToHashSet(StringComparer.OrdinalIgnoreCase));
 
         // Filtered-out slots were never assigned; compacting keeps the order above.

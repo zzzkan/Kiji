@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Kiji.Rendering;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -22,10 +23,8 @@ internal static class StaticSiteGenerator
         ILogger? logger = null)
     {
         var log = logger ?? NullLogger.Instance;
-        // Resolve every output path once and create the directory set up front, so
-        // the parallel render loop issues no per-page directory syscalls.
+        // Resolve every output path once, before any page renders.
         var resolvedPages = new (PageRenderRequest Request, string FullPath)[pageRequests.Count];
-        var outputDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i < pageRequests.Count; i++)
         {
             var fullPath = OutputPathValidator.ResolveUnderRoot(
@@ -33,13 +32,12 @@ internal static class StaticSiteGenerator
                 pageRequests[i].OutputRelativePath,
                 "Page output path");
             resolvedPages[i] = (pageRequests[i], fullPath);
-            outputDirectories.Add(Path.GetDirectoryName(fullPath)!);
         }
 
-        foreach (var directory in outputDirectories)
-        {
-            Directory.CreateDirectory(directory);
-        }
+        // A page creates its directory when it writes, on the thread that rendered it:
+        // creating them all first is a serial pass over the file system, as long on a real
+        // disk as writing the pages. Each directory is still created once.
+        var outputDirectories = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
 
         var rendered = new RenderedPage[resolvedPages.Length];
 
@@ -59,7 +57,7 @@ internal static class StaticSiteGenerator
                     && previousOutputs.TryGetValue(request.OutputRelativePath, out var recorded)
                         ? recorded
                         : null;
-                rendered[index] = await WritePageAsync(request, fullPath, renderPageAsync, previous, outputStampsValid, log, ct);
+                rendered[index] = await WritePageAsync(request, fullPath, renderPageAsync, previous, outputStampsValid, outputDirectories, log, ct);
             });
 
         return rendered;
@@ -71,6 +69,7 @@ internal static class StaticSiteGenerator
         Func<PageRenderRequest, TextWriter, CancellationToken, Task> renderPageAsync,
         BuildManifestPage? previous,
         bool outputStampsValid,
+        ConcurrentDictionary<string, byte> outputDirectories,
         ILogger logger,
         CancellationToken cancellationToken)
     {
@@ -91,6 +90,13 @@ internal static class StaticSiteGenerator
                 || (!(outputStampsValid && stamp is not null && stamp == previous.Stamp) && !writer.MatchesFile(fullPath));
         if (written)
         {
+            var directory = Path.GetDirectoryName(fullPath)!;
+            // Recorded only once it exists, so a page racing for the same directory creates it too.
+            if (!outputDirectories.ContainsKey(directory))
+            {
+                Directory.CreateDirectory(directory);
+                outputDirectories.TryAdd(directory, 0);
+            }
             writer.WriteToFile(fullPath);
         }
 

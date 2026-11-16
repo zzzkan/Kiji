@@ -48,7 +48,7 @@ public sealed class ContentCacheTests : IDisposable
         Assert.Equal(1, cached);
         var manifest = System.Text.Json.JsonSerializer.Deserialize(
             await File.ReadAllBytesAsync(Path.Combine(_root, ".kiji", "cache", "manifest.json")),
-            Generation.BuildManifestJsonContext.Default.BuildManifest)!;
+            BuildManifestJsonContext.Default.BuildManifest)!;
         Assert.Equal(0, manifest.Pages.Single(page => page.RoutePath == "/cache/one/").HtmlLength);
         Assert.True(manifest.Pages.Single(page => page.RoutePath == "/cache/two/").HtmlLength > 0);
     }

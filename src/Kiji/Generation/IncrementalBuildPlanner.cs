@@ -414,8 +414,7 @@ internal sealed class IncrementalBuildPlanner(
                     }
                 }
                 manifest = manifest with { HtmlFile = htmlFile };
-                ArtifactCache.WriteAtomic(_manifestPath,
-                    JsonSerializer.SerializeToUtf8Bytes(manifest, BuildManifestJsonContext.Default.BuildManifest));
+                WriteManifest(manifest);
             }
             catch { File.Delete(htmlPath); throw; }
         }
@@ -424,11 +423,18 @@ internal sealed class IncrementalBuildPlanner(
             manifest = manifest with { HtmlFile = previous.HtmlFile };
             if (_stampsChanged || !OutputStampsValid)
             {
-                ArtifactCache.WriteAtomic(_manifestPath,
-                    JsonSerializer.SerializeToUtf8Bytes(manifest, BuildManifestJsonContext.Default.BuildManifest));
+                WriteManifest(manifest);
             }
         }
         Collect(manifest);
+    }
+
+    private void WriteManifest(BuildManifest manifest)
+    {
+        // Sized for a typical page entry so a large site's manifest seldom regrows.
+        var json = new System.Buffers.ArrayBufferWriter<byte>(Math.Max(64 * 1024, manifest.Pages.Count * 1024));
+        BuildManifestSerializer.Serialize(json, manifest);
+        ArtifactCache.WriteAtomic(_manifestPath, json.WrittenSpan);
     }
 
     private void Collect(BuildManifest manifest)
@@ -468,7 +474,7 @@ internal sealed class IncrementalBuildPlanner(
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var manifest = JsonSerializer.Deserialize(File.ReadAllBytes(_manifestPath), BuildManifestJsonContext.Default.BuildManifest);
+            var manifest = BuildManifestSerializer.Deserialize(File.ReadAllBytes(_manifestPath));
             return manifest?.IsValid() == true ? manifest : null;
         }
         catch (JsonException)

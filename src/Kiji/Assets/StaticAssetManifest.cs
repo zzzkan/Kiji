@@ -20,7 +20,9 @@ internal sealed class StaticAssetManifest
         }
         using var stream = File.OpenRead(path);
         using var document = JsonDocument.Parse(stream);
-        var roots = document.RootElement.GetProperty(nameof(ContentRoots)).Deserialize<string[]>()!;
+        // Read directly: a serializer's first use costs far more than this whole file.
+        string[] roots = [.. document.RootElement.GetProperty(nameof(ContentRoots)).EnumerateArray()
+            .Select(static root => root.GetString()!)];
         if (roots.Any(static root => string.IsNullOrWhiteSpace(root) || !Path.IsPathFullyQualified(root)))
         {
             throw new InvalidOperationException($"Invalid static asset manifest '{path}'. Rebuild the site.");

@@ -164,7 +164,7 @@ internal sealed class MarkdownProcessor
         return html;
     }
 
-    private static MarkdownPipeline BuildPipeline(MarkdownOptions? contentOptions)
+    internal static MarkdownPipeline BuildPipeline(MarkdownOptions? contentOptions)
     {
         var builder = (contentOptions ?? new MarkdownOptions()).Pipeline;
         var attributes = builder.Extensions.Find<GenericAttributesExtension>();

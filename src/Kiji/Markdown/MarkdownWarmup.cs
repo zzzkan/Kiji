@@ -1,0 +1,92 @@
+using Kiji.Assets;
+using Kiji.Generation;
+
+namespace Kiji.Markdown;
+
+/// <summary>
+/// Prepares the Markdown and YAML code on a spare processor while the site is still being
+/// configured. A process uses that code for the first time when it loads content, and the
+/// first use costs far more than the work itself: the runtime loads, compiles and initializes
+/// it then. Content loading and rendering wait on one thread for that, with the others idle.
+/// </summary>
+/// <remarks>
+/// The sample runs the paths every Markdown file takes, with the default options. It reads
+/// nothing, writes nothing and creates no site state, so it cannot affect the output.
+/// </remarks>
+internal static class MarkdownWarmup
+{
+    private const string Sample = """
+        ---
+        title: Title
+        date: 2024-01-02
+        tags:
+          - one
+          - two
+        draft: false
+        order: 1
+        ---
+
+        # Heading
+
+        A paragraph with *emphasis*, **strong** text, `code`, ~~strikethrough~~, a
+        [link](https://example.com/ "title"), <https://example.com/> and a footnote[^1].
+
+        - item
+        - [x] task
+
+        1. first
+        2. second
+
+        > A quotation.
+
+        ```csharp
+        var value = 1;
+        ```
+
+        | A | B |
+        |---|---|
+        | 1 | 2 |
+
+        ![image](https://example.com/image.png){.wide}
+
+        ---
+
+        [^1]: A note.
+
+        """;
+
+    private static int s_started;
+
+    /// <summary>Starts the warm-up once per process. Returns immediately.</summary>
+    internal static void Start()
+    {
+        // With a single processor it would only delay the site's own work.
+        if (Environment.ProcessorCount < 2 || Interlocked.Exchange(ref s_started, 1) != 0)
+        {
+            return;
+        }
+
+        // A background thread never keeps a finished process alive.
+        new Thread(Run) { IsBackground = true, Name = "Kiji Markdown warm-up" }.Start();
+    }
+
+    private static void Run()
+    {
+        try
+        {
+            var options = new MarkdownOptions();
+            BuildFingerprint.HashText(Sample);
+            var (_, body) = MarkdownFrontMatterParser.ParseContentAndBody<Dictionary<string, object>>(
+                Sample, options.CreateDeserializer());
+            var pipeline = MarkdownProcessor.BuildPipeline(options);
+            var document = Markdig.Markdown.Parse(body, pipeline);
+            PooledMarkdigRenderer.Create(pipeline).Render(document,
+                new ResponsiveImageContext(new Dictionary<string, ProcessedImageInfo>(), "/_images/"));
+        }
+#pragma warning disable CA1031 // The site reports its own errors; a failed warm-up changes only timing.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+        }
+    }
+}

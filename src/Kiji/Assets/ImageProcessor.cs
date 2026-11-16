@@ -44,11 +44,12 @@ internal sealed class ImageProcessor : IImageProcessor
         _widths = [.. (options.Widths ?? DefaultWidths)
             .Where(width => width < _maxWidth).Distinct().Order()];
         _generationGate = generationGate ?? ConcurrencyGate;
-        CacheIdentity = BuildFingerprint.HashText(FormattableString.Invariant(
-            $"skia-webp-v2:{_quality}:{_maxWidth}:{string.Join(",", _widths)}:{EncoderIdentity}"));
     }
 
-    public string CacheIdentity { get; }
+    // Computed on first use: the encoder identity loads the native library, which a site
+    // without images never needs. The settings it covers were copied above and cannot change.
+    public string CacheIdentity => field ??= BuildFingerprint.HashText(FormattableString.Invariant(
+        $"skia-webp-v2:{_quality}:{_maxWidth}:{string.Join(",", _widths)}:{EncoderIdentity}"));
 
     /// <inheritdoc/>
     public async Task<ProcessedImageInfo> ProcessAsync(

@@ -65,17 +65,34 @@ internal sealed class SiteEngine
         await using var cacheLease = await CacheLease.AcquireAsync(Paths.ResolveCachePath(), cancellationToken);
         var options = _options;
         ImageArtifactProcessor.ClearWork(Paths.ResolveImageWorkPath(options));
-        var assetManifest = options.AssetManifestPath is null ? new StaticAssetManifest { Assets = [] }
-            : StaticAssetManifest.Load(options.AssetManifestPath, options.AssetEndpointsPath, SiteInfo.BaseUrl);
-        UseAssetResources(assetManifest.Resources);
-        var assets = assetManifest.Assets;
-        OutputPathValidator.Validate(options, assetManifest, Paths.ProjectDirectory, Paths.ResolveKijiPath(), ContentRoots);
-        InvalidateContent();
         cancellationToken.ThrowIfCancellationRequested();
+        // The asset manifest and the content are independent inputs, so they load together.
+        var baseUrl = options.AssetManifestPath is null ? null : SiteInfo.BaseUrl;
+        var assetsLoaded = Task.Run(() =>
+        {
+            var manifest = options.AssetManifestPath is null ? new StaticAssetManifest { Assets = [] }
+                : StaticAssetManifest.Load(options.AssetManifestPath, options.AssetEndpointsPath, baseUrl);
+            OutputPathValidator.Validate(options, manifest, Paths.ProjectDirectory, Paths.ResolveKijiPath(), ContentRoots);
+            return manifest;
+        }, CancellationToken.None);
+        InvalidateContent();
 
         var stopwatch = Stopwatch.StartNew();
         var phases = new BuildPhaseTimer();
-        var snapshot = CreateSnapshot();
+        SiteSnapshot snapshot;
+        try
+        {
+            snapshot = CreateSnapshot();
+        }
+        catch
+        {
+            // An invalid manifest or output location is the error to report, as when it was read first.
+            await assetsLoaded;
+            throw;
+        }
+        var assetManifest = await assetsLoaded;
+        UseAssetResources(assetManifest.Resources);
+        var assets = assetManifest.Assets;
         var renderer = GetRenderer();
 
         var reservedPaths = CreateReservedArtifactPaths(options, snapshot, assets);
@@ -147,6 +164,8 @@ internal sealed class SiteEngine
                 planner.OutputStampsValid,
                 BuildLogger);
             phases.Mark(BuildPhaseTimer.Render);
+            // Rendering is what the profile is for; writing it overlaps the rest of the publish.
+            PublishJitProfile.Stop(PublishJitProfile.CodeIdentity(plan.CodeDependencies), rendered.Count, publishCompleted: false);
         }
         catch
         {
@@ -210,7 +229,8 @@ internal sealed class SiteEngine
 
         planner.SaveManifest(manifest, plan.OldManifest, cancellationToken);
         // Still under the cache lease, so concurrent publishes cannot interleave the save.
-        PublishJitProfile.Save(Paths.ResolveKijiPath(), rendered.Count);
+        PublishJitProfile.Stop(PublishJitProfile.CodeIdentity(plan.CodeDependencies), rendered.Count, publishCompleted: true);
+        await PublishJitProfile.SaveAsync(Paths.ResolveKijiPath());
         phases.Mark(BuildPhaseTimer.Manifest);
 
         var written = rendered.Count(static page => page.Written);

@@ -729,7 +729,7 @@ public sealed class IncrementalBuildTests : IDisposable
         var notesStampBefore = File.GetLastWriteTimeUtc(notesIndex);
         var manifestPath = Path.Combine(root, ".kiji", "cache", "manifest.json");
         var before = System.Text.Json.JsonSerializer.Deserialize(
-            await File.ReadAllTextAsync(manifestPath), Kiji.Generation.BuildManifestJsonContext.Default.BuildManifest)!;
+            await File.ReadAllTextAsync(manifestPath), BuildManifestJsonContext.Default.BuildManifest)!;
         var notesOutput = Path.GetRelativePath(Path.Combine(root, "dist"), notesIndex);
 
         // Touch content in posts/ only. The notes index enumerates its own collection,
@@ -740,7 +740,7 @@ public sealed class IncrementalBuildTests : IDisposable
         Assert.Contains("Edited post body.", await File.ReadAllTextAsync(postPage), StringComparison.Ordinal);
         Assert.Equal(notesStampBefore, File.GetLastWriteTimeUtc(notesIndex));
         var after = System.Text.Json.JsonSerializer.Deserialize(
-            await File.ReadAllTextAsync(manifestPath), Kiji.Generation.BuildManifestJsonContext.Default.BuildManifest)!;
+            await File.ReadAllTextAsync(manifestPath), BuildManifestJsonContext.Default.BuildManifest)!;
         // An unchanged HTML file alone cannot prove the scope stayed unchanged:
         // rendering can produce identical HTML and skip the write.
         Assert.Equal(
@@ -940,7 +940,7 @@ public sealed class IncrementalBuildTests : IDisposable
         {
             stable.HtmlOffset = int.MaxValue;
             await File.WriteAllBytesAsync(Path.Combine(cache, "manifest.json"), System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
-                manifest, Generation.BuildManifestJsonContext.Default.BuildManifest));
+                manifest, BuildManifestJsonContext.Default.BuildManifest));
         }
         else
         {
@@ -1589,7 +1589,7 @@ public sealed class IncrementalBuildTests : IDisposable
     {
         var cache = Path.Combine(root, ".kiji", "cache");
         var manifest = System.Text.Json.JsonSerializer.Deserialize(await File.ReadAllBytesAsync(Path.Combine(cache, "manifest.json")),
-            Generation.BuildManifestJsonContext.Default.BuildManifest)!;
+            BuildManifestJsonContext.Default.BuildManifest)!;
         var bytes = await File.ReadAllBytesAsync(Path.Combine(cache, manifest.HtmlFile));
         foreach (var page in manifest.Pages) { page.Html = bytes.AsMemory(page.HtmlOffset, page.HtmlLength); }
         return manifest;

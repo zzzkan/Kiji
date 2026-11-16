@@ -18,14 +18,21 @@ internal sealed class RunningCommand : IAsyncDisposable
     private readonly Task _drain;
     private readonly TaskCompletionSource<Uri> _address = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    private RunningCommand(string directory, string[] arguments)
+    private readonly bool _traceOutput;
+
+    private RunningCommand(string directory, string[] arguments, bool traceOutput = false)
     {
+        _traceOutput = traceOutput;
         _description = $"dotnet {string.Join(' ', arguments)} (in {directory})";
         var start = new ProcessStartInfo("dotnet")
         {
             WorkingDirectory = directory,
             UseShellExecute = false,
             CreateNoWindow = true,
+            // Never share the runner's input. A child that touches an inherited terminal from
+            // a background process group stops every process in that group, the test host and
+            // the CI runner included, which no timeout can then end.
+            RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
@@ -34,6 +41,7 @@ internal sealed class RunningCommand : IAsyncDisposable
         start.Environment["DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER"] = "0";
         start.Environment["DOTNET_WATCH_SUPPRESS_BROWSER_REFRESH"] = "0";
         _process = Process.Start(start)!;
+        _process.StandardInput.Close();
         Running.TryAdd(this, 0);
         Trace?.Invoke($"start pid {_process.Id}: {_description}");
         _drain = Task.WhenAll(ReadAsync(_process.StandardOutput), ReadAsync(_process.StandardError));
@@ -41,7 +49,8 @@ internal sealed class RunningCommand : IAsyncDisposable
 
     internal string Output { get { lock (_gate) { return _tail.ToString(); } } }
 
-    internal static RunningCommand Start(string directory, params string[] arguments) => new(directory, arguments);
+    // A server's output is the only sign of how far it got before a stall.
+    internal static RunningCommand Start(string directory, params string[] arguments) => new(directory, arguments, traceOutput: true);
 
     internal static async Task<string> RunAsync(string directory, params string[] arguments)
     {
@@ -126,6 +135,7 @@ internal sealed class RunningCommand : IAsyncDisposable
     {
         while (await reader.ReadLineAsync() is { } line)
         {
+            if (_traceOutput) { Trace?.Invoke($"  {_process.Id}| {line}"); }
             lock (_gate)
             {
                 _tail.AppendLine(line);

@@ -150,6 +150,36 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
             Assert.Single(third, static item => Path.GetFileNameWithoutExtension(item.Path) == "stable").FrontMatter);
     }
 
+    [Fact]
+    public async Task Build_CallsTheFileFilterForOneFileAtATimeInPathOrder()
+    {
+        for (var index = 0; index < 64; index++)
+        {
+            await File.WriteAllTextAsync(
+                Path.Combine(_contentsDir, $"post-{index:00}.md"),
+                CreateValidMarkdown("Post", new DateTime(2024, 1, 15)));
+        }
+        var active = 0;
+        var overlapped = false;
+        var seen = new List<string>();
+        var builder = new MarkdownContentsBuilder<FrontMatter>(_contentsDir, RenderAsync, filter: file =>
+        {
+            if (Interlocked.Increment(ref active) != 1) { overlapped = true; }
+            Thread.SpinWait(20_000);
+            seen.Add(file.Name);
+            Interlocked.Decrement(ref active);
+            return !file.Name.EndsWith("0.md", StringComparison.Ordinal);
+        });
+
+        var contents = builder.Build();
+
+        Assert.False(overlapped);
+        Assert.Equal(seen.Order(StringComparer.Ordinal), seen);
+        Assert.Equal(64, seen.Count);
+        Assert.Equal(57, contents.Count);
+        Assert.DoesNotContain(contents, static item => item.Path.EndsWith("0.md", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData("file", false)]
     [InlineData("directory", false)]

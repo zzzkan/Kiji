@@ -36,6 +36,9 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
         // are not documented as thread-safe, so each worker uses its own instance.
         // Each file is read exactly once: the same read yields front matter, the body
         // used for rendering, and the content hash the incremental planner needs.
+        // The filter is site code with no thread-safety requirement, so it runs serially
+        // in path order, before the parallel reads.
+        var included = filter is null ? null : Array.ConvertAll(markdownFiles, file => filter(file));
         var items = new MarkdownContent<TFrontMatter>[markdownFiles.Length];
         var errors = new Exception?[markdownFiles.Length];
         using var deserializers = new ThreadLocal<IDeserializer>(_frontMatterDeserializerFactory);
@@ -45,7 +48,7 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
             try
             {
                 var fileInfo = markdownFiles[index];
-                if (filter?.Invoke(fileInfo) == false)
+                if (included?[index] == false)
                 {
                     return;
                 }

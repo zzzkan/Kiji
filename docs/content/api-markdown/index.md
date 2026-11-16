@@ -30,7 +30,7 @@ Selects the files to load, through the `configure` callback.
 | Property                          | Behavior                                                                                                |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | `string Directory`                | Directory to load recursively, absolute or relative to the project. It must exist. Default `"content"`. |
-| `Func<FileInfo,bool>? FileFilter` | Returns `false` to skip a file. Default: load every `*.md` file.                                        |
+| `Func<FileInfo,bool>? FileFilter` | Returns `false` to skip a file; called for one file at a time. Default: load every `*.md` file.         |
 
 The directory may be outside the project or be a symbolic link. Directories and Markdown files
 below it must not be symbolic links or junctions. [Local images](../markdown/#local-images)

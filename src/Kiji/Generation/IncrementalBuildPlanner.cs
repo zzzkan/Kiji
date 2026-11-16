@@ -34,7 +34,7 @@ internal sealed class IncrementalBuildPlanner(
     ContentPath? contentPaths = null)
 {
     private readonly ILogger _logger = logger ?? NullLogger.Instance;
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Assembly, IReadOnlyList<string>> CodeDependencies = [];
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Assembly, Lazy<List<string>>> CodeDependencies = [];
     private readonly ArtifactCache _cache = new(cacheDirectory);
     private readonly string _rootPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
     private readonly string _manifestPath = Path.Combine(cacheDirectory, "manifest.json");
@@ -602,11 +602,14 @@ internal sealed class IncrementalBuildPlanner(
     {
         // A loaded assembly's references and code identity cannot change. Reuse
         // its complete dependency list across publishes, including framework code.
-        return [.. roots.Distinct().SelectMany(root => CodeDependencies.GetValue(root, CollectAssemblyDependencies))
+        // A publish starts this walk while its content loads; a lazy value lets planning wait
+        // for a walk in progress instead of repeating it.
+        return [.. roots.Distinct().SelectMany(root => CodeDependencies.GetValue(root,
+                static root => new Lazy<List<string>>(() => CollectAssemblyDependencies(root))).Value)
             .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
     }
 
-    private static IReadOnlyList<string> CollectAssemblyDependencies(Assembly root)
+    private static List<string> CollectAssemblyDependencies(Assembly root)
     {
         var visited = new HashSet<string>(StringComparer.Ordinal);
         var fingerprints = new List<string>();

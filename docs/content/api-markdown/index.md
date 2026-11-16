@@ -53,7 +53,7 @@ One Markdown file in a collection.
 | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
 | `string Path`                                                                  | The path relative to the content directory, using `/`. Also the collection ID.                                  |
 | `TFrontMatter FrontMatter`                                                     | The parsed front matter.                                                                                        |
-| `ValueTask<string> RenderAsync(CancellationToken cancellationToken = default)` | Renders the body to HTML. Call it while rendering a page, so Kiji can track the files and images the page uses. |
+| `ValueTask<string> RenderAsync(CancellationToken cancellationToken = default)` | Renders the body to HTML. Call it while rendering a page, so Kiji can track the files and images the page uses. A body with local images fails in a projection or a factory. |
 
 ## `MarkdownBody<TFrontMatter>`
 

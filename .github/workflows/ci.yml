@@ -22,6 +22,10 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    # A healthy job takes about four minutes. A step timeout is enforced by the runner,
+    # which a stalled runner ignores; the job timeout is enforced by the service and
+    # would otherwise default to six hours.
+    timeout-minutes: 20
     env:
       # Share dependencies on the checkout volume so CopyLocal can use hard links.
       NUGET_PACKAGES: ${{ github.workspace }}/artifacts/nuget-packages

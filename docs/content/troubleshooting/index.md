@@ -51,7 +51,7 @@ Port 8080 is taken. Run `dotnet watch -- --urls http://127.0.0.1:5000` to use an
 ### feed.xml or sitemap.xml returns 404 while developing
 
 Only `dotnet publish` writes feeds, sitemaps, and other generated files. See
-[Feeds and sitemaps](../feeds-and-sitemaps/).
+[Generated files](../recipes/#generated-files).
 
 ## Pages and content
 

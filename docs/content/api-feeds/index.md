@@ -12,7 +12,7 @@ section: API reference
 writes an RSS 2.0 feed with items in the given order. The channel's title, description,
 language, and URLs come from `SiteInfo`.
 
-See [Feeds and sitemaps](../feeds-and-sitemaps/#rss-feed) for examples.
+See [Recipes](../recipes/#rss-feed) for examples.
 
 ## `FeedItem`
 

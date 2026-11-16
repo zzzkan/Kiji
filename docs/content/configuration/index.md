@@ -111,6 +111,8 @@ errors, and Kiji's summary; `Debug` for `Kiji.Build` lists each generated file:
 { "Logging": { "LogLevel": { "Kiji.Build": "Debug" } } }
 ```
 
+A `Default` level applies to `Kiji.Build` too, so `"Default": "Warning"` hides the summary.
+
 In a terminal, `dotnet publish` shows these messages only with `-v d`. Inject
 `ILogger<T>` to log from your own components and services. Logs never fail a publish; see
 [Logging](../api-kiji/#logging).

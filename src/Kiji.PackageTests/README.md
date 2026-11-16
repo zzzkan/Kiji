@@ -3,7 +3,7 @@
 Run `dotnet test -c Release` here for package tests, or at the repository root
 for both test projects. `Kiji.Tests` checks library behavior without building
 consumer projects. `Kiji.PackageTests` checks the NuGet package through `dotnet`
-and HTTP on Windows and Linux.
+and HTTP on Windows, Linux and macOS.
 
 | Scenario | What it checks | Why a package test? |
 | --- | --- | --- |
@@ -14,7 +14,8 @@ and HTTP on Windows and Linux.
 `PackageFixture` packs Kiji once (or uses `KIJI_TEST_PACKAGE` from CI), prepares
 the consumer and cleans up. `Fixture/` holds its source template.
 `RunningCommand` runs `dotnet`, includes a bounded log tail in failures and
-stops the processes it started.
+stops the processes it started. Its waits are bounded: a process that outlives
+the command and keeps its output open is noted in the log tail, never awaited.
 
 All scenarios run serially in `artifacts/package-tests/work`. A file lock also
 prevents separate test runs from using it at the same time. Work, the local feed

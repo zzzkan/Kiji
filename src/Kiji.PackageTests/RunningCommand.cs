@@ -49,7 +49,7 @@ internal sealed class RunningCommand : IAsyncDisposable
         try
         {
             await _process.WaitForExitAsync().WaitAsync(TimeSpan.FromMinutes(2));
-            await _drain;
+            await DrainAsync();
             if (_process.ExitCode != 0) { throw new InvalidOperationException($"Exit code {_process.ExitCode}."); }
             return Output;
         }
@@ -66,7 +66,7 @@ internal sealed class RunningCommand : IAsyncDisposable
         var ready = await Task.WhenAny(_address.Task, exited).WaitAsync(TimeSpan.FromMinutes(2));
         if (ready == exited)
         {
-            await _drain;
+            await DrainAsync();
             throw new InvalidOperationException($"Server exited before listening: {_description}\n{Output}");
         }
         return await _address.Task;
@@ -75,8 +75,21 @@ internal sealed class RunningCommand : IAsyncDisposable
     internal async Task StopAsync()
     {
         if (!_process.HasExited) { _process.Kill(entireProcessTree: true); }
-        await _process.WaitForExitAsync();
-        await _drain;
+        await _process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        await DrainAsync();
+    }
+
+    // The pipes close only when every process holding them has exited. A descendant
+    // that outlives the tree kill (a build server, or a child started while the tree
+    // was being enumerated) inherits them, so waiting for the end of the output would
+    // hang the whole test run. Everything the command itself wrote is already read.
+    private async Task DrainAsync()
+    {
+        try { await _drain.WaitAsync(TimeSpan.FromSeconds(10)); }
+        catch (TimeoutException)
+        {
+            lock (_gate) { _tail.AppendLine("[A process outliving the command still holds its output.]"); }
+        }
     }
 
     public async ValueTask DisposeAsync()

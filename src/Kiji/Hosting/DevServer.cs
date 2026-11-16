@@ -328,6 +328,7 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
                 Task<string>? render = null;
                 SharedRenderLifetime? lifetime = null;
                 Rendering.PageRenderRequest? page = null;
+                string? redirect = null;
                 var status = StatusCodes.Status200OK;
                 lock (_snapshotLock)
                 {
@@ -345,24 +346,36 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
                         {
                             if (!path.EndsWith('/') && snapshot.PagesByRoute.TryGetValue(path + "/", out var slashPage))
                             {
-                                context.Response.Redirect(context.Request.PathBase.Add(PathString.FromUriComponent(slashPage.RoutePath)).ToUriComponent()
-                                    + context.Request.QueryString);
-                                return;
+                                redirect = context.Request.PathBase.Add(PathString.FromUriComponent(slashPage.RoutePath)).ToUriComponent()
+                                    + context.Request.QueryString;
                             }
-                            status = StatusCodes.Status404NotFound;
-                            snapshot.PagesByRoute.TryGetValue("/404.html", out page);
+                            else
+                            {
+                                status = StatusCodes.Status404NotFound;
+                                snapshot.PagesByRoute.TryGetValue("/404.html", out page);
+                            }
                         }
-                        if (page is null) { context.Response.StatusCode = status; return; }
-                        lifetime = _sharedRenders!;
-                        render = lifetime.RunAsync(async token =>
+                        if (redirect is null && page is null) { context.Response.StatusCode = status; return; }
+                        if (redirect is null)
                         {
-                            // Register only rendering under the lock; sending the response
-                            // belongs to the request and cannot delay a content refresh.
-                            await Task.Yield();
-                            using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, token);
-                            return await app.RenderPageAsync(page, cancellation.Token, lifetime);
-                        });
+                            lifetime = _sharedRenders!;
+                            render = lifetime.RunAsync(async token =>
+                            {
+                                // Register only rendering under the lock; sending the response
+                                // belongs to the request and cannot delay a content refresh.
+                                await Task.Yield();
+                                using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, token);
+                                return await app.RenderPageAsync(page!, cancellation.Token, lifetime);
+                            });
+                        }
                     }
+                }
+                if (redirect is not null)
+                {
+                    // LocalRedirect rejects any target that would leave this site, so a
+                    // crafted request path can never become an open redirect.
+                    await Results.LocalRedirect(redirect).ExecuteAsync(context);
+                    return;
                 }
                 if (render is null) { await refresh.WaitAsync(context.RequestAborted); continue; }
                 string html;

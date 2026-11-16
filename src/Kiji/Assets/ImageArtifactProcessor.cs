@@ -145,21 +145,19 @@ internal static class ImageArtifactProcessor
 
     private static string NormalizeFileName(string name)
     {
-        try { return name.Normalize(); }
-        catch (ArgumentException)
+        if (name.AsSpan().IndexOfAnyInRange('\uD800', '\uDFFF') < 0) { return name.Normalize(); }
+        // Invariant globalization may leave invalid UTF-16 unchanged instead of
+        // throwing from Normalize. Escape it before creating filenames and URLs.
+        var result = new System.Text.StringBuilder();
+        for (var index = 0; index < name.Length; index++)
         {
-            // Keep otherwise valid NTFS names representable in public URLs.
-            var result = new System.Text.StringBuilder();
-            for (var index = 0; index < name.Length; index++)
-            {
-                var character = name[index];
-                if (char.IsHighSurrogate(character) && index + 1 < name.Length && char.IsLowSurrogate(name[index + 1]))
-                { result.Append(character).Append(name[++index]); }
-                else if (char.IsSurrogate(character)) { result.Append('%').Append(((int)character).ToString("X4", System.Globalization.CultureInfo.InvariantCulture)); }
-                else { result.Append(character); }
-            }
-            return result.ToString().Normalize();
+            var character = name[index];
+            if (char.IsHighSurrogate(character) && index + 1 < name.Length && char.IsLowSurrogate(name[index + 1]))
+            { result.Append(character).Append(name[++index]); }
+            else if (char.IsSurrogate(character)) { result.Append('%').Append(((int)character).ToString("X4", System.Globalization.CultureInfo.InvariantCulture)); }
+            else { result.Append(character); }
         }
+        return result.ToString().Normalize();
     }
 
     private static string FreezeVariant(string directory, string fileName)

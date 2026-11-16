@@ -43,7 +43,7 @@ Changes to `Program.cs` apply only after a restart: press `Ctrl+R` in the `dotne
 terminal. To use another address, for example when port 8080
 is in use:
 
-```pwsh
+```powershell
 dotnet watch -- --urls http://127.0.0.1:5000
 ```
 
@@ -101,7 +101,7 @@ See [Blazor CSS isolation](https://learn.microsoft.com/aspnet/core/blazor/compon
 [`AddSitemap`](../api-sitemaps/#sitemaphostbuilderextensions), and
 [`AddArtifact`](../api-kiji/#staticsitehostbuilderextensions) write feeds, sitemaps,
 and other site-wide files. Only `dotnet publish` writes these files; the development
-server returns 404 for them.
+server returns 404 for them. See [Feeds and sitemaps](../feeds-and-sitemaps/).
 
 ## Static output
 

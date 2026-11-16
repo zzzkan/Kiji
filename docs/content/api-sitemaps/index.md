@@ -1,5 +1,6 @@
 ---
 title: Kiji.Sitemaps namespace
+navTitle: Kiji.Sitemaps
 description: Sitemap registration.
 order: 150
 section: API reference

@@ -21,7 +21,7 @@ Every page has an **Edit this page on GitHub** link at the bottom. The pages are
 files under `docs/content/`, and the site itself is a Kiji project in `docs/`. To preview
 your changes, clone the repository and run:
 
-```pwsh
+```powershell
 dotnet watch --project docs
 ```
 
@@ -30,7 +30,7 @@ dotnet watch --project docs
 Building needs the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0). From
 the repository root:
 
-```pwsh
+```powershell
 dotnet build -c Release
 dotnet test -c Release
 ```

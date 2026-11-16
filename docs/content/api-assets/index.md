@@ -1,5 +1,6 @@
 ---
 title: Kiji.Assets namespace
+navTitle: Kiji.Assets
 description: Image processing options and the image processor interface.
 order: 130
 section: API reference

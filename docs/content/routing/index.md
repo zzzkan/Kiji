@@ -5,6 +5,8 @@ order: 30
 section: Guides
 ---
 
+Kiji writes one HTML file for each route, so every URL must be known when you publish.
+
 ## Fixed routes
 
 Kiji generates a page for each `@page` route on public, non-abstract components in the

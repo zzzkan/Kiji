@@ -1,6 +1,7 @@
 ---
 title: API reference
-description: Types and members of the Kiji package, and the MSBuild property it reads.
+navTitle: Overview
+description: Types and members of the Kiji package, by namespace.
 order: 100
 section: API reference
 ---

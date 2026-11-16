@@ -14,7 +14,7 @@ or later; run `dotnet --version` to check.
 Install [Kiji.Templates](https://github.com/zzzkan/Kiji.Templates) and create a site with
 the [Blog template](https://github.com/zzzkan/Kiji.Templates#kiji-blog):
 
-```pwsh
+```powershell
 dotnet new install Kiji.Templates
 dotnet new kiji-blog -o MyBlog
 cd MyBlog
@@ -24,7 +24,7 @@ In `Program.cs`, set the site name, description, language, and author in `SiteIn
 set `BaseUrl` to your public URL. Then start the development server and open
 <http://localhost:8080>, adding the path from `BaseUrl` if it has one, such as `/blog/`:
 
-```pwsh
+```powershell
 dotnet watch
 ```
 
@@ -51,7 +51,7 @@ Razor and C# blocks show complete files; highlighted lines mark changes.
 
 Create a console project and add Kiji:
 
-```pwsh
+```powershell
 dotnet new console -o MySite
 cd MySite
 dotnet add package Kiji
@@ -104,7 +104,7 @@ Create `Pages/Home.razor`:
 Kiji finds components with `@page` routes automatically. Start the development server
 and open <http://localhost:8080>:
 
-```pwsh
+```powershell
 dotnet watch
 ```
 
@@ -382,7 +382,7 @@ To add a post, create another directory such as `content/posts/second-post/` wit
 
 Stop the development server and publish:
 
-```pwsh
+```powershell
 dotnet publish -o dist
 ```
 
@@ -390,5 +390,5 @@ dotnet publish -o dist
 Later publishes reuse unchanged pages; see [Incremental builds](../incremental-builds/).
 
 Add `.kiji/` and `dist/` to `.gitignore`. Continue with [Concepts](../concepts/),
-[Routing](../routing/), or [Deployment](../deployment/). If something does not work, see
+[Routing](../routing/), [Recipes](../recipes/), or [Deployment](../deployment/). If something does not work, see
 [Troubleshooting](../troubleshooting/).

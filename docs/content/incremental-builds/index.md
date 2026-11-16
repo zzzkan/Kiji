@@ -74,7 +74,7 @@ regenerate images from scratch. Clean removes the build output, Kiji's staging
 directory, and `.kiji`, including the publish and image caches. Clean the Release
 configuration to match the default used by `dotnet publish` on .NET 10.
 
-```pwsh
+```powershell
 dotnet clean -c Release
 dotnet publish -o dist
 

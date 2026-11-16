@@ -1,5 +1,6 @@
 ---
 title: Kiji namespace
+navTitle: Kiji
 description: The site builder, site and page metadata, content collections, and site-wide files.
 order: 110
 section: API reference
@@ -103,7 +104,8 @@ and paths are already selected.
 `Configuration` is a standard
 [configuration](https://learn.microsoft.com/dotnet/core/extensions/configuration), also
 injectable as `IConfiguration`. It reads `appsettings.json` and then
-`appsettings.{Environment}.json` from the project directory:
+`appsettings.{Environment}.json` from the project directory. See
+[Configuration](../configuration/) for a walkthrough.
 
 ```csharp
 builder.Services.Configure<ImageProcessorOptions>(builder.Configuration.GetSection("Images"));

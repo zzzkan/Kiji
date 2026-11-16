@@ -1,5 +1,6 @@
 ---
 title: Kiji.Markdown namespace
+navTitle: Kiji.Markdown
 description: Markdown content registration, options, and rendering.
 order: 120
 section: API reference

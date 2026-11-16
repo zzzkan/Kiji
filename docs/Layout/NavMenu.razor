@@ -10,7 +10,7 @@
         {
             var path = Site.ResolveUrl($"docs/{doc.Slug}/").AbsolutePath;
             <li>
-                <a href="@path" aria-current="@(path == Page.Url.AbsolutePath ? "page" : null)">@doc.Title</a>
+                <a href="@path" aria-current="@(path == Page.Url.AbsolutePath ? "page" : null)">@doc.NavTitle</a>
             </li>
         }
     </ul>

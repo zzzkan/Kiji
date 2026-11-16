@@ -5,6 +5,9 @@ order: 40
 section: Guides
 ---
 
+Kiji loads Markdown files into a typed collection that pages list and render, and
+publishes the images beside them as responsive images.
+
 ## Register Markdown content
 
 Markdown files can start with YAML front matter, whose fields you define in a class:

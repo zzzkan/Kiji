@@ -32,6 +32,8 @@ public sealed class Article
 
     public string Title => _content.FrontMatter.Title;
 
+    public string NavTitle => _content.FrontMatter.NavTitle ?? Title;
+
     public string Description => _content.FrontMatter.Description;
 
     public int Order => _content.FrontMatter.Order;

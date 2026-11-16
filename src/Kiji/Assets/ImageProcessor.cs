@@ -16,6 +16,9 @@ internal sealed class ImageProcessor : IImageProcessor
 
     private static readonly int[] DefaultWidths = [320, 640, 960, 1280];
 
+    /// <summary>The most pixels WebP stores along either side.</summary>
+    private const int MaxWebpDimension = 16383;
+
     // Native code is not covered by managed assembly dependency tracking. Include
     // its version and platform so caches cannot cross incompatible native builds.
     private static readonly string EncoderIdentity =
@@ -66,7 +69,10 @@ internal sealed class ImageProcessor : IImageProcessor
         string outputDirectory, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var contentHash = BuildFingerprint.HashText(CacheIdentity + ":" + sourceHash);
+        // The source name already separates unrelated images, so 64 bits identify
+        // a version. A full digest left too little of the 255-byte file name limit
+        // for long names, which multi-byte scripts reach quickly.
+        var contentHash = BuildFingerprint.HashText(CacheIdentity + ":" + sourceHash)[..16];
         using var source = new MemoryStream(bytes, writable: false);
         using var codec = SKCodec.Create(source) ?? throw new InvalidDataException($"Cannot read image '{fileNameBase}'.");
         // Report and generate the displayed orientation, as browsers show the source.
@@ -79,9 +85,22 @@ internal sealed class ImageProcessor : IImageProcessor
         // Another page may still reference an older variant with this basename.
         // Only output reconciliation knows which files are safe to remove.
 
+        // The encoder rejects larger sides outright. Scale the largest variant to
+        // fit, so a long screenshot or a panorama still publishes.
+        var largestWidth = Math.Min(Math.Min(originalWidth, _maxWidth), MaxWebpDimension);
+        if ((long)originalHeight * largestWidth > (long)MaxWebpDimension * originalWidth)
+        {
+            largestWidth = (int)((long)MaxWebpDimension * originalWidth / originalHeight);
+        }
+        if (largestWidth < 1)
+        {
+            throw new InvalidDataException(
+                $"Image '{fileNameBase}' ({originalWidth}x{originalHeight}) is too narrow for its height to store as WebP, which holds at most {MaxWebpDimension} pixels per side.");
+        }
+
         var targetWidths = _widths
-            .Where(width => width < originalWidth)
-            .Append(Math.Min(originalWidth, _maxWidth))
+            .Where(width => width < largestWidth)
+            .Append(largestWidth)
             .ToArray();
 
         // Lock the materialized image family, not its source: differing requested
@@ -223,7 +242,8 @@ internal sealed class ImageProcessor : IImageProcessor
     {
         // Write to a temp file and move into place so concurrent renders of the same
         // image never observe a partially written variant.
-        var temporaryPath = $"{destinationPath}.{Guid.NewGuid():N}.tmp";
+        // The temporary name omits the variant's, which may already be near the limit.
+        var temporaryPath = Path.Combine(Path.GetDirectoryName(destinationPath)!, $"{Guid.NewGuid():N}.tmp");
         try
         {
             cancellationToken.ThrowIfCancellationRequested();

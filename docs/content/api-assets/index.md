@@ -22,7 +22,7 @@ builder.Services.Configure<ImageProcessorOptions>(options =>
 | Property                     | Default | Behavior                                                                                                                            |
 | ---------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `IReadOnlyList<int>? Widths` | `null`  | Widths of the smaller variants. `null` uses 320, 640, 960, and 1280. Widths at or above the source width or `MaxWidth` are skipped. |
-| `int MaxWidth`               | `1920`  | The widest variant. Every image also gets a variant at its own width, up to this value.                                             |
+| `int MaxWidth`               | `1920`  | The widest variant. Every image also gets a variant at its own width, up to this value and WebP's 16383 pixels per side.            |
 | `int Quality`                | `80`    | Lossy WebP quality from 1 to 100.                                                                                                   |
 
 A custom `IImageProcessor` ignores these settings.

@@ -181,6 +181,74 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
         Assert.Equal("Kept", Assert.Single(builder.Build()).FrontMatter.Title);
     }
 
+    [Fact]
+    public async Task Build_CallsTheFileFilterForOneFileAtATimeInPathOrder()
+    {
+        for (var index = 0; index < 64; index++)
+        {
+            await File.WriteAllTextAsync(
+                Path.Combine(_contentsDir, $"post-{index:00}.md"),
+                CreateValidMarkdown("Post", new DateTime(2024, 1, 15)));
+        }
+        var active = 0;
+        var overlapped = false;
+        var seen = new List<string>();
+        var builder = new MarkdownContentsBuilder<FrontMatter>(_contentsDir, RenderAsync, filter: file =>
+        {
+            if (Interlocked.Increment(ref active) != 1) { overlapped = true; }
+            Thread.SpinWait(20_000);
+            seen.Add(file.Name);
+            Interlocked.Decrement(ref active);
+            return !file.Name.EndsWith("0.md", StringComparison.Ordinal);
+        });
+
+        var contents = builder.Build();
+
+        Assert.False(overlapped);
+        Assert.Equal(seen.Order(StringComparer.Ordinal), seen);
+        Assert.Equal(64, seen.Count);
+        Assert.Equal(57, contents.Count);
+        Assert.DoesNotContain(contents, static item => item.Path.EndsWith("0.md", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("file", false)]
+    [InlineData("directory", false)]
+    [InlineData("nested-directory", false)]
+    [InlineData("loop", false)]
+    [InlineData("root", true)]
+    public async Task Build_RejectsLinksBelowTheContentRootInsteadOfFollowingThem(string link, bool loads)
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Creating symbolic links requires privileges on Windows.");
+        var outside = Path.Combine(_testDir, "outside");
+        Directory.CreateDirectory(outside);
+        await File.WriteAllTextAsync(Path.Combine(outside, "secret.txt"), "Outside the content root.");
+        await File.WriteAllTextAsync(Path.Combine(outside, "inner.md"), CreateValidMarkdown("Inner", new DateTime(2024, 1, 15)));
+        await File.WriteAllTextAsync(Path.Combine(_contentsDir, "real.md"), CreateValidMarkdown("Real", new DateTime(2024, 1, 15)));
+        Directory.CreateDirectory(Path.Combine(_contentsDir, "posts"));
+        var contents = _contentsDir;
+        switch (link)
+        {
+            case "file": File.CreateSymbolicLink(Path.Combine(_contentsDir, "leak.md"), Path.Combine(outside, "secret.txt")); break;
+            case "directory": Directory.CreateSymbolicLink(Path.Combine(_contentsDir, "linked"), outside); break;
+            case "nested-directory": Directory.CreateSymbolicLink(Path.Combine(_contentsDir, "posts", "linked"), outside); break;
+            case "loop": Directory.CreateSymbolicLink(Path.Combine(_contentsDir, "posts", "loop"), _contentsDir); break;
+            default:
+                contents = Path.Combine(_testDir, "linked-content");
+                Directory.CreateSymbolicLink(contents, _contentsDir);
+                break;
+        }
+        var builder = new MarkdownContentsBuilder<FrontMatter>(contents, RenderAsync);
+
+        if (loads)
+        {
+            Assert.Equal("real.md", Assert.Single(builder.Build()).Path);
+            return;
+        }
+        var exception = Assert.Throws<InvalidOperationException>(() => builder.Build());
+        Assert.Contains("symbolic links", exception.Message, StringComparison.Ordinal);
+    }
+
     private MarkdownContentsBuilder<FrontMatter> CreateBuilder()
     {
         return new MarkdownContentsBuilder<FrontMatter>(_contentsDir, RenderAsync);

@@ -22,6 +22,10 @@ CSS, JavaScript, or HTML are not rewritten.
 ## `ImportMap`
 
 Place Blazor's `<ImportMap />` in `HeadContent` before scripts that use JavaScript imports.
+It maps each script's public URL, base path included, to its fingerprinted URL and adds
+the integrity hashes: with a `/blog/` base path, `/blog/js/app.js` loads
+`/blog/js/app.<fingerprint>.js`. Relative imports between your scripts resolve to those
+URLs; from an inline script, import the full path.
 See the
 [ImportMap component](https://learn.microsoft.com/aspnet/core/blazor/fundamentals/static-files?view=aspnetcore-10.0#importmap-component).
 

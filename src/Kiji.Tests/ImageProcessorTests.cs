@@ -67,6 +67,48 @@ public sealed class ImageProcessorTests : IDisposable
         Assert.Equal([320, 640, 960, 1280, 1920], info.Variants.Select(static variant => variant.Width));
     }
 
+    [Fact]
+    public async Task ProcessImage_LongMultiByteName_FitsTheFileNameLimit()
+    {
+        // 184 UTF-8 bytes: a valid source name that must leave room for the variant suffix.
+        var imagePath = Path.Combine(_sourceDir, new string('写', 60) + ".png");
+        await CreateTestImageAsync(imagePath, 500, 300);
+
+        var info = await _processor.ProcessAsync(imagePath, _outputDir);
+
+        Assert.All(info.Variants, variant => Assert.True(File.Exists(Path.Combine(_outputDir, variant.FileName))));
+        Assert.Empty(Directory.GetFiles(_outputDir, "*.tmp"));
+    }
+
+    [Theory]
+    [InlineData(400, 17000, 1920, new[] { 320, 385 })]
+    [InlineData(17000, 8, 20000, new[] { 320, 640, 960, 1280, 16383 })]
+    public async Task ProcessImage_BeyondWebpDimensions_ScalesLargestVariantToFit(int width, int height, int maxWidth, int[] expected)
+    {
+        var imagePath = Path.Combine(_sourceDir, "long.png");
+        await CreateTestImageAsync(imagePath, width, height);
+
+        var info = await new ImageProcessor(new ImageProcessorOptions { MaxWidth = maxWidth }).ProcessAsync(imagePath, _outputDir);
+
+        Assert.Equal(width, info.OriginalWidth);
+        Assert.Equal(height, info.OriginalHeight);
+        Assert.Equal(expected, info.Variants.Select(static variant => variant.Width));
+        using var codec = SKCodec.Create(Path.Combine(_outputDir, info.Variants[^1].FileName));
+        Assert.Equal(expected[^1], codec.Info.Width);
+        Assert.InRange(codec.Info.Height, 1, 16383);
+    }
+
+    [Fact]
+    public async Task ProcessImage_TooNarrowForWebp_NamesTheImage()
+    {
+        var imagePath = Path.Combine(_sourceDir, "sliver.png");
+        await CreateTestImageAsync(imagePath, 1, 20000);
+
+        var exception = await Assert.ThrowsAsync<InvalidDataException>(() => _processor.ProcessAsync(imagePath, _outputDir));
+
+        Assert.Contains("sliver.png", exception.Message, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData(null, 800, new[] { 320, 640, 800 })]
     [InlineData(new[] { 960, 480, 480, 3000 }, 1000, new[] { 480, 960, 1000 })]

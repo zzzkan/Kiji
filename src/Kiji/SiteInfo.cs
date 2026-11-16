@@ -39,14 +39,15 @@ public sealed class SiteInfo
     public string Author { get; init; } = string.Empty;
 
     /// <summary>Combines a site-relative path with the site's <see cref="BaseUrl"/>.</summary>
-    /// <param name="path">A site-relative path, optionally starting with a single slash and including a query or fragment.</param>
+    /// <param name="path">A site-relative path, optionally starting with a single slash. A query or fragment may follow a non-empty path.</param>
     /// <returns>The resolved absolute URI.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="path"/> is null.</exception>
-    /// <exception cref="ArgumentException">The path has surrounding whitespace, is an absolute URI or network-path reference,
+    /// <exception cref="ArgumentException">The path is only a query or fragment, has surrounding whitespace, is an absolute URI or network-path reference,
     /// or contains a backslash, a control character, or a parent-directory segment (including percent-encoded forms).</exception>
     /// <remarks>
     /// A single leading slash is ignored, preserving the deployment base path.
-    /// An empty string or <c>/</c> returns <see cref="BaseUrl"/>. Parent-directory segments are rejected even when they would stay within the site.
+    /// An empty string or <c>/</c> returns <see cref="BaseUrl"/>. A query or fragment alone, such as <c>?page=2</c> or <c>/#top</c>, is rejected;
+    /// append it to <see cref="BaseUrl"/> yourself. Parent-directory segments are rejected even when they would stay within the site.
     /// </remarks>
     public Uri ResolveUrl(string path)
     {
@@ -60,7 +61,12 @@ public sealed class SiteInfo
 
         var suffixStart = relativePath.AsSpan().IndexOfAny('?', '#');
         var pathPart = suffixStart < 0 ? relativePath.AsSpan() : relativePath.AsSpan(0, suffixStart);
-        if (pathPart.IsEmpty || pathPart[0] == '/'
+        if (pathPart.IsEmpty)
+        {
+            throw new ArgumentException("A query or fragment must follow a non-empty site-relative path.", nameof(path));
+        }
+
+        if (pathPart[0] == '/'
             || char.IsWhiteSpace(pathPart[0]) || char.IsWhiteSpace(pathPart[^1]))
         {
             throw new ArgumentException("A site-relative path with at most one leading slash and no surrounding whitespace is required.", nameof(path));

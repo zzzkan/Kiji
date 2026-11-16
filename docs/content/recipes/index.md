@@ -238,8 +238,8 @@ using Kiji.Sitemaps;
 builder.AddSitemap();
 ```
 
-To leave pages out, pass their paths relative to `BaseUrl`. Each path removes only the
-page with that exact path:
+To leave pages out, pass their paths relative to `BaseUrl`, percent-encoded or not. Each
+path removes only the page with that exact path:
 
 ```csharp
 builder.AddSitemap(excludedPaths: ["preview/", "internal/status/"]);

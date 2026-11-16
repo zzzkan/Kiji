@@ -95,8 +95,12 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   Each page gets a fresh renderer/dispatcher, isolating the framework's section state.
   HeadContent replaces earlier providers rather than appending; compose shared tags
   inside the page's HeadContent. Await quiescence before serializing the document.
-- Responsive images are shared under `_images/`, independent of page routes. Sources must
-  be project-local files under registered content roots, without symbolic links or junctions.
+- The requested shared-image design replaces page-bundle image URLs: responsive images
+  live under `_images/`, independent of page routes. Content-derived variant identities
+  preserve immutable bytes across pages and custom processors. This is the intentional
+  exception to the former prohibition on content-addressed image URLs.
+  Sources use registered, watched content roots, including external and linked roots,
+  just as Markdown does. Reject symbolic links or junctions below those roots.
   Keep image variants immutable so carried and freshly rendered pages cannot overwrite
   each other, including with custom processors. Record shared outputs on every referring page.
 - Customize IImageProcessor through builder.Services. The last unkeyed registration must

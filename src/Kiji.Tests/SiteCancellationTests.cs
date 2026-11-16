@@ -60,6 +60,7 @@ public sealed class SiteCancellationTests : IDisposable
     [Theory]
     [InlineData("run")]
     [InlineData("host")]
+    [InlineData("reload")]
     public async Task DevShutdown_CancelsAndJoinsDetachedMarkdown(string trigger)
     {
         WriteContent("dev");
@@ -94,14 +95,13 @@ public sealed class SiteCancellationTests : IDisposable
             await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
             requestStop.Cancel();
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => request);
-            // Reload drops the content dictionary, but its detached producer is still owned.
-            await server.ReloadAfterCodeUpdateAsync();
             if (trigger == "run") { runStop.Cancel(); }
-            else { hostShutdown = web.StopAsync(); }
+            else if (trigger == "host") { hostShutdown = web.StopAsync(); }
+            else { shutdown = server.ReloadAfterCodeUpdateAsync(); }
             // Observe the selected stop signal before disposal can cancel the producer itself.
             await canceled.Task.WaitAsync(TimeSpan.FromSeconds(10));
             await hostShutdown.WaitAsync(TimeSpan.FromSeconds(10));
-            shutdown = server.DisposeAsync().AsTask();
+            shutdown ??= server.DisposeAsync().AsTask();
             Assert.False(shutdown.IsCompleted);
             cleanup.SetResult();
             await shutdown.WaitAsync(TimeSpan.FromSeconds(10));
@@ -113,11 +113,8 @@ public sealed class SiteCancellationTests : IDisposable
             release.TrySetResult();
             await hostShutdown.WaitAsync(TimeSpan.FromSeconds(10));
             if (shutdown is not null) { await shutdown.WaitAsync(TimeSpan.FromSeconds(10)); }
-            else
-            {
-                await web.StopAsync();
-                await server.DisposeAsync();
-            }
+            await web.StopAsync();
+            await server.DisposeAsync();
         }
     }
 

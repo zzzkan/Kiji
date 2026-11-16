@@ -33,6 +33,7 @@ internal sealed class SiteEngine
     public SiteEngine(IServiceProvider services, SiteExecutionPaths paths, ResolvedSitePaths options,
         StaticSiteOptions siteOptions, ContentRuntime runtime, IHostEnvironment environment, IConfiguration configuration)
     {
+        ArgumentNullException.ThrowIfNull(services);
         ServiceProvider = services;
         Paths = paths;
         _options = options;
@@ -45,8 +46,7 @@ internal sealed class SiteEngine
         _serviceAssemblies = services.GetService<KijiServiceProviderStamp>()?.Assemblies ?? [];
         _defaultLayoutType = siteOptions.DefaultLayoutType;
         _notFoundComponentType = siteOptions.NotFoundComponentType;
-        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-        ContentRoots = [.. siteOptions.ContentPaths.Select(paths.ResolveAgainstRoot).Distinct(comparer)];
+        ContentRoots = services.GetRequiredService<ContentPath>().Roots;
     }
 
     internal SiteInfo SiteInfo => ServiceProvider.GetRequiredService<SiteInfo>();
@@ -105,7 +105,7 @@ internal sealed class SiteEngine
                 _configuration,
                 _runtime.Files, _runtime.Dependencies,
                 ServiceProvider.GetRequiredService<IImageProcessor>(), assetManifest.Resources, BuildLogger,
-                _runtime.ResolveItem);
+                _runtime.ResolveItem, ServiceProvider.GetRequiredService<ContentPath>());
 
             // Snapshot planning already required every page type to come from a page assembly.
             // Helpers and custom encoder factories may live outside the page assemblies.
@@ -251,7 +251,11 @@ internal sealed class SiteEngine
         return output.ToString();
     }
 
-    internal void InvalidateContent() => _runtime.Invalidate();
+    internal void InvalidateContent()
+    {
+        _runtime.Invalidate();
+        ServiceProvider.GetRequiredService<ContentPath>().Invalidate();
+    }
 
     internal SiteSnapshot CreateSnapshot()
     {

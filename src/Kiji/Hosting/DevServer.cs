@@ -42,6 +42,9 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
     private Task? _diagnosticsRelay;
     private SharedRenderLifetime? _sharedRenders;
     private bool _disposed;
+    private Task _refreshTask = Task.CompletedTask;
+    private CancellationTokenSource? _serverStopping;
+    private string _imageOutput = null!;
 
     internal static DevServer Create(SiteEngine app, string[] args,
         DevServerStatusReporter? reporter = null, TextWriter? statusOutput = null, bool? isOutputRedirected = null)
@@ -67,6 +70,8 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
     internal async Task<WebApplication> StartAsync(ResolvedSitePaths options, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(options.OutputDirectory);
+        _imageOutput = Path.Combine(options.OutputDirectory, "_images");
+        if (Directory.Exists(_imageOutput)) { Directory.Delete(_imageOutput, recursive: true); }
         var builder = _builder;
         // The standard Host Filtering middleware reads AllowedHosts. Supply only a
         // fallback; appsettings, environment variables and command line stay in control.
@@ -99,7 +104,8 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
 
         var web = builder.Build();
         _webApplication = web;
-        _sharedRenders = new SharedRenderLifetime(cancellationToken, web.Lifetime.ApplicationStopping);
+        _serverStopping = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, web.Lifetime.ApplicationStopping);
+        _sharedRenders = new SharedRenderLifetime(_serverStopping.Token, CancellationToken.None);
 
         // Must run before route matching, so the /_kiji/* endpoints below match a
         // prefixed request. WebApplication auto-inserts UseRouting ahead of all user
@@ -207,7 +213,7 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
             web.Configuration[WatchDiagnosticsRelay.EndpointKey],
             web.Configuration[WatchDiagnosticsRelay.ServerKeyKey],
             diagnostics => _hub.ReportDiagnosticsAsync(diagnostics, CancellationToken.None),
-            _sharedRenders.Token);
+            _serverStopping.Token);
         _reporter.DevServerStarted(
             new Uri(new Uri(web.Urls.First()), app.SiteInfo.BaseUrl.AbsolutePath),
             app.ContentRoots,
@@ -245,9 +251,9 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
     {
         lock (_snapshotLock)
         {
-            _snapshot = null;
-            app.InvalidateContent();
+            QueueContentRefresh();
         }
+        await _refreshTask;
 
         var reloadedClients = await _hub.BroadcastReloadAsync(CancellationToken.None);
         _reporter.CodeUpdated(reloadedClients);
@@ -271,10 +277,9 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
             await _debounceTimer.DisposeAsync();
         }
 
-        if (_sharedRenders is not null)
-        {
-            await _sharedRenders.DisposeAsync();
-        }
+        if (_serverStopping is not null) { await _serverStopping.CancelAsync(); }
+        await _refreshTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        if (_sharedRenders is not null) { await _sharedRenders.DisposeAsync(); }
 
         if (_webApplication is not null)
         {
@@ -290,6 +295,7 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
         {
             await _diagnosticsRelay;
         }
+        _serverStopping?.Dispose();
     }
 
     private static readonly Lazy<string> LiveReloadScript = new(static () =>
@@ -301,6 +307,31 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
     });
 
     private async Task HandlePageAsync(HttpContext context)
+    {
+        while (true)
+        {
+            Task refresh;
+            Task? render = null;
+            lock (_snapshotLock)
+            {
+                refresh = _refreshTask;
+                if (refresh.IsCompletedSuccessfully)
+                {
+                    render = _sharedRenders!.RunAsync(async _ =>
+                    {
+                        // Register under the lock, then render outside it.
+                        await Task.Yield();
+                        await HandleCurrentPageAsync(context);
+                        return "";
+                    });
+                }
+            }
+            if (render is not null) { await render; return; }
+            await refresh.WaitAsync(context.RequestAborted);
+        }
+    }
+
+    private async Task HandleCurrentPageAsync(HttpContext context)
     {
         var path = context.Request.Path.Value ?? "/";
         var snapshot = GetSnapshot();
@@ -390,6 +421,15 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
             if (!Directory.Exists(root)) { continue; }
             StartWatcher(root, inputs);
         }
+        // Recursive parent watchers do not follow child links. Open each linked
+        // content root directly as well, while its parent still detects retargeting.
+        foreach (var input in _watchedPaths.Where(input => input.Source == WatchedPathSource.Content))
+        {
+            if (Directory.Exists(input.Path) && new DirectoryInfo(input.Path).LinkTarget is not null)
+            {
+                StartWatcher(input.Path, [input]);
+            }
+        }
     }
 
     private void StartWatcher(string root, WatchedPath[] inputs)
@@ -474,8 +514,7 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
             if (_contentChanged)
             {
                 _contentChanged = false;
-                _snapshot = null;
-                app.InvalidateContent();
+                QueueContentRefresh();
             }
         }
 
@@ -540,6 +579,31 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
         };
     }
 
+    // Called under the snapshot lock. New requests wait while old renders are
+    // canceled and joined; cleanup can never race a writer from either snapshot.
+    private void QueueContentRefresh()
+    {
+        var previous = _refreshTask;
+        _refreshTask = Task.Run(async () =>
+        {
+            // A transient cleanup failure is surfaced to requests; the next change
+            // can retry instead of retaining a failed refresh forever.
+            await previous.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            await _sharedRenders!.DisposeAsync();
+            lock (_snapshotLock)
+            {
+                if (_disposed) { return; }
+                if (Directory.Exists(_imageOutput)) { Directory.Delete(_imageOutput, recursive: true); }
+                app.InvalidateContent();
+                _snapshot = null;
+                foreach (var watcher in _watchers) { watcher.Dispose(); }
+                _watchers.Clear();
+                StartWatchers();
+                _sharedRenders = new SharedRenderLifetime(_serverStopping!.Token, CancellationToken.None);
+            }
+        });
+    }
+
     private async Task ReportReloadAsync(List<WatchedChange> changes)
     {
         if (changes.Count == 0)
@@ -547,6 +611,7 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
             return;
         }
 
+        await _refreshTask;
         var reloadedClients = await _hub.BroadcastReloadAsync(CancellationToken.None);
         _reporter.ChangesDetected(changes, reloadedClients);
     }

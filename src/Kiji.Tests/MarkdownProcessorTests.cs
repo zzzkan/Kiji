@@ -96,7 +96,8 @@ public sealed class MarkdownProcessorTests : IDisposable
             () => WithPageContextAsync("/p/", () => ProcessFileAsync(CreateProcessor(), mdPath)));
 
         Assert.Contains("missing.png", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("broken.md", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(mdPath, exception.Message, StringComparison.Ordinal);
+        Assert.Contains(Path.Combine(_testFilesDir, "missing.png"), exception.Message, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -231,6 +232,62 @@ public sealed class MarkdownProcessorTests : IDisposable
     }
 
     [Fact]
+    public async Task AddedImage_IsVisibleBeforeSnapshotInvalidation()
+    {
+        await CreateTestImageAsync(Path.Combine(_testFilesDir, "first.png"), 32, 32);
+        var processor = CreateProcessor();
+        await WithPageContextAsync("/first/", () => processor.ProcessBodyAsync(
+            Path.Combine(_testFilesDir, "first.md"), "![First](first.png)"));
+        await CreateTestImageAsync(Path.Combine(_testFilesDir, "added.png"), 32, 32);
+        var html = await WithPageContextAsync("/second/", () => processor.ProcessBodyAsync(
+            Path.Combine(_testFilesDir, "second.md"), "![Added](added.png)"));
+        Assert.Contains("added.png.", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UnicodeNormalizationAlias_CanResolveAnExistingImage()
+    {
+        var diskName = "cafe\u0301.png";
+        var alias = "caf\u00e9.png";
+        await CreateTestImageAsync(Path.Combine(_testFilesDir, diskName), 32, 32);
+        Assert.SkipUnless(File.Exists(Path.Combine(_testFilesDir, alias)), "Requires a normalization-insensitive filesystem.");
+        var markdown = CreateMarkdownFile("unicode.md", $"![Photo]({alias})");
+        var html = await WithPageContextAsync("/unicode/", () => ProcessFileAsync(CreateProcessor(), markdown));
+        Assert.Contains("caf%C3%A9.png.", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ShortFilenameAlias_CanResolveAnExistingImage()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "8.3 aliases require Windows.");
+        var path = Path.Combine(_testFilesDir, "Photograph with a long name.png");
+        await CreateTestImageAsync(path, 32, 32);
+        using var command = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe")
+        {
+            Arguments = $"/d /c for %I in (\"{path}\") do @echo %~sI",
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+        })!;
+        var shortPath = (await command.StandardOutput.ReadToEndAsync()).Trim();
+        await command.WaitForExitAsync();
+        var shortName = Path.GetFileName(shortPath);
+        Assert.SkipUnless(shortName.Contains('~') && File.Exists(shortPath), "8.3 names are disabled on this volume.");
+        var markdown = CreateMarkdownFile("short.md", $"![Photo]({shortName})");
+        var html = await WithPageContextAsync("/short/", () => ProcessFileAsync(CreateProcessor(), markdown));
+        Assert.StartsWith("/_images/", ImageSource(html), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ColonInRelativeSourceName_IsSupportedOnUnix()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Colons are not ordinary Windows filename characters.");
+        await CreateTestImageAsync(Path.Combine(_testFilesDir, "photo:one.png"), 32, 32);
+        var markdown = CreateMarkdownFile("colon.md", "![Photo](./photo:one.png)");
+        var html = await WithPageContextAsync("/colon/", () => ProcessFileAsync(CreateProcessor(), markdown));
+        Assert.Contains("photo%253Aone.png.", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ProcessAsync_ImageWithoutPageRenderContext_Throws()
     {
         var mdPath = CreateMarkdownFile("no-context.md", "![Used](used.png)");
@@ -248,7 +305,7 @@ public sealed class MarkdownProcessorTests : IDisposable
         {
             OutputDirectory = _outputDir,
             ImageCacheDirectory = _cacheDir,
-        }, new SiteExecutionPaths(_testDir), site ?? TestArticleContents.CreateSiteInfo(), [_testFilesDir], new ProjectPath(), imageProcessor ?? new ImageProcessor());
+        }, new SiteExecutionPaths(_testDir), site ?? TestArticleContents.CreateSiteInfo(), new ContentPath([_testFilesDir]), imageProcessor ?? new ImageProcessor());
     }
 
     private static Task<string> ProcessFileAsync(MarkdownProcessor processor, string path)

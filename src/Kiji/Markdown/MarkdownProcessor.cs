@@ -23,22 +23,19 @@ internal sealed class MarkdownProcessor
     private readonly string? _imageCachePath;
     private readonly string _projectDirectory;
     private readonly string _basePath;
-    private readonly string[] _contentRoots;
-    private readonly ProjectPath _projectPaths;
+    private readonly ContentPath _contentPaths;
 
     /// <param name="options">The resolved site paths.</param>
     /// <param name="paths">The project root used for portable source identities.</param>
     /// <param name="site">The site's public deployment base path.</param>
-    /// <param name="contentRoots">Registered directories watched for content changes.</param>
-    /// <param name="projectPaths">File names resolved within the current content snapshot.</param>
+    /// <param name="contentPaths">Registered roots and file names within the current content snapshot.</param>
     /// <param name="imageProcessor">The image backend used to process referenced local images.</param>
     /// <param name="contentOptions">Site-wide pipeline configuration.</param>
     public MarkdownProcessor(
         ResolvedSitePaths options,
         SiteExecutionPaths paths,
         SiteInfo site,
-        IEnumerable<string> contentRoots,
-        ProjectPath projectPaths,
+        ContentPath contentPaths,
         IImageProcessor imageProcessor,
         MarkdownOptions? contentOptions = null)
     {
@@ -46,12 +43,11 @@ internal sealed class MarkdownProcessor
         ArgumentNullException.ThrowIfNull(imageProcessor);
 
         _imageProcessor = imageProcessor;
-        _projectPaths = projectPaths;
+        _contentPaths = contentPaths;
         _outputPath = Path.Combine(options.OutputDirectory, "_images");
         _imageCachePath = options.ImageCacheDirectory;
         _projectDirectory = paths.ProjectDirectory;
         _basePath = new Uri(site.BaseUrl, "_images/").AbsolutePath;
-        _contentRoots = [.. contentRoots.Select(Path.GetFullPath)];
         _pipeline = BuildPipeline(contentOptions);
     }
 
@@ -136,7 +132,7 @@ internal sealed class MarkdownProcessor
 
     private string ResolveSourceFile(string filePath, string url, string referenceKey, string sourceRoot)
     {
-        if (referenceKey.Length == 0 || Path.IsPathRooted(referenceKey) || referenceKey.Contains(':', StringComparison.Ordinal))
+        if (referenceKey.Length == 0 || Path.IsPathRooted(referenceKey))
         {
             throw new InvalidOperationException(
                 $"Image reference '{url}' in '{filePath}' is not a resolvable relative path.");
@@ -144,15 +140,10 @@ internal sealed class MarkdownProcessor
 
         try
         {
-            var sourceFile = _projectPaths.ResolveFile(_projectDirectory,
+            return _contentPaths.ResolveFile(
                 Path.GetFullPath(referenceKey.Replace('/', Path.DirectorySeparatorChar), sourceRoot));
-            if (!_contentRoots.Any(root => ProjectPath.GetRelativePath(root, sourceFile) is not null))
-            {
-                throw new InvalidOperationException("Image sources must be inside a registered content directory.");
-            }
-            return sourceFile;
         }
-        catch (Exception exception) when (exception is InvalidOperationException or IOException)
+        catch (Exception exception) when (exception is InvalidOperationException or IOException or UnauthorizedAccessException)
         {
             throw new InvalidOperationException($"Image '{url}' referenced by '{filePath}' cannot be resolved. {exception.Message}", exception);
         }

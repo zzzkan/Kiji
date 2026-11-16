@@ -116,7 +116,7 @@ public sealed class MarkdownCancellationTests
         var processor = new MarkdownProcessor(new ResolvedSitePaths
         {
             OutputDirectory = root,
-        }, new SiteExecutionPaths(root), TestArticleContents.CreateSiteInfo(), [root], new ProjectPath(), new ImageProcessor(), options);
+        }, new SiteExecutionPaths(root), TestArticleContents.CreateSiteInfo(), new ContentPath([root]), new ImageProcessor(), options);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => processor.ProcessBodyAsync(
             Path.Combine(root, "post.md"), "# heading", cancellation.Token));
     }

@@ -46,7 +46,7 @@ internal sealed record BuildManifest
                 || string.IsNullOrEmpty(page.RoutePath) || page.ParametersHash is ""
                 || !ArtifactCache.IsHash(page.OutputHash) || page.Dependencies is null || page.AdditionalOutputs is null
                 || page.ImageRequests is null || page.ImageRequests.Any(static image => image is null
-                    || !IsRelativeOutput(image.Source) || (image.OutputDirectory != "." && !IsRelativeOutput(image.OutputDirectory)))
+                    || !IsRelativeSource(image.Source) || (image.OutputDirectory != "." && !IsRelativeOutput(image.OutputDirectory)))
                 || page.Images is null || page.Images.Any(static key => !ArtifactCache.IsHash(key))
                 || page.AdditionalOutputs.Any(static output => output is null || !IsRelativeOutput(output.RelativePath) || !ArtifactCache.IsHash(output.Hash))
                 || page.Dependencies.Any(static dependency => dependency is null || dependency.Key is null
@@ -73,6 +73,10 @@ internal sealed record BuildManifest
         }
         return true;
     }
+
+    internal static bool IsRelativeSource(string? path) => path is not null && !Path.IsPathRooted(path)
+        && !path.Contains('\\') && !path.Contains('\0')
+        && path.Split('/').All(segment => segment.Length > 0 && segment is not "." and not "..");
 
     internal static bool IsRelativeOutput(string? path)
     {

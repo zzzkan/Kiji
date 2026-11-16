@@ -26,11 +26,12 @@ internal static class ImageArtifactProcessor
                 // Development can reuse the deterministic built-in variants already on disk.
                 return await builtIn.ProcessBytesAsync(sourceBytes, sourceName, sourceHash, output, cancellationToken);
             }
-            return await GenerateAsync(processor, source, sourceBytes, sourceHash, output, null, null, cancellationToken);
+            return await GenerateAsync(processor, sourceBytes, sourceHash, output, null, null, sourceName, cancellationToken);
         }
         var root = Path.GetDirectoryName(cacheDirectory)!;
         var cache = new ArtifactCache(root);
-        var key = BuildFingerprint.HashText(identity + ":" + sourceName + ":" + sourceHash);
+        // Older recipes may contain mutable or platform-specific variant paths.
+        var key = BuildFingerprint.HashText("shared-images-v1:" + identity + ":" + sourceName + ":" + sourceHash);
         dependencies?.AddImage(key);
         var recordPath = Path.Combine(root, "image-records", key + ".json");
         using var generation = await ImageGenerationLock.AcquireAsync(recordPath, cancellationToken);
@@ -55,15 +56,14 @@ internal static class ImageArtifactProcessor
         }
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException) { }
 
-        return await GenerateAsync(processor, source, sourceBytes, sourceHash, output, cache, recordPath, cancellationToken);
+        return await GenerateAsync(processor, sourceBytes, sourceHash, output, cache, recordPath, sourceName, cancellationToken);
     }
 
-    private static async Task<ProcessedImageInfo> GenerateAsync(IImageProcessor processor, string source,
-        byte[] sourceBytes, string sourceHash, string output, ArtifactCache? cache, string? recordPath, CancellationToken cancellationToken)
+    private static async Task<ProcessedImageInfo> GenerateAsync(IImageProcessor processor,
+        byte[] sourceBytes, string sourceHash, string output, ArtifactCache? cache, string? recordPath, string sourceName, CancellationToken cancellationToken)
     {
-        var work = recordPath is null
-            ? Path.Combine(output, ".work-" + Guid.NewGuid().ToString("N"))
-            : Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(recordPath))!, "work", Guid.NewGuid().ToString("N"));
+        // Work never belongs to public output, including canceled/terminated builds.
+        var work = Path.Combine(Path.GetTempPath(), "kiji-image-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(work);
         try
         {
@@ -72,17 +72,30 @@ internal static class ImageArtifactProcessor
             ProcessedImageInfo info;
             if (processor is ImageProcessor builtIn)
             {
-                info = await builtIn.ProcessBytesAsync(sourceBytes, NormalizeCasing(Path.GetFileName(source)), sourceHash, generated, cancellationToken);
+                info = await builtIn.ProcessBytesAsync(sourceBytes, sourceName, sourceHash, generated, cancellationToken);
             }
             else
             {
-                var sourceCopy = Path.Combine(work, "source", Path.GetFileName(source));
+                var sourceCopy = Path.Combine(work, "source", sourceName);
                 Directory.CreateDirectory(Path.GetDirectoryName(sourceCopy)!);
                 await File.WriteAllBytesAsync(sourceCopy, sourceBytes, cancellationToken);
                 info = await processor.ProcessAsync(sourceCopy, generated, cancellationToken);
                 // Custom processors may change bytes without changing their filenames.
                 // Immutable destinations preserve the versions used by carried pages.
-                info = info with { Variants = [.. info.Variants.Select(variant => FreezeVariant(generated, variant))] };
+                var frozen = new Dictionary<string, string>(StringComparer.Ordinal);
+                info = info with
+                {
+                    Variants = [.. info.Variants.Select(variant =>
+                {
+                    // Several widths may intentionally use the same generated file.
+                    if (!frozen.TryGetValue(variant.FileName, out var name))
+                    {
+                        name = FreezeVariant(generated, variant.FileName);
+                        frozen.Add(variant.FileName, name);
+                    }
+                    return variant with { FileName = name };
+                })]
+                };
             }
             cancellationToken.ThrowIfCancellationRequested();
             var outputs = info.Variants.Select(variant =>
@@ -127,18 +140,18 @@ internal static class ImageArtifactProcessor
 
     // Fold through uppercase before choosing lowercase URI spelling, so simple
     // case aliases (including the Greek sigma forms) publish the same filename.
-    private static string NormalizeCasing(string path) => path.ToUpperInvariant().ToLowerInvariant();
+    private static string NormalizeCasing(string path) => path.Normalize().ToUpperInvariant().ToLowerInvariant().Replace(":", "%3A", StringComparison.Ordinal);
 
-    private static ImageVariant FreezeVariant(string directory, ImageVariant variant)
+    private static string FreezeVariant(string directory, string fileName)
     {
-        if (!BuildManifest.IsRelativeOutput(variant.FileName)) { throw new InvalidDataException("Invalid image variant path."); }
-        var source = Path.Combine(directory, variant.FileName);
+        if (!BuildManifest.IsRelativeOutput(fileName)) { throw new InvalidDataException("Invalid image variant path."); }
+        var source = Path.Combine(directory, fileName);
         var hash = BuildFingerprint.HashFile(source);
-        if (!ArtifactCache.IsHash(hash)) { throw new IOException($"Cannot read generated image variant '{variant.FileName}'."); }
-        var name = Path.Combine(hash[..16], NormalizeCasing(variant.FileName));
+        if (!ArtifactCache.IsHash(hash)) { throw new IOException($"Cannot read generated image variant '{fileName}'."); }
+        var name = hash[..16] + "/" + NormalizeCasing(fileName.Replace(Path.DirectorySeparatorChar, '/'));
         var destination = Path.Combine(directory, name);
         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
         File.Move(source, destination, overwrite: true);
-        return variant with { FileName = name };
+        return name;
     }
 }

@@ -104,7 +104,7 @@ internal sealed class ResponsiveImageWriter
 
     private static string EncodeRelativePath(string path)
     {
-        return string.Join('/', path.Split(['/', '\\']).Select(Uri.EscapeDataString));
+        return string.Join('/', path.Split('/').Select(Uri.EscapeDataString));
     }
 
     private static bool TryGetAttribute(HtmlAttributes? attributes, string name, out string? value)

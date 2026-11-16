@@ -60,6 +60,7 @@ public sealed class ImageConcurrencyTests : IDisposable
         var first = ImageArtifactProcessor.ProcessAsync(processor, source, output, null, default);
         var second = ImageArtifactProcessor.ProcessAsync(processor, source, output, null, default);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.False(Directory.Exists(output)); // In-progress work is never publicly visible.
         release.SetResult();
         var results = await Task.WhenAll(first, second);
         Assert.Equal(2, processor.Calls);
@@ -67,6 +68,51 @@ public sealed class ImageConcurrencyTests : IDisposable
         Assert.Equal(results[0].Variants, results[1].Variants);
         Assert.EndsWith("</svg>", await File.ReadAllTextAsync(image), StringComparison.Ordinal);
         Assert.Empty(Directory.GetFiles(output, "*.tmp", SearchOption.AllDirectories));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RepeatedVariantFilename_IsPublishedAndRestoredOnce(bool cached)
+    {
+        var source = await Source("repeated");
+        var processor = new TestSite.PageServices.RepeatedVariantImageProcessor();
+        var output = Path.Combine(_root, "out");
+        var cache = cached ? Path.Combine(_root, "cache", "images") : null;
+        var info = await ImageArtifactProcessor.ProcessAsync(processor, source, output, cache, default);
+        Assert.Equal(2, info.Variants.Count);
+        Assert.Equal(info.Variants[0].FileName, info.Variants[1].FileName);
+        Assert.DoesNotContain('\\', info.Variants[0].FileName);
+        Assert.Single(Directory.GetFiles(output, "*", SearchOption.AllDirectories));
+        Directory.Delete(output, recursive: true);
+        var restored = await ImageArtifactProcessor.ProcessAsync(processor, source, output, cache, default);
+        Assert.Equal(info.Variants, restored.Variants);
+        Assert.Single(Directory.GetFiles(output, "*", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task OldMutableRecipe_CannotBypassSharedOutputFreezing()
+    {
+        var source = await Source("legacy");
+        await using var processor = new TestSite.PageServices.TrackingImageProcessor();
+        var cacheRoot = Path.Combine(_root, "cache");
+        var legacy = Path.Combine(_root, "custom.svg");
+        await File.WriteAllTextAsync(legacy, "<svg/>");
+        var hash = new Kiji.Generation.ArtifactCache(cacheRoot).Store(legacy);
+        var info = new ProcessedImageInfo { OriginalWidth = 2, OriginalHeight = 2, Variants = [new("custom.svg", 2)] };
+        var record = new CachedImageResult(info, [new("custom.svg", hash)]);
+        var payload = System.Text.Json.JsonSerializer.Serialize(record, ImageCacheJsonContext.Default.CachedImageResult);
+        var sourceHash = Kiji.Generation.BuildFingerprint.HashFile(source);
+        var oldKey = Kiji.Generation.BuildFingerprint.HashText(processor.CacheIdentity + ":" + Path.GetFileName(source) + ":" + sourceHash);
+        Directory.CreateDirectory(Path.Combine(cacheRoot, "image-records"));
+        await File.WriteAllTextAsync(Path.Combine(cacheRoot, "image-records", oldKey + ".json"),
+            System.Text.Json.JsonSerializer.Serialize(new ImageCacheEnvelope(Kiji.Generation.BuildFingerprint.HashText(payload), payload),
+                ImageCacheJsonContext.Default.ImageCacheEnvelope));
+
+        var result = await ImageArtifactProcessor.ProcessAsync(processor, source, Path.Combine(_root, "shared"),
+            Path.Combine(cacheRoot, "images"), default);
+        Assert.Equal(1, processor.Calls);
+        Assert.Matches("^[a-f0-9]{16}/custom\\.svg$", Assert.Single(result.Variants).FileName);
     }
 
     [Fact]

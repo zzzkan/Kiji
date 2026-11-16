@@ -16,8 +16,6 @@ internal sealed class ContentRuntime
     /// <summary>Hashes of the content files read in the current snapshot.</summary>
     internal Generation.ContentFileRegistry Files { get; } = new();
 
-    internal Generation.ProjectPath ProjectPaths { get; } = new();
-
     private readonly HashSet<(Type Type, string? ServiceKey)> _registrations = [];
     private readonly ConcurrentDictionary<object, object> _materialized = new();
     private readonly Lock _materializationLock = new();
@@ -57,7 +55,6 @@ internal sealed class ContentRuntime
             _materialized.Clear();
             Dependencies.Invalidate();
             Files.Invalidate();
-            ProjectPaths.Invalidate();
         }
     }
 

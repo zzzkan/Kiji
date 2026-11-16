@@ -1154,37 +1154,130 @@ public sealed class IncrementalBuildTests : IDisposable
         Assert.Equal(2, processor.Calls);
     }
 
-    [Fact]
-    public async Task ExternalResponsiveImages_FailInsteadOfDisablingPortableCaching()
+    [Theory]
+    [InlineData("absolute")]
+    [InlineData("relative")]
+    [InlineData("linked-root")]
+    public async Task ExternalContentWithImages_RendersWithoutPortablePageRecipes(string rootKind)
     {
+        Assert.SkipWhen(rootKind == "linked-root" && OperatingSystem.IsWindows(), "Creating symbolic links requires privileges on Windows.");
         var root = CreateSiteRoot("external-site");
         var external = CreateSiteRoot("external-content");
         await WritePostAsync(external, "stable", "External image", "![image](source.png)");
         await File.WriteAllBytesAsync(Path.Combine(external, "content", "source.png"), [1, 2, 3]);
-        var builder = CreateBuilder(root, directory: Path.Combine(external, "content"));
+        var directory = Path.Combine(external, "content");
+        if (rootKind == "relative") { directory = Path.GetRelativePath(root, directory); }
+        if (rootKind == "linked-root")
+        {
+            directory = Path.Combine(root, "linked-content");
+            Directory.CreateSymbolicLink(directory, Path.Combine(external, "content"));
+        }
+        var builder = CreateBuilder(root, directory: directory);
         builder.Services.AddSingleton<IImageProcessor, TestSite.PageServices.TrackingImageProcessor>();
         await using var site = builder.BuildSite();
+        await site.PublishAsync("dist");
+        var page = (await ReadCacheManifest(root)).Pages.Single(page => page.RoutePath == "/md/stable/");
+        // External roots follow Markdown's existing nonportable input policy. A linked
+        // root inside the project is portable when the checkout recreates that root.
+        if (rootKind != "linked-root")
+        {
+            Assert.Null(page.ParametersHash);
+            Assert.Empty(page.ImageRequests);
+        }
+        Assert.Single(page.AdditionalOutputs);
+        Assert.Contains("/_images/", await File.ReadAllTextAsync(Path.Combine(root, "dist", page.OutputRelativePath)), StringComparison.Ordinal);
+        Directory.Delete(Path.Combine(root, "dist"), recursive: true);
+        await site.PublishAsync("dist");
+        Assert.True(File.Exists(Path.Combine(root, "dist", page.AdditionalOutputs[0].RelativePath)));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CachedImages_RejectReplacedLinksWithAndWithoutRepair(bool repair)
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Creating symbolic links requires privileges on Windows.");
+        var root = CreateSiteRoot("cached-image-link");
+        var source = Path.Combine(root, "content", "source.png");
+        var target = Path.Combine(_testDir, "outside.png");
+        await File.WriteAllBytesAsync(source, [1, 2, 3]);
+        File.Copy(source, target);
+        await WritePostAsync(root, "stable", "Image", "![image](source.png)");
+        var builder = CreateBuilder(root);
+        builder.Services.AddSingleton<IImageProcessor, TestSite.PageServices.TrackingImageProcessor>();
+        await using var site = builder.BuildSite();
+        await site.PublishAsync("dist");
+        File.Delete(source);
+        File.CreateSymbolicLink(source, target);
+        if (repair)
+        {
+            Directory.Delete(Path.Combine(root, "dist"), recursive: true);
+            Directory.Delete(Path.Combine(root, ".kiji", "cache", "images"), recursive: true);
+        }
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => site.PublishAsync("dist"));
-        Assert.Contains("inside the project", exception.Message, StringComparison.Ordinal);
-        Assert.False(File.Exists(Path.Combine(root, ".kiji", "cache", "manifest.json")));
+        Assert.Contains("symbolic links", exception.Message, StringComparison.Ordinal);
     }
 
     [Theory]
     [InlineData("/kiji/")]
     [InlineData("/%E6%97%A5%E6%9C%AC/")]
-    public async Task DevelopmentImages_ReloadSharedVariantsUnderBasePathWithoutChangingPublishCache(string basePath)
+    public async Task DevelopmentCustomImages_CollectRetiredVariantsOnReload(string basePath)
     {
-        var root = CreateSiteRoot("dev-images");
+        var root = CreateSiteRoot("dev-custom-images");
         await WritePostAsync(root, "stable", "Image", "![image](source.png)");
-        await WritePostAsync(root, "changing", "Other image", "![image](source.png)");
-        var source = Path.Combine(root, "content", "source.png");
+        await File.WriteAllBytesAsync(Path.Combine(root, "content", "source.png"), [1]);
+        var builder = CreateBuilder(root, serve: true);
+        builder.UseSiteInfo(new SiteInfo { Name = "Images", BaseUrl = new Uri("https://example.com" + basePath) });
+        builder.Services.AddSingleton<IImageProcessor, TestSite.PageServices.VaryingImageProcessor>();
+        await using var app = builder.BuildSite();
+        var (server, web) = await app.StartDevServerAsync(TestUrls.EphemeralPort, CancellationToken.None);
+        await using (server)
+        {
+            using var client = new HttpClient { BaseAddress = new Uri(web.Urls.First()) };
+            var images = Path.Combine(root, ".kiji", "dev-site", "_images");
+            var previous = ImageSource(await client.GetStringAsync(basePath + "md/stable/"));
+            for (var index = 0; index < 3; index++)
+            {
+                await server.ReloadAfterCodeUpdateAsync();
+                var current = ImageSource(await client.GetStringAsync(basePath + "md/stable/"));
+                Assert.NotEqual(previous, current);
+                Assert.NotEmpty(await client.GetByteArrayAsync(current));
+                Assert.Single(Directory.GetFiles(images, "*", SearchOption.AllDirectories));
+                previous = current;
+            }
+            await web.StopAsync();
+        }
+    }
+
+    [Theory]
+    [InlineData("/kiji/", "local")]
+    [InlineData("/kiji/", "external")]
+    [InlineData("/kiji/", "linked")]
+    [InlineData("/%E6%97%A5%E6%9C%AC/", "local")]
+    [InlineData("/%E6%97%A5%E6%9C%AC/", "external")]
+    [InlineData("/%E6%97%A5%E6%9C%AC/", "linked")]
+    public async Task DevelopmentImages_ReloadSharedVariantsUnderBasePathWithoutChangingPublishCache(string basePath, string rootKind)
+    {
+        Assert.SkipWhen(rootKind == "linked" && OperatingSystem.IsWindows(), "Creating symbolic links requires privileges on Windows.");
+        var root = CreateSiteRoot("dev-images");
+        var contentSite = rootKind == "local" ? root : CreateSiteRoot("dev-external-images");
+        var directory = Path.Combine(contentSite, "content");
+        if (rootKind == "linked")
+        {
+            var link = Path.Combine(root, "linked-content");
+            Directory.CreateSymbolicLink(link, directory);
+            directory = link;
+        }
+        await WritePostAsync(contentSite, "stable", "Image", "![image](source.png)");
+        await WritePostAsync(contentSite, "changing", "Other image", "![image](source.png)");
+        var source = Path.Combine(contentSite, "content", "source.png");
         WriteImage(SkiaSharp.SKColors.Red);
         var info = new SiteInfo { Name = "Images", BaseUrl = new Uri("https://example.com" + basePath) };
-        var publishingBuilder = CreateBuilder(root);
+        var publishingBuilder = CreateBuilder(root, directory: directory);
         publishingBuilder.UseSiteInfo(info);
         await using (var publishing = publishingBuilder.BuildSite()) { await publishing.PublishAsync("dist"); }
         var before = SnapshotDirectory(Path.Combine(root, ".kiji", "cache"));
-        var builder = CreateBuilder(root, serve: true);
+        var builder = CreateBuilder(root, directory: directory, serve: true);
         builder.UseSiteInfo(info);
         await using var app = builder.BuildSite();
         var (server, web) = await app.StartDevServerAsync(TestUrls.EphemeralPort, CancellationToken.None);
@@ -1209,14 +1302,15 @@ public sealed class IncrementalBuildTests : IDisposable
 
             // Replacing a name must invalidate directory lookups as well as HTML.
             reload = socket.ReceiveAsync(new ArraySegment<byte>(new byte[64]), timeout.Token);
-            File.Move(source, Path.Combine(root, "content", "renamed.png"));
-            await WritePostAsync(root, "stable", "Image", "![image](renamed.png)");
-            await WritePostAsync(root, "changing", "Other image", "![image](renamed.png)");
+            File.Move(source, Path.Combine(contentSite, "content", "renamed.png"));
+            await WritePostAsync(contentSite, "stable", "Image", "![image](renamed.png)");
+            await WritePostAsync(contentSite, "changing", "Other image", "![image](renamed.png)");
             await reload;
             var renamed = ImageSource(await client.GetStringAsync(basePath + "md/stable/"));
             Assert.NotEqual(updated, renamed);
             Assert.Equal(renamed, ImageSource(await client.GetStringAsync(basePath + "md/changing/")));
             Assert.Equal(updatedBytes, await client.GetByteArrayAsync(renamed));
+            await socket.CloseAsync(System.Net.WebSockets.WebSocketCloseStatus.NormalClosure, null, timeout.Token);
             await web.StopAsync();
         }
         var after = SnapshotDirectory(Path.Combine(root, ".kiji", "cache"));
@@ -1233,10 +1327,6 @@ public sealed class IncrementalBuildTests : IDisposable
             bitmap.Erase(color);
             using var encoded = bitmap.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100);
             File.WriteAllBytes(source, encoded.ToArray());
-        }
-        static string ImageSource(string html)
-        {
-            return System.Text.RegularExpressions.Regex.Match(html, "src=\"([^\"]+)\"").Groups[1].Value;
         }
     }
 
@@ -1379,6 +1469,9 @@ public sealed class IncrementalBuildTests : IDisposable
 
         return builder;
     }
+
+    private static string ImageSource(string html) =>
+        System.Text.RegularExpressions.Regex.Match(html, "src=\"([^\"]+)\"").Groups[1].Value;
 
     private static Dictionary<string, (byte[] Bytes, DateTime LastWriteTimeUtc)> SnapshotDirectory(string directory)
     {

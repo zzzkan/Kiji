@@ -210,10 +210,15 @@ casing across platforms. Generated URLs include the site's deployment base path.
 
 Image edits invalidate every referring page. Incremental publishing restores missing
 variants, and removes unused variants after the last reference disappears.
-For responsive processing, use relative filesystem references to project files inside a
-registered content directory, such as the default `content/`. Parent references can cross
-article directories within those roots. Local references that escape these roots, become
-rooted after path normalization, or traverse symbolic links or junctions fail the render.
-Missing images also fail the render. Site-root and remote URLs remain unprocessed as
+For responsive processing, use filesystem references relative to the Markdown file,
+inside a registered content directory, such as the default `content/`. Parent references
+can cross article directories within those roots. Content roots may be outside the project
+or reached through a symbolic link, just as with Markdown loading. External files render
+normally; pages reading files outside the project are rerendered on each publish rather
+than stored as portable page recipes.
+Local references that escape the registered roots, become rooted after path normalization,
+or traverse symbolic links or junctions below a root fail the render. OneDrive placeholders
+and deduplicated files are supported. Missing images fail with the resolved search path.
+Development reloads discard retired generated variants after pending renders stop. Site-root and remote URLs remain unprocessed as
 described above.
 To replace the image processor, see [`IImageProcessor`](../api-reference/#iimageprocessor).

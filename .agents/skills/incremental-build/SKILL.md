@@ -40,7 +40,11 @@ not built with conflicting global properties.
   Shared images live under `_images/`; every referring page records its immutable outputs
   and recipes sufficient for cache-only repair. Reused pages may retain older custom
   processor results while newly rendered pages reference another immutable version.
-  Responsive sources must stay inside the project and registered, watched content roots.
+  Resolve responsive sources under registered, watched content roots, including external
+  or linked roots. External files follow Markdown's existing nonportable-page policy;
+  they may render, but cannot produce portable page recipes. Check source containment
+  and descendant links on reuse and repair as well as rendering. LinkTarget, rather than
+  ReparsePoint alone, distinguishes redirects from cloud placeholders and deduplicated files.
 - AlwaysRender marks pages, layouts or child components that read untracked external
   state. Any output page rendering one is uncacheable, including nested/dynamic children.
   AlwaysRender does not add external watchers or clear image processing caches.

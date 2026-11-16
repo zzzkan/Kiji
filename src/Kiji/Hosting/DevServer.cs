@@ -447,7 +447,9 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
             {
                 RefreshLinkedWatcher(input);
             }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            // A target removed while its watcher starts surfaces as ArgumentException.
+            // A faulted refresh would fail every request until the next content change.
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
             {
                 _reporter.WatcherError(input.Source, input.Path, exception);
             }

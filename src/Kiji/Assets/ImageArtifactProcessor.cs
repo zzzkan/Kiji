@@ -136,7 +136,13 @@ internal static class ImageArtifactProcessor
             }
             return info;
         }
-        finally { Directory.Delete(work, recursive: true); }
+        finally
+        {
+            // A scanner or encoder handle can briefly hold a generated file on Windows.
+            // The next run clears the work directory; never replace the result with a cleanup error.
+            try { Directory.Delete(work, recursive: true); }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
+        }
     }
 
     // Fold through uppercase before choosing lowercase URI spelling, so simple

@@ -187,10 +187,9 @@ public sealed class DevServerTests : IAsyncDisposable
             Assert.Contains("<h1>Hello Updated</h1>", updatedHtml, StringComparison.Ordinal);
 
             var output = logs.ToString();
-            Assert.Contains(
-                $"Content changed: {Path.Combine(_contentsDir, "hello-world.md")}",
-                output,
-                StringComparison.Ordinal);
+            // FileSystemWatcher may report an overwrite as Created on macOS.
+            Assert.Contains(output.Split('\n'), line => line.Contains("Content ", StringComparison.Ordinal)
+                && line.Contains("hello-world.md", StringComparison.Ordinal));
             Assert.Contains("Reloaded 1 browser client(s).", output, StringComparison.Ordinal);
             await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
             Assert.Equal(WebSocketState.Closed, socket.State);
@@ -365,10 +364,8 @@ public sealed class DevServerTests : IAsyncDisposable
             Assert.Contains("color: red", await client.GetStringAsync(new Uri(baseAddress, "/site.css")), StringComparison.Ordinal);
 
             var output = logs.ToString();
-            Assert.Contains(
-                $"Static asset changed: {Path.Combine(_staticDir, "site.css")}",
-                output,
-                StringComparison.Ordinal);
+            Assert.Contains(output.Split('\n'), line => line.Contains("Static asset ", StringComparison.Ordinal)
+                && line.Contains("site.css", StringComparison.Ordinal));
             Assert.Contains("Reloaded 1 browser client(s).", output, StringComparison.Ordinal);
         }
     }

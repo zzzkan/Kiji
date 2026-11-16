@@ -1,5 +1,6 @@
 using Kiji.Assets;
 using Kiji.Markdown;
+using Kiji.Sitemaps;
 using Kiji.Tests.TestSite.Pages;
 using Kiji.Tests.TestSite;
 using Kiji.Tests.TestSite.ErrorHandling;
@@ -985,6 +986,28 @@ public sealed class IncrementalBuildTests : IDisposable
         Assert.Equal(previous, await File.ReadAllBytesAsync(path));
         await BuildAsync(root);
         Assert.Contains("Changed body.", await File.ReadAllTextAsync(Path.Combine(root, "dist", "md", "stable", "index.html")), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task FailedBuild_KeepsPreviousSitemap()
+    {
+        var root = CreateSiteRoot("failed-sitemap");
+        async Task PublishAsync(Action? onRender = null)
+        {
+            var builder = CreateBuilder(root, onRender);
+            builder.AddSitemap();
+            await using var app = builder.BuildSite();
+            await app.PublishAsync(Path.Combine(root, "dist"));
+        }
+
+        await PublishAsync();
+        var path = Path.Combine(root, "dist", "sitemap.xml");
+        var previous = await File.ReadAllBytesAsync(path);
+        await WritePostAsync(root, "added", "Added", "Added body.");
+        await Assert.ThrowsAnyAsync<Exception>(() => PublishAsync(() => throw new InvalidOperationException("render failed")));
+        Assert.Equal(previous, await File.ReadAllBytesAsync(path));
+        await PublishAsync();
+        Assert.Contains("/md/added/", await File.ReadAllTextAsync(path), StringComparison.Ordinal);
     }
 
     [Fact]

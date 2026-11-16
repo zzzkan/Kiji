@@ -82,13 +82,15 @@ internal sealed class SiteEngine
         var artifactPaths = ReserveArtifactPaths(options, reservedPaths);
         phases.Mark(BuildPhaseTimer.Snapshot);
 
-        // The sitemap reads only the page list, so it is written while pages are planned and
-        // rendered. Artifacts that run site code, including the feed factory, still run after
-        // all pages in registration order.
+        // The sitemap reads only the page list, so it is generated while pages are planned and
+        // rendered, then written once they all succeed: a failed build keeps the previous file.
+        // Artifacts that run site code, including the feed factory, still run after all pages
+        // in registration order.
         var artifactContext = _artifacts.Length == 0 ? null : CreateOutputContext(snapshot);
         using var artifactCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var pagesRendered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var independentArtifacts = WriteArtifactsAsync(artifactPaths, artifactContext, independentOfPages: true,
-            artifactCancellation.Token);
+            artifactCancellation.Token, pagesRendered.Task);
 
         IncrementalBuildPlanner planner;
         IncrementalBuildPlan plan;
@@ -150,11 +152,13 @@ internal sealed class SiteEngine
         {
             // Report the build failure, not a write it interrupted.
             await artifactCancellation.CancelAsync();
+            pagesRendered.SetCanceled(artifactCancellation.Token);
             try { await independentArtifacts; }
             catch (Exception) when (artifactCancellation.IsCancellationRequested) { }
             throw;
         }
 
+        pagesRendered.SetResult();
         await independentArtifacts;
         await WriteArtifactsAsync(artifactPaths, artifactContext, independentOfPages: false, cancellationToken);
         IReadOnlyList<string> artifacts = [.. artifactPaths.Select(path => Path.GetRelativePath(options.OutputDirectory, path))];
@@ -502,7 +506,7 @@ internal sealed class SiteEngine
     }
 
     private async Task WriteArtifactsAsync(string[] paths, SiteOutputContext? context, bool independentOfPages,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, Task? pagesRendered = null)
     {
         for (var i = 0; i < _artifacts.Length; i++)
         {
@@ -519,8 +523,7 @@ internal sealed class SiteEngine
             }
 
             var fullPath = paths[i];
-            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-            await artifact.WriteFileAsync(fullPath, context!, cancellationToken);
+            await artifact.WriteFileAsync(fullPath, context!, cancellationToken, pagesRendered);
             BuildLogger.ArtifactGenerated(fullPath);
         }
     }

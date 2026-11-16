@@ -33,7 +33,7 @@ internal sealed class ContentPath(IEnumerable<string> roots)
             // Cache successful listings only. A miss refreshes the listing, so a file
             // created before the watcher's debounce completes can already be resolved.
             var entries = directories.GetOrAdd(current, ReadNames);
-            var name = FindName(entries, segment);
+            entries.TryGetValue(segment, out var name);
             if (name is null)
             {
                 entries = ReadNames(current);
@@ -60,11 +60,17 @@ internal sealed class ContentPath(IEnumerable<string> roots)
         Directory.EnumerateFileSystemEntries(directory).Select(static path => Path.GetFileName(path))
             .ToDictionary(static name => name, StringComparer.Ordinal);
 
+    private static string Normalize(string name)
+    {
+        try { return name.Normalize(NormalizationForm.FormC); }
+        catch (ArgumentException) { return name; } // NTFS permits unpaired UTF-16 surrogates.
+    }
+
     private static string? FindName(Dictionary<string, string> entries, string segment)
     {
         if (entries.TryGetValue(segment, out var exact)) { return exact; }
-        var normalized = segment.Normalize(NormalizationForm.FormC);
-        var matches = entries.Keys.Where(name => string.Equals(name.Normalize(NormalizationForm.FormC),
+        var normalized = Normalize(segment);
+        var matches = entries.Keys.Where(name => string.Equals(Normalize(name),
             normalized, StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();
         return matches.Length == 1 ? matches[0] : null;
     }

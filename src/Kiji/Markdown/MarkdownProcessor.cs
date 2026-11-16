@@ -22,6 +22,7 @@ internal sealed class MarkdownProcessor
     private readonly string _outputPath;
     private readonly string? _imageCachePath;
     private readonly string _projectDirectory;
+    private readonly string _workDirectory;
     private readonly string _basePath;
     private readonly ContentPath _contentPaths;
 
@@ -47,6 +48,7 @@ internal sealed class MarkdownProcessor
         _outputPath = Path.Combine(options.OutputDirectory, "_images");
         _imageCachePath = options.ImageCacheDirectory;
         _projectDirectory = paths.ProjectDirectory;
+        _workDirectory = options.ImageCacheDirectory is null ? Path.Combine(paths.ResolveKijiPath(), "dev-work") : Path.Combine(paths.ResolveCachePath(), "work");
         _basePath = new Uri(site.BaseUrl, "_images/").AbsolutePath;
         _pipeline = BuildPipeline(contentOptions);
     }
@@ -113,7 +115,7 @@ internal sealed class MarkdownProcessor
             var processed = await ImageArtifactProcessor.ProcessAsync(
                 _imageProcessor, sourceFile,
                 outputDirectory,
-                cacheDirectory,
+                cacheDirectory, _workDirectory,
                 cancellationToken);
 
             if (pageContext.Dependencies is { } dependencies)
@@ -143,7 +145,7 @@ internal sealed class MarkdownProcessor
             return _contentPaths.ResolveFile(
                 Path.GetFullPath(referenceKey.Replace('/', Path.DirectorySeparatorChar), sourceRoot));
         }
-        catch (Exception exception) when (exception is InvalidOperationException or IOException or UnauthorizedAccessException)
+        catch (Exception exception) when (exception is InvalidOperationException or IOException or UnauthorizedAccessException or ArgumentException)
         {
             throw new InvalidOperationException($"Image '{url}' referenced by '{filePath}' cannot be resolved. {exception.Message}", exception);
         }

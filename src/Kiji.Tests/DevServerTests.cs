@@ -74,6 +74,41 @@ public sealed class DevServerTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task ContentRefresh_DoesNotCancelOrWaitForResponseTransmission()
+    {
+        using var logs = new StringWriter();
+        var (baseAddress, server) = await StartServerAsync(logs);
+        await using (server)
+        {
+            await using var body = new BlockingResponseStream();
+            var context = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+            context.Request.Path = "/";
+            context.Response.Body = body;
+            var response = server.HandlePageAsync(context);
+            try
+            {
+                await body.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                await server.ReloadAfterCodeUpdateAsync().WaitAsync(TimeSpan.FromSeconds(10));
+                Assert.False(response.IsCompleted);
+                using var client = CreateClient();
+                Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(baseAddress)).StatusCode);
+                body.Release.SetResult();
+                await response.WaitAsync(TimeSpan.FromSeconds(10));
+                Assert.Contains("</html>", Encoding.UTF8.GetString(body.ToArray()), StringComparison.Ordinal);
+                await server.DisposeAsync();
+                var stopped = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+                await server.HandlePageAsync(stopped);
+                Assert.Equal(503, stopped.Response.StatusCode);
+            }
+            finally
+            {
+                body.Release.TrySetResult();
+                await response.WaitAsync(TimeSpan.FromSeconds(10));
+            }
+        }
+    }
+
+    [Fact]
     public async Task Serve_RendersPageOnDemandWithLiveReloadScript()
     {
         using var logs = new StringWriter();
@@ -287,7 +322,7 @@ public sealed class DevServerTests : IAsyncDisposable
     public async Task Serve_RequiresManifest_AndAcceptsEmptyAssets(bool missing)
     {
         using var logs = new StringWriter();
-        Task<(Uri BaseAddress, IAsyncDisposable DevServer)> Start()
+        Task<(Uri BaseAddress, Kiji.Hosting.DevServer DevServer)> Start()
         {
             return StartServerAsync(logs, configureAssets: builder =>
             {
@@ -668,12 +703,12 @@ public sealed class DevServerTests : IAsyncDisposable
         }
     }
 
-    private Task<(Uri BaseAddress, IAsyncDisposable DevServer)> StartServerAsync()
+    private Task<(Uri BaseAddress, Kiji.Hosting.DevServer DevServer)> StartServerAsync()
     {
         return StartServerAsync(new StringWriter());
     }
 
-    private async Task<(Uri BaseAddress, IAsyncDisposable DevServer)> StartServerAsync(
+    private async Task<(Uri BaseAddress, Kiji.Hosting.DevServer DevServer)> StartServerAsync(
         StringWriter logs,
         SiteInfo? site = null,
         string? additionalSlug = null,

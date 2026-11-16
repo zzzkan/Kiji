@@ -29,10 +29,10 @@ public sealed class ImageConcurrencyTests : IDisposable
         {
             BeforeEncodeAsync = async (_, ct) => { Interlocked.Increment(ref count); entered.TrySetResult(); await release.Task.WaitAsync(ct); },
         };
-        var first = ImageArtifactProcessor.ProcessAsync(processor, source, Path.Combine(_root, "shared"), Path.Combine(_root, "cache"), default);
+        var first = ImageArtifactProcessor.ProcessAsync(processor, source, Path.Combine(_root, "shared"), Path.Combine(_root, "cache"), Path.Combine(_root, "work"), default);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
         var others = Enumerable.Range(0, 12).Select(_ => ImageArtifactProcessor.ProcessAsync(processor, source,
-            Path.Combine(_root, "shared"), Path.Combine(_root, "cache"), default)).ToArray();
+            Path.Combine(_root, "shared"), Path.Combine(_root, "cache"), Path.Combine(_root, "work"), default)).ToArray();
         release.SetResult();
         var info = await first;
         var results = await Task.WhenAll(others);
@@ -57,8 +57,8 @@ public sealed class ImageConcurrencyTests : IDisposable
             },
         };
         var output = Path.Combine(_root, "shared");
-        var first = ImageArtifactProcessor.ProcessAsync(processor, source, output, null, default);
-        var second = ImageArtifactProcessor.ProcessAsync(processor, source, output, null, default);
+        var first = ImageArtifactProcessor.ProcessAsync(processor, source, output, null, Path.Combine(_root, "work"), default);
+        var second = ImageArtifactProcessor.ProcessAsync(processor, source, output, null, Path.Combine(_root, "work"), default);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.False(Directory.Exists(output)); // In-progress work is never publicly visible.
         release.SetResult();
@@ -79,13 +79,13 @@ public sealed class ImageConcurrencyTests : IDisposable
         var processor = new TestSite.PageServices.RepeatedVariantImageProcessor();
         var output = Path.Combine(_root, "out");
         var cache = cached ? Path.Combine(_root, "cache", "images") : null;
-        var info = await ImageArtifactProcessor.ProcessAsync(processor, source, output, cache, default);
+        var info = await ImageArtifactProcessor.ProcessAsync(processor, source, output, cache, Path.Combine(_root, "work"), default);
         Assert.Equal(2, info.Variants.Count);
         Assert.Equal(info.Variants[0].FileName, info.Variants[1].FileName);
         Assert.DoesNotContain('\\', info.Variants[0].FileName);
         Assert.Single(Directory.GetFiles(output, "*", SearchOption.AllDirectories));
         Directory.Delete(output, recursive: true);
-        var restored = await ImageArtifactProcessor.ProcessAsync(processor, source, output, cache, default);
+        var restored = await ImageArtifactProcessor.ProcessAsync(processor, source, output, cache, Path.Combine(_root, "work"), default);
         Assert.Equal(info.Variants, restored.Variants);
         Assert.Single(Directory.GetFiles(output, "*", SearchOption.AllDirectories));
     }
@@ -110,7 +110,7 @@ public sealed class ImageConcurrencyTests : IDisposable
                 ImageCacheJsonContext.Default.ImageCacheEnvelope));
 
         var result = await ImageArtifactProcessor.ProcessAsync(processor, source, Path.Combine(_root, "shared"),
-            Path.Combine(cacheRoot, "images"), default);
+            Path.Combine(cacheRoot, "images"), Path.Combine(_root, "work"), default);
         Assert.Equal(1, processor.Calls);
         Assert.Matches("^[a-f0-9]{16}/custom\\.svg$", Assert.Single(result.Variants).FileName);
     }
@@ -132,9 +132,9 @@ public sealed class ImageConcurrencyTests : IDisposable
             },
         };
         await Task.WhenAll(ImageArtifactProcessor.ProcessAsync(processor, a, Path.Combine(_root, "out"),
-                Path.Combine(_root, "cache", "images"), default),
+                Path.Combine(_root, "cache", "images"), Path.Combine(_root, "work"), default),
             ImageArtifactProcessor.ProcessAsync(processor, b, Path.Combine(_root, "out"),
-                Path.Combine(_root, "cache", "images"), default));
+                Path.Combine(_root, "cache", "images"), Path.Combine(_root, "work"), default));
         Assert.Equal(2, count);
     }
 
@@ -186,9 +186,9 @@ public sealed class ImageConcurrencyTests : IDisposable
             },
         };
         var first = ImageArtifactProcessor.ProcessAsync(processor, source, Path.Combine(_root, "first"),
-            Path.Combine(_root, "cache"), canceled.Token);
+            Path.Combine(_root, "cache"), Path.Combine(_root, "work"), canceled.Token);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        var second = ImageArtifactProcessor.ProcessAsync(processor, source, Path.Combine(_root, "second"), Path.Combine(_root, "cache"), default);
+        var second = ImageArtifactProcessor.ProcessAsync(processor, source, Path.Combine(_root, "second"), Path.Combine(_root, "cache"), Path.Combine(_root, "work"), default);
         canceled.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
         var result = await second.WaitAsync(TimeSpan.FromSeconds(10));

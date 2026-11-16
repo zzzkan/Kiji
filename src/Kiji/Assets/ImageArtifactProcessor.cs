@@ -8,7 +8,7 @@ namespace Kiji.Assets;
 internal static class ImageArtifactProcessor
 {
     internal static async Task<ProcessedImageInfo> ProcessAsync(IImageProcessor processor,
-        string source, string output, string? cacheDirectory, CancellationToken cancellationToken)
+        string source, string output, string? cacheDirectory, string workDirectory, CancellationToken cancellationToken)
     {
         var sourceBytes = await File.ReadAllBytesAsync(source, cancellationToken);
         var sourceHash = BuildFingerprint.HashBytes(sourceBytes);
@@ -26,7 +26,7 @@ internal static class ImageArtifactProcessor
                 // Development can reuse the deterministic built-in variants already on disk.
                 return await builtIn.ProcessBytesAsync(sourceBytes, sourceName, sourceHash, output, cancellationToken);
             }
-            return await GenerateAsync(processor, sourceBytes, sourceHash, output, null, null, sourceName, cancellationToken);
+            return await GenerateAsync(processor, sourceBytes, sourceHash, output, null, null, sourceName, workDirectory, cancellationToken);
         }
         var root = Path.GetDirectoryName(cacheDirectory)!;
         var cache = new ArtifactCache(root);
@@ -56,14 +56,14 @@ internal static class ImageArtifactProcessor
         }
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException) { }
 
-        return await GenerateAsync(processor, sourceBytes, sourceHash, output, cache, recordPath, sourceName, cancellationToken);
+        return await GenerateAsync(processor, sourceBytes, sourceHash, output, cache, recordPath, sourceName, workDirectory, cancellationToken);
     }
 
     private static async Task<ProcessedImageInfo> GenerateAsync(IImageProcessor processor,
-        byte[] sourceBytes, string sourceHash, string output, ArtifactCache? cache, string? recordPath, string sourceName, CancellationToken cancellationToken)
+        byte[] sourceBytes, string sourceHash, string output, ArtifactCache? cache, string? recordPath, string sourceName, string workDirectory, CancellationToken cancellationToken)
     {
         // Work never belongs to public output, including canceled/terminated builds.
-        var work = Path.Combine(Path.GetTempPath(), "kiji-image-" + Guid.NewGuid().ToString("N"));
+        var work = Path.Combine(workDirectory, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(work);
         try
         {
@@ -125,6 +125,7 @@ internal static class ImageArtifactProcessor
                 {
                     throw new IOException("Cannot materialize a generated image.");
                 }
+                if (processor is not ImageProcessor) { PageRenderContext.Current?.SharedRenders?.AddOutput(destination); }
             }
             cancellationToken.ThrowIfCancellationRequested();
             if (recordPath is not null)
@@ -140,7 +141,26 @@ internal static class ImageArtifactProcessor
 
     // Fold through uppercase before choosing lowercase URI spelling, so simple
     // case aliases (including the Greek sigma forms) publish the same filename.
-    private static string NormalizeCasing(string path) => path.Normalize().ToUpperInvariant().ToLowerInvariant().Replace(":", "%3A", StringComparison.Ordinal);
+    private static string NormalizeCasing(string path) => NormalizeFileName(path).ToUpperInvariant().ToLowerInvariant().Replace(":", "%3A", StringComparison.Ordinal);
+
+    private static string NormalizeFileName(string name)
+    {
+        try { return name.Normalize(); }
+        catch (ArgumentException)
+        {
+            // Keep otherwise valid NTFS names representable in public URLs.
+            var result = new System.Text.StringBuilder();
+            for (var index = 0; index < name.Length; index++)
+            {
+                var character = name[index];
+                if (char.IsHighSurrogate(character) && index + 1 < name.Length && char.IsLowSurrogate(name[index + 1]))
+                { result.Append(character).Append(name[++index]); }
+                else if (char.IsSurrogate(character)) { result.Append('%').Append(((int)character).ToString("X4", System.Globalization.CultureInfo.InvariantCulture)); }
+                else { result.Append(character); }
+            }
+            return result.ToString().Normalize();
+        }
+    }
 
     private static string FreezeVariant(string directory, string fileName)
     {

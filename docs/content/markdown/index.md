@@ -219,6 +219,6 @@ than stored as portable page recipes.
 Local references that escape the registered roots, become rooted after path normalization,
 or traverse symbolic links or junctions below a root fail the render. OneDrive placeholders
 and deduplicated files are supported. Missing images fail with the resolved search path.
-Development reloads discard retired generated variants after pending renders stop. Site-root and remote URLs remain unprocessed as
+Development reloads reuse unchanged built-in variants without re-encoding. Retired custom-processor variants are removed after pending renders stop; files temporarily in use are retried on the next reload. Site-root and remote URLs remain unprocessed as
 described above.
 To replace the image processor, see [`IImageProcessor`](../api-reference/#iimageprocessor).

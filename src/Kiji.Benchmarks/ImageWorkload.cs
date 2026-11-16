@@ -40,7 +40,7 @@ internal sealed class ImageWorkload : IDisposable
     internal Task RunAsync(IImageProcessor processor) => Task.WhenAll(_sources.Select(source =>
         ImageArtifactProcessor.ProcessAsync(processor, source,
             Output,
-            Path.Combine(Cache, "images"), default)));
+            Path.Combine(Cache, "images"), Path.Combine(Root, "work"), default)));
 
     public void Dispose()
     {

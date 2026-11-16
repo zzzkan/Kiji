@@ -7,6 +7,11 @@ internal sealed class SharedRenderLifetime : IAsyncDisposable
     private readonly Lock _gate = new();
     private readonly HashSet<Task> _pending = [];
     private bool _disposed;
+    // Built-in variants persist; only custom processor outputs retire with the snapshot.
+    private readonly HashSet<string> _outputs = new(StringComparer.Ordinal);
+
+    internal void AddOutput(string path) { lock (_gate) { _outputs.Add(path); } }
+    internal string[] Outputs { get { lock (_gate) { return [.. _outputs]; } } }
 
     internal SharedRenderLifetime(CancellationToken runToken, CancellationToken stoppingToken)
     {
@@ -15,13 +20,14 @@ internal sealed class SharedRenderLifetime : IAsyncDisposable
     }
 
     internal CancellationToken Token { get; }
+    internal bool IsStopping => Volatile.Read(ref _disposed) || Token.IsCancellationRequested;
 
     internal async Task<string> RunAsync(Func<CancellationToken, Task<string>> render)
     {
         var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         lock (_gate)
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_disposed) { throw new OperationCanceledException(Token); }
             Token.ThrowIfCancellationRequested();
             _pending.Add(completed.Task);
         }

@@ -64,6 +64,8 @@ internal sealed class SiteEngine
 
         await using var cacheLease = await CacheLease.AcquireAsync(Paths.ResolveCachePath(), cancellationToken);
         var options = _options;
+        var work = Path.Combine(Paths.ResolveCachePath(), "work");
+        if (Directory.Exists(work)) { Directory.Delete(work, recursive: true); }
         var assetManifest = options.AssetManifestPath is null ? new StaticAssetManifest { Assets = [] }
             : StaticAssetManifest.Load(options.AssetManifestPath, options.AssetEndpointsPath, SiteInfo.BaseUrl);
         UseAssetResources(assetManifest.Resources);

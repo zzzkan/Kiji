@@ -43,6 +43,7 @@ internal sealed class IncrementalBuildPlanner(
     internal bool OutputStampsValid { get; private set; }
     private readonly ConcurrentDictionary<(string Path, string Hash), Lazy<bool>> _restoredImages = new();
     private readonly ConcurrentDictionary<string, Lazy<BuildManifestOutput>> _imageOutputs = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, Lazy<string>> _imageSources = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, Lazy<string>> _fileFingerprints = new(StringComparer.Ordinal);
 
     internal async Task<IncrementalBuildPlan> CreatePlanAsync(
@@ -143,7 +144,17 @@ internal sealed class IncrementalBuildPlanner(
         // Reuse and cache-only repair must enforce the same source rules as rendering.
         foreach (var image in oldPage.ImageRequests)
         {
-            contentPaths?.ResolveFile(ResolveDependencyPath(image.Source));
+            try
+            {
+                _ = _imageSources.GetOrAdd(image.Source, static (source, planner) => new Lazy<string>(() => planner.ResolveImageSource(source)),
+                    this).Value;
+            }
+            catch (Exception exception) when (exception is InvalidOperationException or IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                var markdown = string.Join(", ", oldPage.Dependencies.Where(dependency => dependency.Kind == BuildManifestDependency.FileKind
+                    && dependency.Key.EndsWith(".md", StringComparison.OrdinalIgnoreCase)).Select(dependency => dependency.Key));
+                throw new InvalidOperationException($"Image source '{image.Source}' used by page '{request.RoutePath}' (Markdown: {markdown}) cannot be resolved. {exception.Message}", exception);
+            }
         }
         if (!oldPage.AdditionalOutputs.All(RestoreImageOutput))
         {
@@ -151,7 +162,7 @@ internal sealed class IncrementalBuildPlanner(
             foreach (var image in oldPage.ImageRequests)
             {
                 await ImageArtifactProcessor.ProcessAsync(imageProcessor, ResolveDependencyPath(image.Source),
-                    Path.Combine(options.OutputDirectory, image.OutputDirectory), options.ImageCacheDirectory, cancellationToken);
+                    Path.Combine(options.OutputDirectory, image.OutputDirectory), options.ImageCacheDirectory, Path.Combine(cacheDirectory, "work"), cancellationToken);
             }
             if (!oldPage.AdditionalOutputs.All(output =>
                 HashFileCached(Path.Combine(options.OutputDirectory, output.RelativePath)) == output.Hash))
@@ -175,6 +186,9 @@ internal sealed class IncrementalBuildPlanner(
         }
         return true;
     }
+
+    private string ResolveImageSource(string source) =>
+        contentPaths?.ResolveFile(ResolveDependencyPath(source)) ?? ResolveDependencyPath(source);
 
     private bool RestoreImageOutput(BuildManifestOutput output)
     {

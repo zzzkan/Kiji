@@ -23,6 +23,9 @@ public sealed class SiteCancellationTests : IDisposable
         var manifest = File.ReadAllBytes(Path.Combine(cache, "manifest.json"));
         var htmlPath = Path.Combine(output, "md", "post", "index.html");
         var originalHtml = File.ReadAllText(htmlPath);
+        var abandoned = Path.Combine(cache, "work", "abandoned");
+        Directory.CreateDirectory(abandoned);
+        File.WriteAllText(Path.Combine(abandoned, "unfinished"), "interrupted image work");
         WriteContent("changed");
 
         using var cancellation = new CancellationTokenSource();
@@ -41,6 +44,7 @@ public sealed class SiteCancellationTests : IDisposable
         try
         {
             await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.False(Directory.Exists(abandoned));
             cancellation.Cancel();
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run.WaitAsync(TimeSpan.FromSeconds(10)));
             Assert.Equal(manifest, File.ReadAllBytes(Path.Combine(cache, "manifest.json")));
@@ -52,9 +56,40 @@ public sealed class SiteCancellationTests : IDisposable
             await Task.WhenAny(run).WaitAsync(TimeSpan.FromSeconds(10));
         }
 
+        Assert.Empty(Directory.GetFileSystemEntries(Path.Combine(cache, "work")));
         await using var recovered = CreateApp(new TrackingImageProcessor());
         await recovered.PublishAsync(output);
         Assert.Contains("changed", File.ReadAllText(htmlPath), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ContentRefresh_RetriesAnUnsentResponseAgainstTheNewSnapshot()
+    {
+        WriteContent("dev");
+        var started = Signal();
+        var calls = 0;
+        var processor = new TrackingImageProcessor
+        {
+            BeforeWriteAsync = async token =>
+            {
+                if (Interlocked.Increment(ref calls) != 1) { return; }
+                started.SetResult();
+                await Task.Delay(Timeout.Infinite, token);
+            },
+        };
+        await using var app = CreateApp(processor, serve: true);
+        var (server, web) = await app.StartDevServerAsync(TestUrls.EphemeralPort, CancellationToken.None);
+        await using (server)
+        {
+            using var client = new HttpClient { BaseAddress = new Uri(web.Urls.First()) };
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var request = client.GetStringAsync("/md/post/", timeout.Token);
+            await started.Task.WaitAsync(timeout.Token);
+            await server.ReloadAfterCodeUpdateAsync().WaitAsync(timeout.Token);
+            Assert.Contains("<img ", await request, StringComparison.Ordinal);
+            Assert.Equal(2, calls);
+            await web.StopAsync();
+        }
     }
 
     [Theory]

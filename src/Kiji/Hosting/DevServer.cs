@@ -45,6 +45,8 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
     private Task _refreshTask = Task.CompletedTask;
     private CancellationTokenSource? _serverStopping;
     private string _imageOutput = null!;
+    private readonly HashSet<string> _retiredImages = new(StringComparer.Ordinal);
+    private readonly Dictionary<WatchedPath, (string Target, FileSystemWatcher Watcher)> _linkedWatchers = [];
 
     internal static DevServer Create(SiteEngine app, string[] args,
         DevServerStatusReporter? reporter = null, TextWriter? statusOutput = null, bool? isOutputRedirected = null)
@@ -70,8 +72,19 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
     internal async Task<WebApplication> StartAsync(ResolvedSitePaths options, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(options.OutputDirectory);
-        _imageOutput = Path.Combine(options.OutputDirectory, "_images");
-        if (Directory.Exists(_imageOutput)) { Directory.Delete(_imageOutput, recursive: true); }
+        var imageOutput = _imageOutput = Path.Combine(options.OutputDirectory, "_images");
+        // Built-in variants are immutable and can survive reloads and restarts.
+        if (Directory.Exists(imageOutput))
+        {
+            foreach (var directory in Directory.EnumerateDirectories(imageOutput))
+            {
+                foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
+                { _retiredImages.Add(file); }
+            }
+            CollectRetiredImages();
+        }
+        var work = Path.Combine(app.Paths.ResolveKijiPath(), "dev-work");
+        if (Directory.Exists(work)) { Directory.Delete(work, recursive: true); }
         var builder = _builder;
         // The standard Host Filtering middleware reads AllowedHosts. Supply only a
         // fallback; appsettings, environment variables and command line stay in control.
@@ -277,12 +290,14 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
         if (_serverStopping is not null) { await _serverStopping.CancelAsync(); }
         await _refreshTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
         foreach (var watcher in _watchers) { watcher.Dispose(); }
-        if (_sharedRenders is not null) { await _sharedRenders.DisposeAsync(); }
+        foreach (var (_, watcher) in _linkedWatchers.Values) { watcher.Dispose(); }
 
         if (_webApplication is not null)
         {
-            await _webApplication.DisposeAsync();
+            await _webApplication.StopAsync();
         }
+        if (_sharedRenders is not null) { await _sharedRenders.DisposeAsync(); }
+        if (_webApplication is not null) { await _webApplication.DisposeAsync(); }
 
         if (_warmupTask is not null)
         {
@@ -304,72 +319,72 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
         return reader.ReadToEnd();
     });
 
-    private async Task HandlePageAsync(HttpContext context)
+    internal async Task HandlePageAsync(HttpContext context)
     {
-        while (true)
+        try
         {
-            Task refresh;
-            Task? render = null;
-            lock (_snapshotLock)
+            while (true)
             {
-                refresh = _refreshTask;
-                if (refresh.IsCompletedSuccessfully)
+                Task refresh;
+                Task<string>? render = null;
+                SharedRenderLifetime? lifetime = null;
+                Rendering.PageRenderRequest? page = null;
+                var status = StatusCodes.Status200OK;
+                lock (_snapshotLock)
                 {
-                    render = _sharedRenders!.RunAsync(async _ =>
+                    if (_disposed || _serverStopping!.IsCancellationRequested)
                     {
-                        // Register under the lock, then render outside it.
-                        await Task.Yield();
-                        await HandleCurrentPageAsync(context);
-                        return "";
-                    });
+                        context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+                        return;
+                    }
+                    refresh = _refreshTask;
+                    if (refresh.IsCompletedSuccessfully)
+                    {
+                        var snapshot = GetSnapshot();
+                        var path = context.Request.Path.Value ?? "/";
+                        if (!snapshot.PagesByRoute.TryGetValue(path, out page))
+                        {
+                            if (!path.EndsWith('/') && snapshot.PagesByRoute.TryGetValue(path + "/", out var slashPage))
+                            {
+                                context.Response.Redirect(context.Request.PathBase.Add(PathString.FromUriComponent(slashPage.RoutePath)).ToUriComponent()
+                                    + context.Request.QueryString);
+                                return;
+                            }
+                            status = StatusCodes.Status404NotFound;
+                            snapshot.PagesByRoute.TryGetValue("/404.html", out page);
+                        }
+                        if (page is null) { context.Response.StatusCode = status; return; }
+                        lifetime = _sharedRenders!;
+                        render = lifetime.RunAsync(async token =>
+                        {
+                            // Register only rendering under the lock; sending the response
+                            // belongs to the request and cannot delay a content refresh.
+                            await Task.Yield();
+                            using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, token);
+                            return await app.RenderPageAsync(page, cancellation.Token, lifetime);
+                        });
+                    }
                 }
+                if (render is null) { await refresh.WaitAsync(context.RequestAborted); continue; }
+                string html;
+                try { html = await render; }
+                catch (OperationCanceledException) when (lifetime!.IsStopping
+                    && !context.RequestAborted.IsCancellationRequested && !_serverStopping!.IsCancellationRequested)
+                {
+                    // The snapshot changed before any response bytes were sent.
+                    continue;
+                }
+                context.Response.StatusCode = status;
+                context.Response.ContentType = "text/html; charset=utf-8";
+                context.Response.Headers.CacheControl = "no-store";
+                await context.Response.WriteAsync(InjectLiveReloadScript(html, context.Request.PathBase), context.RequestAborted);
+                return;
             }
-            if (render is not null) { await render; return; }
-            await refresh.WaitAsync(context.RequestAborted);
         }
-    }
-
-    private async Task HandleCurrentPageAsync(HttpContext context)
-    {
-        var path = context.Request.Path.Value ?? "/";
-        var snapshot = GetSnapshot();
-
-        if (!snapshot.PagesByRoute.TryGetValue(path, out var page))
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested || _serverStopping!.IsCancellationRequested)
         {
-            // Keep directory-style page URLs canonical and aligned with the generated
-            // route, even though shared image URLs do not depend on the slash.
-            if (!path.EndsWith('/') && snapshot.PagesByRoute.TryGetValue(path + "/", out var slashPage))
-            {
-                await Results.LocalRedirect(
-                        context.Request.PathBase.Add(PathString.FromUriComponent(slashPage.RoutePath)).ToUriComponent()
-                        + context.Request.QueryString)
-                    .ExecuteAsync(context);
-                return;
-            }
-
-            if (snapshot.PagesByRoute.TryGetValue("/404.html", out var notFoundPage))
-            {
-                await WritePageAsync(context, notFoundPage, StatusCodes.Status404NotFound);
-                return;
-            }
-
-            context.Response.StatusCode = StatusCodes.Status404NotFound;
-            return;
+            if (!context.Response.HasStarted) { context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable; }
         }
-
-        await WritePageAsync(context, page, StatusCodes.Status200OK);
-    }
-
-    private async Task WritePageAsync(HttpContext context, Rendering.PageRenderRequest page, int statusCode)
-    {
-        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, _sharedRenders!.Token);
-        var html = await app.RenderPageAsync(page, cancellation.Token, _sharedRenders);
-        html = InjectLiveReloadScript(html, context.Request.PathBase);
-
-        context.Response.StatusCode = statusCode;
-        context.Response.ContentType = "text/html; charset=utf-8";
-        context.Response.Headers.CacheControl = "no-store";
-        await context.Response.WriteAsync(html, context.RequestAborted);
     }
 
     // PathBase carries the site's base path, so the script resolves under the prefix.
@@ -417,20 +432,45 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
                 .Select(static entry => entry.Input).ToArray();
             remaining.RemoveAll(entry => WatchedPath.Contains(root, entry.Root));
             if (!Directory.Exists(root)) { continue; }
-            StartWatcher(root, inputs);
+            _watchers.Add(StartWatcher(root, inputs));
         }
-        // Recursive parent watchers do not follow child links. Open each linked
-        // content root directly as well, while its parent still detects retargeting.
+        RefreshLinkedWatchers();
+    }
+
+    private void RefreshLinkedWatchers()
+    {
+        // Parent watchers survive ordinary saves. Only a retargeted content link
+        // needs a new direct watcher; Error events never restart native watchers.
         foreach (var input in _watchedPaths.Where(input => input.Source == WatchedPathSource.Content))
         {
-            if (Directory.Exists(input.Path) && new DirectoryInfo(input.Path).LinkTarget is not null)
+            try
             {
-                StartWatcher(input.Path, [input]);
+                RefreshLinkedWatcher(input);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                _reporter.WatcherError(input.Source, input.Path, exception);
             }
         }
     }
 
-    private void StartWatcher(string root, WatchedPath[] inputs)
+    private void RefreshLinkedWatcher(WatchedPath input)
+    {
+        var target = Directory.Exists(input.Path)
+            ? new DirectoryInfo(input.Path).ResolveLinkTarget(returnFinalTarget: true)?.FullName : null;
+        if (_linkedWatchers.TryGetValue(input, out var existing))
+        {
+            if (existing.Target == target) { return; }
+            existing.Watcher.Dispose();
+            _linkedWatchers.Remove(input);
+        }
+        if (target is not null && Directory.Exists(target))
+        {
+            _linkedWatchers.Add(input, (target, StartWatcher(input.Path, [input])));
+        }
+    }
+
+    private FileSystemWatcher StartWatcher(string root, WatchedPath[] inputs)
     {
         var watcher = new FileSystemWatcher(root)
         {
@@ -473,8 +513,12 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
                     input.Source is not WatchedPathSource.Static);
             }
         };
-        _watchers.Add(watcher);
-        watcher.EnableRaisingEvents = true;
+        try
+        {
+            watcher.EnableRaisingEvents = true;
+            return watcher;
+        }
+        catch { watcher.Dispose(); throw; }
     }
 
     private void ScheduleReload(WatchedChange change, bool contentChanged)
@@ -584,24 +628,46 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
         var previous = _refreshTask;
         _refreshTask = Task.Run(async () =>
         {
-            // A transient cleanup failure is surfaced to requests; the next change
-            // can retry instead of retaining a failed refresh forever.
+            // Retire source work before invalidating the snapshot.
             await previous.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
             await _sharedRenders!.DisposeAsync();
             lock (_snapshotLock)
             {
                 if (_disposed) { return; }
-                if (Directory.Exists(_imageOutput)) { Directory.Delete(_imageOutput, recursive: true); }
+                foreach (var path in _sharedRenders.Outputs) { _retiredImages.Add(path); }
                 app.InvalidateContent();
                 _snapshot = null;
                 _sharedRenders = new SharedRenderLifetime(_serverStopping!.Token, CancellationToken.None);
             }
             // Native watcher shutdown may join a callback that needs _snapshotLock.
             // Requests still wait for this refresh; server disposal joins it as well.
-            foreach (var watcher in _watchers) { watcher.Dispose(); }
-            _watchers.Clear();
-            StartWatchers();
+            CollectRetiredImages();
+            RefreshLinkedWatchers();
         });
+    }
+
+    private void CollectRetiredImages()
+    {
+        foreach (var path in _retiredImages.ToArray())
+        {
+            try
+            {
+                File.Delete(path);
+                var directory = Path.GetDirectoryName(path);
+                while (directory is not null && directory != _imageOutput && Directory.Exists(directory)
+                    && !Directory.EnumerateFileSystemEntries(directory).Any())
+                {
+                    Directory.Delete(directory);
+                    directory = Path.GetDirectoryName(directory);
+                }
+                _retiredImages.Remove(path);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                // A static response or scanner may still hold the file on Windows.
+                // Retry next refresh without preventing fresh pages or reload notices.
+            }
+        }
     }
 
     private async Task ReportReloadAsync(List<WatchedChange> changes)

@@ -1216,6 +1216,70 @@ public sealed class IncrementalBuildTests : IDisposable
         }
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => site.PublishAsync("dist"));
         Assert.Contains("symbolic links", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("/md/stable/", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("stable.md", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UnixBackslashInSourceDirectory_PublishesAndRestoresImages()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Backslashes are Windows path separators.");
+        var root = CreateSiteRoot("backslash-source");
+        var directory = Path.Combine(root, "content", @"notes\2024");
+        Directory.CreateDirectory(directory);
+        await File.WriteAllTextAsync(Path.Combine(directory, "index.md"), "---\ntitle: Notes\n---\n![Image](source.png)");
+        await File.WriteAllBytesAsync(Path.Combine(directory, "source.png"), [1, 2, 3]);
+        var builder = CreateBuilder(root);
+        builder.Services.AddSingleton<IImageProcessor, TestSite.PageServices.TrackingImageProcessor>();
+        await using var site = builder.BuildSite();
+        await site.PublishAsync("dist");
+        var expected = SnapshotDirectory(Path.Combine(root, "dist"));
+        await site.PublishAsync("dist");
+        Directory.Delete(Path.Combine(root, "dist"), recursive: true);
+        await site.PublishAsync("dist");
+        var restored = SnapshotDirectory(Path.Combine(root, "dist"));
+        Assert.Equal(expected.Keys.Order(), restored.Keys.Order());
+        foreach (var (path, entry) in expected) { Assert.Equal(entry.Bytes, restored[path].Bytes); }
+    }
+
+    [Theory]
+    [InlineData("/kiji/")]
+    [InlineData("/%E6%97%A5%E6%9C%AC/")]
+    public async Task DevelopmentBuiltInImages_ReusesVariantsAcrossReloadAndRestart(string basePath)
+    {
+        var root = CreateSiteRoot("dev-reuse-images");
+        await WritePostAsync(root, "stable", "Image", "![Image](source.png)");
+        var source = Path.Combine(root, "content", "source.png");
+        using (var bitmap = new SkiaSharp.SKBitmap(700, 400))
+        using (var encoded = bitmap.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100)) { File.WriteAllBytes(source, encoded.ToArray()); }
+        var count = 0;
+        var processor = new Kiji.Assets.ImageProcessor { BeforeEncodeAsync = (_, _) => { Interlocked.Increment(ref count); return Task.CompletedTask; } };
+        for (var start = 0; start < 2; start++)
+        {
+            var builder = CreateBuilder(root, serve: true);
+            builder.UseSiteInfo(new SiteInfo { Name = "Images", BaseUrl = new Uri("https://example.com" + basePath) });
+            builder.Services.AddSingleton<IImageProcessor>(_ => processor);
+            await using var app = builder.BuildSite();
+            var work = Path.Combine(root, ".kiji", "dev-work", "abandoned");
+            Directory.CreateDirectory(work);
+            await File.WriteAllTextAsync(Path.Combine(work, "unfinished"), "interrupted generation");
+            var (server, web) = await app.StartDevServerAsync(TestUrls.EphemeralPort, CancellationToken.None);
+            await using (server)
+            {
+                Assert.False(Directory.Exists(work));
+                using var client = new HttpClient { BaseAddress = new Uri(web.Urls.First()) };
+                var first = await client.GetStringAsync(basePath + "md/stable/");
+                var expectedCount = count;
+                Assert.Equal(3, expectedCount);
+                var stamps = SnapshotDirectory(Path.Combine(root, ".kiji", "dev-site", "_images"));
+                await server.ReloadAfterCodeUpdateAsync();
+                Assert.Equal(first, await client.GetStringAsync(basePath + "md/stable/"));
+                Assert.Equal(expectedCount, count);
+                foreach (var (path, entry) in stamps)
+                { Assert.Equal(entry.LastWriteTimeUtc, File.GetLastWriteTimeUtc(Path.Combine(root, ".kiji", "dev-site", "_images", path))); }
+                await web.StopAsync();
+            }
+        }
     }
 
     [Theory]
@@ -1245,6 +1309,38 @@ public sealed class IncrementalBuildTests : IDisposable
                 Assert.Single(Directory.GetFiles(images, "*", SearchOption.AllDirectories));
                 previous = current;
             }
+            await web.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task DevelopmentImageCleanupFailure_DoesNotPreventRefreshAndRetries()
+    {
+        var root = CreateSiteRoot("dev-locked-images");
+        await WritePostAsync(root, "stable", "Image", "![image](source.png)");
+        await File.WriteAllBytesAsync(Path.Combine(root, "content", "source.png"), [1]);
+        var builder = CreateBuilder(root, serve: true);
+        builder.Services.AddSingleton<IImageProcessor, TestSite.PageServices.VaryingImageProcessor>();
+        await using var app = builder.BuildSite();
+        var (server, web) = await app.StartDevServerAsync(TestUrls.EphemeralPort, CancellationToken.None);
+        await using (server)
+        {
+            using var client = new HttpClient { BaseAddress = new Uri(web.Urls.First()) };
+            var first = ImageSource(await client.GetStringAsync("/md/stable/"));
+            var path = Path.Combine(root, ".kiji", "dev-site", first.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+            // A directory at the retired file path makes File.Delete fail on every OS.
+            File.Delete(path);
+            Directory.CreateDirectory(path);
+            await server.ReloadAfterCodeUpdateAsync();
+            var second = ImageSource(await client.GetStringAsync("/md/stable/"));
+            Assert.NotEqual(first, second);
+            Assert.NotEmpty(await client.GetByteArrayAsync(second));
+            Assert.True(Directory.Exists(path));
+            Directory.Delete(path);
+            await File.WriteAllTextAsync(path, "retired file is now deletable");
+            await server.ReloadAfterCodeUpdateAsync();
+            Assert.NotEmpty(await client.GetStringAsync("/md/stable/"));
+            Assert.False(File.Exists(path));
             await web.StopAsync();
         }
     }
@@ -1310,6 +1406,22 @@ public sealed class IncrementalBuildTests : IDisposable
             Assert.NotEqual(updated, renamed);
             Assert.Equal(renamed, ImageSource(await client.GetStringAsync(basePath + "md/changing/")));
             Assert.Equal(updatedBytes, await client.GetByteArrayAsync(renamed));
+            if (rootKind == "linked")
+            {
+                var replacement = CreateSiteRoot("retargeted-content");
+                await WritePostAsync(replacement, "stable", "Retargeted", "![image](source.png)");
+                File.Copy(Path.Combine(contentSite, "content", "renamed.png"), Path.Combine(replacement, "content", "source.png"));
+                reload = socket.ReceiveAsync(new ArraySegment<byte>(new byte[64]), timeout.Token);
+                Directory.Delete(directory);
+                Directory.CreateSymbolicLink(directory, Path.Combine(replacement, "content"));
+                await reload;
+                Assert.Contains("Retargeted", await client.GetStringAsync(basePath + "md/stable/"), StringComparison.Ordinal);
+                // The direct watcher must follow the new target after a retarget.
+                reload = socket.ReceiveAsync(new ArraySegment<byte>(new byte[64]), timeout.Token);
+                await WritePostAsync(replacement, "stable", "Retargeted edit", "![image](source.png)");
+                await reload;
+                Assert.Contains("Retargeted edit", await client.GetStringAsync(basePath + "md/stable/"), StringComparison.Ordinal);
+            }
             await socket.CloseAsync(System.Net.WebSockets.WebSocketCloseStatus.NormalClosure, null, timeout.Token);
             await web.StopAsync();
         }

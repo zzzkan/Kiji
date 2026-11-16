@@ -75,7 +75,8 @@ internal sealed record BuildManifest
     }
 
     internal static bool IsRelativeSource(string? path) => path is not null && !Path.IsPathRooted(path)
-        && !path.Contains('\\') && !path.Contains('\0')
+        && !path.Contains('\0')
+        && (!OperatingSystem.IsWindows() || !path.Contains('\\'))
         && path.Split('/').All(segment => segment.Length > 0 && segment is not "." and not "..");
 
     internal static bool IsRelativeOutput(string? path)

@@ -245,6 +245,45 @@ public sealed class MarkdownProcessorTests : IDisposable
     }
 
     [Fact]
+    public async Task CaseDistinctAddedImage_DoesNotResolveToCachedLowercaseName()
+    {
+        await CreateTestImageAsync(Path.Combine(_testFilesDir, "photo.png"), 32, 32);
+        Assert.SkipWhen(File.Exists(Path.Combine(_testFilesDir, "Photo.png")), "Requires a case-sensitive filesystem.");
+        var processor = CreateProcessor();
+        var first = await WithPageContextAsync("/first/", () => processor.ProcessBodyAsync(
+            Path.Combine(_testFilesDir, "first.md"), "![First](photo.png)"));
+        await CreateTestImageAsync(Path.Combine(_testFilesDir, "Photo.png"), 64, 64);
+        var second = await WithPageContextAsync("/second/", () => processor.ProcessBodyAsync(
+            Path.Combine(_testFilesDir, "second.md"), "![Second](Photo.png)"));
+        Assert.NotEqual(ImageSource(first), ImageSource(second));
+        Assert.Contains("width=\"64\"", second, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task InvalidImagePath_ReportsMarkdownAndReference()
+    {
+        var markdown = CreateMarkdownFile("invalid-path.md", "![Invalid](a%00.png)");
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            WithPageContextAsync("/invalid/", () => ProcessFileAsync(CreateProcessor(), markdown)));
+        Assert.Contains("a%00.png", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(markdown, exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UnpairedSurrogateName_CanBePublishedOnWindows()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "NTFS supports unpaired UTF-16 surrogates.");
+        var name = "photo\uD800.png";
+        await CreateTestImageAsync(Path.Combine(_testFilesDir, name), 32, 32);
+        var processor = CreateProcessor();
+        // Prime the name cache so lookup must normalize a nonmatching entry too.
+        var markdown = CreateMarkdownFile("surrogate.md", $"![Photo]({name.ToUpperInvariant()})");
+        var html = await WithPageContextAsync("/surrogate/", () => ProcessFileAsync(processor, markdown));
+        Assert.Contains("photo%25d800.png.", html, StringComparison.Ordinal);
+        Assert.Single(Directory.GetFiles(_outputDir, "*.webp", SearchOption.AllDirectories));
+    }
+
+    [Fact]
     public async Task UnicodeNormalizationAlias_CanResolveAnExistingImage()
     {
         var diskName = "cafe\u0301.png";

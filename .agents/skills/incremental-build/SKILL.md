@@ -57,6 +57,11 @@ not built with conflicting global properties.
 
 IncrementalBuildPlanner owns planning and manifest publication. Only `.kiji/cache`
 and `.kiji/jit` travel between checkouts; development uses `.kiji/dev-site`.
+Image work stays in private `.kiji/cache/work` (under the publish lease) or `.kiji/dev-work`;
+remove abandoned work before the next execution. Dev reloads retain built-in immutable
+variants, retire custom outputs best-effort after joining render work, and never wait for
+response transmission. Ordinary saves and watcher errors do not recreate native watchers;
+only retargeted content links replace their direct watchers.
 `.kiji/jit` holds only the publish JIT profile, saved atomically under the cache lease
 after a successful publish. It never affects output or reuse decisions, so CI can
 restore it with or without `.kiji/cache`.

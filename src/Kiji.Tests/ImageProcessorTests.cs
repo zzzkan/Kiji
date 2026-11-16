@@ -176,14 +176,14 @@ public sealed class ImageProcessorTests : IDisposable
         var imagePath = Path.Combine(_sourceDir, "cached.png");
         await CreateTestImageAsync(imagePath, 800, 600);
 
-        await ImageArtifactProcessor.ProcessAsync(processor, imagePath, _outputDir, _cacheDir, default);
+        await ImageArtifactProcessor.ProcessAsync(processor, imagePath, _outputDir, _cacheDir, Path.Combine(_testDir, "work"), default);
         var initialEncodes = encodes;
         Assert.True(initialEncodes > 0);
 
         // Simulate a clean build: output is wiped, cache survives.
         Directory.Delete(_outputDir, recursive: true);
 
-        var info = await ImageArtifactProcessor.ProcessAsync(processor, imagePath, _outputDir, _cacheDir, default);
+        var info = await ImageArtifactProcessor.ProcessAsync(processor, imagePath, _outputDir, _cacheDir, Path.Combine(_testDir, "work"), default);
 
         foreach (var variant in info.Variants)
         {

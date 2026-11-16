@@ -51,12 +51,20 @@ public sealed class SiteInfo
     /// </remarks>
     public Uri ResolveUrl(string path)
     {
-        ArgumentNullException.ThrowIfNull(path);
+        var relativeUri = ParseRelativePath(path, nameof(path));
+        return relativeUri is null ? BaseUrl : new Uri(BaseUrl, relativeUri);
+    }
+
+    /// <summary>Applies <see cref="ResolveUrl"/>'s path rules, which do not depend on the base URL.</summary>
+    /// <returns>The relative URI, or null when the path names the site root.</returns>
+    internal static Uri? ParseRelativePath(string path, string parameterName)
+    {
+        ArgumentNullException.ThrowIfNull(path, parameterName);
 
         var relativePath = path.StartsWith('/') ? path[1..] : path;
         if (relativePath.Length == 0)
         {
-            return BaseUrl;
+            return null;
         }
 
         var suffixStart = relativePath.AsSpan().IndexOfAny('?', '#');
@@ -69,7 +77,7 @@ public sealed class SiteInfo
         if (pathPart[0] == '/'
             || char.IsWhiteSpace(pathPart[0]) || char.IsWhiteSpace(pathPart[^1]))
         {
-            throw new ArgumentException("A site-relative path with at most one leading slash and no surrounding whitespace is required.", nameof(path));
+            throw new ArgumentException("A site-relative path with at most one leading slash and no surrounding whitespace is required.", parameterName);
         }
 
         // Inspect decoded path segments before Uri can normalize away '..'. Query and
@@ -79,7 +87,7 @@ public sealed class SiteInfo
         {
             if (character == '\\' || char.IsControl(character))
             {
-                throw new ArgumentException("The path cannot contain backslashes or control characters.", nameof(path));
+                throw new ArgumentException("The path cannot contain backslashes or control characters.", parameterName);
             }
         }
 
@@ -87,16 +95,16 @@ public sealed class SiteInfo
         {
             if (decodedPath[segment].SequenceEqual(".."))
             {
-                throw new ArgumentException("The path cannot contain parent-directory segments.", nameof(path));
+                throw new ArgumentException("The path cannot contain parent-directory segments.", parameterName);
             }
         }
 
         if (!Uri.TryCreate(relativePath, UriKind.Relative, out var relativeUri))
         {
-            throw new ArgumentException("The path must be site-relative, not an absolute URI.", nameof(path));
+            throw new ArgumentException("The path must be site-relative, not an absolute URI.", parameterName);
         }
 
-        return new Uri(BaseUrl, relativeUri);
+        return relativeUri;
     }
 
     private static Uri ValidateBaseUrl(Uri value)

@@ -19,3 +19,8 @@ See [Recipes](../recipes/#rss-feed) for examples.
 `FeedItem(string Title, string Description, DateTimeOffset PublishedAt, string RelativePath)`
 describes one item. `RelativePath` is the page path relative to `BaseUrl` without a leading
 `/`, such as `posts/hello/`, or `""` for the home page.
+
+The constructor throws `ArgumentException` for a path with a leading `/`, a query, or a
+fragment, for a path `SiteInfo.ResolveUrl` rejects, such as one with a `..` segment or
+surrounding whitespace, and for a title or description containing a character XML cannot
+represent, such as a control character other than tab or newline.

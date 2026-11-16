@@ -109,9 +109,35 @@ public sealed class FeedsTests
     [InlineData("https://example.com/blog/post/")]
     [InlineData("blog/post/?draft=true")]
     [InlineData("blog\\post\\")]
+    [InlineData("blog/../post/")]
+    [InlineData(" blog/post/")]
+    [InlineData("blog/a%5Cb/")]
     public void FeedItem_RejectsInvalidRelativePath(string path)
     {
-        Assert.Throws<ArgumentException>(() => new FeedItem("Post", "Description", DateTimeOffset.UtcNow, path));
+        var exception = Assert.Throws<ArgumentException>(() => new FeedItem("Post", "Description", DateTimeOffset.UtcNow, path));
+        Assert.Equal("RelativePath", exception.ParamName);
+    }
+
+    [Theory]
+    [InlineData("Bad\u0001title", "Description", "Title")]
+    [InlineData("Title", "Bad\uFFFEdescription", "Description")]
+    public void FeedItem_RejectsTextXmlCannotRepresent_NamingTheItem(string title, string description, string parameter)
+    {
+        var exception = Assert.Throws<ArgumentException>(() => new FeedItem(title, description, DateTimeOffset.UtcNow, "blog/post/"));
+        Assert.Equal(parameter, exception.ParamName);
+        Assert.Contains("'blog/post/'", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WriteAsync_KeepsWhitespaceControlsAndSupplementaryCharacters()
+    {
+        var text = "Line one\n\tLine two 😀";
+        var artifact = new RssFeedArtifact(_ => [new FeedItem(text, text, DateTimeOffset.UnixEpoch, "blog/post/")]);
+
+        var document = XDocument.Parse(await WriteFeedAsync(artifact, CreateContext()));
+
+        var item = Assert.Single(document.Root!.Element("channel")!.Elements("item"));
+        Assert.Equal(text, item.Element("title")!.Value);
     }
 
 }

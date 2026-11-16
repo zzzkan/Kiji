@@ -2,6 +2,7 @@
 title: Deployment
 description: Publish to GitHub Pages or another static host, including under a subpath.
 order: 50
+section: Guides
 ---
 
 `dotnet publish -o dist` writes the site to `dist/` as static files only, ready to upload to any

@@ -2,7 +2,10 @@
 title: Routing
 description: Generate fixed, parameterized, and not-found pages from Razor routes.
 order: 30
+section: Guides
 ---
+
+Kiji writes one HTML file for each route, so every URL must be known when you publish.
 
 ## Fixed routes
 

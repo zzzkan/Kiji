@@ -1,5 +1,6 @@
 @page "/"
 @inject SiteInfo Site
+@inject ContentCollection<Article> Articles
 
 <PageHead Title="Home" Description="@Site.Description" />
 
@@ -9,6 +10,12 @@
     <p>Kiji renders your Razor components with Blazor's
         <a href="https://learn.microsoft.com/aspnet/core/blazor/components/render-components-outside-of-aspnetcore"><code>HtmlRenderer</code></a>
         and writes each page, Markdown included, as plain HTML for any static host.</p>
+    <p class="actions">
+        <a class="action primary" href="@Site.ResolveUrl($"docs/{Articles.MinBy(static article => article.Order)?.Slug}/").AbsolutePath">Get started</a>
+        <a class="action" href="https://github.com/zzzkan/kiji">GitHub</a>
+    </p>
+    <pre class="install"><code class="language-powershell">dotnet new install Kiji.Templates
+dotnet new kiji-blog -o MyBlog</code></pre>
 </div>
 
 <section class="pitch">

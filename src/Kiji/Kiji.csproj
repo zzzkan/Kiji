@@ -34,6 +34,65 @@
     <None Update="MSBuild/Kiji.targets" Pack="true" PackagePath="build/Kiji.targets" />
   </ItemGroup>
 
+  <!-- A publish is one short process, and compiling Kiji's own code was a large part of it.
+       The package therefore carries ReadyToRun images beside the IL assembly in lib/: the host
+       picks runtimes/<rid>/ where it matches and the IL everywhere else, so nothing depends on
+       them. An image stays valid across runtime servicing; code that no longer fits the
+       running framework is compiled again by the JIT. -->
+  <PropertyGroup>
+    <KijiReadyToRun Condition="'$(KijiReadyToRun)' == ''">true</KijiReadyToRun>
+    <KijiReadyToRunRuntimeIdentifiers Condition="'$(KijiReadyToRunRuntimeIdentifiers)' == ''">linux-x64;linux-arm64;linux-musl-x64;win-x64;win-arm64;osx-x64;osx-arm64</KijiReadyToRunRuntimeIdentifiers>
+    <TargetsForTfmSpecificContentInPackage Condition="'$(KijiReadyToRun)' == 'true'">$(TargetsForTfmSpecificContentInPackage);KijiPackReadyToRun</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+
+  <!-- The compiler for this machine and the framework each image is compiled against. -->
+  <ItemGroup Condition="'$(KijiReadyToRun)' == 'true'">
+    <KijiReadyToRunRuntime Include="$(KijiReadyToRunRuntimeIdentifiers)" />
+    <PackageDownload Include="Microsoft.NETCore.App.Crossgen2.$(NETCoreSdkPortableRuntimeIdentifier)" Version="[$(BundledNETCoreAppPackageVersion)]" />
+    <PackageDownload Include="@(KijiReadyToRunRuntime->'Microsoft.NETCore.App.Runtime.%(Identity)')" Version="[$(BundledNETCoreAppPackageVersion)]" />
+    <PackageDownload Include="@(KijiReadyToRunRuntime->'Microsoft.AspNetCore.App.Runtime.%(Identity)')" Version="[$(BundledNETCoreAppPackageVersion)]" />
+  </ItemGroup>
+
+  <!-- Runs once per runtime identifier, and only when the assembly changed. -->
+  <Target Name="KijiCompileReadyToRun" Condition="'$(KijiReadyToRun)' == 'true'"
+          Inputs="@(IntermediateAssembly);$(MSBuildProjectFullPath)"
+          Outputs="$(IntermediateOutputPath)r2r/%(KijiReadyToRunRuntime.Identity)/$(TargetFileName)">
+    <PropertyGroup>
+      <_KijiRuntime>%(KijiReadyToRunRuntime.Identity)</_KijiRuntime>
+      <_KijiTargetArchitecture>$(_KijiRuntime.Substring($([MSBuild]::Add($(_KijiRuntime.LastIndexOf('-')), 1))))</_KijiTargetArchitecture>
+      <_KijiTargetOS>linux</_KijiTargetOS>
+      <_KijiTargetOS Condition="$(_KijiRuntime.StartsWith('win-'))">windows</_KijiTargetOS>
+      <_KijiTargetOS Condition="$(_KijiRuntime.StartsWith('osx-'))">osx</_KijiTargetOS>
+      <_KijiPackageVersion>$(BundledNETCoreAppPackageVersion.ToLowerInvariant())</_KijiPackageVersion>
+      <_KijiCrossgenDirectory>$(NuGetPackageRoot)microsoft.netcore.app.crossgen2.$(NETCoreSdkPortableRuntimeIdentifier.ToLowerInvariant())/$(_KijiPackageVersion)/tools/</_KijiCrossgenDirectory>
+      <!-- The pack holds a native executable, or an assembly for the SDK's host. -->
+      <_KijiCrossgen>"$(_KijiCrossgenDirectory)crossgen2$(_NativeExecutableExtension)"</_KijiCrossgen>
+      <_KijiCrossgen Condition="$([MSBuild]::IsOSPlatform('Windows'))">"$(_KijiCrossgenDirectory)crossgen2.exe"</_KijiCrossgen>
+      <_KijiCrossgen Condition="Exists('$(_KijiCrossgenDirectory)crossgen2.dll')">"$(DOTNET_HOST_PATH)" "$(_KijiCrossgenDirectory)crossgen2.dll"</_KijiCrossgen>
+      <_KijiReadyToRunDirectory>$(MSBuildProjectDirectory)/$(IntermediateOutputPath)r2r/$(_KijiRuntime)/</_KijiReadyToRunDirectory>
+    </PropertyGroup>
+    <ItemGroup>
+      <_KijiCrossgenArgument Remove="@(_KijiCrossgenArgument)" />
+      <_KijiCrossgenArgument Include="@(IntermediateAssembly->'%(FullPath)')" />
+      <_KijiCrossgenArgument Include="--out:$(_KijiReadyToRunDirectory)$(TargetFileName)" />
+      <_KijiCrossgenArgument Include="--targetos:$(_KijiTargetOS);--targetarch:$(_KijiTargetArchitecture);--optimize" />
+      <_KijiCrossgenArgument Include="--reference:$(NuGetPackageRoot)microsoft.netcore.app.runtime.$(_KijiRuntime)/$(_KijiPackageVersion)/runtimes/$(_KijiRuntime)/lib/$(TargetFramework)/*.dll" />
+      <_KijiCrossgenArgument Include="--reference:$(NuGetPackageRoot)microsoft.aspnetcore.app.runtime.$(_KijiRuntime)/$(_KijiPackageVersion)/runtimes/$(_KijiRuntime)/lib/$(TargetFramework)/*.dll" />
+      <!-- Package references; the framework's reference assemblies are not implementations. -->
+      <_KijiCrossgenArgument Include="@(ReferencePath->'--reference:%(FullPath)')" Condition="'%(ReferencePath.FrameworkReferenceName)' == ''" />
+    </ItemGroup>
+    <MakeDir Directories="$(_KijiReadyToRunDirectory)" />
+    <WriteLinesToFile File="$(_KijiReadyToRunDirectory)crossgen.rsp" Lines="@(_KijiCrossgenArgument)" Overwrite="true" />
+    <Exec Command="$(_KijiCrossgen) &quot;@$(_KijiReadyToRunDirectory)crossgen.rsp&quot;" StandardOutputImportance="low" />
+  </Target>
+
+  <Target Name="KijiPackReadyToRun" DependsOnTargets="ResolveReferences;KijiCompileReadyToRun">
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="@(KijiReadyToRunRuntime->'$(IntermediateOutputPath)r2r/%(Identity)/$(TargetFileName)')"
+                              PackagePath="runtimes/%(Identity)/lib/$(TargetFramework)" />
+    </ItemGroup>
+  </Target>
+
   <ItemGroup>
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
       <_Parameter1>Kiji.Tests</_Parameter1>

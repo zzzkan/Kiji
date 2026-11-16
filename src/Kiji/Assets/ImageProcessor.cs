@@ -21,7 +21,9 @@ internal sealed class ImageProcessor : IImageProcessor
 
     // Native code is not covered by managed assembly dependency tracking. Include
     // its version and platform so caches cannot cross incompatible native builds.
-    private static readonly string EncoderIdentity =
+    // Not a static initializer: those all run with the first use of the type, and reading
+    // the version loads the native library.
+    private static string EncoderIdentity => field ??=
         $"mvid:{typeof(SKWebpEncoder).Assembly.ManifestModule.ModuleVersionId:N}:{SkiaSharpVersion.Native}:{RuntimeInformation.RuntimeIdentifier}";
 
     private readonly int[] _widths;

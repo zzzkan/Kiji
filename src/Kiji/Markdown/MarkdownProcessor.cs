@@ -29,7 +29,7 @@ internal sealed class MarkdownProcessor
     /// <param name="options">The resolved site paths.</param>
     /// <param name="paths">The project root used for portable source identities.</param>
     /// <param name="site">The site's public deployment base path.</param>
-    /// <param name="contentPaths">Registered roots and file names within the current content snapshot.</param>
+    /// <param name="contentPaths">Registered content roots used to validate local image sources.</param>
     /// <param name="imageProcessor">The image backend used to process referenced local images.</param>
     /// <param name="contentOptions">Site-wide pipeline configuration.</param>
     public MarkdownProcessor(

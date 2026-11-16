@@ -256,7 +256,6 @@ internal sealed class SiteEngine
     internal void InvalidateContent()
     {
         _runtime.Invalidate();
-        ServiceProvider.GetRequiredService<ContentPath>().Invalidate();
     }
 
     internal SiteSnapshot CreateSnapshot()

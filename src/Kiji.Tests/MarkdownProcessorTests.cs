@@ -188,7 +188,7 @@ public sealed class MarkdownProcessorTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task CachedNames_StillRejectReplacementWithSymbolicLinks(bool directoryLink)
+    public async Task PreviouslyReadPaths_StillRejectReplacementWithSymbolicLinks(bool directoryLink)
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), "Creating symbolic links requires privileges on Windows.");
         var shared = Path.Combine(_testFilesDir, "shared");
@@ -245,7 +245,7 @@ public sealed class MarkdownProcessorTests : IDisposable
     }
 
     [Fact]
-    public async Task CaseDistinctAddedImage_DoesNotResolveToCachedLowercaseName()
+    public async Task CaseDistinctAddedImage_DoesNotResolveToPreviouslyReadLowercaseName()
     {
         await CreateTestImageAsync(Path.Combine(_testFilesDir, "photo.png"), 32, 32);
         Assert.SkipWhen(File.Exists(Path.Combine(_testFilesDir, "Photo.png")), "Requires a case-sensitive filesystem.");

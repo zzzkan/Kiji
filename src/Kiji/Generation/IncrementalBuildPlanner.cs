@@ -30,7 +30,8 @@ internal sealed class IncrementalBuildPlanner(
     IImageProcessor? imageProcessor = null,
     AssetResources? assets = null,
     ILogger? logger = null,
-    Func<object, ContentItemIdentity?>? resolveContentItem = null)
+    Func<object, ContentItemIdentity?>? resolveContentItem = null,
+    ContentPath? contentPaths = null)
 {
     private readonly ILogger _logger = logger ?? NullLogger.Instance;
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Assembly, IReadOnlyList<string>> CodeDependencies = [];
@@ -40,7 +41,10 @@ internal sealed class IncrementalBuildPlanner(
     private readonly string _outputDirectoryHash = BuildFingerprint.HashText(Path.GetFullPath(options.OutputDirectory));
     private bool _stampsChanged;
     internal bool OutputStampsValid { get; private set; }
-    private readonly ConcurrentDictionary<string, Lazy<string>> _fileFingerprints = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<(string Path, string Hash), Lazy<bool>> _restoredImages = new();
+    private readonly ConcurrentDictionary<string, Lazy<BuildManifestOutput>> _imageOutputs = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, Lazy<string>> _imageSources = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, Lazy<string>> _fileFingerprints = new(StringComparer.Ordinal);
 
     internal async Task<IncrementalBuildPlan> CreatePlanAsync(
         IReadOnlyList<PageRenderRequest> pages,
@@ -137,16 +141,30 @@ internal sealed class IncrementalBuildPlanner(
             }
         }
 
+        // Reuse and cache-only repair must enforce the same source rules as rendering.
+        foreach (var image in oldPage.ImageRequests)
+        {
+            try
+            {
+                _ = ResolveImageSource(image.Source);
+            }
+            catch (Exception exception) when (exception is InvalidOperationException or IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                var markdown = string.Join(", ", oldPage.Dependencies.Where(dependency => dependency.Kind == BuildManifestDependency.FileKind
+                    && dependency.Key.EndsWith(".md", StringComparison.OrdinalIgnoreCase)).Select(dependency => dependency.Key));
+                throw new InvalidOperationException($"Image source '{image.Source}' used by page '{request.RoutePath}' (Markdown: {markdown}) cannot be resolved. {exception.Message}", exception);
+            }
+        }
         if (!oldPage.AdditionalOutputs.All(RestoreImageOutput))
         {
             if (imageProcessor is null) { return false; }
             foreach (var image in oldPage.ImageRequests)
             {
-                await ImageArtifactProcessor.ProcessAsync(imageProcessor, ResolveDependencyPath(image.Source),
-                    Path.Combine(options.OutputDirectory, image.OutputDirectory), options.ImageCacheDirectory, cancellationToken);
+                await ImageArtifactProcessor.ProcessAsync(imageProcessor, ResolveImageSource(image.Source),
+                    Path.Combine(options.OutputDirectory, image.OutputDirectory), options.ImageCacheDirectory, Path.Combine(cacheDirectory, "work"), cancellationToken);
             }
             if (!oldPage.AdditionalOutputs.All(output =>
-                BuildFingerprint.HashFile(Path.Combine(options.OutputDirectory, output.RelativePath)) == output.Hash))
+                HashFileCached(Path.Combine(options.OutputDirectory, output.RelativePath)) == output.Hash))
             {
                 return false;
             }
@@ -168,11 +186,21 @@ internal sealed class IncrementalBuildPlanner(
         return true;
     }
 
+    // Many pages share one image; validate each source once per plan.
+    private string ResolveImageSource(string source) => _imageSources.GetOrAdd(source, source => new Lazy<string>(() =>
+        contentPaths?.ResolveFile(ResolveDependencyPath(source)) ?? ResolveDependencyPath(source))).Value;
+
     private bool RestoreImageOutput(BuildManifestOutput output)
     {
-        var path = Path.Combine(options.OutputDirectory, output.RelativePath);
-        return (OutputStampsValid && output.Stamp is { } stamp && OutputStamp.Read(path) == stamp)
-            || _cache.Restore(output.Hash, path);
+        var restored = _restoredImages.GetOrAdd((output.RelativePath, output.Hash), _ => new Lazy<bool>(() =>
+        {
+            var path = Path.Combine(options.OutputDirectory, output.RelativePath);
+            return (OutputStampsValid && output.Stamp is { } stamp && OutputStamp.Read(path) == stamp)
+                || _cache.Restore(output.Hash, path);
+        })).Value;
+        // A failed restore may become possible after an encoder repairs the blob.
+        if (!restored) { _restoredImages.TryRemove((output.RelativePath, output.Hash), out _); }
+        return restored;
     }
 
     internal BuildManifestPage CreatePageEntry(
@@ -184,13 +212,13 @@ internal sealed class IncrementalBuildPlanner(
         // A deterministic dependency order makes cache records reproducible.
         var dependencies = new List<BuildManifestDependency>();
 
-        foreach (var (file, recorded) in recorder.FileInputs.OrderBy(static entry => entry.Key, StringComparer.OrdinalIgnoreCase))
+        foreach (var (file, recorded) in recorder.FileInputs.OrderBy(static entry => entry.Key, StringComparer.Ordinal))
         {
-            var key = ToDependencyKey(file);
-            if (!BuildManifest.IsRelativeOutput(key)) { recorder.DisableCache(); }
+            var key = ContentPath.GetRelativePath(_rootPath, file);
+            if (key is null) { recorder.DisableCache(); }
             dependencies.Add(new BuildManifestDependency(
                 BuildManifestDependency.FileKind,
-                BuildManifest.IsRelativeOutput(key) ? key : "untracked-external-file",
+                key ?? "untracked-external-file",
                 recorded));
         }
 
@@ -199,9 +227,10 @@ internal sealed class IncrementalBuildPlanner(
         {
             dependencies.Add(new BuildManifestDependency("assets", "", assetsFingerprint));
         }
-        var additionalOutputs = recorder.AdditionalOutputs.Select(path => new BuildManifestOutput(
-            Path.GetRelativePath(options.OutputDirectory, path),
-            _cache.Store(path))).ToArray();
+        var additionalOutputs = recorder.AdditionalOutputs.Select(path =>
+            _imageOutputs.GetOrAdd(path, path => new Lazy<BuildManifestOutput>(() => new BuildManifestOutput(
+                Path.GetRelativePath(options.OutputDirectory, path).Replace(Path.DirectorySeparatorChar, '/'),
+                _cache.Store(path)))).Value).ToArray();
         var parametersHash = recorder.Cacheable ? BuildFingerprint.HashParameters(request.Parameters, resolveContentItem) : null;
         return new BuildManifestPage(
             request.OutputRelativePath,
@@ -216,7 +245,7 @@ internal sealed class IncrementalBuildPlanner(
             // Pages that always render need no repair recipes. In particular,
             // external sources have no portable, root-relative identity.
             ImageRequests = parametersHash is null ? [] : [.. recorder.ImageRequests.Select(image => new BuildManifestImage(
-                ToDependencyKey(image.Source), Path.GetRelativePath(options.OutputDirectory, image.OutputDirectory)))],
+                ToDependencyKey(image.Source), Path.GetRelativePath(options.OutputDirectory, image.OutputDirectory).Replace(Path.DirectorySeparatorChar, '/')))],
         };
     }
 
@@ -301,7 +330,7 @@ internal sealed class IncrementalBuildPlanner(
         while (directories.Length > 0)
         {
             // Scan independent directories together. A recursive enumerator opens
-            // every page bundle serially even when no output needs changing.
+            // every output directory serially even when no output needs changing.
             var children = new ConcurrentBag<DirectoryInfo>();
             Parallel.ForEach(directories, directory =>
             {
@@ -309,7 +338,7 @@ internal sealed class IncrementalBuildPlanner(
                 {
                     if (entry is DirectoryInfo child) { children.Add(child); continue; }
                     var file = (FileInfo)entry;
-                    var relativePath = Path.GetRelativePath(options.OutputDirectory, file.FullName);
+                    var relativePath = Path.GetRelativePath(options.OutputDirectory, file.FullName).Replace(Path.DirectorySeparatorChar, '/');
                     if (expected.TryGetValue(relativePath, out var page))
                     {
                         // Enumeration already supplies size and time; no second stat.
@@ -473,7 +502,7 @@ internal sealed class IncrementalBuildPlanner(
     // thousands of files; parallelizing by file also keeps a one-page edit cheap.
     internal static void VerifyInputs(IEnumerable<BuildDependencyRecorder> recorders)
     {
-        var inputs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var inputs = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var recorder in recorders)
         {
             foreach (var (path, digest) in recorder.FileInputs)
@@ -499,21 +528,21 @@ internal sealed class IncrementalBuildPlanner(
         var paths = new Dictionary<string, BuildManifestPage?>(StringComparer.OrdinalIgnoreCase);
         foreach (var page in manifest.Pages)
         {
-            paths.Add(page.OutputRelativePath, page);
+            paths.Add(page.OutputRelativePath.Replace(Path.DirectorySeparatorChar, '/'), page);
             foreach (var additionalOutput in page.AdditionalOutputs)
             {
-                paths.TryAdd(additionalOutput.RelativePath, null);
+                paths.TryAdd(additionalOutput.RelativePath.Replace(Path.DirectorySeparatorChar, '/'), null);
             }
         }
 
         foreach (var staticFile in manifest.StaticFiles)
         {
-            paths.TryAdd(staticFile, null);
+            paths.TryAdd(staticFile.Replace(Path.DirectorySeparatorChar, '/'), null);
         }
 
         foreach (var artifact in manifest.Artifacts)
         {
-            paths.TryAdd(artifact, null);
+            paths.TryAdd(artifact.Replace(Path.DirectorySeparatorChar, '/'), null);
         }
 
         return paths;
@@ -633,9 +662,7 @@ internal sealed class IncrementalBuildPlanner(
     private string ToDependencyKey(string absolutePath)
     {
         var fullPath = Path.GetFullPath(absolutePath);
-        return fullPath.StartsWith(_rootPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-            ? Path.GetRelativePath(_rootPath, fullPath).Replace('\\', '/')
-            : fullPath;
+        return ContentPath.GetRelativePath(_rootPath, fullPath) ?? fullPath;
     }
 
     private string ResolveDependencyPath(string key)

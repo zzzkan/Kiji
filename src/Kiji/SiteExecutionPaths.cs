@@ -39,6 +39,16 @@ internal sealed class SiteExecutionPaths
     }
 
     /// <summary>
+    /// Private image work: inside the publish cache, under its lease, or beside the dev mirror.
+    /// </summary>
+    internal string ResolveImageWorkPath(ResolvedSitePaths options)
+    {
+        return options.ImageCacheDirectory is null
+            ? Path.Combine(ResolveKijiPath(), "dev-work")
+            : Path.Combine(ResolveCachePath(), "work");
+    }
+
+    /// <summary>
     /// Paths for a publish: the site is written to <paramref name="outputPath"/>, which
     /// <c>dotnet publish</c> supplied.
     /// </summary>

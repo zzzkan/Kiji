@@ -11,6 +11,7 @@ namespace Kiji.PackageTests;
 public sealed class PackageFixture : IAsyncLifetime
 {
     private FileStream? _lease;
+    private ScenarioWatchdog? _watchdog;
     private string _repository = "";
     private string _root = "";
     private string _version = "";
@@ -27,6 +28,11 @@ public sealed class PackageFixture : IAsyncLifetime
         Assert.NotNull(repository);
         _repository = repository.FullName;
         _root = Path.Combine(_repository, "artifacts", "package-tests");
+        // Read environment variables through configuration providers, not direct process APIs.
+        using var configuration = new ConfigurationManager();
+        configuration.AddEnvironmentVariables();
+        _watchdog = new ScenarioWatchdog(configuration["KIJI_TEST_TRACE"] is { Length: > 0 } trace ? trace : null);
+        RunningCommand.Trace = _watchdog.Trace;
         var locations = await RunningCommand.RunAsync(_repository, "nuget", "locals", "global-packages", "--list");
         const string prefix = "global-packages: ";
         Assert.StartsWith(prefix, locations, StringComparison.Ordinal);
@@ -45,9 +51,6 @@ public sealed class PackageFixture : IAsyncLifetime
             await DeleteGeneratedFilesAsync(); // Also recover an interrupted previous run.
             var feed = Path.Combine(_root, "feed");
             Directory.CreateDirectory(feed);
-            // Read environment variables through configuration providers, not direct process APIs.
-            using var configuration = new ConfigurationManager();
-            configuration.AddEnvironmentVariables();
             string package;
             if (configuration["KIJI_TEST_PACKAGE"] is { Length: > 0 } supplied)
             {
@@ -100,8 +103,10 @@ public sealed class PackageFixture : IAsyncLifetime
         await DotnetAsync("restore", "restore/kiji/Kiji.csproj", "--packages", Packages, "--source", feed, "--configfile", Path.Combine(Work, "NuGet.Config"));
     }
 
-    internal async Task ScenarioAsync(Func<Task> action, string sdk = "Microsoft.NET.Sdk.Razor")
+    internal async Task ScenarioAsync(Func<Task> action, string sdk = "Microsoft.NET.Sdk.Razor",
+        [System.Runtime.CompilerServices.CallerMemberName] string scenario = "")
     {
+        _watchdog?.Trace($"scenario {scenario} ({sdk}) starts");
         try
         {
             await DeleteOwnedAsync(Work);
@@ -131,8 +136,18 @@ public sealed class PackageFixture : IAsyncLifetime
             // Tiny valid PNG, kept textual in the fixture source tree.
             File.WriteAllBytes(Path.Combine(Site, "content", "source.png"), Convert.FromBase64String(File.ReadAllText(Path.Combine(Site, "content", "source.png.base64"))));
             await action();
+            _watchdog?.Trace($"scenario {scenario} ({sdk}) passed; cleaning up");
         }
-        finally { await DeleteOwnedAsync(Work); }
+        catch (Exception exception)
+        {
+            _watchdog?.Trace($"scenario {scenario} ({sdk}) failed; cleaning up: {exception.Message.Split('\n')[0]}");
+            throw;
+        }
+        finally
+        {
+            await DeleteOwnedAsync(Work);
+            _watchdog?.Trace($"scenario {scenario} ({sdk}) cleaned up");
+        }
     }
 
     internal void Write(string relative, string text)
@@ -197,8 +212,17 @@ public sealed class PackageFixture : IAsyncLifetime
 
     public async ValueTask DisposeAsync()
     {
-        if (_lease is null) { return; }
-        try { await DeleteGeneratedFilesAsync(); }
-        finally { await _lease.DisposeAsync(); _lease = null; }
+        try
+        {
+            if (_lease is null) { return; }
+            try { await DeleteGeneratedFilesAsync(); }
+            finally { await _lease.DisposeAsync(); _lease = null; }
+        }
+        finally
+        {
+            _watchdog?.Trace("fixture disposed");
+            _watchdog?.Dispose();
+            _watchdog = null;
+        }
     }
 }

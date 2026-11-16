@@ -95,6 +95,12 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   Each page gets a fresh renderer/dispatcher, isolating the framework's section state.
   HeadContent replaces earlier providers rather than appending; compose shared tags
   inside the page's HeadContent. Await quiescence before serializing the document.
+- Responsive images live under `_images/`, independent of page routes, at immutable
+  content-derived names, so carried and freshly rendered pages never overwrite each
+  other's variants, including with custom processors. Record shared outputs on every
+  referring page. Sources resolve within registered, watched content roots, including
+  external and linked roots, as Markdown does; reject symbolic links or junctions below
+  those roots.
 - Customize IImageProcessor through builder.Services. The last unkeyed registration must
   be a singleton; standard DI ownership applies. It must support concurrency and retain
   no page/content state. Reload does not recreate it. Include external configuration
@@ -105,9 +111,10 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
 Do not reintroduce evaluated alternatives: pooled HtmlRenderer (root/scope state cannot
 reset), RouteView (PageView owns Kiji's layout resolution), AOT/trimming (reflection),
 source-generated page discovery (cached scanning suffices), IBufferWriter rendering
-(HtmlRootComponent exposes TextWriter), content-addressed image URLs (break page bundles),
-incremental RSS/sitemap (depend on all metadata and are cheap to regenerate), or a frozen
-configuration snapshot (default sources do not reload during a publish).
+(HtmlRootComponent exposes TextWriter), page-bundle image variants (articles could not
+share an image), incremental RSS/sitemap (depend on all metadata and are cheap to
+regenerate), or a frozen configuration snapshot (default sources do not reload during a
+publish).
 
 ## Skills
 

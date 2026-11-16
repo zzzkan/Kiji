@@ -1,3 +1,4 @@
+using Kiji.Generation;
 using System.Reflection;
 using Kiji.Assets;
 using Kiji.Hosting;
@@ -71,9 +72,15 @@ public static class StaticSite
             provider.GetRequiredService<IOptions<ImageProcessorOptions>>().Value,
             logger: provider.GetRequiredService<ILoggerFactory>().CreateLogger(BuildLoggerExtensions.CategoryName)));
 
+        builder.Services.AddSingleton(static provider => new ContentPath(
+            provider.GetRequiredService<StaticSiteOptions>().ContentPaths
+                .Select(provider.GetRequiredService<SiteExecutionPaths>().ResolveAgainstRoot)));
         builder.Services.AddOptions<MarkdownOptions>();
         builder.Services.AddSingleton(static provider => new MarkdownProcessor(
             provider.GetRequiredService<ResolvedSitePaths>(),
+            provider.GetRequiredService<SiteExecutionPaths>(),
+            provider.GetRequiredService<SiteInfo>(),
+            provider.GetRequiredService<ContentPath>(),
             provider.GetRequiredService<IImageProcessor>(),
             provider.GetRequiredService<IOptions<MarkdownOptions>>().Value));
 

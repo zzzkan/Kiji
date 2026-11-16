@@ -53,7 +53,7 @@ public sealed class MarkdownCancellationTests
             PageRenderContext.SetCurrent(Context(request.Token, lifetime));
             var first = content.RenderAsync().AsTask();
             await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
-            PageRenderContext.SetCurrent(Context(default, lifetime));
+            PageRenderContext.SetCurrent(Context(default, lifetime, route: "/another/"));
             var second = content.RenderAsync().AsTask();
             request.Cancel();
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
@@ -116,7 +116,7 @@ public sealed class MarkdownCancellationTests
         var processor = new MarkdownProcessor(new ResolvedSitePaths
         {
             OutputDirectory = root,
-        }, new ImageProcessor(), options);
+        }, new SiteExecutionPaths(root), TestArticleContents.CreateSiteInfo(), new ContentPath([root]), new ImageProcessor(), options);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => processor.ProcessBodyAsync(
             Path.Combine(root, "post.md"), "# heading", cancellation.Token));
     }
@@ -128,11 +128,9 @@ public sealed class MarkdownCancellationTests
             (_, token) => render(token), contentHash: "captured-source-hash");
 
     private static PageRenderContext Context(CancellationToken cancellationToken,
-        SharedRenderLifetime? lifetime = null, bool tracked = false) => new()
+        SharedRenderLifetime? lifetime = null, bool tracked = false, string route = "/post/") => new()
         {
-            RoutePath = "/post/",
-            OutputRelativeDirectory = "post",
-            OutputUrlDirectory = "/post/",
+            RoutePath = route,
             CancellationToken = cancellationToken,
             SharedRenders = lifetime,
             Dependencies = tracked ? new BuildDependencyRecorder() : null,

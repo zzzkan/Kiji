@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Kiji.Rendering;
 
 namespace Kiji.Markdown;
@@ -8,10 +7,8 @@ public sealed class MarkdownContent<TFrontMatter>
 {
     private readonly Func<MarkdownContent<TFrontMatter>, CancellationToken, Task<string>> _renderAsync;
 
-    // Rendered HTML is cached per page route: local-image URLs and materialized variants
-    // belong to the rendering page's output directory, so each page that embeds this
-    // content must run the pipeline once.
-    private ConcurrentDictionary<string, Lazy<Task<string>>>? _renderTasksByRoute;
+    private readonly Lock _renderLock = new();
+    private Lazy<Task<string>>? _renderTask;
     private string? _frontMatterDependencyKey;
     private int _rendered;
 
@@ -76,7 +73,7 @@ public sealed class MarkdownContent<TFrontMatter>
         }
     }
 
-    /// <summary>Renders the Markdown body as HTML and writes referenced image variants beside the current page.</summary>
+    /// <summary>Renders the Markdown body as HTML and materializes shared image variants.</summary>
     public async ValueTask<string> RenderAsync(CancellationToken cancellationToken = default)
     {
         Interlocked.Exchange(ref _rendered, 1);
@@ -97,15 +94,11 @@ public sealed class MarkdownContent<TFrontMatter>
             return html;
         }
 
-        var cacheKey = context?.RoutePath ?? string.Empty;
-        var tasks = LazyInitializer.EnsureInitialized(ref _renderTasksByRoute,
-            static () => new(StringComparer.Ordinal));
-        var cached = tasks.GetOrAdd(cacheKey, _ => CreateSharedRender(tasks, cacheKey, context?.SharedRenders));
-        // A producer may have finished before its eviction continuation runs.
+        var cached = GetSharedRender(context?.SharedRenders);
         while (cached.IsValueCreated && cached.Value.IsCompleted && !cached.Value.IsCompletedSuccessfully)
         {
-            tasks.TryRemove(new KeyValuePair<string, Lazy<Task<string>>>(cacheKey, cached));
-            cached = tasks.GetOrAdd(cacheKey, _ => CreateSharedRender(tasks, cacheKey, context?.SharedRenders));
+            RemoveSharedRender(cached);
+            cached = GetSharedRender(context?.SharedRenders);
         }
         try
         {
@@ -119,14 +112,29 @@ public sealed class MarkdownContent<TFrontMatter>
             // Do not evict a shared render merely because one waiting request left.
             if (!cached.IsValueCreated || (cached.Value.IsCompleted && !cached.Value.IsCompletedSuccessfully))
             {
-                tasks.TryRemove(new KeyValuePair<string, Lazy<Task<string>>>(cacheKey, cached));
+                RemoveSharedRender(cached);
             }
             throw;
         }
     }
 
-    private Lazy<Task<string>> CreateSharedRender(ConcurrentDictionary<string, Lazy<Task<string>>> tasks,
-        string cacheKey, SharedRenderLifetime? lifetime)
+    private Lazy<Task<string>> GetSharedRender(SharedRenderLifetime? lifetime)
+    {
+        lock (_renderLock)
+        {
+            return _renderTask ??= CreateSharedRender(lifetime);
+        }
+    }
+
+    private void RemoveSharedRender(Lazy<Task<string>> cached)
+    {
+        lock (_renderLock)
+        {
+            if (ReferenceEquals(_renderTask, cached)) { _renderTask = null; }
+        }
+    }
+
+    private Lazy<Task<string>> CreateSharedRender(SharedRenderLifetime? lifetime)
     {
         Lazy<Task<string>> cached = null!;
         cached = new Lazy<Task<string>>(() =>
@@ -134,17 +142,15 @@ public sealed class MarkdownContent<TFrontMatter>
             var task = lifetime is null
                 ? _renderAsync(this, CancellationToken.None)
                 : lifetime.RunAsync(token => _renderAsync(this, token));
-            // Observe and evict failed shared renders even after every waiter has left.
-            _ = EvictFailedRenderAsync(task, tasks, cacheKey, cached);
+            _ = EvictFailedRenderAsync(task, cached);
             return task;
         });
         return cached;
     }
 
-    private static async Task EvictFailedRenderAsync(Task<string> render,
-        ConcurrentDictionary<string, Lazy<Task<string>>> tasks, string cacheKey, Lazy<Task<string>> cached)
+    private async Task EvictFailedRenderAsync(Task<string> render, Lazy<Task<string>> cached)
     {
         try { await render; }
-        catch { tasks.TryRemove(new KeyValuePair<string, Lazy<Task<string>>>(cacheKey, cached)); }
+        catch { RemoveSharedRender(cached); }
     }
 }

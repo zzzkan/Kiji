@@ -9,7 +9,7 @@ namespace Kiji.Generation;
 /// </summary>
 internal sealed class ContentFileRegistry
 {
-    private readonly ConcurrentDictionary<string, string> _hashes = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, string> _hashes = new(StringComparer.Ordinal);
 
     internal string? GetSnapshotHash(string path) => _hashes.GetValueOrDefault(path);
 

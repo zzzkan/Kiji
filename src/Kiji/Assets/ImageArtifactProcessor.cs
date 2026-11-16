@@ -8,27 +8,31 @@ namespace Kiji.Assets;
 internal static class ImageArtifactProcessor
 {
     internal static async Task<ProcessedImageInfo> ProcessAsync(IImageProcessor processor,
-        string source, string output, string? cacheDirectory, CancellationToken cancellationToken)
+        string source, string output, string? cacheDirectory, string workDirectory, CancellationToken cancellationToken)
     {
-        if (cacheDirectory is null && PageRenderContext.Current?.Dependencies is null)
-        {
-            return await processor.ProcessAsync(source, output, cancellationToken);
-        }
         var sourceBytes = await File.ReadAllBytesAsync(source, cancellationToken);
         var sourceHash = BuildFingerprint.HashBytes(sourceBytes);
-        PageRenderContext.Current?.Dependencies?.AddFile(source, sourceHash);
-        var identity = ImageProcessorIdentity.Get(processor);
-        PageRenderContext.Current?.Dependencies?.AddValue("image-processor", identity);
-        PageRenderContext.Current?.Dependencies?.AddImageRequest(source, output);
+        var sourceName = processor is ImageProcessor ? NormalizeCasing(Path.GetFileName(source)) : Path.GetFileName(source);
+        var dependencies = PageRenderContext.Current?.Dependencies;
+        dependencies?.AddFile(source, sourceHash);
+        var identity = cacheDirectory is null && dependencies is null ? null : ImageProcessorIdentity.Get(processor);
+        dependencies?.AddValue("image-processor", identity);
+        dependencies?.AddImageRequest(source, output);
         if (cacheDirectory is null || identity is null)
         {
-            PageRenderContext.Current?.Dependencies?.DisableCache();
-            return await processor.ProcessAsync(source, output, cancellationToken);
+            dependencies?.DisableCache();
+            if (processor is ImageProcessor builtIn)
+            {
+                // Development can reuse the deterministic built-in variants already on disk.
+                return await builtIn.ProcessBytesAsync(sourceBytes, sourceName, sourceHash, output, cancellationToken);
+            }
+            return await GenerateAsync(processor, sourceBytes, sourceHash, output, null, null, sourceName, workDirectory, cancellationToken);
         }
         var root = Path.GetDirectoryName(cacheDirectory)!;
         var cache = new ArtifactCache(root);
-        var key = BuildFingerprint.HashText(identity + ":" + Path.GetFileName(source) + ":" + sourceHash);
-        PageRenderContext.Current?.Dependencies?.AddImage(key);
+        // Older recipes may contain mutable or platform-specific variant paths.
+        var key = BuildFingerprint.HashText("shared-images-v1:" + identity + ":" + sourceName + ":" + sourceHash);
+        dependencies?.AddImage(key);
         var recordPath = Path.Combine(root, "image-records", key + ".json");
         using var generation = await ImageGenerationLock.AcquireAsync(recordPath, cancellationToken);
         try
@@ -52,7 +56,22 @@ internal static class ImageArtifactProcessor
         }
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException) { }
 
-        var work = Path.Combine(root, "work", Guid.NewGuid().ToString("N"));
+        return await GenerateAsync(processor, sourceBytes, sourceHash, output, cache, recordPath, sourceName, workDirectory, cancellationToken);
+    }
+
+    // Abandoned work is private and uniquely named, so a leftover a scanner still
+    // holds is harmless: it must not fail startup, and the next run retries.
+    internal static void ClearWork(string workDirectory)
+    {
+        try { Directory.Delete(workDirectory, recursive: true); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
+    }
+
+    private static async Task<ProcessedImageInfo> GenerateAsync(IImageProcessor processor,
+        byte[] sourceBytes, string sourceHash, string output, ArtifactCache? cache, string? recordPath, string sourceName, string workDirectory, CancellationToken cancellationToken)
+    {
+        // Work never belongs to public output, including canceled/terminated builds.
+        var work = Path.Combine(workDirectory, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(work);
         try
         {
@@ -61,37 +80,109 @@ internal static class ImageArtifactProcessor
             ProcessedImageInfo info;
             if (processor is ImageProcessor builtIn)
             {
-                // The built-in encoder can consume the exact bytes already hashed.
-                info = await builtIn.ProcessBytesAsync(sourceBytes, Path.GetFileName(source), sourceHash, generated, cancellationToken);
+                info = await builtIn.ProcessBytesAsync(sourceBytes, sourceName, sourceHash, generated, cancellationToken);
             }
             else
             {
-                // Path-based custom encoders receive an isolated source snapshot.
-                var sourceCopy = Path.Combine(work, "source", Path.GetFileName(source));
+                var sourceCopy = Path.Combine(work, "source", sourceName);
                 Directory.CreateDirectory(Path.GetDirectoryName(sourceCopy)!);
                 await File.WriteAllBytesAsync(sourceCopy, sourceBytes, cancellationToken);
                 info = await processor.ProcessAsync(sourceCopy, generated, cancellationToken);
+                // Custom processors may change bytes without changing their filenames.
+                // Immutable destinations preserve the versions used by carried pages.
+                var frozen = new Dictionary<string, string>(StringComparer.Ordinal);
+                info = info with
+                {
+                    Variants = [.. info.Variants.Select(variant =>
+                {
+                    // Several widths may intentionally use the same generated file.
+                    if (!frozen.TryGetValue(variant.FileName, out var name))
+                    {
+                        name = FreezeVariant(generated, variant.FileName);
+                        frozen.Add(variant.FileName, name);
+                    }
+                    return variant with { FileName = name };
+                })]
+                };
             }
             cancellationToken.ThrowIfCancellationRequested();
             var outputs = info.Variants.Select(variant =>
             {
-                return !BuildManifest.IsRelativeOutput(variant.FileName)
-                    ? throw new InvalidDataException("Invalid image variant path.")
-                    : new BuildManifestOutput(variant.FileName, cache.Store(Path.Combine(generated, variant.FileName)));
+                if (!BuildManifest.IsRelativeOutput(variant.FileName)) { throw new InvalidDataException("Invalid image variant path."); }
+                var path = Path.Combine(generated, variant.FileName);
+                return new BuildManifestOutput(variant.FileName, cache?.Store(path) ?? BuildFingerprint.HashFile(path));
             }).ToArray();
             foreach (var artifact in outputs)
             {
-                if (!cache.Restore(artifact.Hash, Path.Combine(output, artifact.RelativePath)))
+                var destination = Path.Combine(output, artifact.RelativePath);
+                if (cache is null)
+                {
+                    var existing = BuildFingerprint.HashFile(destination);
+                    if (existing == artifact.Hash) { continue; }
+                    try
+                    {
+                        ArtifactCache.WriteAtomic(destination, await File.ReadAllBytesAsync(
+                            Path.Combine(generated, artifact.RelativePath), cancellationToken), overwrite: existing != BuildFingerprint.Missing);
+                    }
+                    catch (IOException) when (BuildFingerprint.HashFile(destination) == artifact.Hash)
+                    {
+                        // Another writer published the same immutable bytes first.
+                    }
+                }
+                else if (!cache.Restore(artifact.Hash, destination))
                 {
                     throw new IOException("Cannot materialize a generated image.");
                 }
+                if (processor is not ImageProcessor) { PageRenderContext.Current?.SharedRenders?.AddOutput(destination); }
             }
             cancellationToken.ThrowIfCancellationRequested();
-            var payload = JsonSerializer.Serialize(new CachedImageResult(info, outputs), ImageCacheJsonContext.Default.CachedImageResult);
-            ArtifactCache.WriteAtomic(recordPath, JsonSerializer.SerializeToUtf8Bytes(
-                new ImageCacheEnvelope(BuildFingerprint.HashText(payload), payload), ImageCacheJsonContext.Default.ImageCacheEnvelope));
+            if (recordPath is not null)
+            {
+                var payload = JsonSerializer.Serialize(new CachedImageResult(info, outputs), ImageCacheJsonContext.Default.CachedImageResult);
+                ArtifactCache.WriteAtomic(recordPath, JsonSerializer.SerializeToUtf8Bytes(
+                    new ImageCacheEnvelope(BuildFingerprint.HashText(payload), payload), ImageCacheJsonContext.Default.ImageCacheEnvelope));
+            }
             return info;
         }
-        finally { Directory.Delete(work, recursive: true); }
+        finally
+        {
+            // A scanner or encoder handle can briefly hold a generated file on Windows.
+            // Never replace the result with a cleanup error.
+            ClearWork(work);
+        }
+    }
+
+    // Fold through uppercase before choosing lowercase URI spelling, so simple
+    // case aliases (including the Greek sigma forms) publish the same filename.
+    private static string NormalizeCasing(string path) => NormalizeFileName(path).ToUpperInvariant().ToLowerInvariant().Replace(":", "%3A", StringComparison.Ordinal);
+
+    private static string NormalizeFileName(string name)
+    {
+        if (name.AsSpan().IndexOfAnyInRange('\uD800', '\uDFFF') < 0) { return name.Normalize(); }
+        // Invariant globalization may leave invalid UTF-16 unchanged instead of
+        // throwing from Normalize. Escape it before creating filenames and URLs.
+        var result = new System.Text.StringBuilder();
+        for (var index = 0; index < name.Length; index++)
+        {
+            var character = name[index];
+            if (char.IsHighSurrogate(character) && index + 1 < name.Length && char.IsLowSurrogate(name[index + 1]))
+            { result.Append(character).Append(name[++index]); }
+            else if (char.IsSurrogate(character)) { result.Append('%').Append(((int)character).ToString("X4", System.Globalization.CultureInfo.InvariantCulture)); }
+            else { result.Append(character); }
+        }
+        return result.ToString().Normalize();
+    }
+
+    private static string FreezeVariant(string directory, string fileName)
+    {
+        if (!BuildManifest.IsRelativeOutput(fileName)) { throw new InvalidDataException("Invalid image variant path."); }
+        var source = Path.Combine(directory, fileName);
+        var hash = BuildFingerprint.HashFile(source);
+        if (!ArtifactCache.IsHash(hash)) { throw new IOException($"Cannot read generated image variant '{fileName}'."); }
+        var name = hash[..16] + "/" + NormalizeCasing(fileName.Replace('\\', '/'));
+        var destination = Path.Combine(directory, name);
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        File.Move(source, destination, overwrite: true);
+        return name;
     }
 }

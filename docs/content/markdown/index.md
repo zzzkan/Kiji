@@ -170,8 +170,8 @@ content/
 ![A description](photo.jpg)
 ```
 
-For `.jpg`, `.jpeg`, `.png`, `.gif`, and `.webp` files, Kiji writes WebP versions beside
-the page's `index.html`: 320, 640, 960, and 1280 pixels wide when the source is wider,
+For `.jpg`, `.jpeg`, `.png`, `.gif`, and `.webp` files, Kiji writes WebP versions under
+the site's `_images/` directory: 320, 640, 960, and 1280 pixels wide when the source is wider,
 plus one at the source width, up to 1920 pixels. The `<img>` gets a `srcset` and the source
 dimensions, and every image after the first loads lazily. To change the widths or the
 quality, see [`ImageProcessorOptions`](../api-assets/#imageprocessoroptions).
@@ -186,5 +186,40 @@ portrait phone photos stay upright. To keep an image as is, put it in `wwwroot/`
 reference it as a static asset. Remote images, paths starting with `/`, and `<img>` written
 in HTML are left unchanged.
 
-A missing image, or a path outside the Markdown file's directory tree, fails the render.
+### Share an image between articles
+
+Relative image paths are resolved from the Markdown file, including `../` paths:
+
+```text
+content/
+├── shared/
+│   └── photo.jpg
+├── first/
+│   └── index.md
+└── second/
+    └── index.md
+```
+
+Both articles can use:
+
+```markdown
+![A description](../shared/photo.jpg)
+```
+
+Kiji writes the variants once under `_images/`, with file names derived from the source
+bytes and the processing settings. Articles that reference the same image share its files
+and URLs whatever their routes, and images with the same name but different content stay
+separate. The URLs include the site's [subpath](../deployment/#publish-under-a-subpath).
+
+Editing an image rerenders every page that uses it. A publish restores missing variants
+and removes a variant once no page references it.
+
+The image must be inside a content directory registered with `AddMarkdownContent`, such
+as the default `content/`. A content directory may be outside the project or be a symbolic
+link itself; pages that read files outside the project are rendered on every publish. The
+render fails when the image is missing, when the path leaves the content directories, or
+when it passes through a symbolic link or junction below one.
+
+During development, unchanged images are not encoded again after a reload.
+
 To replace the image processor, see [`IImageProcessor`](../api-assets/#iimageprocessor).

@@ -67,7 +67,7 @@ internal static class OutputPathValidator
 
     private static string Normalize(string path) => Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
 
-    private static bool Contains(string parent, string child)
+    internal static bool Contains(string parent, string child)
     {
         var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         return string.Equals(parent, child, comparison)

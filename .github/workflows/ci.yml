@@ -8,7 +8,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # Identify the workflow file and ref independently of its display name.
+  group: ${{ github.workflow_ref }}
   cancel-in-progress: true
 
 permissions:
@@ -19,8 +20,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    # A healthy job takes about four minutes. A step timeout is enforced by the runner,
+    # which a stalled runner ignores; the job timeout is enforced by the service and
+    # would otherwise default to six hours.
+    timeout-minutes: 20
     env:
       # Share dependencies on the checkout volume so CopyLocal can use hard links.
       NUGET_PACKAGES: ${{ github.workspace }}/artifacts/nuget-packages
@@ -51,8 +56,20 @@ jobs:
           "KIJI_TEST_PACKAGE=$($packages[0].FullName)" >> $env:GITHUB_ENV
 
       - name: Package scenarios
+        timeout-minutes: 10
         working-directory: src/Kiji.PackageTests
-        run: dotnet test -c Release
+        shell: bash
+        env:
+          KIJI_TEST_TRACE: ${{ runner.temp }}/package-scenarios.log
+        # Passed tests print nothing until the run ends. Follow the scenario trace so a
+        # stalled run shows its last step; the tests end themselves before the timeout.
+        run: |
+          : > "$KIJI_TEST_TRACE"
+          tail -f "$KIJI_TEST_TRACE" &
+          code=0
+          dotnet test -c Release || code=$?
+          kill $!
+          exit $code
 
       - name: Build docs
         if: matrix.os == 'ubuntu-latest'

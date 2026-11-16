@@ -32,6 +32,9 @@ Selects the files to load, through the `configure` callback.
 | `string Directory`                | Directory to load recursively, absolute or relative to the project. It must exist. Default `"content"`. |
 | `Func<FileInfo,bool>? FileFilter` | Returns `false` to skip a file. Default: load every `*.md` file.                                        |
 
+The directory may be outside the project or be a symbolic link. [Local images](../markdown/#local-images)
+must stay inside a registered directory.
+
 ## `MarkdownOptions`
 
 Parsing settings for all Markdown content. Configure them with
@@ -46,11 +49,11 @@ Parsing settings for all Markdown content. Configure them with
 
 One Markdown file in a collection.
 
-| Member                                                                         | Behavior                                                                                                     |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| `string Path`                                                                  | The path relative to the content directory, using `/`. Also the collection ID.                               |
-| `TFrontMatter FrontMatter`                                                     | The parsed front matter.                                                                                     |
-| `ValueTask<string> RenderAsync(CancellationToken cancellationToken = default)` | Renders the body to HTML. Call it while rendering a page, because local images are written beside that page. |
+| Member                                                                         | Behavior                                                                                                        |
+| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `string Path`                                                                  | The path relative to the content directory, using `/`. Also the collection ID.                                  |
+| `TFrontMatter FrontMatter`                                                     | The parsed front matter.                                                                                        |
+| `ValueTask<string> RenderAsync(CancellationToken cancellationToken = default)` | Renders the body to HTML. Call it while rendering a page, so Kiji can track the files and images the page uses. |
 
 ## `MarkdownBody<TFrontMatter>`
 

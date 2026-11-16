@@ -37,7 +37,14 @@ not built with conflicting global properties.
   snapshot items. Parsed front matter can return in a later snapshot. Strings hash by value;
   an instance shared by several items is unidentified.
 - Images record source bytes, processor identity, repair requests and variants.
-  Keep public image URLs in the page bundle and recipes sufficient for cache-only repair.
+  Shared images live under `_images/`; every referring page records its immutable outputs
+  and recipes sufficient for cache-only repair. Reused pages may retain older custom
+  processor results while newly rendered pages reference another immutable version.
+  Resolve responsive sources under registered, watched content roots, including external
+  or linked roots. External files follow Markdown's existing nonportable-page policy;
+  they may render, but cannot produce portable page recipes. Check source containment
+  and descendant links on reuse and repair as well as rendering. LinkTarget, rather than
+  ReparsePoint alone, distinguishes redirects from cloud placeholders and deduplicated files.
 - AlwaysRender marks pages, layouts or child components that read untracked external
   state. Any output page rendering one is uncacheable, including nested/dynamic children.
   AlwaysRender does not add external watchers or clear image processing caches.
@@ -50,6 +57,11 @@ not built with conflicting global properties.
 
 IncrementalBuildPlanner owns planning and manifest publication. Only `.kiji/cache`
 and `.kiji/jit` travel between checkouts; development uses `.kiji/dev-site`.
+Image work stays in private `.kiji/cache/work` (under the publish lease) or `.kiji/dev-work`;
+remove abandoned work before the next execution. Dev reloads retain built-in immutable
+variants, retire custom outputs best-effort after joining render work, and never wait for
+response transmission. Ordinary saves and watcher errors do not recreate native watchers;
+only retargeted content links replace their direct watchers.
 `.kiji/jit` holds only the publish JIT profile, saved atomically under the cache lease
 after a successful publish. It never affects output or reuse decisions, so CI can
 restore it with or without `.kiji/cache`.

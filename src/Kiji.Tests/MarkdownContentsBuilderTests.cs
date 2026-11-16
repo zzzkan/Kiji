@@ -1,3 +1,4 @@
+using Kiji.Generation;
 using Kiji.Assets;
 using Kiji.Markdown;
 using Xunit;
@@ -21,7 +22,7 @@ public sealed class MarkdownContentsBuilderTests : IDisposable
         _markdownProcessor = new MarkdownProcessor(new ResolvedSitePaths
         {
             OutputDirectory = _outputDir,
-        }, new ImageProcessor());
+        }, new SiteExecutionPaths(_testDir), TestArticleContents.CreateSiteInfo(), new ContentPath([_testDir]), new ImageProcessor());
     }
 
     public void Dispose()

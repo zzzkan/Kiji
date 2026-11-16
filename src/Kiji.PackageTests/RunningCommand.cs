@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -8,6 +9,8 @@ namespace Kiji.PackageTests;
 // Only this instance's process tree is ever terminated.
 internal sealed class RunningCommand : IAsyncDisposable
 {
+    private static readonly ConcurrentDictionary<RunningCommand, byte> Running = new();
+    internal static Action<string>? Trace { get; set; }
     private readonly Process _process;
     private readonly string _description;
     private readonly StringBuilder _tail = new();
@@ -15,14 +18,21 @@ internal sealed class RunningCommand : IAsyncDisposable
     private readonly Task _drain;
     private readonly TaskCompletionSource<Uri> _address = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    private RunningCommand(string directory, string[] arguments)
+    private readonly bool _traceOutput;
+
+    private RunningCommand(string directory, string[] arguments, bool traceOutput = false)
     {
+        _traceOutput = traceOutput;
         _description = $"dotnet {string.Join(' ', arguments)} (in {directory})";
         var start = new ProcessStartInfo("dotnet")
         {
             WorkingDirectory = directory,
             UseShellExecute = false,
             CreateNoWindow = true,
+            // Never share the runner's input. A child that touches an inherited terminal from
+            // a background process group stops every process in that group, the test host and
+            // the CI runner included, which no timeout can then end.
+            RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
@@ -31,12 +41,16 @@ internal sealed class RunningCommand : IAsyncDisposable
         start.Environment["DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER"] = "0";
         start.Environment["DOTNET_WATCH_SUPPRESS_BROWSER_REFRESH"] = "0";
         _process = Process.Start(start)!;
+        _process.StandardInput.Close();
+        Running.TryAdd(this, 0);
+        Trace?.Invoke($"start pid {_process.Id}: {_description}");
         _drain = Task.WhenAll(ReadAsync(_process.StandardOutput), ReadAsync(_process.StandardError));
     }
 
     internal string Output { get { lock (_gate) { return _tail.ToString(); } } }
 
-    internal static RunningCommand Start(string directory, params string[] arguments) => new(directory, arguments);
+    // A server's output is the only sign of how far it got before a stall.
+    internal static RunningCommand Start(string directory, params string[] arguments) => new(directory, arguments, traceOutput: true);
 
     internal static async Task<string> RunAsync(string directory, params string[] arguments)
     {
@@ -49,7 +63,7 @@ internal sealed class RunningCommand : IAsyncDisposable
         try
         {
             await _process.WaitForExitAsync().WaitAsync(TimeSpan.FromMinutes(2));
-            await _drain;
+            await DrainAsync();
             if (_process.ExitCode != 0) { throw new InvalidOperationException($"Exit code {_process.ExitCode}."); }
             return Output;
         }
@@ -66,7 +80,7 @@ internal sealed class RunningCommand : IAsyncDisposable
         var ready = await Task.WhenAny(_address.Task, exited).WaitAsync(TimeSpan.FromMinutes(2));
         if (ready == exited)
         {
-            await _drain;
+            await DrainAsync();
             throw new InvalidOperationException($"Server exited before listening: {_description}\n{Output}");
         }
         return await _address.Task;
@@ -74,9 +88,41 @@ internal sealed class RunningCommand : IAsyncDisposable
 
     internal async Task StopAsync()
     {
-        if (!_process.HasExited) { _process.Kill(entireProcessTree: true); }
-        await _process.WaitForExitAsync();
-        await _drain;
+        if (!_process.HasExited)
+        {
+            Trace?.Invoke($"kill tree of pid {_process.Id}");
+            _process.Kill(entireProcessTree: true);
+            Trace?.Invoke($"killed tree of pid {_process.Id}");
+        }
+        await _process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        await DrainAsync();
+        if (Running.TryRemove(this, out _)) { Trace?.Invoke($"ended pid {_process.Id} with exit code {_process.ExitCode}"); }
+    }
+
+    internal static string DescribeRunning() => string.Join("\n", Running.Keys.Select(command =>
+        $"Still running: pid {command._process.Id}: {command._description}\n{command.Output}"));
+
+    internal static void KillRunning()
+    {
+        foreach (var command in Running.Keys)
+        {
+            try { command._process.Kill(entireProcessTree: true); }
+            catch (Exception exception) when (exception is InvalidOperationException or AggregateException or System.ComponentModel.Win32Exception) { }
+        }
+    }
+
+    // The pipes close only when every process holding them has exited. A descendant
+    // that outlives the tree kill (a build server, or a child started while the tree
+    // was being enumerated) inherits them, so waiting for the end of the output would
+    // hang the whole test run. Everything the command itself wrote is already read.
+    private async Task DrainAsync()
+    {
+        try { await _drain.WaitAsync(TimeSpan.FromSeconds(10)); }
+        catch (TimeoutException)
+        {
+            lock (_gate) { _tail.AppendLine("[A process outliving the command still holds its output.]"); }
+            Trace?.Invoke($"output of pid {_process.Id} is still held by another process");
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -89,6 +135,7 @@ internal sealed class RunningCommand : IAsyncDisposable
     {
         while (await reader.ReadLineAsync() is { } line)
         {
+            if (_traceOutput) { Trace?.Invoke($"  {_process.Id}| {line}"); }
             lock (_gate)
             {
                 _tail.AppendLine(line);

@@ -33,6 +33,7 @@ internal sealed class SiteEngine
     public SiteEngine(IServiceProvider services, SiteExecutionPaths paths, ResolvedSitePaths options,
         StaticSiteOptions siteOptions, ContentRuntime runtime, IHostEnvironment environment, IConfiguration configuration)
     {
+        ArgumentNullException.ThrowIfNull(services);
         ServiceProvider = services;
         Paths = paths;
         _options = options;
@@ -45,8 +46,7 @@ internal sealed class SiteEngine
         _serviceAssemblies = services.GetService<KijiServiceProviderStamp>()?.Assemblies ?? [];
         _defaultLayoutType = siteOptions.DefaultLayoutType;
         _notFoundComponentType = siteOptions.NotFoundComponentType;
-        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-        ContentRoots = [.. siteOptions.ContentPaths.Select(paths.ResolveAgainstRoot).Distinct(comparer)];
+        ContentRoots = services.GetRequiredService<ContentPath>().Roots;
     }
 
     internal SiteInfo SiteInfo => ServiceProvider.GetRequiredService<SiteInfo>();
@@ -64,6 +64,7 @@ internal sealed class SiteEngine
 
         await using var cacheLease = await CacheLease.AcquireAsync(Paths.ResolveCachePath(), cancellationToken);
         var options = _options;
+        ImageArtifactProcessor.ClearWork(Paths.ResolveImageWorkPath(options));
         var assetManifest = options.AssetManifestPath is null ? new StaticAssetManifest { Assets = [] }
             : StaticAssetManifest.Load(options.AssetManifestPath, options.AssetEndpointsPath, SiteInfo.BaseUrl);
         UseAssetResources(assetManifest.Resources);
@@ -105,7 +106,7 @@ internal sealed class SiteEngine
                 _configuration,
                 _runtime.Files, _runtime.Dependencies,
                 ServiceProvider.GetRequiredService<IImageProcessor>(), assetManifest.Resources, BuildLogger,
-                _runtime.ResolveItem);
+                _runtime.ResolveItem, ServiceProvider.GetRequiredService<ContentPath>());
 
             // Snapshot planning already required every page type to come from a page assembly.
             // Helpers and custom encoder factories may live outside the page assemblies.
@@ -442,13 +443,9 @@ internal sealed class SiteEngine
     private PageRenderContext CreatePageRenderContext(PageRenderRequest request, BuildDependencyRecorder? dependencies,
         SharedRenderLifetime? sharedRenders, CancellationToken cancellationToken)
     {
-        var outputRelativeDirectory = Path.GetDirectoryName(request.OutputRelativePath) ?? string.Empty;
-
         return new PageRenderContext
         {
             RoutePath = request.RoutePath,
-            OutputRelativeDirectory = outputRelativeDirectory,
-            OutputUrlDirectory = PageRenderContext.CreateOutputUrlDirectory(SiteInfo.BaseUrl, outputRelativeDirectory),
             Dependencies = dependencies,
             CancellationToken = cancellationToken,
             SharedRenders = sharedRenders,

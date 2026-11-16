@@ -74,6 +74,41 @@ public sealed class DevServerTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task ContentRefresh_DoesNotCancelOrWaitForResponseTransmission()
+    {
+        using var logs = new StringWriter();
+        var (baseAddress, server) = await StartServerAsync(logs);
+        await using (server)
+        {
+            await using var body = new BlockingResponseStream();
+            var context = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+            context.Request.Path = "/";
+            context.Response.Body = body;
+            var response = server.HandlePageAsync(context);
+            try
+            {
+                await body.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                await server.ReloadAfterCodeUpdateAsync().WaitAsync(TimeSpan.FromSeconds(10));
+                Assert.False(response.IsCompleted);
+                using var client = CreateClient();
+                Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(baseAddress)).StatusCode);
+                body.Release.SetResult();
+                await response.WaitAsync(TimeSpan.FromSeconds(10));
+                Assert.Contains("</html>", Encoding.UTF8.GetString(body.ToArray()), StringComparison.Ordinal);
+                await server.DisposeAsync();
+                var stopped = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+                await server.HandlePageAsync(stopped);
+                Assert.Equal(503, stopped.Response.StatusCode);
+            }
+            finally
+            {
+                body.Release.TrySetResult();
+                await response.WaitAsync(TimeSpan.FromSeconds(10));
+            }
+        }
+    }
+
+    [Fact]
     public async Task Serve_RendersPageOnDemandWithLiveReloadScript()
     {
         using var logs = new StringWriter();
@@ -187,10 +222,9 @@ public sealed class DevServerTests : IAsyncDisposable
             Assert.Contains("<h1>Hello Updated</h1>", updatedHtml, StringComparison.Ordinal);
 
             var output = logs.ToString();
-            Assert.Contains(
-                $"Content changed: {Path.Combine(_contentsDir, "hello-world.md")}",
-                output,
-                StringComparison.Ordinal);
+            // FileSystemWatcher may report an overwrite as Created on macOS.
+            Assert.Contains(output.Split('\n'), line => line.Contains("Content ", StringComparison.Ordinal)
+                && line.Contains("hello-world.md", StringComparison.Ordinal));
             Assert.Contains("Reloaded 1 browser client(s).", output, StringComparison.Ordinal);
             await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
             Assert.Equal(WebSocketState.Closed, socket.State);
@@ -288,7 +322,7 @@ public sealed class DevServerTests : IAsyncDisposable
     public async Task Serve_RequiresManifest_AndAcceptsEmptyAssets(bool missing)
     {
         using var logs = new StringWriter();
-        Task<(Uri BaseAddress, IAsyncDisposable DevServer)> Start()
+        Task<(Uri BaseAddress, Kiji.Hosting.DevServer DevServer)> Start()
         {
             return StartServerAsync(logs, configureAssets: builder =>
             {
@@ -365,10 +399,8 @@ public sealed class DevServerTests : IAsyncDisposable
             Assert.Contains("color: red", await client.GetStringAsync(new Uri(baseAddress, "/site.css")), StringComparison.Ordinal);
 
             var output = logs.ToString();
-            Assert.Contains(
-                $"Static asset changed: {Path.Combine(_staticDir, "site.css")}",
-                output,
-                StringComparison.Ordinal);
+            Assert.Contains(output.Split('\n'), line => line.Contains("Static asset ", StringComparison.Ordinal)
+                && line.Contains("site.css", StringComparison.Ordinal));
             Assert.Contains("Reloaded 1 browser client(s).", output, StringComparison.Ordinal);
         }
     }
@@ -671,12 +703,12 @@ public sealed class DevServerTests : IAsyncDisposable
         }
     }
 
-    private Task<(Uri BaseAddress, IAsyncDisposable DevServer)> StartServerAsync()
+    private Task<(Uri BaseAddress, Kiji.Hosting.DevServer DevServer)> StartServerAsync()
     {
         return StartServerAsync(new StringWriter());
     }
 
-    private async Task<(Uri BaseAddress, IAsyncDisposable DevServer)> StartServerAsync(
+    private async Task<(Uri BaseAddress, Kiji.Hosting.DevServer DevServer)> StartServerAsync(
         StringWriter logs,
         SiteInfo? site = null,
         string? additionalSlug = null,

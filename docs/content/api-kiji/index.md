@@ -191,7 +191,8 @@ Site metadata, set with `builder.UseSiteInfo(...)` and injectable into component
 
 `Uri ResolveUrl(string path)` returns the absolute URL of a site-relative path. A leading
 `/` is ignored, so `"about/"` and `"/about/"` both stay under the base path, and `""`
-returns `BaseUrl`.
+returns `BaseUrl`. A query or fragment may follow a path, as in `"about/?lang=ja#team"`, but
+cannot stand alone: `"?page=2"` and `"#top"` throw `ArgumentException`.
 
 ## `PageInfo`
 

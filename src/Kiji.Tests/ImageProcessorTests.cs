@@ -68,6 +68,35 @@ public sealed class ImageProcessorTests : IDisposable
     }
 
     [Theory]
+    [InlineData(400, 17000, 1920, new[] { 320, 385 })]
+    [InlineData(17000, 8, 20000, new[] { 320, 640, 960, 1280, 16383 })]
+    public async Task ProcessImage_BeyondWebpDimensions_ScalesLargestVariantToFit(int width, int height, int maxWidth, int[] expected)
+    {
+        var imagePath = Path.Combine(_sourceDir, "long.png");
+        await CreateTestImageAsync(imagePath, width, height);
+
+        var info = await new ImageProcessor(new ImageProcessorOptions { MaxWidth = maxWidth }).ProcessAsync(imagePath, _outputDir);
+
+        Assert.Equal(width, info.OriginalWidth);
+        Assert.Equal(height, info.OriginalHeight);
+        Assert.Equal(expected, info.Variants.Select(static variant => variant.Width));
+        using var codec = SKCodec.Create(Path.Combine(_outputDir, info.Variants[^1].FileName));
+        Assert.Equal(expected[^1], codec.Info.Width);
+        Assert.InRange(codec.Info.Height, 1, 16383);
+    }
+
+    [Fact]
+    public async Task ProcessImage_TooNarrowForWebp_NamesTheImage()
+    {
+        var imagePath = Path.Combine(_sourceDir, "sliver.png");
+        await CreateTestImageAsync(imagePath, 1, 20000);
+
+        var exception = await Assert.ThrowsAsync<InvalidDataException>(() => _processor.ProcessAsync(imagePath, _outputDir));
+
+        Assert.Contains("sliver.png", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
     [InlineData(null, 800, new[] { 320, 640, 800 })]
     [InlineData(new[] { 960, 480, 480, 3000 }, 1000, new[] { 480, 960, 1000 })]
     [InlineData(new int[0], 1200, new[] { 1200 })]

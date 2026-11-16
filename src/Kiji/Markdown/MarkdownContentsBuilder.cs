@@ -1,3 +1,4 @@
+using System.IO.Enumeration;
 using System.Runtime.ExceptionServices;
 using Kiji.Generation;
 using YamlDotNet.Serialization;
@@ -14,6 +15,12 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
 {
     private readonly Func<IDeserializer> _frontMatterDeserializerFactory =
         frontMatterDeserializerFactory ?? (static () => new MarkdownOptions().CreateDeserializer());
+
+    private static readonly string MarkdownPattern = FileSystemName.TranslateWin32Expression("*.md");
+
+    // The platform default of the pattern overloads this enumeration replaces.
+    private static readonly bool IgnoreCase = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+        || OperatingSystem.IsIOS() || OperatingSystem.IsTvOS();
 
     public IReadOnlyList<MarkdownContent<TFrontMatter>> Build()
     {
@@ -77,17 +84,23 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
     /// Content directories often hold one directory per post, so their subtrees are
     /// enumerated in parallel instead of opening every directory serially.
     /// </summary>
+    /// <remarks>
+    /// The root may itself be a link, as for watching and image resolution. Redirecting
+    /// directories and Markdown files below it are rejected rather than followed, so
+    /// content cannot read outside its registered root or loop.
+    /// </remarks>
     private static FileInfo[] FindMarkdownFiles(DirectoryInfo root)
     {
         var subdirectories = root.EnumerateDirectories().ToArray();
         var found = new FileInfo[subdirectories.Length + 1][];
-        found[0] = [.. root.EnumerateFiles("*.md")];
+        found[0] = [.. EnumerateMarkdownFiles(root.FullName, recurse: false)];
         var errors = new Exception?[subdirectories.Length];
         Parallel.For(0, subdirectories.Length, index =>
         {
             try
             {
-                found[index + 1] = [.. subdirectories[index].EnumerateFiles("*.md", SearchOption.AllDirectories)];
+                RejectLink(subdirectories[index]);
+                found[index + 1] = [.. EnumerateMarkdownFiles(subdirectories[index].FullName, recurse: true)];
             }
             catch (Exception exception)
             {
@@ -104,5 +117,51 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
         return [.. found.SelectMany(static files => files)
             .OrderBy(static file => file.FullName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static file => file.FullName, StringComparer.Ordinal)];
+    }
+
+    private static FileSystemEnumerable<FileInfo> EnumerateMarkdownFiles(string directory, bool recurse)
+    {
+        // Same matching as EnumerateFiles("*.md"), which cannot report the links it follows.
+        return new FileSystemEnumerable<FileInfo>(
+            directory,
+            static (ref entry) => (FileInfo)entry.ToFileSystemInfo(),
+            new EnumerationOptions
+            {
+                RecurseSubdirectories = recurse,
+                AttributesToSkip = 0,
+                IgnoreInaccessible = false,
+                MatchType = MatchType.Win32,
+            })
+        {
+            ShouldIncludePredicate = static (ref entry) =>
+            {
+                if (entry.IsDirectory || !FileSystemName.MatchesWin32Expression(MarkdownPattern, entry.FileName, IgnoreCase))
+                {
+                    return false;
+                }
+                RejectLink(ref entry);
+                return true;
+            },
+            ShouldRecursePredicate = static (ref entry) =>
+            {
+                RejectLink(ref entry);
+                return true;
+            },
+        };
+    }
+
+    private static void RejectLink(ref FileSystemEntry entry)
+    {
+        // Reparse points also include cloud placeholders and deduplicated files.
+        if ((entry.Attributes & FileAttributes.ReparsePoint) != 0) { RejectLink(entry.ToFileSystemInfo()); }
+    }
+
+    private static void RejectLink(FileSystemInfo entry)
+    {
+        if ((entry.Attributes & FileAttributes.ReparsePoint) != 0 && entry.LinkTarget is not null)
+        {
+            throw new InvalidOperationException(
+                $"Markdown content '{entry.FullName}' cannot be loaded through symbolic links or junctions below a content root.");
+        }
     }
 }

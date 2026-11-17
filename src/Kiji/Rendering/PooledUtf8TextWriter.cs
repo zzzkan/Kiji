@@ -65,29 +65,6 @@ internal sealed class PooledUtf8TextWriter(int initialCapacity = 64 * 1024) : Te
         return _buffer.AsSpan(0, _written).ToArray();
     }
 
-    internal bool MatchesFile(string path)
-    {
-        FlushPendingSurrogate();
-        return Generation.BuildFingerprint.FileEquals(path, _buffer.AsSpan(0, _written));
-    }
-
-    /// <summary>
-    /// Writes the accumulated UTF-8 bytes to <paramref name="path"/> in a single
-    /// write, replacing any existing file.
-    /// </summary>
-    public void WriteToFile(string path)
-    {
-        FlushPendingSurrogate();
-
-        using var handle = File.OpenHandle(
-            path,
-            FileMode.Create,
-            FileAccess.Write,
-            FileShare.None,
-            FileOptions.None);
-        RandomAccess.Write(handle, _buffer.AsSpan(0, _written), fileOffset: 0);
-    }
-
     protected override void Dispose(bool disposing)
     {
         if (disposing && _buffer.Length > 0)

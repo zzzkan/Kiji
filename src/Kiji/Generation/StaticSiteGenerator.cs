@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Kiji.Rendering;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -34,75 +33,82 @@ internal static class StaticSiteGenerator
             resolvedPages[i] = (pageRequests[i], fullPath);
         }
 
-        // A page creates its directory when it writes, on the thread that rendered it:
-        // creating them all first is a serial pass over the file system, as long on a real
-        // disk as writing the pages. Each directory is still created once.
-        var outputDirectories = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
-
-        var rendered = new RenderedPage[resolvedPages.Length];
+        var rendered = new (PageRenderRequest Request, string OutputHash, byte[] Html)[resolvedPages.Length];
+        var written = new Task<bool>[resolvedPages.Length];
 
         // Each page renders on its own HtmlRenderer/DI scope, so pages are safe to
-        // render concurrently.
-        await Parallel.ForEachAsync(
-            Enumerable.Range(0, resolvedPages.Length),
-            new ParallelOptions
-            {
-                MaxDegreeOfParallelism = Environment.ProcessorCount,
-                CancellationToken = cancellationToken,
-            },
-            async (index, ct) =>
-            {
-                var (request, fullPath) = resolvedPages[index];
-                var previous = previousOutputs is not null
-                    && previousOutputs.TryGetValue(request.OutputRelativePath, out var recorded)
-                        ? recorded
-                        : null;
-                rendered[index] = await WritePageAsync(request, fullPath, renderPageAsync, previous, outputStampsValid, outputDirectories, log, ct);
-            });
-
-        return rendered;
-    }
-
-    private static async Task<RenderedPage> WritePageAsync(
-        PageRenderRequest pageRequest,
-        string fullPath,
-        Func<PageRenderRequest, TextWriter, CancellationToken, Task> renderPageAsync,
-        BuildManifestPage? previous,
-        bool outputStampsValid,
-        ConcurrentDictionary<string, byte> outputDirectories,
-        ILogger logger,
-        CancellationToken cancellationToken)
-    {
-        // Render into a pooled UTF-8 buffer, then persist with one write:
-        // no StreamWriter/FileStream buffers and no chunked async writes per page.
-        using var writer = new PooledUtf8TextWriter();
-        await renderPageAsync(pageRequest, writer, cancellationToken);
-        var outputHash = writer.GetContentHash();
-
-        // Kiji owns generated outputs. Matching stamps avoid reopening unchanged
-        // files, but newly rendered bytes must still match the recorded hash.
-        var stamp = previous?.OutputHash == outputHash ? OutputStamp.Read(fullPath) : null;
-        // A forced render or missing cache still produces verified fresh bytes.
-        // Keep identical files so downstream SDK compression remains incremental.
-        var written = previous is null
-            ? !File.Exists(fullPath) || !writer.MatchesFile(fullPath)
-            : previous.OutputHash != outputHash
-                || (!(outputStampsValid && stamp is not null && stamp == previous.Stamp) && !writer.MatchesFile(fullPath));
-        if (written)
+        // render concurrently. Pages persist on the writer's threads, which also create
+        // each output directory once, when its first page is written.
+        using (var output = new PageOutputWriter(cancellationToken))
         {
-            var directory = Path.GetDirectoryName(fullPath)!;
-            // Recorded only once it exists, so a page racing for the same directory creates it too.
-            if (!outputDirectories.ContainsKey(directory))
+            try
             {
-                Directory.CreateDirectory(directory);
-                outputDirectories.TryAdd(directory, 0);
+                await Parallel.ForEachAsync(
+                    Enumerable.Range(0, resolvedPages.Length),
+                    new ParallelOptions
+                    {
+                        MaxDegreeOfParallelism = Environment.ProcessorCount,
+                        CancellationToken = output.Stopping,
+                    },
+                    async (index, ct) =>
+                    {
+                        var (request, fullPath) = resolvedPages[index];
+                        var previous = previousOutputs is not null
+                            && previousOutputs.TryGetValue(request.OutputRelativePath, out var recorded)
+                                ? recorded
+                                : null;
+                        rendered[index] = await RenderPageAsync(request, renderPageAsync, ct);
+                        written[index] = output.Enqueue(fullPath, rendered[index].Html,
+                            () => MustWrite(fullPath, rendered[index].OutputHash, rendered[index].Html, previous, outputStampsValid));
+                    });
             }
-            writer.WriteToFile(fullPath);
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                // A page failed to persist; its exception is the one to report, below.
+            }
         }
 
-        if (written) { logger.PageGenerated(fullPath); }
-        else { logger.PageUnchanged(fullPath); }
-        return new RenderedPage(pageRequest, outputHash, written, writer.ToArray());
+        // Reports a failed write, including when it stopped rendering early.
+        await Task.WhenAll(written.Where(static task => task is not null));
+        var pages = new RenderedPage[resolvedPages.Length];
+        for (var i = 0; i < pages.Length; i++)
+        {
+            var (request, outputHash, html) = rendered[i];
+            var pageWritten = await written[i];
+            var fullPath = resolvedPages[i].FullPath;
+            if (pageWritten) { log.PageGenerated(fullPath); }
+            else { log.PageUnchanged(fullPath); }
+            pages[i] = new RenderedPage(request, outputHash, pageWritten, html);
+        }
+        return pages;
     }
 
+    private static async Task<(PageRenderRequest Request, string OutputHash, byte[] Html)> RenderPageAsync(
+        PageRenderRequest pageRequest,
+        Func<PageRenderRequest, TextWriter, CancellationToken, Task> renderPageAsync,
+        CancellationToken cancellationToken)
+    {
+        // Render into a pooled UTF-8 buffer; the page persists with one write.
+        using var writer = new PooledUtf8TextWriter();
+        await renderPageAsync(pageRequest, writer, cancellationToken);
+        return (pageRequest, writer.GetContentHash(), writer.ToArray());
+    }
+
+    /// <summary>Whether the rendered bytes must replace what is on disk.</summary>
+    private static bool MustWrite(string fullPath, string outputHash, byte[] html,
+        BuildManifestPage? previous, bool outputStampsValid)
+    {
+        // A forced render or missing cache still produces verified fresh bytes.
+        // Keep identical files so downstream SDK compression remains incremental.
+        if (previous is null)
+        {
+            return !File.Exists(fullPath) || !BuildFingerprint.FileEquals(fullPath, html);
+        }
+        // Kiji owns generated outputs. Matching stamps avoid reopening unchanged
+        // files, but newly rendered bytes must still match the recorded hash.
+        if (previous.OutputHash != outputHash) { return true; }
+        var stamp = OutputStamp.Read(fullPath);
+        return !(outputStampsValid && stamp is not null && stamp == previous.Stamp)
+            && !BuildFingerprint.FileEquals(fullPath, html);
+    }
 }

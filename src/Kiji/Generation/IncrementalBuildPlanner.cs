@@ -41,6 +41,12 @@ internal sealed class IncrementalBuildPlanner(
     private readonly string _outputDirectoryHash = BuildFingerprint.HashText(Path.GetFullPath(options.OutputDirectory));
     private bool _stampsChanged;
     internal bool OutputStampsValid { get; private set; }
+
+    /// <summary>
+    /// The output directory did not exist when planning began, so everything in it comes from
+    /// this build: nothing there needs comparing, and nothing unknown needs removing.
+    /// </summary>
+    internal bool OutputDirectoryCreated { get; private set; }
     private readonly ConcurrentDictionary<(string Path, string Hash), Lazy<bool>> _restoredImages = new();
     private readonly ConcurrentDictionary<string, Lazy<BuildManifestOutput>> _imageOutputs = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, Lazy<string>> _imageSources = new(StringComparer.Ordinal);
@@ -52,11 +58,22 @@ internal sealed class IncrementalBuildPlanner(
         CancellationToken cancellationToken,
         Task<BuildManifest?>? previousManifest = null)
     {
+        // Before planning, which may already restore outputs.
+        OutputDirectoryCreated = !Directory.Exists(options.OutputDirectory);
         var optionsHash = ComputeOptionsHash();
         var codeDependencies = CollectCodeDependencies(assemblies);
 
         var oldManifest = previousManifest is null ? LoadManifest(cacheDirectory, cancellationToken) : await previousManifest;
         OutputStampsValid = oldManifest?.OutputDirectoryHash == _outputDirectoryHash;
+        if (OutputDirectoryCreated && oldManifest is not null)
+        {
+            // The stamps describe files that no longer exist; whatever is restored is stamped afresh.
+            foreach (var page in oldManifest.Pages)
+            {
+                page.Stamp = null;
+                foreach (var output in page.AdditionalOutputs) { output.Stamp = null; }
+            }
+        }
 
         // Without a manifest nothing about the previous build can be proven, so every
         // page renders. Unrecognized files in the output directory are not a reason to
@@ -208,7 +225,8 @@ internal sealed class IncrementalBuildPlanner(
         PageRenderRequest request,
         string outputHash,
         BuildDependencyRecorder recorder,
-        byte[] html)
+        byte[] html,
+        OutputStamp? stamp = null)
     {
         // A deterministic dependency order makes cache records reproducible.
         var dependencies = new List<BuildManifestDependency>();
@@ -242,6 +260,7 @@ internal sealed class IncrementalBuildPlanner(
             additionalOutputs)
         {
             Html = html,
+            Stamp = stamp,
             Images = recorder.Images,
             // Pages that always render need no repair recipes. In particular,
             // external sources have no portable, root-relative identity.
@@ -319,6 +338,28 @@ internal sealed class IncrementalBuildPlanner(
     {
         if (!Directory.Exists(options.OutputDirectory))
         {
+            return;
+        }
+
+        if (OutputDirectoryCreated)
+        {
+            // Rendered pages read their stamps as they wrote; read the rest one file at a time.
+            _stampsChanged = true;
+            // Shared images appear on many pages; read each once.
+            var imageStamps = new Dictionary<string, OutputStamp?>(StringComparer.OrdinalIgnoreCase);
+            foreach (var page in manifest.Pages)
+            {
+                page.Stamp ??= OutputStamp.Read(Path.Combine(options.OutputDirectory, page.OutputRelativePath));
+                foreach (var output in page.AdditionalOutputs)
+                {
+                    if (!imageStamps.TryGetValue(output.RelativePath, out var imageStamp))
+                    {
+                        imageStamp = OutputStamp.Read(Path.Combine(options.OutputDirectory, output.RelativePath));
+                        imageStamps.Add(output.RelativePath, imageStamp);
+                    }
+                    output.Stamp = imageStamp;
+                }
+            }
             return;
         }
 

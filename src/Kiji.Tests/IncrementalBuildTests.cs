@@ -1585,6 +1585,33 @@ public sealed class IncrementalBuildTests : IDisposable
         AssertDirectoriesIdentical(Path.Combine(scratch, "dist"), Path.Combine(root, "dist"));
     }
 
+    // A build into a new output directory reads each file's stamp as it writes, instead of
+    // listing the directory afterwards. A stamp that differs from a listing's would make every
+    // later build compare those files byte by byte.
+    [Fact]
+    public async Task NewOutputDirectory_RecordsTheStampsAListingReports()
+    {
+        var root = CreateSiteRoot("new-output");
+        var output = Path.Combine(root, "dist");
+        Assert.False(Directory.Exists(output));
+        await BuildAsync(root);
+
+        var manifest = await ReadCacheManifest(root);
+        Assert.NotEmpty(manifest.Pages);
+        foreach (var page in manifest.Pages)
+        {
+            Assert.Equal(Generation.OutputStamp.Read(Path.Combine(output, page.OutputRelativePath)), page.Stamp);
+            foreach (var additional in page.AdditionalOutputs)
+            {
+                Assert.Equal(Generation.OutputStamp.Read(Path.Combine(output, additional.RelativePath)), additional.Stamp);
+            }
+        }
+        var scratch = CreateSiteRoot("new-output-listed");
+        Directory.CreateDirectory(Path.Combine(scratch, "dist"));
+        await BuildAsync(scratch);
+        AssertDirectoriesIdentical(Path.Combine(scratch, "dist"), output);
+    }
+
     private static async Task<Generation.BuildManifest> ReadCacheManifest(string root)
     {
         var cache = Path.Combine(root, ".kiji", "cache");

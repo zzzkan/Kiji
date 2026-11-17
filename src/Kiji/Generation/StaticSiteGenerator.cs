@@ -13,6 +13,11 @@ internal static class StaticSiteGenerator
     /// Null when nothing may be assumed about the output directory.
     /// </param>
     /// <param name="logger">Receives a Debug message per page.</param>
+    /// <param name="outputDirectoryCreated">
+    /// The output directory did not exist when this build began, so no page has a file to
+    /// compare with, and each page reads its stamp as it writes instead of reconciliation
+    /// listing the directory afterwards.
+    /// </param>
     internal static async Task<IReadOnlyList<RenderedPage>> RenderPagesAsync(
         ResolvedSitePaths options,
         IReadOnlyList<PageRenderRequest> pageRequests,
@@ -20,7 +25,8 @@ internal static class StaticSiteGenerator
         IReadOnlyDictionary<string, BuildManifestPage>? previousOutputs,
         CancellationToken cancellationToken,
         bool outputStampsValid = false,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        bool outputDirectoryCreated = false)
     {
         var log = logger ?? NullLogger.Instance;
         // Resolve every output path once, before any page renders.
@@ -57,7 +63,8 @@ internal static class StaticSiteGenerator
                     && previousOutputs.TryGetValue(request.OutputRelativePath, out var recorded)
                         ? recorded
                         : null;
-                rendered[index] = await WritePageAsync(request, fullPath, renderPageAsync, previous, outputStampsValid, outputDirectories, log, ct);
+                rendered[index] = await WritePageAsync(request, fullPath, renderPageAsync, previous, outputStampsValid,
+                    outputDirectoryCreated, outputDirectories, log, ct);
             });
 
         return rendered;
@@ -69,6 +76,7 @@ internal static class StaticSiteGenerator
         Func<PageRenderRequest, TextWriter, CancellationToken, Task> renderPageAsync,
         BuildManifestPage? previous,
         bool outputStampsValid,
+        bool outputDirectoryCreated,
         ConcurrentDictionary<string, byte> outputDirectories,
         ILogger logger,
         CancellationToken cancellationToken)
@@ -81,13 +89,13 @@ internal static class StaticSiteGenerator
 
         // Kiji owns generated outputs. Matching stamps avoid reopening unchanged
         // files, but newly rendered bytes must still match the recorded hash.
-        var stamp = previous?.OutputHash == outputHash ? OutputStamp.Read(fullPath) : null;
+        var stamp = !outputDirectoryCreated && previous?.OutputHash == outputHash ? OutputStamp.Read(fullPath) : null;
         // A forced render or missing cache still produces verified fresh bytes.
         // Keep identical files so downstream SDK compression remains incremental.
-        var written = previous is null
+        var written = outputDirectoryCreated || (previous is null
             ? !File.Exists(fullPath) || !writer.MatchesFile(fullPath)
             : previous.OutputHash != outputHash
-                || (!(outputStampsValid && stamp is not null && stamp == previous.Stamp) && !writer.MatchesFile(fullPath));
+                || (!(outputStampsValid && stamp is not null && stamp == previous.Stamp) && !writer.MatchesFile(fullPath)));
         if (written)
         {
             var directory = Path.GetDirectoryName(fullPath)!;
@@ -99,10 +107,12 @@ internal static class StaticSiteGenerator
             }
             writer.WriteToFile(fullPath);
         }
+        // One file's metadata, where reconciliation would otherwise list every directory.
+        var writtenStamp = outputDirectoryCreated ? OutputStamp.Read(fullPath) : null;
 
         if (written) { logger.PageGenerated(fullPath); }
         else { logger.PageUnchanged(fullPath); }
-        return new RenderedPage(pageRequest, outputHash, written, writer.ToArray());
+        return new RenderedPage(pageRequest, outputHash, written, writer.ToArray(), writtenStamp);
     }
 
 }

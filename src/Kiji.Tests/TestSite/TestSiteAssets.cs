@@ -40,6 +40,8 @@ internal static class TestSiteAssets
         {
             rootNode["Patterns"] = JsonSerializer.SerializeToNode(new[] { new { ContentRootIndex = 0, Pattern = "**", Depth = 0 } });
         }
-        File.WriteAllText(path, JsonSerializer.Serialize(new { ContentRoots = roots, Root = rootNode }));
+        // Replaced, never truncated: concurrent builders of one site rewrite it while a publish reads it.
+        Kiji.Generation.ArtifactCache.WriteAtomic(path,
+            System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { ContentRoots = roots, Root = rootNode })));
     }
 }

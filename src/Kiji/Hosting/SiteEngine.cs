@@ -167,7 +167,8 @@ internal sealed class SiteEngine
                     StringComparer.OrdinalIgnoreCase),
                 cancellationToken,
                 planner.OutputStampsValid,
-                BuildLogger);
+                BuildLogger,
+                planner.OutputDirectoryCreated);
             phases.Mark(BuildPhaseTimer.Render);
             // Rendering is what the profile is for; writing it overlaps the rest of the publish.
             PublishJitProfile.Stop(PublishJitProfile.CodeIdentity(plan.CodeDependencies), rendered.Count, publishCompleted: false);
@@ -200,7 +201,8 @@ internal sealed class SiteEngine
                     page.Request,
                     page.OutputHash,
                     recorders[page.Request.OutputRelativePath],
-                    page.Html);
+                    page.Html,
+                    page.Stamp);
             });
             return renderedEntries;
         }, CancellationToken.None);

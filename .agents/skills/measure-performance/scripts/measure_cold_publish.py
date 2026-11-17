@@ -99,7 +99,13 @@ internal static class StartupHook
             observer?.SetValue(null, new Action<string, TimeSpan>((name, elapsed) =>
                 Console.Error.WriteLine($"KIJI_PHASE {name} {elapsed.TotalMilliseconds:F1} {Now():F1}")));
         };
-        AppDomain.CurrentDomain.ProcessExit += (_, _) => Console.Error.WriteLine($"KIJI_PHASE exit 0 {Now():F1}");
+        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+        {
+            Console.Error.WriteLine($"KIJI_PHASE exit 0 {Now():F1}");
+            // Compilation the process still does, summed over threads: what precompiling could remove.
+            Console.Error.WriteLine($"KIJI_STAT jit-ms {System.Runtime.JitInfo.GetCompilationTime().TotalMilliseconds:F1}");
+            Console.Error.WriteLine($"KIJI_STAT jit-methods {System.Runtime.JitInfo.GetCompiledMethodCount()}");
+        };
     }
 }
 """
@@ -161,6 +167,10 @@ def parse_phases(stderr):
     if not marks:
         return {}
     phases = {}
+    for line in stderr.splitlines():
+        if line.startswith("KIJI_STAT "):
+            _, name, value = line.split()
+            phases[name] = float(value)
     ends = [(name, float(duration), float(at)) for name, duration, at in marks]
     timed = [mark for mark in ends if mark[0] not in ("hook", "exit") and "." not in mark[0]]
     if timed:

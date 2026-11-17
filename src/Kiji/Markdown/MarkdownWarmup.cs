@@ -60,8 +60,10 @@ internal static class MarkdownWarmup
     /// <summary>Starts the warm-up once per process. Returns immediately.</summary>
     internal static void Start()
     {
-        // With a single processor it would only delay the site's own work.
-        if (Environment.ProcessorCount < 2 || Interlocked.Exchange(ref s_started, 1) != 0)
+        // With a single processor it would only delay the site's own work, and a replayed JIT
+        // profile already prepares the same code on a thread of its own.
+        if (Environment.ProcessorCount < 2 || Hosting.PublishJitProfile.Replaying
+            || Interlocked.Exchange(ref s_started, 1) != 0)
         {
             return;
         }

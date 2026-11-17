@@ -41,6 +41,29 @@
     <DefaultItemExcludes>$(DefaultItemExcludes);content/**;dist/**</DefaultItemExcludes>
   </PropertyGroup>
 
+  <!-- The package carries ReadyToRun images of the exact Markdig and YamlDotNet versions Kiji
+       references, which every Markdown page runs. A site that resolves those versions copies
+       the images to its output instead of the IL, so generation and the dev server skip most of
+       their compilation; any other version, or a runtime without images, keeps the IL. An image
+       holds the same metadata and module identity, so code identity and caches are unchanged.
+       Set KijiReadyToRunDependencies=false to keep the IL. -->
+  <PropertyGroup Condition="'$(_KijiIsSiteApp)' == 'true'">
+    <_KijiReadyToRunRuntime>$(RuntimeIdentifier)</_KijiReadyToRunRuntime>
+    <_KijiReadyToRunRuntime Condition="'$(_KijiReadyToRunRuntime)' == ''">$(NETCoreSdkPortableRuntimeIdentifier)</_KijiReadyToRunRuntime>
+    <_KijiReadyToRunDirectory>$(MSBuildThisFileDirectory)r2r$([System.IO.Path]::DirectorySeparatorChar)$(_KijiReadyToRunRuntime)$([System.IO.Path]::DirectorySeparatorChar)</_KijiReadyToRunDirectory>
+  </PropertyGroup>
+
+  <Target Name="KijiUseReadyToRunDependencies" BeforeTargets="_CopyFilesMarkedCopyLocal"
+          Condition="'$(_KijiIsSiteApp)' == 'true' and '$(KijiReadyToRunDependencies)' != 'false' and Exists('$(_KijiReadyToRunDirectory)')">
+    <ItemGroup>
+      <_KijiReadyToRunReference Include="@(ReferenceCopyLocalPaths)"
+                                Condition="'%(ReferenceCopyLocalPaths.NuGetPackageId)' != '' and '%(ReferenceCopyLocalPaths.Extension)' == '.dll'
+                                           and Exists('$(_KijiReadyToRunDirectory)%(ReferenceCopyLocalPaths.NuGetPackageId)/%(ReferenceCopyLocalPaths.NuGetPackageVersion)/%(ReferenceCopyLocalPaths.Filename)%(ReferenceCopyLocalPaths.Extension)')" />
+      <ReferenceCopyLocalPaths Remove="@(_KijiReadyToRunReference)" />
+      <ReferenceCopyLocalPaths Include="@(_KijiReadyToRunReference->'$(_KijiReadyToRunDirectory)%(NuGetPackageId)/%(NuGetPackageVersion)/%(Filename)%(Extension)')" />
+    </ItemGroup>
+  </Target>
+
   <!-- Runtime metadata keeps checkout paths out of code identity. -->
   <ItemGroup Condition="'$(_KijiIsSiteApp)' == 'true'">
     <RuntimeHostConfigurationOption Include="Kiji.ProjectDirectory" Value="$(MSBuildProjectDirectory)" />

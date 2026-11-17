@@ -19,6 +19,9 @@ public sealed class PackageFixture : IAsyncLifetime
     private string Work => Path.Combine(_root, "work");
     internal string Site => Path.Combine(Work, "Site");
     private string Packages => Path.Combine(_root, "packages");
+    internal string InstalledPackage => Path.Combine(Packages, "kiji", _version.ToLowerInvariant());
+    /// <summary>A package packed in Release carries ReadyToRun images; a Debug pack carries IL only.</summary>
+    internal bool HasReadyToRunImages { get; private set; }
     private string Template => Path.Combine(_repository, "src", "Kiji.PackageTests", "Fixture");
 
     public async ValueTask InitializeAsync()
@@ -66,8 +69,9 @@ public sealed class PackageFixture : IAsyncLifetime
             }
             using var archive = ZipFile.OpenRead(package);
             // Nothing else fails when the precompiled image is missing; publishing is only slower.
-            if (configuration["KIJI_TEST_PACKAGE"] is { Length: > 0 }
-                || typeof(PackageFixture).Assembly.GetCustomAttribute<AssemblyConfigurationAttribute>()!.Configuration == "Release")
+            HasReadyToRunImages = configuration["KIJI_TEST_PACKAGE"] is { Length: > 0 }
+                || typeof(PackageFixture).Assembly.GetCustomAttribute<AssemblyConfigurationAttribute>()!.Configuration == "Release";
+            if (HasReadyToRunImages)
             {
                 Assert.Contains(archive.Entries, entry => entry.FullName
                     == $"runtimes/{System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier}/lib/net10.0/Kiji.dll");

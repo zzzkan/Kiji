@@ -23,6 +23,18 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         Assert.True(File.Exists(Path.Combine(buildDirectory, "publish", "index.html")));
         Assert.False(File.Exists(Path.Combine(buildDirectory, "dist", "previous.json")));
         Assert.False(File.Exists(Path.Combine(fixture.Site, "dist", "index.html")));
+
+        // A portable build copies the packaged images of the dependency versions Kiji references.
+        // A wrong path or package version leaves the IL in place, which only shows as a slower publish.
+        if (fixture.HasReadyToRunImages)
+        {
+            var images = Path.Combine(fixture.InstalledPackage, "build", "r2r", System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier);
+            foreach (var name in (string[])["Markdig", "YamlDotNet"])
+            {
+                var image = Assert.Single(Directory.GetFiles(Path.Combine(images, name), name + ".dll", SearchOption.AllDirectories));
+                Assert.Equal(File.ReadAllBytes(image), File.ReadAllBytes(Path.Combine(buildDirectory, name + ".dll")));
+            }
+        }
     });
 
     [Fact]

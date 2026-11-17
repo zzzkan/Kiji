@@ -65,6 +65,7 @@ PROJECT = """\
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>Kiji.SyntheticSite</AssemblyName>
     <RootNamespace>Kiji.SyntheticSite</RootNamespace>
+    <UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier>
     <InvariantGlobalization>true</InvariantGlobalization>
     <InvariantTimezone>true</InvariantTimezone>
     <DefaultItemExcludes>$(DefaultItemExcludes);contents/**</DefaultItemExcludes>
@@ -126,7 +127,8 @@ def run(command, cwd, quiet=True):
 
 def pack(source, feed):
     run(["dotnet", "pack", "src/Kiji", "-c", "Release", "-o", str(feed)], source)
-    package = next(feed.glob("Kiji.*.nupkg"))
+    # Since runtime packages exist, Kiji.Runtime.<rid> packages sit beside Kiji's.
+    package = next(path for path in feed.glob("Kiji.*.nupkg") if not path.name.startswith("Kiji.Runtime."))
     return package.name[len("Kiji."):-len(".nupkg")]
 
 
@@ -143,13 +145,18 @@ def create_site(site, repository, corpus, feed, version, packages):
     run(["dotnet", "publish", "-c", "Release", "-o", "dist"], site)
 
 
+def build_directory(site, kind):
+    # The site builds for the current runtime, into <kind>/Release/net10.0/<rid>/.
+    return next((site / kind / "Release" / "net10.0").glob("*/Kiji.SyntheticSite.dll")).parent
+
+
 def staging(site):
-    return site / "obj" / "Release" / "net10.0" / "kiji"
+    return build_directory(site, "obj") / "kiji"
 
 
 def generate(site, hook=None):
     command = ["dotnet", "exec", "--runtimeconfig", str(staging(site) / "publish.runtimeconfig.json"),
-               str(site / "bin" / "Release" / "net10.0" / "Kiji.SyntheticSite.dll")]
+               str(build_directory(site, "bin") / "Kiji.SyntheticSite.dll")]
     environment = None
     if hook is not None:
         environment = dict(os.environ, DOTNET_STARTUP_HOOKS=str(hook))

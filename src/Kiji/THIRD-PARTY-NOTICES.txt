@@ -1,6 +1,6 @@
-Kiji includes ReadyToRun images compiled from the following components, which are
-distributed under the licenses below. The images in build/r2r contain each component's
-original metadata and code, precompiled for the named runtime.
+This package includes ReadyToRun images compiled from the following components, which
+are distributed under the licenses below. Each image contains its component's original
+metadata and code, precompiled for this package's runtime.
 
 ================================================================================
 Markdig 1.5.0 - https://github.com/xoofx/markdig

@@ -41,20 +41,43 @@
     <DefaultItemExcludes>$(DefaultItemExcludes);content/**;dist/**</DefaultItemExcludes>
   </PropertyGroup>
 
-  <!-- The package carries ReadyToRun images of the exact Markdig and YamlDotNet versions Kiji
-       references, which every Markdown page runs. A site that resolves those versions copies
-       the images to its output instead of the IL, so generation and the dev server skip most of
-       their compilation; any other version, or a runtime without images, keeps the IL. An image
-       holds the same metadata and module identity, so code identity and caches are unchanged.
-       Set KijiReadyToRunDependencies=false to keep the IL. -->
-  <PropertyGroup Condition="'$(_KijiIsSiteApp)' == 'true'">
-    <_KijiReadyToRunRuntime>$(RuntimeIdentifier)</_KijiReadyToRunRuntime>
-    <_KijiReadyToRunRuntime Condition="'$(_KijiReadyToRunRuntime)' == ''">$(NETCoreSdkPortableRuntimeIdentifier)</_KijiReadyToRunRuntime>
-    <_KijiReadyToRunDirectory>$(MSBuildThisFileDirectory)r2r$([System.IO.Path]::DirectorySeparatorChar)$(_KijiReadyToRunRuntime)$([System.IO.Path]::DirectorySeparatorChar)</_KijiReadyToRunDirectory>
-  </PropertyGroup>
+  <!-- A site builds for one runtime. Kiji's runtime.json then restores that runtime's package:
+       the native image libraries (SkiaSharp's own packages carry those for Windows and macOS) and,
+       where Kiji publishes one, Kiji.Runtime.<rid> with ReadyToRun images. Without a runtime
+       identifier a Linux site would have no image library and every site would copy SkiaSharp's
+       libraries for every platform. -->
+  <Target Name="KijiRequireRuntimeIdentifier" BeforeTargets="ResolvePackageAssets"
+          Condition="'$(_KijiIsSiteApp)' == 'true' and '$(RuntimeIdentifier)' == '' and '$(DesignTimeBuild)' != 'true'">
+    <Error Code="KIJI1007"
+           Text="Kiji sites build for the current runtime. Add &lt;UseCurrentRuntimeIdentifier&gt;true&lt;/UseCurrentRuntimeIdentifier&gt; to the project's PropertyGroup, or set a RuntimeIdentifier." />
+  </Target>
 
-  <Target Name="KijiUseReadyToRunDependencies" BeforeTargets="_CopyFilesMarkedCopyLocal"
-          Condition="'$(_KijiIsSiteApp)' == 'true' and '$(KijiReadyToRunDependencies)' != 'false' and Exists('$(_KijiReadyToRunDirectory)')">
+  <!-- Kiji.Runtime.<rid> carries ReadyToRun images of Kiji, Markdig and YamlDotNet under
+       runtimes/<rid>/native/kiji-r2r/<id>/<version>/, so NuGet selects the site runtime's images
+       and Kiji.targets receives them as native assets. None is copied as such: an image replaces
+       the IL of exactly the package version it was compiled from, and any other version keeps its
+       IL. An image holds the same metadata and module identity, so code identity and caches are
+       unchanged. Generation and the dev server then skip most of their compilation.
+       Set KijiReadyToRunDependencies=false to keep the IL. -->
+  <Target Name="KijiSelectReadyToRunImages" AfterTargets="ResolvePackageAssets" Condition="'$(_KijiIsSiteApp)' == 'true'">
+    <ItemGroup>
+      <_KijiReadyToRunImage Include="@(NativeCopyLocalItems)"
+                            Condition="$([System.String]::Copy('%(NativeCopyLocalItems.NuGetPackageId)').StartsWith('Kiji.Runtime.'))
+                                       and $([System.String]::Copy('%(NativeCopyLocalItems.PathInPackage)').Contains('/native/kiji-r2r/'))" />
+      <NativeCopyLocalItems Remove="@(_KijiReadyToRunImage)" />
+      <!-- The path below kiji-r2r/ is the image's <id>/<version>/<file>; the rest is their shared root. -->
+      <_KijiReadyToRunImage>
+        <ImagePath>$([System.String]::Copy('%(PathInPackage)').Substring($([MSBuild]::Add($([System.String]::Copy('%(PathInPackage)').IndexOf('/kiji-r2r/')), 10))))</ImagePath>
+      </_KijiReadyToRunImage>
+      <_KijiReadyToRunRoot Include="$([System.String]::Copy('%(_KijiReadyToRunImage.FullPath)').Substring(0, $([MSBuild]::Subtract($([System.String]::Copy('%(_KijiReadyToRunImage.FullPath)').Length), $([System.String]::Copy('%(_KijiReadyToRunImage.ImagePath)').Length)))))" />
+    </ItemGroup>
+    <PropertyGroup>
+      <_KijiReadyToRunDirectory>@(_KijiReadyToRunRoot->Distinct())</_KijiReadyToRunDirectory>
+    </PropertyGroup>
+  </Target>
+
+  <Target Name="KijiUseReadyToRunImages" BeforeTargets="_CopyFilesMarkedCopyLocal"
+          Condition="'$(_KijiIsSiteApp)' == 'true' and '$(KijiReadyToRunDependencies)' != 'false' and '$(_KijiReadyToRunDirectory)' != ''">
     <ItemGroup>
       <_KijiReadyToRunReference Include="@(ReferenceCopyLocalPaths)"
                                 Condition="'%(ReferenceCopyLocalPaths.NuGetPackageId)' != '' and '%(ReferenceCopyLocalPaths.Extension)' == '.dll'

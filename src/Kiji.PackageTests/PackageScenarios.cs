@@ -15,25 +15,31 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
     public Task Publish_UsesSdkDefaultDestination() => fixture.ScenarioAsync(async () =>
     {
         const string project = "Site/PackageSite.csproj";
-        fixture.Replace(project, "<UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier>",
-            "<UseCurrentRuntimeIdentifier>false</UseCurrentRuntimeIdentifier>");
+        // Without a runtime identifier a Linux site would have no image library, and every site
+        // would copy SkiaSharp's libraries for every platform: the build stops and says why.
+        var portable = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            fixture.DotnetAsync("build", project, "-c", "Release", "-p:UseCurrentRuntimeIdentifier=false"));
+        Assert.Contains("KIJI1007", portable.Message, StringComparison.Ordinal);
+
         fixture.Write("Site/dist/previous.json", "{}");
         await fixture.DotnetAsync("publish", project, "-c", "Release");
-        var buildDirectory = Path.Combine(fixture.Site, "bin", "Release", "net10.0");
+        var buildDirectory = Path.Combine(fixture.Site, "bin", "Release", "net10.0", System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier);
         Assert.True(File.Exists(Path.Combine(buildDirectory, "publish", "index.html")));
         Assert.False(File.Exists(Path.Combine(buildDirectory, "dist", "previous.json")));
         Assert.False(File.Exists(Path.Combine(fixture.Site, "dist", "index.html")));
 
-        // A portable build copies the packaged images of the dependency versions Kiji references.
-        // A wrong path or package version leaves the IL in place, which only shows as a slower publish.
+        // The build copies the runtime package's images in place of the IL of the versions they
+        // were compiled from. A wrong path or version leaves the IL, which only shows as a slower
+        // publish; an image copied as a native asset would leave the IL too.
         if (fixture.HasReadyToRunImages)
         {
-            var images = Path.Combine(fixture.InstalledPackage, "build", "r2r", System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier);
-            foreach (var name in (string[])["Markdig", "YamlDotNet"])
+            var images = Path.Combine(fixture.InstalledRuntimePackage, "runtimes", System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier, "native", "kiji-r2r");
+            foreach (var name in (string[])["Kiji", "Markdig", "YamlDotNet"])
             {
                 var image = Assert.Single(Directory.GetFiles(Path.Combine(images, name), name + ".dll", SearchOption.AllDirectories));
                 Assert.Equal(File.ReadAllBytes(image), File.ReadAllBytes(Path.Combine(buildDirectory, name + ".dll")));
             }
+            Assert.DoesNotContain("kiji-r2r", File.ReadAllText(Path.Combine(buildDirectory, "PackageSite.deps.json")), StringComparison.Ordinal);
         }
     });
 

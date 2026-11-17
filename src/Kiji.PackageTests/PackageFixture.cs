@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Reflection;
 using System.Security;
+using System.Text.Json;
 using System.Xml.Linq;
 using Microsoft.Extensions.Configuration;
 using Xunit;
@@ -19,8 +20,10 @@ public sealed class PackageFixture : IAsyncLifetime
     private string Work => Path.Combine(_root, "work");
     internal string Site => Path.Combine(Work, "Site");
     private string Packages => Path.Combine(_root, "packages");
-    internal string InstalledPackage => Path.Combine(Packages, "kiji", _version.ToLowerInvariant());
-    /// <summary>A package packed in Release carries ReadyToRun images; a Debug pack carries IL only.</summary>
+    /// <summary>This machine's Kiji.Runtime package, where Kiji publishes one for its runtime.</summary>
+    internal static string RuntimePackageId => "Kiji.Runtime." + System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier;
+    internal string InstalledRuntimePackage => Path.Combine(Packages, RuntimePackageId.ToLowerInvariant(), _version.ToLowerInvariant());
+    /// <summary>A Release pack also makes the runtime packages of ReadyToRun images; a Debug pack makes Kiji's alone.</summary>
     internal bool HasReadyToRunImages { get; private set; }
     private string Template => Path.Combine(_repository, "src", "Kiji.PackageTests", "Fixture");
 
@@ -57,30 +60,36 @@ public sealed class PackageFixture : IAsyncLifetime
             string package;
             if (configuration["KIJI_TEST_PACKAGE"] is { Length: > 0 } supplied)
             {
-                // CI supplies the exact package it will release; never select an old glob match.
+                // CI supplies the exact package it will release, with the runtime packages packed
+                // beside it; never select an old glob match.
                 package = Path.Combine(feed, Path.GetFileName(supplied));
                 File.Copy(Path.GetFullPath(supplied), package);
+                var version = Path.GetFileNameWithoutExtension(supplied)["Kiji.".Length..];
+                foreach (var runtimePackage in Directory.GetFiles(Path.GetDirectoryName(Path.GetFullPath(supplied))!, $"Kiji.Runtime.*.{version}.nupkg"))
+                {
+                    File.Copy(runtimePackage, Path.Combine(feed, Path.GetFileName(runtimePackage)));
+                }
             }
             else
             {
                 var buildConfiguration = typeof(PackageFixture).Assembly.GetCustomAttribute<AssemblyConfigurationAttribute>()!.Configuration;
                 await RunningCommand.RunAsync(_repository, "pack", "src/Kiji", "-c", buildConfiguration, "--no-build", "-o", feed);
-                package = Directory.GetFiles(feed, "*.nupkg").Single();
+                package = Directory.GetFiles(feed, "Kiji.*.nupkg").Single(path => !Path.GetFileName(path).StartsWith("Kiji.Runtime.", StringComparison.Ordinal));
             }
             using var archive = ZipFile.OpenRead(package);
-            // Nothing else fails when the precompiled image is missing; publishing is only slower.
-            HasReadyToRunImages = configuration["KIJI_TEST_PACKAGE"] is { Length: > 0 }
-                || typeof(PackageFixture).Assembly.GetCustomAttribute<AssemblyConfigurationAttribute>()!.Configuration == "Release";
-            if (HasReadyToRunImages)
-            {
-                Assert.Contains(archive.Entries, entry => entry.FullName
-                    == $"runtimes/{System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier}/lib/net10.0/Kiji.dll");
-            }
             using var manifest = archive.Entries.Single(entry => entry.FullName.EndsWith(".nuspec", StringComparison.Ordinal)).Open();
             var metadata = XDocument.Load(manifest).Root!.Elements().Single(element => element.Name.LocalName == "metadata");
             Assert.Equal("Kiji", metadata.Elements().Single(element => element.Name.LocalName == "id").Value);
             _version = metadata.Elements().Single(element => element.Name.LocalName == "version").Value;
-            await PreparePackagesAsync(metadata, feed);
+            // Nothing else fails when the precompiled images are missing; publishing is only slower.
+            HasReadyToRunImages = configuration["KIJI_TEST_PACKAGE"] is { Length: > 0 }
+                || typeof(PackageFixture).Assembly.GetCustomAttribute<AssemblyConfigurationAttribute>()!.Configuration == "Release";
+            if (HasReadyToRunImages)
+            {
+                Assert.True(File.Exists(Path.Combine(feed, $"{RuntimePackageId}.{_version}.nupkg")), $"{RuntimePackageId} was not packed.");
+            }
+            using var graph = archive.GetEntry("runtime.json")!.Open();
+            await PreparePackagesAsync(metadata, JsonDocument.Parse(graph), feed);
         }
         catch
         {
@@ -89,7 +98,7 @@ public sealed class PackageFixture : IAsyncLifetime
         }
     }
 
-    private async Task PreparePackagesAsync(XElement metadata, string feed)
+    private async Task PreparePackagesAsync(XElement metadata, JsonDocument runtimeGraph, string feed)
     {
         // Restore-only projects: resolve the tested package's dependencies into the normal
         // global cache, then install just Kiji privately before enabling the fallback cache.
@@ -99,8 +108,15 @@ public sealed class PackageFixture : IAsyncLifetime
         Write("NuGet.Config", "<configuration><packageSources><clear/><add key=\"nuget\" value=\"https://api.nuget.org/v3/index.json\"/></packageSources><fallbackPackageFolders><clear/></fallbackPackageFolders></configuration>");
         var group = metadata.Elements().Single(element => element.Name.LocalName == "dependencies")
             .Elements().Single(element => (string?)element.Attribute("targetFramework") == "net10.0");
-        var references = group.Elements().Select(dependency => new XElement("PackageReference",
-            new XAttribute("Include", dependency.Attribute("id")!.Value), new XAttribute("Version", dependency.Attribute("version")!.Value)));
+        // The runtime graph adds packages for a site's runtime, such as SkiaSharp's Linux libraries.
+        var runtimeDependencies = runtimeGraph.RootElement.GetProperty("runtimes").EnumerateObject()
+            .SelectMany(runtime => runtime.Value.GetProperty("Kiji").EnumerateObject())
+            .Where(dependency => !dependency.Name.StartsWith("Kiji.", StringComparison.Ordinal))
+            .Select(dependency => (Id: dependency.Name, Version: dependency.Value.GetString()!))
+            .Distinct();
+        var references = group.Elements().Select(dependency => (Id: dependency.Attribute("id")!.Value, Version: dependency.Attribute("version")!.Value))
+            .Concat(runtimeDependencies)
+            .Select(dependency => new XElement("PackageReference", new XAttribute("Include", dependency.Id), new XAttribute("Version", dependency.Version)));
         // The Web SDK also restores implicit static-web-asset packages used by both SDKs.
         Write("restore/dependencies/Dependencies.csproj", new XElement("Project", new XAttribute("Sdk", "Microsoft.NET.Sdk.Web"), new XElement("ItemGroup", references)).ToString());
         // The SDK requests its internal web-assets pack only when Razor content exists.
@@ -108,7 +124,7 @@ public sealed class PackageFixture : IAsyncLifetime
         await DotnetAsync("restore", "restore/dependencies/Dependencies.csproj", "--packages", _globalPackages, "--configfile", Path.Combine(Work, "NuGet.Config"));
         Write("restore/kiji/Kiji.csproj", $"""
             <Project Sdk="Microsoft.NET.Sdk"><ItemGroup>
-              <PackageDownload Include="Kiji" Version="[{SecurityElement.Escape(_version)}]" />
+              <PackageDownload Include="Kiji{string.Concat(Directory.GetFiles(feed, $"Kiji.Runtime.*.{_version}.nupkg").Select(path => ";" + Path.GetFileName(path)[..^$".{_version}.nupkg".Length]))}" Version="[{SecurityElement.Escape(_version)}]" />
             </ItemGroup></Project>
             """);
         await DotnetAsync("restore", "restore/kiji/Kiji.csproj", "--packages", Packages, "--source", feed, "--configfile", Path.Combine(Work, "NuGet.Config"));

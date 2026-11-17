@@ -12,6 +12,9 @@
 
   <ItemGroup>
     <ProjectReference Include="../Kiji/Kiji.csproj" />
+    <!-- A Kiji package restores SkiaSharp's Linux libraries through its runtime graph; a project
+         reference does not. -->
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
   </ItemGroup>
 
 </Project>

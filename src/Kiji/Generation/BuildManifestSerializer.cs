@@ -12,7 +12,7 @@ namespace Kiji.Generation;
 /// <remarks>
 /// The format is the one <see cref="JsonSerializer"/> produces for the manifest records with
 /// default options, in both directions: property names are case-sensitive, unknown properties
-/// are skipped, the last duplicate wins and missing or null members are left for
+/// are skipped, the last duplicate wins and missing or null members are null, left for
 /// <see cref="BuildManifest.IsValid"/> to reject.
 /// </remarks>
 internal static class BuildManifestSerializer
@@ -181,36 +181,34 @@ internal static class BuildManifestSerializer
     private static BuildManifest ReadManifest(ref Utf8JsonReader reader)
     {
         ExpectStartObject(ref reader);
+        // A member the JSON omits is left null, not at its initial value, as the serializer
+        // leaves it: an incomplete manifest must not pass for a valid one.
         var schemaVersion = 0;
-        var optionsHash = string.Empty;
-        var htmlFile = string.Empty;
-        var outputDirectoryHash = string.Empty;
-        IReadOnlyList<string> codeDependencies = [];
-        IReadOnlyList<BuildManifestPage> pages = [];
-        IReadOnlyList<string> staticFiles = [];
-        IReadOnlyList<string> artifacts = [];
+        string? optionsHash = null, htmlFile = null, outputDirectoryHash = null;
+        IReadOnlyList<string>? codeDependencies = null, staticFiles = null, artifacts = null;
+        IReadOnlyList<BuildManifestPage>? pages = null;
         while (ReadProperty(ref reader))
         {
             if (reader.ValueTextEquals(SchemaVersion.EncodedUtf8Bytes)) { reader.Read(); schemaVersion = reader.GetInt32(); }
-            else if (reader.ValueTextEquals(OptionsHash.EncodedUtf8Bytes)) { reader.Read(); optionsHash = reader.GetString()!; }
-            else if (reader.ValueTextEquals(CodeDependencies.EncodedUtf8Bytes)) { codeDependencies = ReadStrings(ref reader)!; }
-            else if (reader.ValueTextEquals(HtmlFile.EncodedUtf8Bytes)) { reader.Read(); htmlFile = reader.GetString()!; }
-            else if (reader.ValueTextEquals(OutputDirectoryHash.EncodedUtf8Bytes)) { reader.Read(); outputDirectoryHash = reader.GetString()!; }
-            else if (reader.ValueTextEquals(Pages.EncodedUtf8Bytes)) { pages = ReadList(ref reader, ReadPage)!; }
-            else if (reader.ValueTextEquals(StaticFiles.EncodedUtf8Bytes)) { staticFiles = ReadStrings(ref reader)!; }
-            else if (reader.ValueTextEquals(Artifacts.EncodedUtf8Bytes)) { artifacts = ReadStrings(ref reader)!; }
+            else if (reader.ValueTextEquals(OptionsHash.EncodedUtf8Bytes)) { reader.Read(); optionsHash = reader.GetString(); }
+            else if (reader.ValueTextEquals(CodeDependencies.EncodedUtf8Bytes)) { codeDependencies = ReadStrings(ref reader); }
+            else if (reader.ValueTextEquals(HtmlFile.EncodedUtf8Bytes)) { reader.Read(); htmlFile = reader.GetString(); }
+            else if (reader.ValueTextEquals(OutputDirectoryHash.EncodedUtf8Bytes)) { reader.Read(); outputDirectoryHash = reader.GetString(); }
+            else if (reader.ValueTextEquals(Pages.EncodedUtf8Bytes)) { pages = ReadList(ref reader, ReadPage); }
+            else if (reader.ValueTextEquals(StaticFiles.EncodedUtf8Bytes)) { staticFiles = ReadStrings(ref reader); }
+            else if (reader.ValueTextEquals(Artifacts.EncodedUtf8Bytes)) { artifacts = ReadStrings(ref reader); }
             else { reader.Skip(); }
         }
         return new BuildManifest
         {
             SchemaVersion = schemaVersion,
-            OptionsHash = optionsHash,
-            CodeDependencies = codeDependencies,
-            HtmlFile = htmlFile,
-            OutputDirectoryHash = outputDirectoryHash,
-            Pages = pages,
-            StaticFiles = staticFiles,
-            Artifacts = artifacts,
+            OptionsHash = optionsHash!,
+            CodeDependencies = codeDependencies!,
+            HtmlFile = htmlFile!,
+            OutputDirectoryHash = outputDirectoryHash!,
+            Pages = pages!,
+            StaticFiles = staticFiles!,
+            Artifacts = artifacts!,
         };
     }
 
@@ -220,8 +218,8 @@ internal static class BuildManifestSerializer
         string? outputRelativePath = null, routePath = null, parametersHash = null, outputHash = null;
         IReadOnlyList<BuildManifestDependency>? dependencies = null;
         IReadOnlyList<BuildManifestOutput>? additionalOutputs = null;
-        IReadOnlyList<BuildManifestImage> imageRequests = [];
-        IReadOnlyList<string> images = [];
+        IReadOnlyList<BuildManifestImage>? imageRequests = null;
+        IReadOnlyList<string>? images = null;
         var htmlOffset = 0;
         var htmlLength = 0;
         OutputStamp? stamp = null;
@@ -236,8 +234,8 @@ internal static class BuildManifestSerializer
             else if (reader.ValueTextEquals(HtmlOffset.EncodedUtf8Bytes)) { reader.Read(); htmlOffset = reader.GetInt32(); }
             else if (reader.ValueTextEquals(HtmlLength.EncodedUtf8Bytes)) { reader.Read(); htmlLength = reader.GetInt32(); }
             else if (reader.ValueTextEquals(Stamp.EncodedUtf8Bytes)) { stamp = ReadStamp(ref reader); }
-            else if (reader.ValueTextEquals(ImageRequests.EncodedUtf8Bytes)) { imageRequests = ReadList(ref reader, ReadImage)!; }
-            else if (reader.ValueTextEquals(Images.EncodedUtf8Bytes)) { images = ReadStrings(ref reader)!; }
+            else if (reader.ValueTextEquals(ImageRequests.EncodedUtf8Bytes)) { imageRequests = ReadList(ref reader, ReadImage); }
+            else if (reader.ValueTextEquals(Images.EncodedUtf8Bytes)) { images = ReadStrings(ref reader); }
             else { reader.Skip(); }
         }
         return new BuildManifestPage(outputRelativePath!, routePath!, parametersHash, outputHash!, dependencies!, additionalOutputs!)
@@ -245,8 +243,8 @@ internal static class BuildManifestSerializer
             HtmlOffset = htmlOffset,
             HtmlLength = htmlLength,
             Stamp = stamp,
-            ImageRequests = imageRequests,
-            Images = images,
+            ImageRequests = imageRequests!,
+            Images = images!,
         };
     }
 

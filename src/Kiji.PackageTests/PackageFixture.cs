@@ -65,6 +65,13 @@ public sealed class PackageFixture : IAsyncLifetime
                 package = Directory.GetFiles(feed, "*.nupkg").Single();
             }
             using var archive = ZipFile.OpenRead(package);
+            // Nothing else fails when the precompiled image is missing; publishing is only slower.
+            if (configuration["KIJI_TEST_PACKAGE"] is { Length: > 0 }
+                || typeof(PackageFixture).Assembly.GetCustomAttribute<AssemblyConfigurationAttribute>()!.Configuration == "Release")
+            {
+                Assert.Contains(archive.Entries, entry => entry.FullName
+                    == $"runtimes/{System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier}/lib/net10.0/Kiji.dll");
+            }
             using var manifest = archive.Entries.Single(entry => entry.FullName.EndsWith(".nuspec", StringComparison.Ordinal)).Open();
             var metadata = XDocument.Load(manifest).Root!.Elements().Single(element => element.Name.LocalName == "metadata");
             Assert.Equal("Kiji", metadata.Elements().Single(element => element.Name.LocalName == "id").Value);

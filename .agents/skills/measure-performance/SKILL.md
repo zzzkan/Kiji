@@ -23,6 +23,10 @@ ordinary/high resolution. ContentLoadBenchmarks separates file I/O from parsing.
 Keep maintained benchmarks on current production paths; temporary comparisons and
 rejected experiments belong in ignored `artifacts`.
 
+- **Cold publish process**: what a user's `dotnet publish` runs. Most of its time is
+  first use (loading, compiling and initializing code), which the three harnesses above do
+  not show: they build repeatedly in one warm process.
+
 ## Before/after protocol
 
 1. Set an acceptance threshold before measuring. Save Release baseline binaries
@@ -43,6 +47,29 @@ rejected experiments belong in ignored `artifacts`.
 
 Filesystem/virus-scanner variation makes a single before-then-after pair unreliable.
 Do not normalize output differences unless the task explicitly permits them.
+
+## Measure the cold publish process
+
+Publish a consumer of each saved package once, then time the command `KijiGenerateSite`
+executes, alternating the two consumers:
+
+```sh
+dotnet exec --runtimeconfig obj/Release/net10.0/kiji/publish.runtimeconfig.json bin/Release/net10.0/<Site>.dll
+```
+
+- Pack with the default `KijiReadyToRun`: a consumer of the package runs the ReadyToRun
+  image, a project reference runs IL. Do not compare one with the other.
+- Measure two states and report both. Fresh: remove `.kiji`, the staged `site` directory and
+  `publish.jitprofile*` beside it, as a clean checkout has none. Profiled: remove only
+  `.kiji/cache` and the staged `site`; discard the first two runs, which record the profile.
+- Alternate at least ten runs per state and compare medians. Check the staged output of
+  both consumers is identical.
+- File systems differ far more than Kiji's own time. Use a memory file system to compare
+  processor time, and repeat on a disk for the writes. A disk that slows down as files are
+  repeatedly deleted and recreated inflates both variants; only interleaved runs compare.
+- Runtime events and `/proc/self` counters attribute a cold process without a profiler:
+  JIT time and method counts by namespace, system calls, page faults, per-thread time.
+  `System.Runtime.JitInfo` gives the totals.
 
 ## Harness details
 

@@ -75,7 +75,19 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   fingerprint.
 - The dev server enforces BaseUrl's path prefix and uses `.kiji/dev-site`.
   Only `.kiji/cache` (pages) and `.kiji/jit` (publish JIT profile) are portable; CI restores
-  either or both. Planning creates no output directories.
+  either or both. Planning creates no output directories; a page creates its own when it
+  writes.
+- A publish is one short process whose time is mostly first use of code. Keep its cold path
+  short: no serializer or reflection where a reader or writer does (the manifest is written
+  by `BuildManifestSerializer` in the serializer's own format, which tests compare); no
+  static initializer that loads what a site may not use; independent inputs load together
+  (asset manifest, code identity and content; page entries, input verification and
+  artifacts). `MarkdownWarmup` prepares the Markdown and YAML code on a spare processor
+  while the host is built. It must stay free of side effects and run the default pipeline.
+- The package carries ReadyToRun images of Kiji in `runtimes/<rid>/lib` beside the IL in
+  `lib`; the host picks one where it matches. `KijiReadyToRun=false` packs IL only.
+  The images are compiled at pack time against each runtime pack, so restoring Kiji
+  downloads those packs and the compiler.
 - HostApplicationBuilder.Services is standard DI; KijiServiceProviderFactory validates
   Kiji-owned registrations (including its own hosted service), records code assemblies and
   enables scope validation in Build. A replaced factory is rejected at startup.
@@ -114,7 +126,14 @@ source-generated page discovery (cached scanning suffices), IBufferWriter render
 (HtmlRootComponent exposes TextWriter), page-bundle image variants (articles could not
 share an image), incremental RSS/sitemap (depend on all metadata and are cheap to
 regenerate), or a frozen configuration snapshot (default sources do not reload during a
-publish).
+publish). For the cold publish process, measured and rejected: tiering settings
+(`TieredCompilation`, `QuickJit`, `QuickJitForLoops`, `CallCountingDelayMs`,
+`CallCountThreshold`: compiling optimized code costs more than a short process gets back),
+non-concurrent GC and a fixed gen0 budget (no difference), reading code identity from
+assembly files with MetadataReader (slower than loading them), collecting code identity
+while the host is built (contends with the host's own loading), warming the component
+renderer (no difference), and disabling W^X (`DOTNET_EnableWriteXorExecute=0`, faster but
+removes a runtime mitigation; a site owner can set it, Kiji does not).
 
 ## Skills
 

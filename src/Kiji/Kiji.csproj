@@ -42,7 +42,8 @@
   <PropertyGroup>
     <KijiReadyToRun Condition="'$(KijiReadyToRun)' == ''">true</KijiReadyToRun>
     <KijiReadyToRunRuntimeIdentifiers Condition="'$(KijiReadyToRunRuntimeIdentifiers)' == ''">linux-x64;linux-arm64;linux-musl-x64;win-x64;win-arm64;osx-x64;osx-arm64</KijiReadyToRunRuntimeIdentifiers>
-    <TargetsForTfmSpecificContentInPackage Condition="'$(KijiReadyToRun)' == 'true'">$(TargetsForTfmSpecificContentInPackage);KijiPackReadyToRun</TargetsForTfmSpecificContentInPackage>
+    <!-- Only optimized code is worth compiling ahead; the runtime ignores images of a Debug build. -->
+    <TargetsForTfmSpecificContentInPackage Condition="'$(KijiReadyToRun)' == 'true' and '$(Configuration)' == 'Release'">$(TargetsForTfmSpecificContentInPackage);KijiPackReadyToRun</TargetsForTfmSpecificContentInPackage>
   </PropertyGroup>
 
   <!-- The compiler for this machine and the framework each image is compiled against. -->

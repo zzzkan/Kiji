@@ -162,6 +162,8 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         // The portable copy lets a clean checkout restore it without the page cache.
         Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(stagingDirectory)!, "publish.jitprofile")));
         Assert.True(File.Exists(Path.Combine(fixture.Site, ".kiji", "jit", "publish.jitprofile")));
+        // The stamp lets a publish keep a profile recorded by the same code instead of rewriting it.
+        Assert.True(File.Exists(Path.Combine(fixture.Site, ".kiji", "jit", "publish.jitprofile.stamp")));
         // This file is deliberately untracked. Cleaning must make the next publish render it again.
         Assert.Contains("external-value-1", Read("index.html"), StringComparison.Ordinal);
         fixture.Write("Site/value.txt", "external-value-2");

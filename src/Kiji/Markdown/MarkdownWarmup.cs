@@ -74,19 +74,25 @@ internal static class MarkdownWarmup
     {
         try
         {
-            var options = new MarkdownOptions();
-            BuildFingerprint.HashText(Sample);
-            var (_, body) = MarkdownFrontMatterParser.ParseContentAndBody<Dictionary<string, object>>(
-                Sample, options.CreateDeserializer());
-            var pipeline = MarkdownProcessor.BuildPipeline(options);
-            var document = Markdig.Markdown.Parse(body, pipeline);
-            PooledMarkdigRenderer.Create(pipeline).Render(document,
-                new ResponsiveImageContext(new Dictionary<string, ProcessedImageInfo>(), "/_images/"));
+            Warm();
         }
 #pragma warning disable CA1031 // The site reports its own errors; a failed warm-up changes only timing.
         catch (Exception)
 #pragma warning restore CA1031
         {
         }
+    }
+
+    /// <summary>Runs the sample through front matter parsing, Markdown parsing and rendering.</summary>
+    internal static string Warm()
+    {
+        var options = new MarkdownOptions();
+        BuildFingerprint.HashText(Sample);
+        var (_, body) = MarkdownFrontMatterParser.ParseContentAndBody<Dictionary<string, object>>(
+            Sample, options.CreateDeserializer());
+        var pipeline = MarkdownProcessor.BuildPipeline(options);
+        var document = Markdig.Markdown.Parse(body, pipeline);
+        return PooledMarkdigRenderer.Create(pipeline).Render(document,
+            new ResponsiveImageContext(new Dictionary<string, ProcessedImageInfo>(), "/_images/"));
     }
 }

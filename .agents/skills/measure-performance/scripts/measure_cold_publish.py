@@ -172,6 +172,12 @@ def main():
     repository = pathlib.Path.cwd()
     work = pathlib.Path(arguments.work).resolve()
     work.mkdir(parents=True)
+    # A work directory inside the repository must not inherit its build settings.
+    (work / "Directory.Build.props").write_text("<Project />", encoding="utf-8")
+    (work / "Directory.Build.targets").write_text("<Project />", encoding="utf-8")
+    (work / "Directory.Packages.props").write_text(
+        "<Project><PropertyGroup><ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally></PropertyGroup></Project>",
+        encoding="utf-8")
     baseline_source = work / "baseline-source"
     run(["git", "worktree", "add", "--detach", str(baseline_source), arguments.baseline], repository)
 

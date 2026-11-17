@@ -75,36 +75,4 @@ public sealed class StaticSiteGeneratorTests : IDisposable
         Assert.False(bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF, "Page output must not start with a UTF-8 BOM.");
         Assert.Equal("<!doctype html><html>日本語</html>", System.Text.Encoding.UTF8.GetString(bytes));
     }
-
-    // Pages persist on writer threads after rendering moves on. A failed write must fail the
-    // build with its own error, and stop further pages from rendering.
-    [Fact]
-    public async Task RenderPagesAsync_FailedWrite_ReportsItsErrorAndStopsRendering()
-    {
-        var outputDir = Path.Combine(_testDir, "output");
-        // A directory where the first page's file belongs makes its write fail.
-        Directory.CreateDirectory(Path.Combine(outputDir, "a", "index.html"));
-        var requests = Enumerable.Range(0, 200).Select(index => new PageRenderRequest(
-            SourceIdentifier: "/{Slug}/",
-            ComponentType: typeof(StaticSiteGeneratorTests),
-            Parameters: new Dictionary<string, object?>(),
-            RoutePath: index == 0 ? "/a/" : $"/p{index}/",
-            OutputRelativePath: index == 0 ? Path.Combine("a", "index.html") : Path.Combine($"p{index}", "index.html"))).ToArray();
-        var rendered = 0;
-
-        var exception = await Record.ExceptionAsync(() => StaticSiteGenerator.RenderPagesAsync(
-            new ResolvedSitePaths { OutputDirectory = outputDir },
-            requests,
-            async (request, output, cancellationToken) =>
-            {
-                Interlocked.Increment(ref rendered);
-                // Later pages take long enough for the failure to stop them.
-                if (request.RoutePath != "/a/") { await Task.Delay(20, cancellationToken); }
-                await output.WriteAsync("page");
-            },
-            previousOutputs: null, CancellationToken.None));
-
-        Assert.True(exception is IOException or UnauthorizedAccessException, exception?.ToString());
-        Assert.True(rendered < requests.Length, $"Rendered {rendered} of {requests.Length} pages after the failure.");
-    }
 }

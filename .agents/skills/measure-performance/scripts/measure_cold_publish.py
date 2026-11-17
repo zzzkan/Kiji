@@ -11,6 +11,7 @@ Run it from the repository root. The work directory must not exist; it is left i
 """
 import argparse
 import hashlib
+import os
 import pathlib
 import shutil
 import statistics
@@ -76,6 +77,39 @@ PROJECT = """\
 
 SITE_SOURCES = ["MainLayout.cs", "PageHead.cs", "PostFrontMatter.cs", "PostSlug.cs"]
 
+# A startup hook that reports Kiji's build phases, as wall-clock offsets from process start.
+# Both revisions report through the same internal observer, so the hook needs no Kiji reference.
+PHASE_HOOK = """\
+using System;
+using System.Diagnostics;
+using System.Reflection;
+
+internal static class StartupHook
+{
+    public static void Initialize()
+    {
+        var start = Process.GetCurrentProcess().StartTime;
+        double Now() => (DateTime.Now - start).TotalMilliseconds;
+        Console.Error.WriteLine($"KIJI_PHASE hook 0 {Now():F1}");
+        AppDomain.CurrentDomain.AssemblyLoad += (_, e) =>
+        {
+            if (e.LoadedAssembly.GetName().Name != "Kiji") { return; }
+            var observer = e.LoadedAssembly.GetType("Kiji.Generation.BuildPhaseTimer")?
+                .GetProperty("Observer", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+            observer?.SetValue(null, new Action<string, TimeSpan>((name, elapsed) =>
+                Console.Error.WriteLine($"KIJI_PHASE {name} {elapsed.TotalMilliseconds:F1} {Now():F1}")));
+        };
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => Console.Error.WriteLine($"KIJI_PHASE exit 0 {Now():F1}");
+    }
+}
+"""
+
+HOOK_PROJECT = """\
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><AssemblyName>KijiPhaseHook</AssemblyName></PropertyGroup>
+</Project>
+"""
+
 
 def run(command, cwd, quiet=True):
     result = subprocess.run(command, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -107,15 +141,46 @@ def staging(site):
     return site / "obj" / "Release" / "net10.0" / "kiji"
 
 
-def generate(site):
+def generate(site, hook=None):
     command = ["dotnet", "exec", "--runtimeconfig", str(staging(site) / "publish.runtimeconfig.json"),
                str(site / "bin" / "Release" / "net10.0" / "Kiji.SyntheticSite.dll")]
+    environment = None
+    if hook is not None:
+        environment = dict(os.environ, DOTNET_STARTUP_HOOKS=str(hook))
     start = time.perf_counter()
-    result = subprocess.run(command, cwd=site, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    result = subprocess.run(command, cwd=site, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, env=environment)
     elapsed = (time.perf_counter() - start) * 1000
     if result.returncode != 0:
         sys.exit(f"Generation failed in {site}:\n{result.stderr[-4000:]}")
-    return elapsed
+    return elapsed, parse_phases(result.stderr)
+
+
+def parse_phases(stderr):
+    """Top-level phase durations, plus the time before the first and after the last."""
+    marks = [line.split()[1:] for line in stderr.splitlines() if line.startswith("KIJI_PHASE ")]
+    if not marks:
+        return {}
+    phases = {}
+    ends = [(name, float(duration), float(at)) for name, duration, at in marks]
+    timed = [mark for mark in ends if mark[0] not in ("hook", "exit") and "." not in mark[0]]
+    if timed:
+        first = timed[0]
+        phases["start"] = first[2] - first[1]
+        for name, duration, _ in timed:
+            phases[name] = phases.get(name, 0) + duration
+        exits = [at for name, _, at in ends if name == "exit"]
+        if exits:
+            phases["exit"] = exits[-1] - timed[-1][2]
+    return phases
+
+
+def build_hook(work):
+    directory = work / "phase-hook"
+    directory.mkdir()
+    (directory / "StartupHook.cs").write_text(PHASE_HOOK, encoding="utf-8")
+    (directory / "KijiPhaseHook.csproj").write_text(HOOK_PROJECT, encoding="utf-8")
+    run(["dotnet", "build", "-c", "Release", "-o", str(directory / "out")], directory)
+    return directory / "out" / "KijiPhaseHook.dll"
 
 
 def remove(path):
@@ -167,6 +232,8 @@ def main():
     parser.add_argument("--work", required=True, help="New directory for packages, consumers and results.")
     parser.add_argument("--pages", type=int, default=1000)
     parser.add_argument("--rounds", type=int, default=12, help="Measured rounds per scenario.")
+    parser.add_argument("--phases", action="store_true",
+                        help="Also report median build phases, through a startup hook in every run.")
     arguments = parser.parse_args()
 
     repository = pathlib.Path.cwd()
@@ -200,23 +267,32 @@ def main():
     if output_digest(sites["baseline"]) != output_digest(sites["candidate"]):
         sys.exit("The two packages generate different output.")
     print("output: identical", flush=True)
+    hook = build_hook(work) if arguments.phases else None
 
     # Discarded rounds let each state settle: the profiled state records its profile first.
     warmup = {"fresh": 1, "profiled": 3, "no-change": 2, "one-edited": 2}
     print(f"{'scenario':<12}{'baseline':>10}{'candidate':>11}{'change':>9}   (median ms, {arguments.rounds} rounds)")
     for scenario in ("fresh", "profiled", "no-change", "one-edited"):
         samples = {name: [] for name in sites}
+        phase_samples = {name: {} for name in sites}
         for round_index in range(warmup[scenario] + arguments.rounds):
             for name, site in sites.items():
                 prepare(site, scenario, round_index)
-                elapsed = generate(site)
+                elapsed, phases = generate(site, hook)
                 if round_index >= warmup[scenario]:
                     samples[name].append(elapsed)
+                    for phase, duration in phases.items():
+                        phase_samples[name].setdefault(phase, []).append(duration)
         for site in sites.values():
             restore(site)
         baseline = statistics.median(samples["baseline"])
         candidate = statistics.median(samples["candidate"])
         print(f"{scenario:<12}{baseline:>10.1f}{candidate:>11.1f}{(candidate / baseline - 1) * 100:>8.1f}%", flush=True)
+        for phase in phase_samples["candidate"]:
+            if phase in phase_samples["baseline"]:
+                before = statistics.median(phase_samples["baseline"][phase])
+                after = statistics.median(phase_samples["candidate"][phase])
+                print(f"  {phase:<10}{before:>10.1f}{after:>11.1f}", flush=True)
 
     if output_digest(sites["baseline"]) != output_digest(sites["candidate"]):
         sys.exit("The two packages generate different output.")

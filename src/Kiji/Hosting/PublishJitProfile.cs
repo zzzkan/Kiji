@@ -30,12 +30,6 @@ internal static class PublishJitProfile
 
     private static Session? s_session;
 
-    /// <summary>
-    /// Whether this process replays a profile. The runtime then compiles the recorded code
-    /// on a background thread, which is what a warm-up would otherwise be for.
-    /// </summary>
-    internal static bool Replaying { get; private set; }
-
     internal static string PortablePath(string kijiDirectory) => Path.Combine(kijiDirectory, "jit", FileName);
 
     internal static void Start(SiteRuntimeMetadata runtimeMetadata)
@@ -63,7 +57,7 @@ internal static class PublishJitProfile
         {
             return;
         }
-        Replaying = TryCopy(kept, Path.Combine(sessionDirectory, RecordingName));
+        TryCopy(kept, Path.Combine(sessionDirectory, RecordingName));
 
         // The runtime replays the profile, ignores one it cannot use, and records a new one.
         ProfileOptimization.SetProfileRoot(sessionDirectory);

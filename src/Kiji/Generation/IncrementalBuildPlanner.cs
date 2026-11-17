@@ -520,11 +520,16 @@ internal sealed class IncrementalBuildPlanner(
                 inputs[path] = digest;
             }
         }
-        Parallel.ForEach(inputs, input =>
+        // An indexed loop: partitioning the dictionary itself compiles a second parallel loop
+        // for its entry type.
+        var files = new string[inputs.Count];
+        inputs.Keys.CopyTo(files, 0);
+        Parallel.For(0, files.Length, index =>
         {
-            if (input.Value != BuildFingerprint.Missing && BuildFingerprint.HashFile(input.Key) != input.Value)
+            var expected = inputs[files[index]];
+            if (expected != BuildFingerprint.Missing && BuildFingerprint.HashFile(files[index]) != expected)
             {
-                throw new IOException("An input changed during the build: " + input.Key);
+                throw new IOException("An input changed during the build: " + files[index]);
             }
         });
     }

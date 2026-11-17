@@ -1,5 +1,4 @@
 using System.Collections;
-using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 using Kiji.Hosting;
 using Kiji.Generation;
@@ -159,13 +158,13 @@ public sealed class ContentCollection<T> : IReadOnlyCollection<T>
 
         return new MaterializedContent(
             entries,
-            index.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase),
+            index,
             projections);
     }
 
     private sealed class MaterializedContent(
         IReadOnlyList<T> entries,
-        FrozenDictionary<string, (T Item, string? Digest, string? FrontMatterDigest)> index,
+        Dictionary<string, (T Item, string? Digest, string? FrontMatterDigest)> index,
         IReadOnlyList<(string Id, string? Digest)> projections)
     {
         public Lazy<string?> CollectionDigest { get; } = new(() =>
@@ -181,7 +180,9 @@ public sealed class ContentCollection<T> : IReadOnlyCollection<T>
         });
         public IReadOnlyList<T> Entries { get; } = entries;
 
-        public FrozenDictionary<string, (T Item, string? Digest, string? FrontMatterDigest)> Index { get; } = index;
+        // Built once per snapshot and only read afterwards. A frozen dictionary costs more to
+        // build than a publish gets back from its lookups.
+        public Dictionary<string, (T Item, string? Digest, string? FrontMatterDigest)> Index { get; } = index;
 
     }
 }

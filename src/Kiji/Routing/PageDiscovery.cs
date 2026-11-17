@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Collections.Frozen;
 using System.Reflection;
 using Microsoft.AspNetCore.Components;
 
@@ -12,7 +11,7 @@ namespace Kiji.Routing;
 internal static class PageDiscovery
 {
     private static readonly ConcurrentDictionary<Assembly, IReadOnlyList<DiscoveredPage>> AssemblyCache = new();
-    private static readonly ConcurrentDictionary<Type, FrozenDictionary<string, ComponentParameter>> ParameterCache = new();
+    private static readonly ConcurrentDictionary<Type, Dictionary<string, ComponentParameter>> ParameterCache = new();
     private static readonly ConcurrentDictionary<Type, IReadOnlyList<DiscoveredPage>> TypeCache = new();
 
     /// <summary>
@@ -41,14 +40,14 @@ internal static class PageDiscovery
     /// parameter, or the component would reject them at render time with no indication
     /// of which registration was at fault.
     /// </summary>
-    internal static FrozenDictionary<string, ComponentParameter> Parameters(Type componentType)
+    internal static Dictionary<string, ComponentParameter> Parameters(Type componentType)
     {
         return ParameterCache.GetOrAdd(
             componentType,
             static type => type
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(static property => property.IsDefined(typeof(ParameterAttribute), inherit: true))
-                .ToFrozenDictionary(
+                .ToDictionary(
                     static property => property.Name,
                     static property => new ComponentParameter(property.PropertyType,
                         property.SetMethod is { IsPublic: true } && property.GetIndexParameters().Length == 0),

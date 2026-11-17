@@ -49,19 +49,34 @@ internal static class PublishJitProfile
         }
 
         var sessionDirectory = Path.Combine(directory, SessionName);
+        var recording = Path.Combine(sessionDirectory, RecordingName);
         try
         {
             Directory.CreateDirectory(sessionDirectory);
+            // A run that ended between the two renames below left the profile here.
+            if (!File.Exists(kept) && File.Exists(recording)) { File.Move(recording, kept); }
+            // The runtime replays the file it records to. A rename, unlike a copy, writes no
+            // file, and on Windows nothing new for a scanner to read.
+            if (File.Exists(kept)) { File.Move(kept, recording, overwrite: true); }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             return;
         }
-        TryCopy(kept, Path.Combine(sessionDirectory, RecordingName));
 
         // The runtime replays the profile, ignores one it cannot use, and records a new one.
+        // It reads the whole profile before StartProfile returns, so the file can move back at
+        // once: the session directory then holds only a recording worth keeping.
         ProfileOptimization.SetProfileRoot(sessionDirectory);
         ProfileOptimization.StartProfile(RecordingName);
+        try
+        {
+            if (File.Exists(recording)) { File.Move(recording, kept, overwrite: true); }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Left in the session directory, the profile moves back at the next publish.
+        }
         s_session = new Session(directory, sessionDirectory);
     }
 

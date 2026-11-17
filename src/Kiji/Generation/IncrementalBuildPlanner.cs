@@ -49,12 +49,13 @@ internal sealed class IncrementalBuildPlanner(
     internal async Task<IncrementalBuildPlan> CreatePlanAsync(
         IReadOnlyList<PageRenderRequest> pages,
         IEnumerable<Assembly> assemblies,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Task<BuildManifest?>? previousManifest = null)
     {
         var optionsHash = ComputeOptionsHash();
         var codeDependencies = CollectCodeDependencies(assemblies);
 
-        var oldManifest = LoadManifest(cancellationToken);
+        var oldManifest = previousManifest is null ? LoadManifest(cacheDirectory, cancellationToken) : await previousManifest;
         OutputStampsValid = oldManifest?.OutputDirectoryHash == _outputDirectoryHash;
 
         // Without a manifest nothing about the previous build can be proven, so every
@@ -464,9 +465,14 @@ internal sealed class IncrementalBuildPlanner(
         _cache.Collect(manifest.Pages.SelectMany(p => p.AdditionalOutputs.Select(o => o.Hash)));
     }
 
-    private BuildManifest? LoadManifest(CancellationToken cancellationToken)
+    /// <summary>
+    /// Reads and validates the previous build's manifest. It depends only on the cache, so a
+    /// publish reads it, under the cache lease, while its content loads.
+    /// </summary>
+    internal static BuildManifest? LoadManifest(string cacheDirectory, CancellationToken cancellationToken)
     {
-        if (!File.Exists(_manifestPath))
+        var manifestPath = Path.Combine(cacheDirectory, "manifest.json");
+        if (!File.Exists(manifestPath))
         {
             return null;
         }
@@ -474,7 +480,7 @@ internal sealed class IncrementalBuildPlanner(
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var manifest = BuildManifestSerializer.Deserialize(File.ReadAllBytes(_manifestPath));
+            var manifest = BuildManifestSerializer.Deserialize(File.ReadAllBytes(manifestPath));
             return manifest?.IsValid() == true ? manifest : null;
         }
         catch (JsonException)

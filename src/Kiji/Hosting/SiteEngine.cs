@@ -73,6 +73,9 @@ internal sealed class SiteEngine
         // Following every reference loads most of the framework, which needs nothing from the
         // content: do it while the content loads. Planning reads the result, or its failure.
         var codeIdentity = Task.Run(() => IncrementalBuildPlanner.CollectCodeDependencies(codeAssemblies), CancellationToken.None);
+        // The previous manifest depends only on the cache, which the lease now holds.
+        var cachePath = Paths.ResolveCachePath();
+        var previousManifest = Task.Run(() => IncrementalBuildPlanner.LoadManifest(cachePath, cancellationToken), CancellationToken.None);
         // The asset manifest and the content are independent inputs, so they load together.
         var baseUrl = options.AssetManifestPath is null ? null : SiteInfo.BaseUrl;
         var assetsLoaded = Task.Run(() =>
@@ -134,7 +137,7 @@ internal sealed class SiteEngine
                 ServiceProvider.GetRequiredService<IImageProcessor>(), assetManifest.Resources, BuildLogger,
                 _runtime.ResolveItem, ServiceProvider.GetRequiredService<ContentPath>());
 
-            plan = await planner.CreatePlanAsync(snapshot.Pages, codeAssemblies, cancellationToken);
+            plan = await planner.CreatePlanAsync(snapshot.Pages, codeAssemblies, cancellationToken, previousManifest);
             await ((Task)codeIdentity).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
             phases.Mark(BuildPhaseTimer.Plan);
 

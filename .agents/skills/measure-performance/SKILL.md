@@ -61,11 +61,12 @@ Windows and macOS runners. By hand, publish a consumer of each saved package onc
 then time the command `KijiGenerateSite` executes, alternating the two consumers:
 
 ```sh
-dotnet exec --runtimeconfig obj/Release/net10.0/kiji/publish.runtimeconfig.json bin/Release/net10.0/<Site>.dll
+dotnet exec --runtimeconfig obj/Release/net10.0/<rid>/kiji/publish.runtimeconfig.json bin/Release/net10.0/<rid>/<Site>.dll
 ```
 
-- Pack with the default `KijiReadyToRun`: a consumer of the package runs the ReadyToRun
-  image, a project reference runs IL. Do not compare one with the other.
+- Pack with the default `KijiReadyToRun` and keep the `Kiji.Runtime.*` packages in the same
+  feed: a consumer of the package runs the ReadyToRun images, a project reference runs IL. Do
+  not compare one with the other.
 - Measure two states and report both. Fresh: remove `.kiji`, the staged `site` directory and
   `publish.jitprofile*` beside it, as a clean checkout has none. Profiled: remove only
   `.kiji/cache` and the staged `site`; discard the first two runs, which record the profile.

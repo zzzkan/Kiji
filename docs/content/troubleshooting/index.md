@@ -27,10 +27,12 @@ The project's assembly does not exist, usually because publishing skipped the bu
 `Program.cs` finished without running the site. End it with
 `await builder.Build().RunAsync();`.
 
-### bin/ takes several hundred megabytes
+### KIJI1007: Kiji sites build for the current runtime
 
 Add `<UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier>` to the project's
-`<PropertyGroup>`, as in [Create the project](../getting-started/#create-the-project).
+`<PropertyGroup>`, as in [Create the project](../getting-started/#create-the-project), or set
+a `RuntimeIdentifier`. Kiji restores the image library and precompiled code for that runtime
+only.
 
 ## Development server
 

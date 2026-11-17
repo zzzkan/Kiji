@@ -10,7 +10,8 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   `dotnet watch --project docs` serves it. Docs references the local Kiji project
   and imports its publish targets. Use an isolated consumer of the packed local
   package to verify package integration.
-- `src/Kiji` is the single package, including Markdown, images, feeds and hosting.
+- `src/Kiji` is the single library package, including Markdown, images, feeds and hosting.
+  `src/Kiji.Runtime` only packs its per-runtime images (`Kiji.Runtime.<rid>`) during Kiji's pack.
   `MSBuild/Kiji.targets` integrates publish, watch and clean.
 - `src/Kiji.Tests` contains library unit/component tests and TestSite fixtures.
   Classes run in parallel; never mutate process-wide state. It does not pack or build consumers.
@@ -87,15 +88,22 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   (asset manifest, code identity and content; page entries, input verification and
   artifacts). `MarkdownWarmup` prepares the Markdown and YAML code on a spare processor
   while the host is built. It must stay free of side effects and run the default pipeline.
-- The package carries ReadyToRun images of Kiji in `runtimes/<rid>/lib` beside the IL in
-  `lib`; the host picks one where it matches. It also carries images of the exact Markdig
-  and YamlDotNet versions Kiji references in `build/r2r/<rid>/<id>/<version>`; `Kiji.targets`
-  copies them to a site's output in place of the IL only when the resolved package id and
-  version match (`KijiReadyToRunDependencies=false` keeps the IL). Images keep the IL's
-  metadata and MVID, so code identity and caches are unchanged. `THIRD-PARTY-NOTICES.txt`
-  carries the dependencies' licenses; update it with their versions. `KijiReadyToRun=false`
-  packs IL only. The images are compiled at pack time against each runtime pack, so
-  restoring Kiji downloads those packs and the compiler.
+- A site builds for one runtime identifier (KIJI1007 otherwise; `UseCurrentRuntimeIdentifier`).
+  Kiji's package holds IL and a `runtime.json` that makes NuGet restore, for that runtime,
+  `Kiji.Runtime.<rid>` and SkiaSharp's Linux native assets (SkiaSharp itself brings Windows
+  and macOS). Projects here that run Kiji through a project reference reference the Linux
+  assets themselves. `Kiji.Runtime.<rid>` carries ReadyToRun images of Kiji and the exact
+  Markdig and YamlDotNet versions Kiji references, as native assets under
+  `runtimes/<rid>/native/kiji-r2r/<id>/<version>`; `Kiji.targets` removes them from the
+  native assets and copies each in place of the IL only when package id and version match
+  (`KijiReadyToRunDependencies=false` keeps the IL). Runtimes fall back through the graph
+  (linux-musl-x64 to linux-x64, whose images are identical). Images keep the IL's metadata
+  and MVID, so code identity and caches are unchanged. Pack fails until
+  `THIRD-PARTY-NOTICES.txt` names the versions the images are compiled from.
+  `KijiReadyToRun=false` or a Debug pack makes Kiji's package alone. The images are compiled
+  at pack time against each runtime pack, so restoring Kiji downloads those packs and the
+  compiler. Partial images from a MIBC profile need dotnet-pgo, which nuget.org does not
+  carry; each runtime package is about 1.4 MB.
 - HostApplicationBuilder.Services is standard DI; KijiServiceProviderFactory validates
   Kiji-owned registrations (including its own hosted service), records code assemblies and
   enables scope validation in Build. A replaced factory is rejected at startup.

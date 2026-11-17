@@ -71,8 +71,8 @@ In its `<PropertyGroup>`, add this setting:
 <UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier>
 ```
 
-Without `UseCurrentRuntimeIdentifier`, every build copies Kiji's native image library
-for every platform into `bin/`, several hundred megabytes in total.
+Kiji requires it: the site then builds for your platform and restores only that
+platform's image library and precompiled code. Without it the build stops with KIJI1007.
 
 ### Build the smallest site
 

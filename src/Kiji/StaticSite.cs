@@ -25,17 +25,17 @@ public static class StaticSite
         ArgumentNullException.ThrowIfNull(args);
         // Start early so the host and rendering pipeline can use background-compiled methods.
         var runtimeMetadata = SiteRuntimeMetadata.Read(AppContext.GetData);
-        PublishJitProfile.Start(runtimeMetadata);
+        var jitProfile = PublishJitProfile.Start(runtimeMetadata);
         var entryAssembly = Assembly.GetEntryAssembly() ?? throw new InvalidOperationException("No entry assembly is available. Run the site project as an application.");
         // Read environment variables through configuration providers, not direct process APIs.
         using var hostConfiguration = new ConfigurationManager();
         hostConfiguration.AddEnvironmentVariables();
         return CreateBuilder(args, SiteExecutionPaths.FromRuntimeMetadata(runtimeMetadata, entryAssembly),
-            entryAssembly, hostConfiguration, runtimeMetadata);
+            entryAssembly, hostConfiguration, runtimeMetadata, jitProfile);
     }
 
     internal static HostApplicationBuilder CreateBuilder(string[] args, SiteExecutionPaths paths, Assembly entryAssembly,
-        IConfiguration? hostConfiguration = null, SiteRuntimeMetadata? runtimeMetadata = null)
+        IConfiguration? hostConfiguration = null, SiteRuntimeMetadata? runtimeMetadata = null, PublishJitProfile? jitProfile = null)
     {
         ArgumentNullException.ThrowIfNull(args);
         var settings = SiteRunSettings.FromExecutionContext(hostConfiguration ?? new ConfigurationBuilder().Build(), runtimeMetadata ?? new SiteRuntimeMetadata(), args);
@@ -103,6 +103,7 @@ public static class StaticSite
         builder.Services.AddSingleton(settings.Publishing ? paths.ResolveForPublish(settings.OutputPath!) : paths.ResolveForDevelopment());
         builder.Services.AddSingleton(settings);
         builder.Services.AddSingleton<SiteEngine>();
+        if (jitProfile is not null) { builder.Services.AddSingleton(jitProfile); }
         builder.Services.AddSingleton(new SiteServerArguments([.. args]));
         if (settings.Publishing) { builder.Services.AddHostedService<SitePublishService>(); }
         else { builder.Services.AddHostedService<SiteServeService>(); }

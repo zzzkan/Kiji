@@ -14,9 +14,10 @@ namespace Kiji.Hosting;
 /// independently of the page cache in <c>.kiji/cache</c>. The runtime writes a profile one
 /// record at a time, thousands of small writes, so a publish keeps the profile it replayed
 /// when the same code recorded it over at least as many pages, and otherwise writes the new
-/// one while the publish finishes.
+/// one while the publish finishes. <see cref="StaticSite.CreateBuilder(string[])"/> starts the
+/// profile before the host exists and registers it as a service; the publish ends it.
 /// </remarks>
-internal static class PublishJitProfile
+internal sealed class PublishJitProfile
 {
     internal const string FileName = "publish.jitprofile";
 
@@ -28,15 +29,32 @@ internal static class PublishJitProfile
     // loses its recording this way only leaves the kept profile as it was.
     private const string SessionName = "jit-session";
 
-    private static Session? s_session;
+    // Multicore JIT belongs to the runtime, one per process: a second host never restarts it.
+    private static int s_started;
+
+    private readonly string _directory;
+    private readonly string _sessionDirectory;
+    private PublishJitProfileStamp? _stamp;
+    private bool _keep;
+    private Task? _written;
+    private bool _saved;
+
+    private PublishJitProfile(string directory, string sessionDirectory)
+    {
+        _directory = directory;
+        _sessionDirectory = sessionDirectory;
+    }
 
     internal static string PortablePath(string kijiDirectory) => Path.Combine(kijiDirectory, "jit", FileName);
 
-    internal static void Start(SiteRuntimeMetadata runtimeMetadata)
+    /// <summary>Starts the profile of this process's publish.</summary>
+    /// <returns>The started profile, or <see langword="null"/> when this process records none.</returns>
+    internal static PublishJitProfile? Start(SiteRuntimeMetadata runtimeMetadata)
     {
-        if (runtimeMetadata.JitProfileDirectory is not string directory || !Path.IsPathFullyQualified(directory))
+        if (runtimeMetadata.JitProfileDirectory is not string directory || !Path.IsPathFullyQualified(directory)
+            || Interlocked.Exchange(ref s_started, 1) != 0)
         {
-            return;
+            return null;
         }
 
         var kept = Path.Combine(directory, FileName);
@@ -61,7 +79,7 @@ internal static class PublishJitProfile
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            return;
+            return null;
         }
 
         // The runtime replays the profile, ignores one it cannot use, and records a new one.
@@ -77,14 +95,14 @@ internal static class PublishJitProfile
         {
             // Left in the session directory, the profile moves back at the next publish.
         }
-        s_session = new Session(directory, sessionDirectory);
+        return new PublishJitProfile(directory, sessionDirectory);
     }
 
     /// <summary>
     /// Ends the recording. Call it when pages have rendered and again, with
     /// <paramref name="publishCompleted"/>, when the publish has finished; follow with
     /// <see cref="SaveAsync"/> once it has succeeded. A no-op when this process started no
-    /// profile or has already ended it.
+    /// has already ended it.
     /// </summary>
     /// <remarks>
     /// A publish with no profile for its code gains nothing from its own recording, so that
@@ -97,25 +115,25 @@ internal static class PublishJitProfile
     /// so an existing profile is kept for the next publish that renders.
     /// </param>
     /// <param name="publishCompleted">Whether the recording covers the whole publish.</param>
-    internal static void Stop(string codeIdentity, int renderedPages, bool publishCompleted)
+    internal void Stop(string codeIdentity, int renderedPages, bool publishCompleted)
     {
-        if (Volatile.Read(ref s_session) is not { Written: null } session)
+        if (_written is not null)
         {
             return;
         }
 
-        var kept = Path.Combine(session.Directory, FileName);
+        var kept = Path.Combine(_directory, FileName);
         var recorded = File.Exists(kept) ? PublishJitProfileStamp.Read(kept + ".stamp") : null;
         var sameCode = recorded?.CodeIdentity == codeIdentity;
         if (recorded is null || (renderedPages > 0 && !sameCode))
         {
             // Nothing usable was replayed. Any recording is an improvement.
-            session.Keep = true;
+            _keep = true;
         }
         else if (renderedPages == 0 || (recorded.Complete && recorded.RenderedPages >= renderedPages))
         {
             // Without its directory the runtime cannot open the recording, and skips the write.
-            TryDeleteDirectory(session.SessionDirectory);
+            TryDeleteDirectory(_sessionDirectory);
         }
         else if (!publishCompleted)
         {
@@ -125,36 +143,37 @@ internal static class PublishJitProfile
         else
         {
             // Keep the wider rendering coverage of a profile that only lacks the end of a publish.
-            session.Keep = recorded.Complete || renderedPages >= recorded.RenderedPages;
-            if (!session.Keep) { TryDeleteDirectory(session.SessionDirectory); }
+            _keep = recorded.Complete || renderedPages >= recorded.RenderedPages;
+            if (!_keep) { TryDeleteDirectory(_sessionDirectory); }
         }
 
-        session.Stamp = new PublishJitProfileStamp(codeIdentity, renderedPages, publishCompleted);
+        _stamp = new PublishJitProfileStamp(codeIdentity, renderedPages, publishCompleted);
         // Stopping writes the recorded profile now instead of at process exit.
-        session.Written = Task.Run(static () => ProfileOptimization.StartProfile(null));
+        _written = Task.Run(static () => ProfileOptimization.StartProfile(null));
     }
 
     /// <summary>
     /// Keeps the recording <see cref="Stop"/> ended. Call it under the cache lease after a
-    /// successful publish.
+    /// successful publish. A no-op until <see cref="Stop"/> has ended the recording.
     /// </summary>
     /// <param name="kijiDirectory">The site's <c>.kiji</c> directory.</param>
-    internal static async Task SaveAsync(string kijiDirectory)
+    internal async Task SaveAsync(string kijiDirectory)
     {
-        if (Interlocked.Exchange(ref s_session, null) is not { Written: { } written } session)
+        if (_written is not { } written || _saved)
         {
             return;
         }
 
+        _saved = true;
         await written;
         try
         {
-            var recording = Path.Combine(session.SessionDirectory, RecordingName);
-            if (session.Keep && File.Exists(recording))
+            var recording = Path.Combine(_sessionDirectory, RecordingName);
+            if (_keep && File.Exists(recording))
             {
                 var bytes = File.ReadAllBytes(recording);
-                var stamp = System.Text.Encoding.UTF8.GetBytes(session.Stamp!.ToString());
-                var kept = Path.Combine(session.Directory, FileName);
+                var stamp = System.Text.Encoding.UTF8.GetBytes(_stamp!.ToString());
+                var kept = Path.Combine(_directory, FileName);
                 var portable = PortablePath(kijiDirectory);
                 // A stamp never describes a profile other than the one beside it: it is
                 // removed before its profile changes and written after.
@@ -166,7 +185,7 @@ internal static class PublishJitProfile
         {
             // Only a later publish's startup time depends on it.
         }
-        TryDeleteDirectory(session.SessionDirectory);
+        TryDeleteDirectory(_sessionDirectory);
     }
 
     /// <summary>Identifies the code a profile was recorded for.</summary>
@@ -199,14 +218,5 @@ internal static class PublishJitProfile
     {
         try { Directory.Delete(directory, recursive: true); }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
-    }
-
-    private sealed class Session(string directory, string sessionDirectory)
-    {
-        public string Directory { get; } = directory;
-        public string SessionDirectory { get; } = sessionDirectory;
-        public PublishJitProfileStamp? Stamp { get; set; }
-        public bool Keep { get; set; }
-        public Task? Written { get; set; }
     }
 }

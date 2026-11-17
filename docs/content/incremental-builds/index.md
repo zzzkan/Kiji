@@ -102,8 +102,9 @@ page anyway, and restoring it costs more. Cache `.kiji/jit` first, add `.kiji/ca
 when measurements show it pays off, and use `dotnet clean` to remove both.
 
 Publishing also turns off tiered PGO, which cannot pay off within one short process,
-unless the project sets `TieredPGO` itself. For the same reason, the Kiji package carries
-ReadyToRun (precompiled) images of Kiji and of the Markdig and YamlDotNet versions it uses,
-for Windows, Linux and macOS on x64 and Arm64. A site that resolves those versions builds with
-the images instead of compiling the code on every publish; set the `KijiReadyToRunDependencies`
-property to `false` to keep the libraries' own assemblies.
+unless the project sets `TieredPGO` itself. For the same reason, restoring Kiji for a site's
+runtime also restores a `Kiji.Runtime` package of ReadyToRun (precompiled) images of Kiji and
+of the Markdig and YamlDotNet versions it uses, for Windows, Linux and macOS on x64 and Arm64.
+A site that resolves those versions builds with the images instead of compiling the code on
+every publish; set the `KijiReadyToRunDependencies` property to `false` to keep the libraries'
+own assemblies.

@@ -28,6 +28,7 @@ internal sealed class SiteEngine
     private readonly Type? _defaultLayoutType;
     private readonly Type? _notFoundComponentType;
     private readonly ResolvedSitePaths _options;
+    private readonly PublishJitProfile? _jitProfile;
     private ComponentRenderer? _renderer;
 
     public SiteEngine(IServiceProvider services, SiteExecutionPaths paths, ResolvedSitePaths options,
@@ -47,6 +48,7 @@ internal sealed class SiteEngine
         _defaultLayoutType = siteOptions.DefaultLayoutType;
         _notFoundComponentType = siteOptions.NotFoundComponentType;
         ContentRoots = services.GetRequiredService<ContentPath>().Roots;
+        _jitProfile = services.GetService<PublishJitProfile>();
     }
 
     internal SiteInfo SiteInfo => ServiceProvider.GetRequiredService<SiteInfo>();
@@ -171,7 +173,7 @@ internal sealed class SiteEngine
                 planner.OutputDirectoryCreated);
             phases.Mark(BuildPhaseTimer.Render);
             // Rendering is what the profile is for; writing it overlaps the rest of the publish.
-            PublishJitProfile.Stop(PublishJitProfile.CodeIdentity(plan.CodeDependencies), rendered.Count, publishCompleted: false);
+            _jitProfile?.Stop(PublishJitProfile.CodeIdentity(plan.CodeDependencies), rendered.Count, publishCompleted: false);
         }
         catch
         {
@@ -249,8 +251,11 @@ internal sealed class SiteEngine
 
         planner.SaveManifest(manifest, plan.OldManifest, cancellationToken);
         // Still under the cache lease, so concurrent publishes cannot interleave the save.
-        PublishJitProfile.Stop(PublishJitProfile.CodeIdentity(plan.CodeDependencies), rendered.Count, publishCompleted: true);
-        await PublishJitProfile.SaveAsync(Paths.ResolveKijiPath());
+        if (_jitProfile is not null)
+        {
+            _jitProfile.Stop(PublishJitProfile.CodeIdentity(plan.CodeDependencies), rendered.Count, publishCompleted: true);
+            await _jitProfile.SaveAsync(Paths.ResolveKijiPath());
+        }
         phases.Mark(BuildPhaseTimer.Manifest);
 
         var written = rendered.Count(static page => page.Written);

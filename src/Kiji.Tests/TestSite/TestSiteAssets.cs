@@ -40,8 +40,12 @@ internal static class TestSiteAssets
         {
             rootNode["Patterns"] = JsonSerializer.SerializeToNode(new[] { new { ContentRootIndex = 0, Pattern = "**", Depth = 0 } });
         }
-        // Replaced, never truncated: concurrent builders of one site rewrite it while a publish reads it.
-        Kiji.Generation.ArtifactCache.WriteAtomic(path,
-            System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { ContentRoots = roots, Root = rootNode })));
+        // Concurrent builders of one site write the same manifest while a publish reads it.
+        // Rewriting it would truncate what the publish reads, or on Windows fail to replace it.
+        var bytes = System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { ContentRoots = roots, Root = rootNode }));
+        if (!File.Exists(path) || !File.ReadAllBytes(path).AsSpan().SequenceEqual(bytes))
+        {
+            File.WriteAllBytes(path, bytes);
+        }
     }
 }

@@ -64,8 +64,10 @@
       <_KijiTargetOS>linux</_KijiTargetOS>
       <_KijiTargetOS Condition="$(_KijiRuntime.StartsWith('win-'))">windows</_KijiTargetOS>
       <_KijiTargetOS Condition="$(_KijiRuntime.StartsWith('osx-'))">osx</_KijiTargetOS>
+      <!-- NUGET_PACKAGES supplies the root without a trailing separator. -->
+      <_KijiPackageRoot>$([MSBuild]::EnsureTrailingSlash('$(NuGetPackageRoot)'))</_KijiPackageRoot>
       <_KijiPackageVersion>$(BundledNETCoreAppPackageVersion.ToLowerInvariant())</_KijiPackageVersion>
-      <_KijiCrossgenDirectory>$(NuGetPackageRoot)microsoft.netcore.app.crossgen2.$(NETCoreSdkPortableRuntimeIdentifier.ToLowerInvariant())/$(_KijiPackageVersion)/tools/</_KijiCrossgenDirectory>
+      <_KijiCrossgenDirectory>$(_KijiPackageRoot)microsoft.netcore.app.crossgen2.$(NETCoreSdkPortableRuntimeIdentifier.ToLowerInvariant())/$(_KijiPackageVersion)/tools/</_KijiCrossgenDirectory>
       <!-- The pack holds a native executable, or an assembly for the SDK's host. -->
       <_KijiCrossgen>"$(_KijiCrossgenDirectory)crossgen2$(_NativeExecutableExtension)"</_KijiCrossgen>
       <_KijiCrossgen Condition="$([MSBuild]::IsOSPlatform('Windows'))">"$(_KijiCrossgenDirectory)crossgen2.exe"</_KijiCrossgen>
@@ -77,8 +79,8 @@
       <_KijiCrossgenArgument Include="@(IntermediateAssembly->'%(FullPath)')" />
       <_KijiCrossgenArgument Include="--out:$(_KijiReadyToRunDirectory)$(TargetFileName)" />
       <_KijiCrossgenArgument Include="--targetos:$(_KijiTargetOS);--targetarch:$(_KijiTargetArchitecture);--optimize" />
-      <_KijiCrossgenArgument Include="--reference:$(NuGetPackageRoot)microsoft.netcore.app.runtime.$(_KijiRuntime)/$(_KijiPackageVersion)/runtimes/$(_KijiRuntime)/lib/$(TargetFramework)/*.dll" />
-      <_KijiCrossgenArgument Include="--reference:$(NuGetPackageRoot)microsoft.aspnetcore.app.runtime.$(_KijiRuntime)/$(_KijiPackageVersion)/runtimes/$(_KijiRuntime)/lib/$(TargetFramework)/*.dll" />
+      <_KijiCrossgenArgument Include="--reference:$(_KijiPackageRoot)microsoft.netcore.app.runtime.$(_KijiRuntime)/$(_KijiPackageVersion)/runtimes/$(_KijiRuntime)/lib/$(TargetFramework)/*.dll" />
+      <_KijiCrossgenArgument Include="--reference:$(_KijiPackageRoot)microsoft.aspnetcore.app.runtime.$(_KijiRuntime)/$(_KijiPackageVersion)/runtimes/$(_KijiRuntime)/lib/$(TargetFramework)/*.dll" />
       <!-- Package references; the framework's reference assemblies are not implementations. -->
       <_KijiCrossgenArgument Include="@(ReferencePath->'--reference:%(FullPath)')" Condition="'%(ReferencePath.FrameworkReferenceName)' == ''" />
     </ItemGroup>

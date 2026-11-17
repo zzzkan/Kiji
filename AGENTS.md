@@ -85,9 +85,14 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   artifacts). `MarkdownWarmup` prepares the Markdown and YAML code on a spare processor
   while the host is built. It must stay free of side effects and run the default pipeline.
 - The package carries ReadyToRun images of Kiji in `runtimes/<rid>/lib` beside the IL in
-  `lib`; the host picks one where it matches. `KijiReadyToRun=false` packs IL only.
-  The images are compiled at pack time against each runtime pack, so restoring Kiji
-  downloads those packs and the compiler.
+  `lib`; the host picks one where it matches. It also carries images of the exact Markdig
+  and YamlDotNet versions Kiji references in `build/r2r/<rid>/<id>/<version>`; `Kiji.targets`
+  copies them to a site's output in place of the IL only when the resolved package id and
+  version match (`KijiReadyToRunDependencies=false` keeps the IL). Images keep the IL's
+  metadata and MVID, so code identity and caches are unchanged. `THIRD-PARTY-NOTICES.txt`
+  carries the dependencies' licenses; update it with their versions. `KijiReadyToRun=false`
+  packs IL only. The images are compiled at pack time against each runtime pack, so
+  restoring Kiji downloads those packs and the compiler.
 - HostApplicationBuilder.Services is standard DI; KijiServiceProviderFactory validates
   Kiji-owned registrations (including its own hosted service), records code assemblies and
   enables scope validation in Build. A replaced factory is rejected at startup.

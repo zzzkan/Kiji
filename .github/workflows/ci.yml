@@ -71,6 +71,13 @@ jobs:
           kill $!
           exit $code
 
+      # TEMPORARY: measures this branch against main on every platform. Removed before merge.
+      - name: Measure cold publish
+        shell: bash
+        run: |
+          PY=$(command -v python || command -v python3)
+          "$PY" .agents/skills/measure-performance/scripts/measure_cold_publish.py --baseline origin/main --work artifacts/cold-publish --rounds 12
+
       - name: Build docs
         if: matrix.os == 'ubuntu-latest'
         run: dotnet publish docs -c Release --no-build -o docs/dist

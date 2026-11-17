@@ -50,8 +50,11 @@ Do not normalize output differences unless the task explicitly permits them.
 
 ## Measure the cold publish process
 
-Publish a consumer of each saved package once, then time the command `KijiGenerateSite`
-executes, alternating the two consumers:
+`scripts/measure_cold_publish.py --baseline <revision> --work <new directory>` does all of
+this on any platform: it packs the baseline revision and the working tree, publishes the
+frozen site against each package, alternates the two consumers through four scenarios and
+checks their output is identical. By hand, publish a consumer of each saved package once,
+then time the command `KijiGenerateSite` executes, alternating the two consumers:
 
 ```sh
 dotnet exec --runtimeconfig obj/Release/net10.0/kiji/publish.runtimeconfig.json bin/Release/net10.0/<Site>.dll

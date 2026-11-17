@@ -132,7 +132,8 @@ publish). For the cold publish process, measured and rejected: tiering settings
 non-concurrent GC and a fixed gen0 budget (no difference), reading code identity from
 assembly files with MetadataReader (slower than loading them), collecting code identity
 while the host is built (contends with the host's own loading), warming the component
-renderer (no difference), and disabling W^X (`DOTNET_EnableWriteXorExecute=0`, faster but
+renderer (no difference), frozen dictionaries for per-snapshot lookups (building one costs
+more than a publish's lookups save), and disabling W^X (`DOTNET_EnableWriteXorExecute=0`, faster but
 removes a runtime mitigation; a site owner can set it, Kiji does not).
 
 ## Skills

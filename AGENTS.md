@@ -76,7 +76,10 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
 - The dev server enforces BaseUrl's path prefix and uses `.kiji/dev-site`.
   Only `.kiji/cache` (pages) and `.kiji/jit` (publish JIT profile) are portable; CI restores
   either or both. Planning creates no output directories; a page creates its own when it
-  writes.
+  writes. When the output directory does not exist as a build begins (clean checkout,
+  `dotnet clean`), every file in it comes from that build: pages write without comparing,
+  read their own stamps, and reconciliation reads the rest one file at a time instead of
+  listing the tree. Stamps from an earlier manifest are cleared then.
 - A publish is one short process whose time is mostly first use of code. Keep its cold path
   short: no serializer or reflection where a reader or writer does (the manifest is written
   by `BuildManifestSerializer` in the serializer's own format, which tests compare); no
@@ -138,7 +141,9 @@ non-concurrent GC and a fixed gen0 budget (no difference), reading code identity
 assembly files with MetadataReader (slower than loading them), collecting code identity
 while the host is built (contends with the host's own loading), warming the component
 renderer (no difference), frozen dictionaries for per-snapshot lookups (building one costs
-more than a publish's lookups save), and disabling W^X (`DOTNET_EnableWriteXorExecute=0`, faster but
+more than a publish's lookups save), disabling DI's dynamic engine or validation on build
+(no difference), persisting pages on dedicated writer threads (no gain on Windows, much
+slower on ext4), skipping the Markdown warm-up while a profile replays (slower), and disabling W^X (`DOTNET_EnableWriteXorExecute=0`, faster but
 removes a runtime mitigation; a site owner can set it, Kiji does not).
 
 ## Skills

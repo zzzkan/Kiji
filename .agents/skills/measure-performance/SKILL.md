@@ -53,7 +53,11 @@ Do not normalize output differences unless the task explicitly permits them.
 `scripts/measure_cold_publish.py --baseline <revision> --work <new directory>` does all of
 this on any platform: it packs the baseline revision and the working tree, publishes the
 frozen site against each package, alternates the two consumers through four scenarios and
-checks their output is identical. By hand, publish a consumer of each saved package once,
+checks their output is identical. `--phases` adds a startup hook that reports each
+generation's build phases, the time before the first and after the last, and the JIT time and
+compiled-method count; use it to attribute a platform's time, not for headline numbers, since
+the hook itself adds time to both sides. Push a branch with a temporary CI step to measure on
+Windows and macOS runners. By hand, publish a consumer of each saved package once,
 then time the command `KijiGenerateSite` executes, alternating the two consumers:
 
 ```sh

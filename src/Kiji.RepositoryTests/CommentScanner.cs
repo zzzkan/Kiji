@@ -7,10 +7,7 @@ internal static class CommentScanner
 {
     private static readonly CSharpParseOptions s_options = new(LanguageVersion.Preview);
 
-    public static IEnumerable<CommentBlock> UnlinkedBlocks(string source) =>
-        Blocks(source).Where(block => !block.LinksASource);
-
-    private static List<CommentBlock> Blocks(string source)
+    public static List<CommentBlock> Blocks(string source)
     {
         var blocks = new List<(int Line, List<string> Lines)>();
         var lastSingleLineCommentLine = int.MinValue;

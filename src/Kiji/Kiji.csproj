@@ -165,6 +165,8 @@
           DependsOnTargets="KijiCompileReadyToRun;KijiCheckThirdPartyNotices">
     <PropertyGroup>
       <_KijiRuntimeStage>$(_KijiIntermediateDirectory)kiji-runtime/</_KijiRuntimeStage>
+      <!-- The runtime project would resolve a relative output path against its own directory. -->
+      <_KijiPackageOutputDirectory>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(PackageOutputPath)'))</_KijiPackageOutputDirectory>
     </PropertyGroup>
     <ItemGroup>
       <_KijiStagedImage Include="@(KijiReadyToRunRuntime)">
@@ -180,7 +182,7 @@
           DestinationFiles="@(_KijiStagedImage->'$(_KijiRuntimeStage)%(Identity)/kiji-r2r/%(Destination)')" />
     <MSBuild Projects="$(_KijiRuntimeProject)" Targets="Restore" Properties="KijiRuntimeRestore=true" />
     <MSBuild Projects="$(_KijiRuntimeProject)" Targets="Pack"
-             Properties="KijiRuntimeIdentifier=%(KijiReadyToRunRuntime.Identity);KijiRuntimeContent=$(_KijiRuntimeStage)%(KijiReadyToRunRuntime.Identity)/;KijiThirdPartyNotices=$(_KijiThirdPartyNotices);PackageVersion=$(PackageVersion);PackageOutputPath=$(PackageOutputPath);NoBuild=true" />
+             Properties="KijiRuntimeIdentifier=%(KijiReadyToRunRuntime.Identity);KijiRuntimeContent=$(_KijiRuntimeStage)%(KijiReadyToRunRuntime.Identity)/;KijiThirdPartyNotices=$(_KijiThirdPartyNotices);PackageVersion=$(PackageVersion);PackageOutputPath=$(_KijiPackageOutputDirectory);NoBuild=true" />
   </Target>
 
   <!-- The notices name the exact versions the images are compiled from, so updating a dependency

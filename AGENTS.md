@@ -2,6 +2,62 @@
 
 A .NET static site generator: Razor components rendered with Blazor's HtmlRenderer.
 
+## How rules work here
+
+Agents copy the code around them more than they read prose, so quality comes from the
+environment they work in, not from more instructions or harder review. Rules are placed at
+the most reliable level that can hold them, in this order:
+
+1. **Codebase.** API design and architecture make the wrong thing impossible or awkward: one
+   way to do each task, internals not reachable, no workarounds or old ways left to copy.
+2. **Static checks.** Compiler, types, analyzers, `.editorconfig` severities, tests and CI fail
+   the build, with messages that say how to fix the root cause.
+3. **Verification.** The site is run the way an author runs it, and the evidence is kept.
+4. **Prose.** This file and the skills hold only what needs judgment.
+5. **Human review** reads the evidence from levels 2 and 3, not every line of the diff.
+
+- A correction is not a new line here. When a human corrects an agent, a mistake recurs,
+  or a rule below is broken, use the `correct` skill: encode it at the highest level that
+  works, prove the check fails on the real mistake, and update the rule table.
+- Keep the tree free of what should not be copied: delete old ways, dead code and
+  workarounds in the change that replaces them. Fix root causes, not symptoms.
+- For a pattern that already exists, block new occurrences first, then clean up the old ones.
+  Baselines only go down.
+- No new comments except public API XML docs, license headers, facts about external
+  constraints we cannot change, tool-required justifications and script usage lines. Meaning
+  goes into names, types, tests and checks. See the `no-comments` skill.
+- A change to user-visible behavior is not done until the `verify-site` skill has driven it
+  through `dotnet publish` or `dotnet watch` and the evidence (commands, output, files,
+  screenshots) is in the report or pull request.
+- Automate a loop (agents merging their own changes, generated fix pull requests) only
+  after its corrections are checks and its results are verified. Automating a loop that
+  produces bad code produces more of it.
+
+### Rule table
+
+Each rule names what enforces it. `judgment` rules are prose on purpose; when one is broken
+twice, encode it. `none` is debt: encode it the next time it matters. Remove prose rules
+below once a check covers them.
+
+| Rule | Enforced by |
+| --- | --- |
+| Warnings and recommended .NET analyzers fail the build | `Directory.Build.props` (`TreatWarningsAsErrors`, `AnalysisLevel`, `EnforceCodeStyleInBuild`) |
+| File-scoped namespaces | `.editorconfig` IDE0160 at `error` |
+| Public API stays compatible, except listed breaks | Package validation against 0.1.0, `src/Kiji/CompatibilitySuppressions.xml` |
+| ReadyToRun images have third-party notices | Pack error in `src/Kiji/Kiji.csproj` |
+| Incremental output equals a clean build | `IncrementalBuildTests` |
+| The package works through the SDK in a real consumer | `Kiji.PackageTests` in CI |
+| Docs site builds | CI `Build docs` step |
+| User-visible changes are driven before they are called done | `verify-site` skill (judgment) |
+| No new comments outside the allowed kinds | none. Baseline: 606 `//` lines in tracked `.cs` files (2026-11-20); see `no-comments` |
+| One type per file | none |
+| Environment variables are read through IConfiguration | none (no current violations; a `BannedSymbols.txt` entry fits) |
+| Kiji never sets `Environment.ExitCode` | none (a `BannedSymbols.txt` entry fits) |
+| Library components are hand-written `ComponentBase` classes, no `.razor` in `src/Kiji` | none |
+| `src/Kiji.SyntheticSite` workload stays frozen | none |
+| `docs/content/api-*` pages follow author-facing API changes | judgment |
+| Design and constraint decisions below | judgment |
+
 ## Commands and layout
 
 - `dotnet build -c Release` and `dotnet test -c Release` cover the whole solution.
@@ -22,9 +78,12 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
 - `src/Kiji.SyntheticSite` is the frozen end-to-end workload; `src/Kiji.Benchmarks`
   contains BenchmarkDotNet measurements. Do not change the workload to improve results.
 - Stop any verification server/watch process before completion. Stop only processes
-  started by the current task.
+  started by the current task (`verify-site`'s `dev-server.sh stop` does this).
 
 ## Design
+
+This section and the next record design decisions that need judgment. When a change breaks
+one, the `correct` skill decides whether it can become a check.
 
 - Read environment variables through IConfiguration providers, not Environment.GetEnvironmentVariable.
 - Follow the .NET host builder shape: CreateBuilder -> builder.Services/Add*/Use* -> Build
@@ -158,6 +217,13 @@ removes a runtime mitigation; a site owner can set it, Kiji does not).
 
 Read before working in the corresponding area; keep reusable verification here:
 
+- `.agents/skills/correct/SKILL.md`: required when a human corrects an agent, a mistake
+  recurs, a rule here is broken, or a rule is added; turns it into a check.
+- `.agents/skills/verify-site/SKILL.md`: required before calling a user-visible change done;
+  drives a real site and records evidence. Its `features/` map is the shared vocabulary for
+  Kiji's features.
+- `.agents/skills/no-comments/SKILL.md`: required when code would gain a comment or when
+  cleaning existing ones.
 - `.agents/skills/measure-performance/SKILL.md`: required for hot-path changes and
   performance claims; harness selection, saved baselines and interleaved comparisons.
 - `.agents/skills/incremental-build/SKILL.md`: required for new inputs/outputs or

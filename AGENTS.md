@@ -46,8 +46,7 @@ below once a check covers them.
 | The package works through the SDK in a real consumer | `Kiji.PackageTests` in CI |
 | Docs site builds | CI `Build docs` step |
 | User-visible changes are driven before they are called done | `verify-site` skill (judgment) |
-| No comments in any source file | `NoCommentTests` |
-| XML docs only on a packed project's public API | `Kiji.Analyzers` KR0004 |
+| No comments; XML docs only on a packed project's public API | `Kiji.Analyzers` KR0004 (compiled C#, plus other files as `AdditionalFiles` in `Directory.Build.targets`) |
 | Kiji's public API is documented | CS1591 at `error` in `src/Kiji/.editorconfig` |
 | One type per file | `Kiji.Analyzers` KR0001 in every project |
 | Kiji reads environment variables through IConfiguration | `src/Kiji/BannedSymbols.txt` (RS0030) |
@@ -75,7 +74,7 @@ below once a check covers them.
   Classes run in parallel. It does not pack or build consumers.
 - `src/Kiji.Analyzers` holds the repository's own analyzers (KR*), referenced by every project
   through `Directory.Build.props`; `Directory.Build.targets` holds MSBuild rule checks.
-  `src/Kiji.RepositoryTests` checks the repository itself (no comments, frozen workload).
+  `src/Kiji.RepositoryTests` checks the frozen workload.
 - `src/Kiji.PackageTests` contains serial, black-box package scenarios with one fixed
   consumer workspace. External dependencies use NuGet's global cache; only Kiji
   is isolated. See its README for execution and cleanup.

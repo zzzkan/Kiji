@@ -1,0 +1,144 @@
+using System.Collections.Immutable;
+using System.Text.RegularExpressions;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Diagnostics;
+
+namespace Kiji.Analyzers;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class CommentAnalyzer : DiagnosticAnalyzer
+{
+    public static readonly DiagnosticDescriptor Rule = new(
+        id: "KR0004",
+        title: "No comments",
+        messageFormat: "{0}. Delete it and let names, types, tests or checks say it.",
+        category: "Repository",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    private static readonly Regex s_trailingYamlComment = new(@"\s#\s(?!v\d+\.\d+\.\d+\s*$)", RegexOptions.CultureInvariant);
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [Rule];
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
+        context.EnableConcurrentExecution();
+        context.RegisterSyntaxTreeAction(tree => ReportComments(tree.Tree, tree.ReportDiagnostic, tree.CancellationToken));
+        context.RegisterSemanticModelAction(AnalyzeDocumentation);
+        context.RegisterAdditionalFileAction(AnalyzeAdditionalFile);
+    }
+
+    private static void ReportComments(SyntaxTree tree, Action<Diagnostic> report, CancellationToken cancellationToken)
+    {
+        foreach (var trivia in tree.GetRoot(cancellationToken).DescendantTrivia(descendIntoTrivia: true))
+        {
+            if (trivia.IsKind(SyntaxKind.SingleLineCommentTrivia) || trivia.IsKind(SyntaxKind.MultiLineCommentTrivia))
+            {
+                report(Diagnostic.Create(Rule, trivia.GetLocation(), "Comments are not allowed"));
+            }
+        }
+    }
+
+    private static void AnalyzeDocumentation(SemanticModelAnalysisContext context)
+    {
+        var packed = context.Options.AnalyzerConfigOptionsProvider.GlobalOptions.TryGetValue("build_property.IsPackable", out var packable)
+            && string.Equals(packable, "true", StringComparison.OrdinalIgnoreCase);
+        foreach (var trivia in DocumentationComments(context.SemanticModel.SyntaxTree.GetRoot(context.CancellationToken)))
+        {
+            var owner = trivia.Token.Parent?.AncestorsAndSelf().OfType<MemberDeclarationSyntax>().FirstOrDefault();
+            if (!packed || owner is null || !IsExternallyVisible(DeclaredSymbol(context.SemanticModel, owner, context.CancellationToken)))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(Rule, trivia.GetLocation(), "XML documentation belongs only to the public API of a packed project"));
+            }
+        }
+    }
+
+    private static void AnalyzeAdditionalFile(AdditionalFileAnalysisContext context)
+    {
+        var path = context.AdditionalFile.Path;
+        var text = context.AdditionalFile.GetText(context.CancellationToken);
+        if (text is null)
+        {
+            return;
+        }
+
+        if (path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+        {
+            var tree = CSharpSyntaxTree.ParseText(text, new CSharpParseOptions(LanguageVersion.Preview), cancellationToken: context.CancellationToken);
+            var outside = new List<Diagnostic>();
+            ReportComments(tree, outside.Add, context.CancellationToken);
+            outside.AddRange(DocumentationComments(tree.GetRoot(context.CancellationToken)).Select(trivia =>
+                Diagnostic.Create(Rule, trivia.GetLocation(), "XML documentation belongs only to the public API of a packed project")));
+            foreach (var diagnostic in outside)
+            {
+                var span = diagnostic.Location.SourceSpan;
+                context.ReportDiagnostic(Diagnostic.Create(Rule, Location.Create(path, span, text.Lines.GetLinePositionSpan(span)), diagnostic.GetMessage(System.Globalization.CultureInfo.InvariantCulture).Split('.')[0]));
+            }
+
+            return;
+        }
+
+        foreach (var line in text.Lines)
+        {
+            var content = line.ToString();
+            if (IsComment(path, content, line.LineNumber))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(Rule, Location.Create(path, line.Span, text.Lines.GetLinePositionSpan(line.Span)), $"Comment \"{content.Trim()}\""));
+            }
+        }
+    }
+
+    private static bool IsComment(string path, string line, int lineNumber)
+    {
+        var text = line.TrimStart();
+        var name = Path.GetFileName(path);
+        switch (Path.GetExtension(path).ToLowerInvariant())
+        {
+            case ".csproj" or ".props" or ".targets":
+                return line.Contains("<!--");
+            case ".razor":
+                return line.Contains("<!--") || line.Contains("@*");
+            case ".css":
+                return line.Contains("/*");
+            case ".js" or ".mjs":
+                return text.StartsWith("//", StringComparison.Ordinal) || text.StartsWith("/*", StringComparison.Ordinal);
+            case ".yml" or ".yaml":
+                return text.StartsWith("#", StringComparison.Ordinal) || text.StartsWith("//", StringComparison.Ordinal) || s_trailingYamlComment.IsMatch(line);
+            case ".ps1" or ".sh" or ".py":
+                return text.StartsWith("#", StringComparison.Ordinal) && !(lineNumber == 0 && text.StartsWith("#!", StringComparison.Ordinal));
+            default:
+                return (name is ".editorconfig" or ".gitignore") && text.StartsWith("#", StringComparison.Ordinal);
+        }
+    }
+
+    private static IEnumerable<SyntaxTrivia> DocumentationComments(SyntaxNode root) =>
+        root.DescendantTrivia().Where(trivia =>
+            trivia.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia) || trivia.IsKind(SyntaxKind.MultiLineDocumentationCommentTrivia));
+
+    private static ISymbol? DeclaredSymbol(SemanticModel model, MemberDeclarationSyntax member, CancellationToken cancellationToken) => member switch
+    {
+        BaseFieldDeclarationSyntax field => field.Declaration.Variables.Select(variable => model.GetDeclaredSymbol(variable, cancellationToken)).FirstOrDefault(),
+        _ => model.GetDeclaredSymbol(member, cancellationToken),
+    };
+
+    private static bool IsExternallyVisible(ISymbol? symbol)
+    {
+        if (symbol is null)
+        {
+            return false;
+        }
+
+        for (var current = symbol; current is not null and not INamespaceSymbol; current = current.ContainingSymbol)
+        {
+            if (current.DeclaredAccessibility is not (Accessibility.Public or Accessibility.Protected or Accessibility.ProtectedOrInternal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+}

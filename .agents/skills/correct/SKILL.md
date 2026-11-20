@@ -33,7 +33,7 @@ Try each level in order and record why a higher one did not work.
      `AnalyzerReleases.Unshipped.md`). Every project already references it.
    - Check project structure (files, SDKs, references, packaging) in `Directory.Build.targets`
      with an `<Error Code="KR...">` whose text names the file or type to use.
-   - Check repository-wide state (comments, frozen files, baselines) in `src/Kiji.RepositoryTests`,
+   - Check repository-wide state (frozen files, baselines) in `src/Kiji.RepositoryTests`,
      which CI runs and `dotnet test -c Release` at the root includes.
    The error text must say how to fix the root cause, not only what is wrong: an agent does
    what the error tells it.

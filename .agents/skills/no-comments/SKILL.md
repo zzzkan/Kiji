@@ -1,11 +1,12 @@
 ---
 name: no-comments
-description: What to do instead of writing a comment. Use when a check reports a comment (NoCommentTests, KR0004, CS1591) or when code seems to need an explanation.
+description: What to do instead of writing a comment. Use when KR0004 or CS1591 fails, or when code seems to need an explanation.
 ---
 
-The repository has no comments. `NoCommentTests` fails on any C#, MSBuild, YAML, script,
-CSS, JS or Razor comment; KR0004 fails on XML docs outside a packed project's public API;
-CS1591 fails on undocumented public API in `src/Kiji`.
+KR0004 fails the build on any comment (C#, MSBuild, YAML, script, CSS, JS, Razor) and on XML
+docs outside a packed project's public API. CS1591 fails on undocumented public API in
+`src/Kiji`. A new kind of file reaches the analyzer through `AdditionalFiles` in
+`Directory.Build.targets`.
 
 Instead of a comment:
 

@@ -1,5 +1,21 @@
 <Project>
 
+  <ItemGroup Condition="'$(MSBuildProjectName)' != 'Kiji.Analyzers' and '$(MSBuildProjectName)' != 'Kiji.Runtime'">
+    <AdditionalFiles Include="$(MSBuildProjectFullPath);**/*.props;**/*.targets;**/*.css;**/*.js;**/*.mjs;**/*.cs"
+                     Exclude="@(Compile);@(AdditionalFiles);bin/**;obj/**;dist/**;.kiji/**" />
+    <AdditionalFiles Include="**/*.razor;**/*.csproj" Exclude="@(AdditionalFiles);bin/**;obj/**;dist/**;.kiji/**"
+                     Condition="'$(UsingMicrosoftNETSdkRazor)' != 'true'" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Kiji'">
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)Directory.Build.props;$(MSBuildThisFileDirectory)Directory.Build.targets;$(MSBuildThisFileDirectory)Directory.Packages.props" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory).editorconfig;$(MSBuildThisFileDirectory).gitignore" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory).github/**/*.yml" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory).agents/**/*.ps1;$(MSBuildThisFileDirectory).agents/**/*.sh;$(MSBuildThisFileDirectory).agents/**/*.py;$(MSBuildThisFileDirectory).agents/**/*.mjs;$(MSBuildThisFileDirectory).agents/**/*.cs" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)src/Kiji.Analyzers/**/*.cs;$(MSBuildThisFileDirectory)src/Kiji.Analyzers/*.csproj;$(MSBuildThisFileDirectory)src/Kiji.Runtime/*.csproj"
+                     Exclude="$(MSBuildThisFileDirectory)src/Kiji.Analyzers/obj/**;$(MSBuildThisFileDirectory)src/Kiji.Analyzers/bin/**" />
+  </ItemGroup>
+
   <Target Name="KijiRequireHandWrittenComponents" BeforeTargets="CoreCompile"
           Condition="'$(MSBuildProjectName)' == 'Kiji' or '$(MSBuildProjectName)' == 'Kiji.Tests'">
     <ItemGroup>

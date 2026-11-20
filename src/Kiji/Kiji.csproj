@@ -65,6 +65,10 @@
 
   <!-- Kiji and the dependencies it ships images of, each with its place under a runtime's directory. -->
   <Target Name="KijiSelectReadyToRunAssemblies" DependsOnTargets="ResolveReferences">
+    <PropertyGroup>
+      <!-- Absolute once, whether the intermediate path is relative or absolute. -->
+      <_KijiIntermediateDirectory>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)'))</_KijiIntermediateDirectory>
+    </PropertyGroup>
     <ItemGroup>
       <_KijiReadyToRunDependency Include="$(_KijiReadyToRunPackages)" />
       <KijiReadyToRunAssembly Include="@(IntermediateAssembly->'%(FullPath)')" RelativePath="$(TargetFileName)" />
@@ -76,7 +80,7 @@
                               RelativePath="%(ReferencePath.NuGetPackageId)/%(ReferencePath.NuGetPackageVersion)/%(ReferencePath.Filename)%(ReferencePath.Extension)" />
       <!-- Every image of every runtime, so that losing any of them compiles again. -->
       <_KijiReadyToRunPair Include="@(KijiReadyToRunAssembly)" Runtime="%(KijiReadyToRunRuntime.Identity)" />
-      <_KijiReadyToRunOutput Include="@(_KijiReadyToRunPair->'$(MSBuildProjectDirectory)/$(IntermediateOutputPath)r2r/%(Runtime)/%(RelativePath)')" />
+      <_KijiReadyToRunOutput Include="@(_KijiReadyToRunPair->'$(_KijiIntermediateDirectory)r2r/%(Runtime)/%(RelativePath)')" />
     </ItemGroup>
     <PropertyGroup>
       <_KijiReadyToRunAssemblyCount>@(KijiReadyToRunAssembly->Count())</_KijiReadyToRunAssemblyCount>
@@ -110,7 +114,7 @@
       <_KijiCrossgen>"$(_KijiCrossgenDirectory)crossgen2$(_NativeExecutableExtension)"</_KijiCrossgen>
       <_KijiCrossgen Condition="$([MSBuild]::IsOSPlatform('Windows'))">"$(_KijiCrossgenDirectory)crossgen2.exe"</_KijiCrossgen>
       <_KijiCrossgen Condition="Exists('$(_KijiCrossgenDirectory)crossgen2.dll')">"$(DOTNET_HOST_PATH)" "$(_KijiCrossgenDirectory)crossgen2.dll"</_KijiCrossgen>
-      <_KijiReadyToRunDirectory>$(MSBuildProjectDirectory)/$(IntermediateOutputPath)r2r/$(_KijiRuntime)/</_KijiReadyToRunDirectory>
+      <_KijiReadyToRunDirectory>$(_KijiIntermediateDirectory)r2r/$(_KijiRuntime)/</_KijiReadyToRunDirectory>
     </PropertyGroup>
     <ItemGroup>
       <_KijiCrossgenOutput Remove="@(_KijiCrossgenOutput)" />
@@ -160,7 +164,7 @@
   <Target Name="KijiPackRuntimePackages" AfterTargets="Pack" Condition="'$(KijiReadyToRun)' == 'true'"
           DependsOnTargets="KijiCompileReadyToRun;KijiCheckThirdPartyNotices">
     <PropertyGroup>
-      <_KijiRuntimeStage>$(MSBuildProjectDirectory)/$(IntermediateOutputPath)kiji-runtime/</_KijiRuntimeStage>
+      <_KijiRuntimeStage>$(_KijiIntermediateDirectory)kiji-runtime/</_KijiRuntimeStage>
     </PropertyGroup>
     <ItemGroup>
       <_KijiStagedImage Include="@(KijiReadyToRunRuntime)">
@@ -172,7 +176,7 @@
       </_KijiStagedImage>
     </ItemGroup>
     <RemoveDir Directories="$(_KijiRuntimeStage)" />
-    <Copy SourceFiles="@(_KijiStagedImage->'$(IntermediateOutputPath)r2r/%(Identity)/%(Source)')"
+    <Copy SourceFiles="@(_KijiStagedImage->'$(_KijiIntermediateDirectory)r2r/%(Identity)/%(Source)')"
           DestinationFiles="@(_KijiStagedImage->'$(_KijiRuntimeStage)%(Identity)/kiji-r2r/%(Destination)')" />
     <MSBuild Projects="$(_KijiRuntimeProject)" Targets="Restore" Properties="KijiRuntimeRestore=true" />
     <MSBuild Projects="$(_KijiRuntimeProject)" Targets="Pack"

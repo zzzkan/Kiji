@@ -166,6 +166,9 @@
     <PropertyGroup>
       <_KijiRuntimeStage>$(_KijiIntermediateDirectory)kiji-runtime/</_KijiRuntimeStage>
       <!-- The runtime project would resolve a relative output path against its own directory. -->
+      <!-- Its own restore and intermediate files, even when the command line sets a shared
+           BaseIntermediateOutputPath that would make it overwrite Kiji's project.assets.json. -->
+      <_KijiRuntimeIntermediateDirectory>$(_KijiIntermediateDirectory)kiji-runtime-obj/</_KijiRuntimeIntermediateDirectory>
       <_KijiPackageOutputDirectory>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(PackageOutputPath)'))</_KijiPackageOutputDirectory>
     </PropertyGroup>
     <ItemGroup>
@@ -180,9 +183,9 @@
     <RemoveDir Directories="$(_KijiRuntimeStage)" />
     <Copy SourceFiles="@(_KijiStagedImage->'$(_KijiIntermediateDirectory)r2r/%(Identity)/%(Source)')"
           DestinationFiles="@(_KijiStagedImage->'$(_KijiRuntimeStage)%(Identity)/kiji-r2r/%(Destination)')" />
-    <MSBuild Projects="$(_KijiRuntimeProject)" Targets="Restore" Properties="KijiRuntimeRestore=true" />
+    <MSBuild Projects="$(_KijiRuntimeProject)" Targets="Restore" Properties="KijiRuntimeRestore=true;BaseIntermediateOutputPath=$(_KijiRuntimeIntermediateDirectory)" />
     <MSBuild Projects="$(_KijiRuntimeProject)" Targets="Pack"
-             Properties="KijiRuntimeIdentifier=%(KijiReadyToRunRuntime.Identity);KijiRuntimeContent=$(_KijiRuntimeStage)%(KijiReadyToRunRuntime.Identity)/;KijiThirdPartyNotices=$(_KijiThirdPartyNotices);PackageVersion=$(PackageVersion);PackageOutputPath=$(_KijiPackageOutputDirectory);NoBuild=true" />
+             Properties="KijiRuntimeIdentifier=%(KijiReadyToRunRuntime.Identity);KijiRuntimeContent=$(_KijiRuntimeStage)%(KijiReadyToRunRuntime.Identity)/;KijiThirdPartyNotices=$(_KijiThirdPartyNotices);PackageVersion=$(PackageVersion);PackageOutputPath=$(_KijiPackageOutputDirectory);BaseIntermediateOutputPath=$(_KijiRuntimeIntermediateDirectory);NoBuild=true" />
   </Target>
 
   <!-- The notices name the exact versions the images are compiled from, so updating a dependency

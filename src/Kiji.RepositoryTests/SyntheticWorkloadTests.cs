@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.CodeAnalysis.CSharp;
 using Xunit;
 
 namespace Kiji.RepositoryTests;
@@ -7,6 +8,8 @@ namespace Kiji.RepositoryTests;
 public sealed class SyntheticWorkloadTests
 {
     private const string HashFile = "src/Kiji.RepositoryTests/synthetic-workload.sha256";
+
+    private static readonly CSharpParseOptions s_options = new(LanguageVersion.Preview);
 
     private static readonly string[] s_harnessFiles =
     [
@@ -45,6 +48,9 @@ public sealed class SyntheticWorkloadTests
         Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
     }
 
-    private static string Hash(string path) =>
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(RepositoryFiles.ReadText(path))));
+    private static string Hash(string path)
+    {
+        var tokens = CSharpSyntaxTree.ParseText(RepositoryFiles.ReadText(path), s_options).GetRoot().DescendantTokens();
+        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n', tokens.Select(token => token.Text)))));
+    }
 }

@@ -46,3 +46,7 @@ updates:
     cooldown:
       default-days: 3
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: dotnet-sdk
+        update-types:
+          - version-update:semver-major

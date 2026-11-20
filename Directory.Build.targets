@@ -15,4 +15,28 @@
            Text="$(MSBuildProjectName) does not use Razor files. Rewrite %(_KijiRazorFile.Filename)%(_KijiRazorFile.Extension) as a ComponentBase class that overrides BuildRenderTree, as in src/Kiji/Components." />
   </Target>
 
+  <PropertyGroup>
+    <KijiAllowedProjectReferences Condition="'$(MSBuildProjectName)' == 'Kiji.Tests'">Kiji</KijiAllowedProjectReferences>
+    <KijiAllowedProjectReferences Condition="'$(MSBuildProjectName)' == 'Kiji.SyntheticSite'">Kiji</KijiAllowedProjectReferences>
+    <KijiAllowedProjectReferences Condition="'$(MSBuildProjectName)' == 'Kiji.Docs'">Kiji</KijiAllowedProjectReferences>
+    <KijiAllowedProjectReferences Condition="'$(MSBuildProjectName)' == 'Kiji.Benchmarks'">Kiji;Kiji.SyntheticSite</KijiAllowedProjectReferences>
+    <KijiAllowedProjectReferences Condition="'$(MSBuildProjectName)' == 'Kiji.PackageTests'">Kiji</KijiAllowedProjectReferences>
+  </PropertyGroup>
+
+  <Target Name="KijiCheckProjectReferences" BeforeTargets="ResolveProjectReferences">
+    <ItemGroup>
+      <_KijiProjectReference Include="@(ProjectReference->'%(Filename)')" Condition="'%(ProjectReference.OutputItemType)' != 'Analyzer'" />
+      <_KijiAllowedProjectReference Include="$(KijiAllowedProjectReferences)" />
+      <_KijiForbiddenProjectReference Include="@(_KijiProjectReference)" Exclude="@(_KijiAllowedProjectReference)" />
+      <_KijiPackageTestsCompileReference Include="@(ProjectReference)"
+                                         Condition="'$(MSBuildProjectName)' == 'Kiji.PackageTests' and '%(ProjectReference.OutputItemType)' != 'Analyzer' and '%(ProjectReference.ReferenceOutputAssembly)' != 'false'" />
+    </ItemGroup>
+    <Error Condition="'@(_KijiForbiddenProjectReference)' != ''"
+           Code="KR0003"
+           Text="$(MSBuildProjectName) may not reference @(_KijiForbiddenProjectReference). Allowed: '$(KijiAllowedProjectReferences)'. Remove the reference, or change the project graph in Directory.Build.targets as a reviewed design change." />
+    <Error Condition="'@(_KijiPackageTestsCompileReference)' != ''"
+           Code="KR0003"
+           Text="Kiji.PackageTests tests the packed package as a black box. Keep ReferenceOutputAssembly=&quot;false&quot; on its reference to @(_KijiPackageTestsCompileReference->'%(Filename)'); it only orders the build." />
+  </Target>
+
 </Project>

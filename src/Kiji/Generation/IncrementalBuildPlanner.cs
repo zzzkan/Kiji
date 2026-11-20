@@ -34,13 +34,19 @@ internal sealed class IncrementalBuildPlanner(
     ContentPath? contentPaths = null)
 {
     private readonly ILogger _logger = logger ?? NullLogger.Instance;
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Assembly, IReadOnlyList<string>> CodeDependencies = [];
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Assembly, Lazy<List<string>>> CodeDependencies = [];
     private readonly ArtifactCache _cache = new(cacheDirectory);
     private readonly string _rootPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
     private readonly string _manifestPath = Path.Combine(cacheDirectory, "manifest.json");
     private readonly string _outputDirectoryHash = BuildFingerprint.HashText(Path.GetFullPath(options.OutputDirectory));
     private bool _stampsChanged;
     internal bool OutputStampsValid { get; private set; }
+
+    /// <summary>
+    /// The output directory did not exist when planning began, so everything in it comes from
+    /// this build: nothing there needs comparing, and nothing unknown needs removing.
+    /// </summary>
+    internal bool OutputDirectoryCreated { get; private set; }
     private readonly ConcurrentDictionary<(string Path, string Hash), Lazy<bool>> _restoredImages = new();
     private readonly ConcurrentDictionary<string, Lazy<BuildManifestOutput>> _imageOutputs = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, Lazy<string>> _imageSources = new(StringComparer.Ordinal);
@@ -49,13 +55,25 @@ internal sealed class IncrementalBuildPlanner(
     internal async Task<IncrementalBuildPlan> CreatePlanAsync(
         IReadOnlyList<PageRenderRequest> pages,
         IEnumerable<Assembly> assemblies,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Task<BuildManifest?>? previousManifest = null)
     {
+        // Before planning, which may already restore outputs.
+        OutputDirectoryCreated = !Directory.Exists(options.OutputDirectory);
         var optionsHash = ComputeOptionsHash();
         var codeDependencies = CollectCodeDependencies(assemblies);
 
-        var oldManifest = LoadManifest(cancellationToken);
+        var oldManifest = previousManifest is null ? LoadManifest(cacheDirectory, cancellationToken) : await previousManifest;
         OutputStampsValid = oldManifest?.OutputDirectoryHash == _outputDirectoryHash;
+        if (OutputDirectoryCreated && oldManifest is not null)
+        {
+            // The stamps describe files that no longer exist; whatever is restored is stamped afresh.
+            foreach (var page in oldManifest.Pages)
+            {
+                page.Stamp = null;
+                foreach (var output in page.AdditionalOutputs) { output.Stamp = null; }
+            }
+        }
 
         // Without a manifest nothing about the previous build can be proven, so every
         // page renders. Unrecognized files in the output directory are not a reason to
@@ -207,7 +225,8 @@ internal sealed class IncrementalBuildPlanner(
         PageRenderRequest request,
         string outputHash,
         BuildDependencyRecorder recorder,
-        byte[] html)
+        byte[] html,
+        OutputStamp? stamp = null)
     {
         // A deterministic dependency order makes cache records reproducible.
         var dependencies = new List<BuildManifestDependency>();
@@ -241,6 +260,7 @@ internal sealed class IncrementalBuildPlanner(
             additionalOutputs)
         {
             Html = html,
+            Stamp = stamp,
             Images = recorder.Images,
             // Pages that always render need no repair recipes. In particular,
             // external sources have no portable, root-relative identity.
@@ -318,6 +338,28 @@ internal sealed class IncrementalBuildPlanner(
     {
         if (!Directory.Exists(options.OutputDirectory))
         {
+            return;
+        }
+
+        if (OutputDirectoryCreated)
+        {
+            // Rendered pages read their stamps as they wrote; read the rest one file at a time.
+            _stampsChanged = true;
+            // Shared images appear on many pages; read each once.
+            var imageStamps = new Dictionary<string, OutputStamp?>(StringComparer.OrdinalIgnoreCase);
+            foreach (var page in manifest.Pages)
+            {
+                page.Stamp ??= OutputStamp.Read(Path.Combine(options.OutputDirectory, page.OutputRelativePath));
+                foreach (var output in page.AdditionalOutputs)
+                {
+                    if (!imageStamps.TryGetValue(output.RelativePath, out var imageStamp))
+                    {
+                        imageStamp = OutputStamp.Read(Path.Combine(options.OutputDirectory, output.RelativePath));
+                        imageStamps.Add(output.RelativePath, imageStamp);
+                    }
+                    output.Stamp = imageStamp;
+                }
+            }
             return;
         }
 
@@ -414,8 +456,7 @@ internal sealed class IncrementalBuildPlanner(
                     }
                 }
                 manifest = manifest with { HtmlFile = htmlFile };
-                ArtifactCache.WriteAtomic(_manifestPath,
-                    JsonSerializer.SerializeToUtf8Bytes(manifest, BuildManifestJsonContext.Default.BuildManifest));
+                WriteManifest(manifest);
             }
             catch { File.Delete(htmlPath); throw; }
         }
@@ -424,11 +465,18 @@ internal sealed class IncrementalBuildPlanner(
             manifest = manifest with { HtmlFile = previous.HtmlFile };
             if (_stampsChanged || !OutputStampsValid)
             {
-                ArtifactCache.WriteAtomic(_manifestPath,
-                    JsonSerializer.SerializeToUtf8Bytes(manifest, BuildManifestJsonContext.Default.BuildManifest));
+                WriteManifest(manifest);
             }
         }
         Collect(manifest);
+    }
+
+    private void WriteManifest(BuildManifest manifest)
+    {
+        // Sized for a typical page entry so a large site's manifest seldom regrows.
+        var json = new System.Buffers.ArrayBufferWriter<byte>(Math.Max(64 * 1024, manifest.Pages.Count * 1024));
+        BuildManifestSerializer.Serialize(json, manifest);
+        ArtifactCache.WriteAtomic(_manifestPath, json.WrittenSpan);
     }
 
     private void Collect(BuildManifest manifest)
@@ -458,9 +506,14 @@ internal sealed class IncrementalBuildPlanner(
         _cache.Collect(manifest.Pages.SelectMany(p => p.AdditionalOutputs.Select(o => o.Hash)));
     }
 
-    private BuildManifest? LoadManifest(CancellationToken cancellationToken)
+    /// <summary>
+    /// Reads and validates the previous build's manifest. It depends only on the cache, so a
+    /// publish reads it, under the cache lease, while its content loads.
+    /// </summary>
+    internal static BuildManifest? LoadManifest(string cacheDirectory, CancellationToken cancellationToken)
     {
-        if (!File.Exists(_manifestPath))
+        var manifestPath = Path.Combine(cacheDirectory, "manifest.json");
+        if (!File.Exists(manifestPath))
         {
             return null;
         }
@@ -468,7 +521,7 @@ internal sealed class IncrementalBuildPlanner(
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var manifest = JsonSerializer.Deserialize(File.ReadAllBytes(_manifestPath), BuildManifestJsonContext.Default.BuildManifest);
+            var manifest = BuildManifestSerializer.Deserialize(File.ReadAllBytes(manifestPath));
             return manifest?.IsValid() == true ? manifest : null;
         }
         catch (JsonException)
@@ -514,11 +567,16 @@ internal sealed class IncrementalBuildPlanner(
                 inputs[path] = digest;
             }
         }
-        Parallel.ForEach(inputs, input =>
+        // An indexed loop: partitioning the dictionary itself compiles a second parallel loop
+        // for its entry type.
+        var files = new string[inputs.Count];
+        inputs.Keys.CopyTo(files, 0);
+        Parallel.For(0, files.Length, index =>
         {
-            if (input.Value != BuildFingerprint.Missing && BuildFingerprint.HashFile(input.Key) != input.Value)
+            var expected = inputs[files[index]];
+            if (expected != BuildFingerprint.Missing && BuildFingerprint.HashFile(files[index]) != expected)
             {
-                throw new IOException("An input changed during the build: " + input.Key);
+                throw new IOException("An input changed during the build: " + files[index]);
             }
         });
     }
@@ -596,11 +654,14 @@ internal sealed class IncrementalBuildPlanner(
     {
         // A loaded assembly's references and code identity cannot change. Reuse
         // its complete dependency list across publishes, including framework code.
-        return [.. roots.Distinct().SelectMany(root => CodeDependencies.GetValue(root, CollectAssemblyDependencies))
+        // A publish starts this walk while its content loads; a lazy value lets planning wait
+        // for a walk in progress instead of repeating it.
+        return [.. roots.Distinct().SelectMany(root => CodeDependencies.GetValue(root,
+                static root => new Lazy<List<string>>(() => CollectAssemblyDependencies(root))).Value)
             .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
     }
 
-    private static IReadOnlyList<string> CollectAssemblyDependencies(Assembly root)
+    private static List<string> CollectAssemblyDependencies(Assembly root)
     {
         var visited = new HashSet<string>(StringComparer.Ordinal);
         var fingerprints = new List<string>();

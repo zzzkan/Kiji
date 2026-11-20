@@ -10,7 +10,8 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   `dotnet watch --project docs` serves it. Docs references the local Kiji project
   and imports its publish targets. Use an isolated consumer of the packed local
   package to verify package integration.
-- `src/Kiji` is the single package, including Markdown, images, feeds and hosting.
+- `src/Kiji` is the single library package, including Markdown, images, feeds and hosting.
+  `src/Kiji.Runtime` only packs its per-runtime images (`Kiji.Runtime.<rid>`) during Kiji's pack.
   `MSBuild/Kiji.targets` integrates publish, watch and clean.
 - `src/Kiji.Tests` contains library unit/component tests and TestSite fixtures.
   Classes run in parallel; never mutate process-wide state. It does not pack or build consumers.
@@ -75,7 +76,34 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   fingerprint.
 - The dev server enforces BaseUrl's path prefix and uses `.kiji/dev-site`.
   Only `.kiji/cache` (pages) and `.kiji/jit` (publish JIT profile) are portable; CI restores
-  either or both. Planning creates no output directories.
+  either or both. Planning creates no output directories; a page creates its own when it
+  writes. When the output directory does not exist as a build begins (clean checkout,
+  `dotnet clean`), every file in it comes from that build: pages write without comparing,
+  read their own stamps, and reconciliation reads the rest one file at a time instead of
+  listing the tree. Stamps from an earlier manifest are cleared then.
+- A publish is one short process whose time is mostly first use of code. Keep its cold path
+  short: no serializer or reflection where a reader or writer does (the manifest is written
+  by `BuildManifestSerializer` in the serializer's own format, which tests compare); no
+  static initializer that loads what a site may not use; independent inputs load together
+  (asset manifest, code identity and content; page entries, input verification and
+  artifacts). `MarkdownWarmup` prepares the Markdown and YAML code on a spare processor
+  while the host is built. It must stay free of side effects and run the default pipeline.
+- A site builds for one runtime identifier (KIJI1007 otherwise; `UseCurrentRuntimeIdentifier`).
+  Kiji's package holds IL and a `runtime.json` that makes NuGet restore, for that runtime,
+  `Kiji.Runtime.<rid>` and SkiaSharp's Linux native assets (SkiaSharp itself brings Windows
+  and macOS). Projects here that run Kiji through a project reference reference the Linux
+  assets themselves. `Kiji.Runtime.<rid>` carries ReadyToRun images of Kiji and the exact
+  Markdig and YamlDotNet versions Kiji references, as native assets under
+  `runtimes/<rid>/native/kiji-r2r/<id>/<version>`; `Kiji.targets` removes them from the
+  native assets and copies each in place of the IL only when package id and version match
+  (`KijiReadyToRunDependencies=false` keeps the IL). Runtimes fall back through the graph
+  (linux-musl-x64 to linux-x64, whose images are identical). Images keep the IL's metadata
+  and MVID, so code identity and caches are unchanged. Pack fails until
+  `THIRD-PARTY-NOTICES.txt` names the versions the images are compiled from.
+  `KijiReadyToRun=false` or a Debug pack makes Kiji's package alone. The images are compiled
+  at pack time against each runtime pack, so restoring Kiji downloads those packs and the
+  compiler. Partial images from a MIBC profile need dotnet-pgo, which nuget.org does not
+  carry; each runtime package is about 1.4 MB.
 - HostApplicationBuilder.Services is standard DI; KijiServiceProviderFactory validates
   Kiji-owned registrations (including its own hosted service), records code assemblies and
   enables scope validation in Build. A replaced factory is rejected at startup.
@@ -114,7 +142,17 @@ source-generated page discovery (cached scanning suffices), IBufferWriter render
 (HtmlRootComponent exposes TextWriter), page-bundle image variants (articles could not
 share an image), incremental RSS/sitemap (depend on all metadata and are cheap to
 regenerate), or a frozen configuration snapshot (default sources do not reload during a
-publish).
+publish). For the cold publish process, measured and rejected: tiering settings
+(`TieredCompilation`, `QuickJit`, `QuickJitForLoops`, `CallCountingDelayMs`,
+`CallCountThreshold`: compiling optimized code costs more than a short process gets back),
+non-concurrent GC and a fixed gen0 budget (no difference), reading code identity from
+assembly files with MetadataReader (slower than loading them), collecting code identity
+while the host is built (contends with the host's own loading), warming the component
+renderer (no difference), frozen dictionaries for per-snapshot lookups (building one costs
+more than a publish's lookups save), disabling DI's dynamic engine or validation on build
+(no difference), persisting pages on dedicated writer threads (no gain on Windows, much
+slower on ext4), skipping the Markdown warm-up while a profile replays (slower), and disabling W^X (`DOTNET_EnableWriteXorExecute=0`, faster but
+removes a runtime mitigation; a site owner can set it, Kiji does not).
 
 ## Skills
 

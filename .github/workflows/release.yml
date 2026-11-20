@@ -42,8 +42,11 @@ jobs:
         run: |
           dotnet pack src/Kiji -c Release --no-build -o artifacts/packages
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          $packages = @(Get-ChildItem artifacts/packages -Filter '*.nupkg')
+          # Kiji's package, and beside it one Kiji.Runtime package per runtime with images.
+          $packages = @(Get-ChildItem artifacts/packages -Filter 'Kiji.*.nupkg' | Where-Object { -not $_.Name.StartsWith('Kiji.Runtime.') })
           if ($packages.Count -ne 1) { throw 'Expected exactly one Kiji package.' }
+          $runtimePackages = @(Get-ChildItem artifacts/packages -Filter 'Kiji.Runtime.*.nupkg')
+          if ($runtimePackages.Count -ne 6) { throw "Expected six Kiji.Runtime packages, found $($runtimePackages.Count)." }
           "KIJI_TEST_PACKAGE=$($packages[0].FullName)" >> $env:GITHUB_ENV
 
       - name: Package scenarios
@@ -67,9 +70,10 @@ jobs:
         with:
           user: ${{ secrets.NUGET_USER }}
 
+      # The runtime packages first: Kiji's runtime graph names them for every restore.
       - name: Push to NuGet.org
-        run: >-
-          dotnet nuget push "artifacts/packages/Kiji.*.nupkg"
-          --api-key "${{ steps.login.outputs.NUGET_API_KEY }}"
-          --source https://api.nuget.org/v3/index.json
-          --skip-duplicate
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: |
+          dotnet nuget push "artifacts/packages/Kiji.Runtime.*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+          dotnet nuget push "artifacts/packages/Kiji.*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate

@@ -51,8 +51,11 @@ jobs:
         run: |
           dotnet pack src/Kiji -c Release --no-build -o artifacts/packages
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          $packages = @(Get-ChildItem artifacts/packages -Filter '*.nupkg')
+          # Kiji's package, and beside it one Kiji.Runtime package per runtime with images.
+          $packages = @(Get-ChildItem artifacts/packages -Filter 'Kiji.*.nupkg' | Where-Object { -not $_.Name.StartsWith('Kiji.Runtime.') })
           if ($packages.Count -ne 1) { throw 'Expected exactly one Kiji package.' }
+          $runtimePackages = @(Get-ChildItem artifacts/packages -Filter 'Kiji.Runtime.*.nupkg')
+          if ($runtimePackages.Count -ne 6) { throw "Expected six Kiji.Runtime packages, found $($runtimePackages.Count)." }
           "KIJI_TEST_PACKAGE=$($packages[0].FullName)" >> $env:GITHUB_ENV
 
       - name: Package scenarios

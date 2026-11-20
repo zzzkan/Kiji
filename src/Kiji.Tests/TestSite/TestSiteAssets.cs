@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Kiji.Assets;
+using Kiji.Generation;
 
 namespace Kiji.Tests.TestSite;
 
@@ -40,6 +41,24 @@ internal static class TestSiteAssets
         {
             rootNode["Patterns"] = JsonSerializer.SerializeToNode(new[] { new { ContentRootIndex = 0, Pattern = "**", Depth = 0 } });
         }
-        File.WriteAllText(path, JsonSerializer.Serialize(new { ContentRoots = roots, Root = rootNode }));
+        // Concurrent builders of one site write the same manifest while a publish reads it. Each
+        // writes a file of its own and moves it into place complete, so a reader never sees a
+        // partial manifest. Replacing an open manifest fails on Windows, so the same bytes stay.
+        var bytes = System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { ContentRoots = roots, Root = rootNode }));
+        if (File.Exists(path))
+        {
+            if (!HasContent(path, bytes)) { ArtifactCache.WriteAtomic(path, bytes); }
+            return;
+        }
+        try
+        {
+            ArtifactCache.WriteAtomic(path, bytes, overwrite: false);
+        }
+        catch (IOException) when (File.Exists(path) && HasContent(path, bytes))
+        {
+            // Another builder created it first.
+        }
     }
+
+    private static bool HasContent(string path, byte[] bytes) => File.ReadAllBytes(path).AsSpan().SequenceEqual(bytes);
 }

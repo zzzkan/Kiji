@@ -1,4 +1,3 @@
-using System.Collections.Frozen;
 using Kiji.Rendering;
 using Microsoft.AspNetCore.Http;
 
@@ -13,14 +12,16 @@ internal sealed class SiteSnapshot
     internal SiteSnapshot(IReadOnlyList<PageRenderRequest> pages)
     {
         Pages = pages;
-        // Ordinal (case-sensitive) so dev matches production static hosts, which
-        // serve files case-sensitively.
-        PagesByRoute = pages.ToFrozenDictionary(
-            static page => PathString.FromUriComponent(page.RoutePath).Value!,
-            StringComparer.Ordinal);
     }
 
     internal IReadOnlyList<PageRenderRequest> Pages { get; }
 
-    internal FrozenDictionary<string, PageRenderRequest> PagesByRoute { get; }
+    /// <remarks>
+    /// Ordinal (case-sensitive) so dev matches production static hosts, which serve files
+    /// case-sensitively. Only the dev server looks pages up by route, so a publish never builds it.
+    /// </remarks>
+    internal Dictionary<string, PageRenderRequest> PagesByRoute => LazyInitializer.EnsureInitialized(ref field,
+        () => Pages.ToDictionary(
+            static page => PathString.FromUriComponent(page.RoutePath).Value!,
+            StringComparer.Ordinal));
 }

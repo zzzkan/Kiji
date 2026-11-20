@@ -17,7 +17,10 @@
   <ItemGroup>
     <PackageReference Include="Markdig" />
     <PackageReference Include="SkiaSharp" />
-    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
+    <!-- SkiaSharp brings its Windows and macOS libraries itself. The Linux ones reach a site
+         through runtime.json, only when it builds for Linux; projects in this repository that
+         run Kiji reference the package themselves. -->
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" PrivateAssets="all" />
     <PackageReference Include="YamlDotNet" />
   </ItemGroup>
 
@@ -33,6 +36,168 @@
          project first of all. The file name has to match the package id. -->
     <None Update="MSBuild/Kiji.targets" Pack="true" PackagePath="build/Kiji.targets" />
   </ItemGroup>
+
+  <!-- A publish is one short process, and compiling code was most of it. Each runtime package,
+       Kiji.Runtime.<rid>, carries ReadyToRun images of Kiji, Markdig and YamlDotNet for one
+       runtime, compiled from the same IL. Kiji's runtime.json makes NuGet restore the package for
+       a site's runtime identifier, falling back as the runtime graph does (linux-musl-x64 to
+       linux-x64), so a site downloads one platform's images and no other. Kiji.targets copies an
+       image in place of the IL only for exactly the package version it was compiled from. Nothing
+       depends on an image, and one stays valid across runtime servicing: code that no longer fits
+       the running framework is compiled again by the JIT. -->
+  <PropertyGroup>
+    <KijiReadyToRun Condition="'$(KijiReadyToRun)' == ''">true</KijiReadyToRun>
+    <!-- Only optimized code is worth compiling ahead; the runtime ignores images of a Debug build. -->
+    <KijiReadyToRun Condition="'$(Configuration)' != 'Release'">false</KijiReadyToRun>
+    <KijiReadyToRunRuntimeIdentifiers Condition="'$(KijiReadyToRunRuntimeIdentifiers)' == ''">linux-x64;linux-arm64;win-x64;win-arm64;osx-x64;osx-arm64</KijiReadyToRunRuntimeIdentifiers>
+    <!-- Every Markdown page runs these; the rest of a publish is framework code. -->
+    <_KijiReadyToRunPackages Condition="'$(_KijiReadyToRunPackages)' == ''">Markdig;YamlDotNet</_KijiReadyToRunPackages>
+    <_KijiRuntimeProject>$(MSBuildThisFileDirectory)../Kiji.Runtime/Kiji.Runtime.csproj</_KijiRuntimeProject>
+  </PropertyGroup>
+
+  <!-- The compiler for this machine and the framework each image is compiled against. -->
+  <ItemGroup Condition="'$(KijiReadyToRun)' == 'true'">
+    <KijiReadyToRunRuntime Include="$(KijiReadyToRunRuntimeIdentifiers)" />
+    <PackageDownload Include="Microsoft.NETCore.App.Crossgen2.$(NETCoreSdkPortableRuntimeIdentifier)" Version="[$(BundledNETCoreAppPackageVersion)]" />
+    <PackageDownload Include="@(KijiReadyToRunRuntime->'Microsoft.NETCore.App.Runtime.%(Identity)')" Version="[$(BundledNETCoreAppPackageVersion)]" />
+    <PackageDownload Include="@(KijiReadyToRunRuntime->'Microsoft.AspNetCore.App.Runtime.%(Identity)')" Version="[$(BundledNETCoreAppPackageVersion)]" />
+  </ItemGroup>
+
+  <!-- Kiji and the dependencies it ships images of, each with its place under a runtime's directory. -->
+  <Target Name="KijiSelectReadyToRunAssemblies" DependsOnTargets="ResolveReferences">
+    <PropertyGroup>
+      <!-- Absolute once, whether the intermediate path is relative or absolute. -->
+      <_KijiIntermediateDirectory>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)'))</_KijiIntermediateDirectory>
+    </PropertyGroup>
+    <ItemGroup>
+      <_KijiReadyToRunDependency Include="$(_KijiReadyToRunPackages)" />
+      <KijiReadyToRunAssembly Include="@(IntermediateAssembly->'%(FullPath)')" RelativePath="$(TargetFileName)" />
+      <KijiReadyToRunAssembly Include="@(ReferencePath->'%(FullPath)')"
+                              Condition="'@(_KijiReadyToRunDependency)' != '' and '%(ReferencePath.NuGetPackageId)' != ''
+                                         and $([System.String]::Copy(';$(_KijiReadyToRunPackages);').Contains(';%(ReferencePath.NuGetPackageId);'))"
+                              PackageId="%(ReferencePath.NuGetPackageId)"
+                              PackageVersion="%(ReferencePath.NuGetPackageVersion)"
+                              RelativePath="%(ReferencePath.NuGetPackageId)/%(ReferencePath.NuGetPackageVersion)/%(ReferencePath.Filename)%(ReferencePath.Extension)" />
+      <!-- Every image of every runtime, so that losing any of them compiles again. -->
+      <_KijiReadyToRunPair Include="@(KijiReadyToRunAssembly)" Runtime="%(KijiReadyToRunRuntime.Identity)" />
+      <_KijiReadyToRunOutput Include="@(_KijiReadyToRunPair->'$(_KijiIntermediateDirectory)r2r/%(Runtime)/%(RelativePath)')" />
+    </ItemGroup>
+    <PropertyGroup>
+      <_KijiReadyToRunAssemblyCount>@(KijiReadyToRunAssembly->Count())</_KijiReadyToRunAssemblyCount>
+      <_KijiReadyToRunDependencyCount>@(_KijiReadyToRunDependency->Count())</_KijiReadyToRunDependencyCount>
+    </PropertyGroup>
+    <!-- A dependency that stops resolving, or splits into several assemblies, must not drop silently. -->
+    <Error Condition="'$(_KijiReadyToRunAssemblyCount)' != '$([MSBuild]::Add(1, $(_KijiReadyToRunDependencyCount)))'"
+           Text="_KijiReadyToRunPackages names a package that does not provide exactly one referenced assembly: $(_KijiReadyToRunPackages)." />
+  </Target>
+
+  <!-- Runs only when an input assembly or the restored versions changed, or an image is missing. -->
+  <Target Name="KijiCompileReadyToRun" Condition="'$(KijiReadyToRun)' == 'true'" DependsOnTargets="KijiSelectReadyToRunAssemblies"
+          Inputs="@(KijiReadyToRunAssembly);$(MSBuildProjectFullPath);$(ProjectAssetsFile)"
+          Outputs="@(_KijiReadyToRunOutput)">
+    <CallTarget Targets="_KijiCompileReadyToRunImages" />
+  </Target>
+
+  <!-- Once per runtime identifier. Outputs alone batches the target and never skips it. -->
+  <Target Name="_KijiCompileReadyToRunImages" Outputs="%(KijiReadyToRunRuntime.Identity)">
+    <PropertyGroup>
+      <_KijiRuntime>%(KijiReadyToRunRuntime.Identity)</_KijiRuntime>
+      <_KijiTargetArchitecture>$(_KijiRuntime.Substring($([MSBuild]::Add($(_KijiRuntime.LastIndexOf('-')), 1))))</_KijiTargetArchitecture>
+      <_KijiTargetOS>linux</_KijiTargetOS>
+      <_KijiTargetOS Condition="$(_KijiRuntime.StartsWith('win-'))">windows</_KijiTargetOS>
+      <_KijiTargetOS Condition="$(_KijiRuntime.StartsWith('osx-'))">osx</_KijiTargetOS>
+      <!-- NUGET_PACKAGES supplies the root without a trailing separator. -->
+      <_KijiPackageRoot>$([MSBuild]::EnsureTrailingSlash('$(NuGetPackageRoot)'))</_KijiPackageRoot>
+      <_KijiPackageVersion>$(BundledNETCoreAppPackageVersion.ToLowerInvariant())</_KijiPackageVersion>
+      <_KijiCrossgenDirectory>$(_KijiPackageRoot)microsoft.netcore.app.crossgen2.$(NETCoreSdkPortableRuntimeIdentifier.ToLowerInvariant())/$(_KijiPackageVersion)/tools/</_KijiCrossgenDirectory>
+      <!-- The pack holds a native executable, or an assembly for the SDK's host. -->
+      <_KijiCrossgen>"$(_KijiCrossgenDirectory)crossgen2$(_NativeExecutableExtension)"</_KijiCrossgen>
+      <_KijiCrossgen Condition="$([MSBuild]::IsOSPlatform('Windows'))">"$(_KijiCrossgenDirectory)crossgen2.exe"</_KijiCrossgen>
+      <_KijiCrossgen Condition="Exists('$(_KijiCrossgenDirectory)crossgen2.dll')">"$(DOTNET_HOST_PATH)" "$(_KijiCrossgenDirectory)crossgen2.dll"</_KijiCrossgen>
+      <_KijiReadyToRunDirectory>$(_KijiIntermediateDirectory)r2r/$(_KijiRuntime)/</_KijiReadyToRunDirectory>
+    </PropertyGroup>
+    <ItemGroup>
+      <_KijiCrossgenOutput Remove="@(_KijiCrossgenOutput)" />
+      <_KijiCrossgenOutput Include="@(KijiReadyToRunAssembly->'$(_KijiReadyToRunDirectory)%(RelativePath)')"
+                           Input="%(Identity)" Response="$(_KijiReadyToRunDirectory)%(RelativePath).rsp" />
+      <_KijiCrossgenReference Remove="@(_KijiCrossgenReference)" />
+      <_KijiCrossgenReference Include="--targetos:$(_KijiTargetOS);--targetarch:$(_KijiTargetArchitecture);--optimize" />
+      <_KijiCrossgenReference Include="--reference:$(_KijiPackageRoot)microsoft.netcore.app.runtime.$(_KijiRuntime)/$(_KijiPackageVersion)/runtimes/$(_KijiRuntime)/lib/$(TargetFramework)/*.dll" />
+      <_KijiCrossgenReference Include="--reference:$(_KijiPackageRoot)microsoft.aspnetcore.app.runtime.$(_KijiRuntime)/$(_KijiPackageVersion)/runtimes/$(_KijiRuntime)/lib/$(TargetFramework)/*.dll" />
+      <!-- Package references; the framework's reference assemblies are not implementations. -->
+      <_KijiCrossgenReference Include="@(ReferencePath->'--reference:%(FullPath)')" Condition="'%(ReferencePath.FrameworkReferenceName)' == ''" />
+    </ItemGroup>
+    <MakeDir Directories="@(_KijiCrossgenOutput->'%(RootDir)%(Directory)')" />
+    <WriteLinesToFile File="%(_KijiCrossgenOutput.Response)" Lines="%(_KijiCrossgenOutput.Input);--out:%(_KijiCrossgenOutput.Identity);@(_KijiCrossgenReference)" Overwrite="true" />
+    <Exec Command="$(_KijiCrossgen) &quot;@%(_KijiCrossgenOutput.Response)&quot;" StandardOutputImportance="low" />
+  </Target>
+
+  <!-- The runtime graph goes into Kiji's package, so it is written once the package version is
+       known and before the package's files are collected. -->
+  <Target Name="KijiWriteRuntimeGraph" BeforeTargets="_GetPackageFiles" DependsOnTargets="GetAssemblyVersion">
+    <ItemGroup>
+      <_KijiLinuxNativeAssets Include="@(PackageVersion)" Condition="'%(Identity)' == 'SkiaSharp.NativeAssets.Linux.NoDependencies'" />
+    </ItemGroup>
+    <Error Condition="'@(_KijiLinuxNativeAssets->Count())' != '1'" Text="Kiji's runtime graph needs the version of SkiaSharp.NativeAssets.Linux.NoDependencies." />
+    <PropertyGroup>
+      <_KijiLinuxNativeAssetsVersion>@(_KijiLinuxNativeAssets->'%(Version)')</_KijiLinuxNativeAssetsVersion>
+    </PropertyGroup>
+    <ItemGroup>
+      <_KijiRuntimeGraphEntry Include="@(KijiReadyToRunRuntime)" Condition="'$(KijiReadyToRun)' == 'true'" />
+      <_KijiRuntimeGraphEntry Condition="$([System.String]::Copy('%(Identity)').StartsWith('linux-'))">
+        <LinuxNativeAssets>, &quot;SkiaSharp.NativeAssets.Linux.NoDependencies&quot;: &quot;$(_KijiLinuxNativeAssetsVersion)&quot;</LinuxNativeAssets>
+      </_KijiRuntimeGraphEntry>
+    </ItemGroup>
+    <PropertyGroup>
+      <_KijiRuntimeGraph>$(IntermediateOutputPath)runtime.json</_KijiRuntimeGraph>
+    </PropertyGroup>
+    <!-- The most specific runtime with an entry wins, so every Linux entry names the native assets too. -->
+    <WriteLinesToFile File="$(_KijiRuntimeGraph)" Overwrite="true" WriteOnlyWhenDifferent="true"
+                      Lines="{;  &quot;runtimes&quot;: {;@(_KijiRuntimeGraphEntry->'    &quot;%(Identity)&quot;: { &quot;Kiji&quot;: { &quot;Kiji.Runtime.%(Identity)&quot;: &quot;[$(PackageVersion)]&quot;%(LinuxNativeAssets) } },');    &quot;linux&quot;: { &quot;Kiji&quot;: { &quot;SkiaSharp.NativeAssets.Linux.NoDependencies&quot;: &quot;$(_KijiLinuxNativeAssetsVersion)&quot; } };  };}" />
+    <ItemGroup>
+      <None Include="$(_KijiRuntimeGraph)" Pack="true" PackagePath="/" />
+    </ItemGroup>
+  </Target>
+
+  <!-- Each runtime package is staged afresh, so an image of an earlier dependency version never
+       stays in it, and packed beside Kiji's package with the same version. -->
+  <Target Name="KijiPackRuntimePackages" AfterTargets="Pack" Condition="'$(KijiReadyToRun)' == 'true'"
+          DependsOnTargets="KijiCompileReadyToRun;KijiCheckThirdPartyNotices">
+    <PropertyGroup>
+      <_KijiRuntimeStage>$(_KijiIntermediateDirectory)kiji-runtime/</_KijiRuntimeStage>
+      <!-- The runtime project would resolve a relative output path against its own directory. -->
+      <!-- Its own restore and intermediate files, even when the command line sets a shared
+           BaseIntermediateOutputPath that would make it overwrite Kiji's project.assets.json. -->
+      <_KijiRuntimeIntermediateDirectory>$(_KijiIntermediateDirectory)kiji-runtime-obj/</_KijiRuntimeIntermediateDirectory>
+      <_KijiPackageOutputDirectory>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(PackageOutputPath)'))</_KijiPackageOutputDirectory>
+    </PropertyGroup>
+    <ItemGroup>
+      <_KijiStagedImage Include="@(KijiReadyToRunRuntime)">
+        <Source>%(KijiReadyToRunAssembly.RelativePath)</Source>
+        <Destination>%(KijiReadyToRunAssembly.PackageId)/%(KijiReadyToRunAssembly.PackageVersion)/%(KijiReadyToRunAssembly.Filename)%(KijiReadyToRunAssembly.Extension)</Destination>
+      </_KijiStagedImage>
+      <_KijiStagedImage Condition="'%(Source)' == '$(TargetFileName)'">
+        <Destination>$(PackageId)/$(PackageVersion)/$(TargetFileName)</Destination>
+      </_KijiStagedImage>
+    </ItemGroup>
+    <RemoveDir Directories="$(_KijiRuntimeStage)" />
+    <Copy SourceFiles="@(_KijiStagedImage->'$(_KijiIntermediateDirectory)r2r/%(Identity)/%(Source)')"
+          DestinationFiles="@(_KijiStagedImage->'$(_KijiRuntimeStage)%(Identity)/kiji-r2r/%(Destination)')" />
+    <MSBuild Projects="$(_KijiRuntimeProject)" Targets="Restore" Properties="KijiRuntimeRestore=true;BaseIntermediateOutputPath=$(_KijiRuntimeIntermediateDirectory)" />
+    <MSBuild Projects="$(_KijiRuntimeProject)" Targets="Pack"
+             Properties="KijiRuntimeIdentifier=%(KijiReadyToRunRuntime.Identity);KijiRuntimeContent=$(_KijiRuntimeStage)%(KijiReadyToRunRuntime.Identity)/;KijiThirdPartyNotices=$(_KijiThirdPartyNotices);PackageVersion=$(PackageVersion);PackageOutputPath=$(_KijiPackageOutputDirectory);BaseIntermediateOutputPath=$(_KijiRuntimeIntermediateDirectory);NoBuild=true" />
+  </Target>
+
+  <!-- The notices name the exact versions the images are compiled from, so updating a dependency
+       fails the pack until its notice is updated too. -->
+  <Target Name="KijiCheckThirdPartyNotices" DependsOnTargets="KijiSelectReadyToRunAssemblies">
+    <PropertyGroup>
+      <_KijiThirdPartyNotices>$(MSBuildProjectDirectory)/THIRD-PARTY-NOTICES.txt</_KijiThirdPartyNotices>
+      <_KijiNotices>$([System.IO.File]::ReadAllText('$(_KijiThirdPartyNotices)'))</_KijiNotices>
+    </PropertyGroup>
+    <Error Condition="'%(KijiReadyToRunAssembly.PackageId)' != '' and !$(_KijiNotices.Contains('%(KijiReadyToRunAssembly.PackageId) %(KijiReadyToRunAssembly.PackageVersion) - '))"
+           Text="THIRD-PARTY-NOTICES.txt has no section for %(KijiReadyToRunAssembly.PackageId) %(KijiReadyToRunAssembly.PackageVersion), whose image the runtime packages carry. Update the notice with the license of that version." />
+  </Target>
 
   <ItemGroup>
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">

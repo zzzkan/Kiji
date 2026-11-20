@@ -90,14 +90,21 @@ Publishing keeps two portable caches that CI can restore independently:
 | Directory     | Contents                                              | Size for 1,000 pages |
 | ------------- | ----------------------------------------------------- | -------------------- |
 | `.kiji/cache` | Page HTML, image variants and the manifest            | about 3.7 MB, plus images |
-| `.kiji/jit`   | A profile of the code compiled during the last publish | about 120 KB         |
+| `.kiji/jit`   | A profile of the code a publish compiles, and a stamp naming the code it was recorded for | about 120 KB |
 
 Most of a publish's time goes to compiling code. With the profile, a publish compiles
 the recorded methods in the background before pages need them, even when every page
-renders. The profile never changes output, and an outdated profile only does less. The
+renders. The profile never changes output, and an outdated profile only does less. A
+publish records a new one when the site's code changed or it rendered more pages than the
+kept profile covers; otherwise it keeps the profile it replayed. The
 page cache lets unchanged pages skip rendering, but code and package changes render every
 page anyway, and restoring it costs more. Cache `.kiji/jit` first, add `.kiji/cache` only
 when measurements show it pays off, and use `dotnet clean` to remove both.
 
 Publishing also turns off tiered PGO, which cannot pay off within one short process,
-unless the project sets `TieredPGO` itself.
+unless the project sets `TieredPGO` itself. For the same reason, restoring Kiji for a site's
+runtime also restores a `Kiji.Runtime` package of ReadyToRun (precompiled) images of Kiji and
+of the Markdig and YamlDotNet versions it uses, for Windows, Linux and macOS on x64 and Arm64.
+A site that resolves those versions builds with the images instead of compiling the code on
+every publish; set the `KijiReadyToRunDependencies` property to `false` to keep the libraries'
+own assemblies.

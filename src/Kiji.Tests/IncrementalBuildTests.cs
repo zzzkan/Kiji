@@ -729,7 +729,7 @@ public sealed class IncrementalBuildTests : IDisposable
         var notesStampBefore = File.GetLastWriteTimeUtc(notesIndex);
         var manifestPath = Path.Combine(root, ".kiji", "cache", "manifest.json");
         var before = System.Text.Json.JsonSerializer.Deserialize(
-            await File.ReadAllTextAsync(manifestPath), Kiji.Generation.BuildManifestJsonContext.Default.BuildManifest)!;
+            await File.ReadAllTextAsync(manifestPath), BuildManifestJsonContext.Default.BuildManifest)!;
         var notesOutput = Path.GetRelativePath(Path.Combine(root, "dist"), notesIndex);
 
         // Touch content in posts/ only. The notes index enumerates its own collection,
@@ -740,7 +740,7 @@ public sealed class IncrementalBuildTests : IDisposable
         Assert.Contains("Edited post body.", await File.ReadAllTextAsync(postPage), StringComparison.Ordinal);
         Assert.Equal(notesStampBefore, File.GetLastWriteTimeUtc(notesIndex));
         var after = System.Text.Json.JsonSerializer.Deserialize(
-            await File.ReadAllTextAsync(manifestPath), Kiji.Generation.BuildManifestJsonContext.Default.BuildManifest)!;
+            await File.ReadAllTextAsync(manifestPath), BuildManifestJsonContext.Default.BuildManifest)!;
         // An unchanged HTML file alone cannot prove the scope stayed unchanged:
         // rendering can produce identical HTML and skip the write.
         Assert.Equal(
@@ -940,7 +940,7 @@ public sealed class IncrementalBuildTests : IDisposable
         {
             stable.HtmlOffset = int.MaxValue;
             await File.WriteAllBytesAsync(Path.Combine(cache, "manifest.json"), System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
-                manifest, Generation.BuildManifestJsonContext.Default.BuildManifest));
+                manifest, BuildManifestJsonContext.Default.BuildManifest));
         }
         else
         {
@@ -1585,11 +1585,38 @@ public sealed class IncrementalBuildTests : IDisposable
         AssertDirectoriesIdentical(Path.Combine(scratch, "dist"), Path.Combine(root, "dist"));
     }
 
+    // A build into a new output directory reads each file's stamp as it writes, instead of
+    // listing the directory afterwards. A stamp that differs from a listing's would make every
+    // later build compare those files byte by byte.
+    [Fact]
+    public async Task NewOutputDirectory_RecordsTheStampsAListingReports()
+    {
+        var root = CreateSiteRoot("new-output");
+        var output = Path.Combine(root, "dist");
+        Assert.False(Directory.Exists(output));
+        await BuildAsync(root);
+
+        var manifest = await ReadCacheManifest(root);
+        Assert.NotEmpty(manifest.Pages);
+        foreach (var page in manifest.Pages)
+        {
+            Assert.Equal(Generation.OutputStamp.Read(Path.Combine(output, page.OutputRelativePath)), page.Stamp);
+            foreach (var additional in page.AdditionalOutputs)
+            {
+                Assert.Equal(Generation.OutputStamp.Read(Path.Combine(output, additional.RelativePath)), additional.Stamp);
+            }
+        }
+        var scratch = CreateSiteRoot("new-output-listed");
+        Directory.CreateDirectory(Path.Combine(scratch, "dist"));
+        await BuildAsync(scratch);
+        AssertDirectoriesIdentical(Path.Combine(scratch, "dist"), output);
+    }
+
     private static async Task<Generation.BuildManifest> ReadCacheManifest(string root)
     {
         var cache = Path.Combine(root, ".kiji", "cache");
         var manifest = System.Text.Json.JsonSerializer.Deserialize(await File.ReadAllBytesAsync(Path.Combine(cache, "manifest.json")),
-            Generation.BuildManifestJsonContext.Default.BuildManifest)!;
+            BuildManifestJsonContext.Default.BuildManifest)!;
         var bytes = await File.ReadAllBytesAsync(Path.Combine(cache, manifest.HtmlFile));
         foreach (var page in manifest.Pages) { page.Html = bytes.AsMemory(page.HtmlOffset, page.HtmlLength); }
         return manifest;

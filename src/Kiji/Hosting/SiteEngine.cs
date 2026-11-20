@@ -28,6 +28,7 @@ internal sealed class SiteEngine
     private readonly Type? _defaultLayoutType;
     private readonly Type? _notFoundComponentType;
     private readonly ResolvedSitePaths _options;
+    private readonly PublishJitProfile? _jitProfile;
     private ComponentRenderer? _renderer;
 
     public SiteEngine(IServiceProvider services, SiteExecutionPaths paths, ResolvedSitePaths options,
@@ -47,6 +48,7 @@ internal sealed class SiteEngine
         _defaultLayoutType = siteOptions.DefaultLayoutType;
         _notFoundComponentType = siteOptions.NotFoundComponentType;
         ContentRoots = services.GetRequiredService<ContentPath>().Roots;
+        _jitProfile = services.GetService<PublishJitProfile>();
     }
 
     internal SiteInfo SiteInfo => ServiceProvider.GetRequiredService<SiteInfo>();
@@ -65,17 +67,44 @@ internal sealed class SiteEngine
         await using var cacheLease = await CacheLease.AcquireAsync(Paths.ResolveCachePath(), cancellationToken);
         var options = _options;
         ImageArtifactProcessor.ClearWork(Paths.ResolveImageWorkPath(options));
-        var assetManifest = options.AssetManifestPath is null ? new StaticAssetManifest { Assets = [] }
-            : StaticAssetManifest.Load(options.AssetManifestPath, options.AssetEndpointsPath, SiteInfo.BaseUrl);
-        UseAssetResources(assetManifest.Resources);
-        var assets = assetManifest.Assets;
-        OutputPathValidator.Validate(options, assetManifest, Paths.ProjectDirectory, Paths.ResolveKijiPath(), ContentRoots);
-        InvalidateContent();
         cancellationToken.ThrowIfCancellationRequested();
+        // Snapshot planning requires every page type to come from a page assembly.
+        // Helpers and custom encoder factories may live outside the page assemblies.
+        // Their code is a build input even when pages only reach it through injection.
+        Assembly[] codeAssemblies = [.. _pageAssemblies, .. _serviceAssemblies, typeof(StaticSite).Assembly];
+        // Following every reference loads most of the framework, which needs nothing from the
+        // content: do it while the content loads. Planning reads the result, or its failure.
+        var codeIdentity = Task.Run(() => IncrementalBuildPlanner.CollectCodeDependencies(codeAssemblies), CancellationToken.None);
+        // The previous manifest depends only on the cache, which the lease now holds.
+        var cachePath = Paths.ResolveCachePath();
+        var previousManifest = Task.Run(() => IncrementalBuildPlanner.LoadManifest(cachePath, cancellationToken), CancellationToken.None);
+        // The asset manifest and the content are independent inputs, so they load together.
+        var baseUrl = options.AssetManifestPath is null ? null : SiteInfo.BaseUrl;
+        var assetsLoaded = Task.Run(() =>
+        {
+            var manifest = options.AssetManifestPath is null ? new StaticAssetManifest { Assets = [] }
+                : StaticAssetManifest.Load(options.AssetManifestPath, options.AssetEndpointsPath, baseUrl);
+            OutputPathValidator.Validate(options, manifest, Paths.ProjectDirectory, Paths.ResolveKijiPath(), ContentRoots);
+            return manifest;
+        }, CancellationToken.None);
+        InvalidateContent();
 
         var stopwatch = Stopwatch.StartNew();
         var phases = new BuildPhaseTimer();
-        var snapshot = CreateSnapshot();
+        SiteSnapshot snapshot;
+        try
+        {
+            snapshot = CreateSnapshot();
+        }
+        catch
+        {
+            // An invalid manifest or output location is the error to report, as when it was read first.
+            await assetsLoaded;
+            throw;
+        }
+        var assetManifest = await assetsLoaded;
+        UseAssetResources(assetManifest.Resources);
+        var assets = assetManifest.Assets;
         var renderer = GetRenderer();
 
         var reservedPaths = CreateReservedArtifactPaths(options, snapshot, assets);
@@ -110,13 +139,8 @@ internal sealed class SiteEngine
                 ServiceProvider.GetRequiredService<IImageProcessor>(), assetManifest.Resources, BuildLogger,
                 _runtime.ResolveItem, ServiceProvider.GetRequiredService<ContentPath>());
 
-            // Snapshot planning already required every page type to come from a page assembly.
-            // Helpers and custom encoder factories may live outside the page assemblies.
-            // Their code is a build input even when pages only reach it through injection.
-            plan = await planner.CreatePlanAsync(
-                snapshot.Pages,
-                [.. _pageAssemblies, .. _serviceAssemblies, typeof(StaticSite).Assembly],
-                cancellationToken);
+            plan = await planner.CreatePlanAsync(snapshot.Pages, codeAssemblies, cancellationToken, previousManifest);
+            await ((Task)codeIdentity).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
             phases.Mark(BuildPhaseTimer.Plan);
 
             // The output directory is kept, never wiped: whatever this build does not
@@ -145,8 +169,11 @@ internal sealed class SiteEngine
                     StringComparer.OrdinalIgnoreCase),
                 cancellationToken,
                 planner.OutputStampsValid,
-                BuildLogger);
+                BuildLogger,
+                planner.OutputDirectoryCreated);
             phases.Mark(BuildPhaseTimer.Render);
+            // Rendering is what the profile is for; writing it overlaps the rest of the publish.
+            _jitProfile?.Stop(PublishJitProfile.CodeIdentity(plan.CodeDependencies), rendered.Count, publishCompleted: false);
         }
         catch
         {
@@ -159,21 +186,15 @@ internal sealed class SiteEngine
         }
 
         pagesRendered.SetResult();
-        await independentArtifacts;
-        await WriteArtifactsAsync(artifactPaths, artifactContext, independentOfPages: false, cancellationToken);
-        IReadOnlyList<string> artifacts = [.. artifactPaths.Select(path => Path.GetRelativePath(options.OutputDirectory, path))];
-        phases.Mark(BuildPhaseTimer.Artifacts);
-
-        // Input verification is independent of output reconciliation and entry
-        // construction. Join it before publishing the cache, including on failure.
+        // Page entries and input verification need only the finished renders, so they run
+        // while the remaining artifacts are written. Both are joined before the cache is
+        // published, including on failure.
         var verification = recorders.IsEmpty ? Task.CompletedTask : Task.Run(
             () => IncrementalBuildPlanner.VerifyInputs(recorders.Values), cancellationToken);
-        BuildManifest manifest;
-        try
+        // One entry per rendered page: independent work, so it runs in parallel and lands
+        // at its own index to keep the manifest order deterministic.
+        var entries = Task.Run(() =>
         {
-            // One entry per rendered page, verifying its dependencies: independent
-            // work, so it runs in parallel and lands at its own index to keep the manifest
-            // order deterministic.
             var renderedEntries = new BuildManifestPage[rendered.Count];
             Parallel.For(0, rendered.Count, index =>
             {
@@ -182,9 +203,29 @@ internal sealed class SiteEngine
                     page.Request,
                     page.OutputHash,
                     recorders[page.Request.OutputRelativePath],
-                    page.Html);
+                    page.Html,
+                    page.Stamp);
             });
+            return renderedEntries;
+        }, CancellationToken.None);
+        try
+        {
+            await independentArtifacts;
+            await WriteArtifactsAsync(artifactPaths, artifactContext, independentOfPages: false, cancellationToken);
+        }
+        catch
+        {
+            // Report the artifact's failure, once nothing else is still using the build.
+            await Task.WhenAll(entries, verification).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            throw;
+        }
+        IReadOnlyList<string> artifacts = [.. artifactPaths.Select(path => Path.GetRelativePath(options.OutputDirectory, path))];
+        phases.Mark(BuildPhaseTimer.Artifacts);
 
+        BuildManifest manifest;
+        try
+        {
+            var renderedEntries = await entries;
             var pageEntries = new List<BuildManifestPage>(plan.CarriedPages.Count + rendered.Count);
             pageEntries.AddRange(plan.CarriedPages);
             pageEntries.AddRange(renderedEntries);
@@ -210,7 +251,11 @@ internal sealed class SiteEngine
 
         planner.SaveManifest(manifest, plan.OldManifest, cancellationToken);
         // Still under the cache lease, so concurrent publishes cannot interleave the save.
-        PublishJitProfile.Save(Paths.ResolveKijiPath(), rendered.Count);
+        if (_jitProfile is not null)
+        {
+            _jitProfile.Stop(PublishJitProfile.CodeIdentity(plan.CodeDependencies), rendered.Count, publishCompleted: true);
+            await _jitProfile.SaveAsync(Paths.ResolveKijiPath());
+        }
         phases.Mark(BuildPhaseTimer.Manifest);
 
         var written = rendered.Count(static page => page.Written);

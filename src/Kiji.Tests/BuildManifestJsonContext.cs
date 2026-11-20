@@ -1,9 +1,10 @@
 using System.Text.Json.Serialization;
+using Kiji.Generation;
 
-namespace Kiji.Generation;
+namespace Kiji.Tests;
 
 /// <summary>
-/// Source-generated JSON serialization for the build manifest (reflection-free and fast).
+/// The serializer's own reading of the manifest records: the format <see cref="BuildManifestSerializer"/> must match.
 /// </summary>
 [JsonSourceGenerationOptions]
 [JsonSerializable(typeof(BuildManifest))]

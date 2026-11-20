@@ -257,7 +257,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
     {
         return System.Text.Json.JsonSerializer.Deserialize(
             await File.ReadAllTextAsync(Path.Combine(_testDir, ".kiji", "cache", "manifest.json")),
-            Kiji.Generation.BuildManifestJsonContext.Default.BuildManifest)!;
+            BuildManifestJsonContext.Default.BuildManifest)!;
     }
 
     private static async Task CreateTestImageAsync(string path, int width, int height)

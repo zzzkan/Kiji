@@ -68,6 +68,7 @@ public static class MarkdownHostBuilderExtensions
         ArgumentNullException.ThrowIfNull(builder);
         var context = SiteBuilderContext.Get(builder);
         ArgumentNullException.ThrowIfNull(select);
+        MarkdownWarmup.Start();
 
         var contentOptions = new MarkdownContentOptions();
         configure?.Invoke(contentOptions);

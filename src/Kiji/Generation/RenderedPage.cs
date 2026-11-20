@@ -9,4 +9,6 @@ namespace Kiji.Generation;
 /// Whether those bytes were written. A re-rendered page whose output turns out to be
 /// what is already on disk is left alone.
 /// </param>
-internal sealed record RenderedPage(PageRenderRequest Request, string OutputHash, bool Written, byte[] Html);
+/// <param name="Stamp">The written file's stamp, read only in an output directory this build created.</param>
+internal sealed record RenderedPage(PageRenderRequest Request, string OutputHash, bool Written, byte[] Html,
+    OutputStamp? Stamp = null);

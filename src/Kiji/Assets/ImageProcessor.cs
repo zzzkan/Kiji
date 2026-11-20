@@ -21,7 +21,9 @@ internal sealed class ImageProcessor : IImageProcessor
 
     // Native code is not covered by managed assembly dependency tracking. Include
     // its version and platform so caches cannot cross incompatible native builds.
-    private static readonly string EncoderIdentity =
+    // Not a static initializer: those all run with the first use of the type, and reading
+    // the version loads the native library.
+    private static string EncoderIdentity => field ??=
         $"mvid:{typeof(SKWebpEncoder).Assembly.ManifestModule.ModuleVersionId:N}:{SkiaSharpVersion.Native}:{RuntimeInformation.RuntimeIdentifier}";
 
     private readonly int[] _widths;
@@ -44,11 +46,12 @@ internal sealed class ImageProcessor : IImageProcessor
         _widths = [.. (options.Widths ?? DefaultWidths)
             .Where(width => width < _maxWidth).Distinct().Order()];
         _generationGate = generationGate ?? ConcurrencyGate;
-        CacheIdentity = BuildFingerprint.HashText(FormattableString.Invariant(
-            $"skia-webp-v2:{_quality}:{_maxWidth}:{string.Join(",", _widths)}:{EncoderIdentity}"));
     }
 
-    public string CacheIdentity { get; }
+    // Computed on first use: the encoder identity loads the native library, which a site
+    // without images never needs. The settings it covers were copied above and cannot change.
+    public string CacheIdentity => field ??= BuildFingerprint.HashText(FormattableString.Invariant(
+        $"skia-webp-v2:{_quality}:{_maxWidth}:{string.Join(",", _widths)}:{EncoderIdentity}"));
 
     /// <inheritdoc/>
     public async Task<ProcessedImageInfo> ProcessAsync(

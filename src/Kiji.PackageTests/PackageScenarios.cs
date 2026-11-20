@@ -15,14 +15,32 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
     public Task Publish_UsesSdkDefaultDestination() => fixture.ScenarioAsync(async () =>
     {
         const string project = "Site/PackageSite.csproj";
-        fixture.Replace(project, "<UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier>",
-            "<UseCurrentRuntimeIdentifier>false</UseCurrentRuntimeIdentifier>");
+        // Without a runtime identifier a Linux site would have no image library, and every site
+        // would copy SkiaSharp's libraries for every platform: the build stops and says why.
+        var portable = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            fixture.DotnetAsync("build", project, "-c", "Release", "-p:UseCurrentRuntimeIdentifier=false"));
+        Assert.Contains("KIJI1007", portable.Message, StringComparison.Ordinal);
+
         fixture.Write("Site/dist/previous.json", "{}");
         await fixture.DotnetAsync("publish", project, "-c", "Release");
-        var buildDirectory = Path.Combine(fixture.Site, "bin", "Release", "net10.0");
+        var (runtimeIdentifier, images) = await fixture.ResolveRuntimeImagesAsync(project);
+        var buildDirectory = Path.Combine(fixture.Site, "bin", "Release", "net10.0", runtimeIdentifier);
         Assert.True(File.Exists(Path.Combine(buildDirectory, "publish", "index.html")));
         Assert.False(File.Exists(Path.Combine(buildDirectory, "dist", "previous.json")));
         Assert.False(File.Exists(Path.Combine(fixture.Site, "dist", "index.html")));
+
+        // The build copies the runtime package's images in place of the IL of the versions they
+        // were compiled from. A wrong path or version leaves the IL, which only shows as a slower
+        // publish; an image copied as a native asset would leave the IL too.
+        if (images is not null)
+        {
+            foreach (var name in (string[])["Kiji", "Markdig", "YamlDotNet"])
+            {
+                var image = Assert.Single(Directory.GetFiles(Path.Combine(images, name), name + ".dll", SearchOption.AllDirectories));
+                Assert.Equal(File.ReadAllBytes(image), File.ReadAllBytes(Path.Combine(buildDirectory, name + ".dll")));
+            }
+            Assert.DoesNotContain("kiji-r2r", File.ReadAllText(Path.Combine(buildDirectory, "PackageSite.deps.json")), StringComparison.Ordinal);
+        }
     });
 
     [Fact]
@@ -162,6 +180,8 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         // The portable copy lets a clean checkout restore it without the page cache.
         Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(stagingDirectory)!, "publish.jitprofile")));
         Assert.True(File.Exists(Path.Combine(fixture.Site, ".kiji", "jit", "publish.jitprofile")));
+        // The stamp lets a publish keep a profile recorded by the same code instead of rewriting it.
+        Assert.True(File.Exists(Path.Combine(fixture.Site, ".kiji", "jit", "publish.jitprofile.stamp")));
         // This file is deliberately untracked. Cleaning must make the next publish render it again.
         Assert.Contains("external-value-1", Read("index.html"), StringComparison.Ordinal);
         fixture.Write("Site/value.txt", "external-value-2");

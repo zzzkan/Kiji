@@ -62,9 +62,14 @@ remove abandoned work before the next execution. Dev reloads retain built-in imm
 variants, retire custom outputs best-effort after joining render work, and never wait for
 response transmission. Ordinary saves and watcher errors do not recreate native watchers;
 only retargeted content links replace their direct watchers.
-`.kiji/jit` holds only the publish JIT profile, saved atomically under the cache lease
-after a successful publish. It never affects output or reuse decisions, so CI can
-restore it with or without `.kiji/cache`.
+`.kiji/jit` holds only the publish JIT profile and its stamp, saved atomically under the
+cache lease after a successful publish. It never affects output or reuse decisions, so CI
+can restore it with or without `.kiji/cache`. The runtime writes a profile one record at a
+time, so a publish keeps the one it replayed when the stamp shows the same code recorded
+it, to the end of a publish, over at least as many pages. A publish with no profile for
+its code ends the recording with rendering and writes it while the publish finishes; the
+next publish records through to the end once. The recording lives in its own directory
+because removing that directory is the only way to make the runtime drop it.
 
 - Serialize builds sharing a cache with a lease; page work remains parallel.
 - Publish the complete immutable HTML bundle before atomically replacing its manifest.

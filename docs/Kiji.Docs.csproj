@@ -8,6 +8,9 @@
 
   <ItemGroup>
     <ProjectReference Include="../src/Kiji/Kiji.csproj" />
+    <!-- A Kiji package restores SkiaSharp's Linux libraries through its runtime graph; a project
+         reference does not. -->
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
   </ItemGroup>
 
   <Import Project="../src/Kiji/MSBuild/Kiji.targets" />

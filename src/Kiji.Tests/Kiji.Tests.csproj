@@ -10,6 +10,8 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Testing.Platform" />
     <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all" />
+    <AdditionalFiles Include="BannedSymbols.txt" />
   </ItemGroup>
 
   <ItemGroup>

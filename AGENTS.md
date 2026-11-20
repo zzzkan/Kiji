@@ -53,6 +53,9 @@ below once a check covers them.
 | One type per file | `Kiji.Analyzers` KR0001 in every project |
 | Kiji reads environment variables through IConfiguration | `src/Kiji/BannedSymbols.txt` (RS0030) |
 | Kiji never sets `Environment.ExitCode` | `src/Kiji/BannedSymbols.txt` (RS0030) |
+| Kiji uses no frozen collections (measured slower for a publish) | `src/Kiji/BannedSymbols.txt` (RS0030) |
+| `Kiji.Tests` never mutates process-wide state | `src/Kiji.Tests/BannedSymbols.txt` (RS0030) |
+| Each project references only its allowed projects; `Kiji.PackageTests` stays black-box | `Directory.Build.targets` KR0003 |
 | `src/Kiji` and `Kiji.Tests` components are hand-written `ComponentBase` classes | `Directory.Build.targets` KR0002 (no Razor SDK, no `.razor`) |
 | `src/Kiji.SyntheticSite` workload stays frozen | `SyntheticWorkloadTests` against `src/Kiji.RepositoryTests/synthetic-workload.sha256` |
 | `docs/content/api-*` pages follow author-facing API changes | judgment |
@@ -70,7 +73,7 @@ below once a check covers them.
   `src/Kiji.Runtime` only packs its per-runtime images (`Kiji.Runtime.<rid>`) during Kiji's pack.
   `MSBuild/Kiji.targets` integrates publish, watch and clean.
 - `src/Kiji.Tests` contains library unit/component tests and TestSite fixtures.
-  Classes run in parallel; never mutate process-wide state. It does not pack or build consumers.
+  Classes run in parallel. It does not pack or build consumers.
 - `src/Kiji.Analyzers` holds the repository's own analyzers (KR*), referenced by every project
   through `Directory.Build.props`; `Directory.Build.targets` holds MSBuild rule checks.
   `src/Kiji.RepositoryTests` checks the repository itself (comment baseline, frozen workload).
@@ -207,8 +210,7 @@ publish). For the cold publish process, measured and rejected: tiering settings
 non-concurrent GC and a fixed gen0 budget (no difference), reading code identity from
 assembly files with MetadataReader (slower than loading them), collecting code identity
 while the host is built (contends with the host's own loading), warming the component
-renderer (no difference), frozen dictionaries for per-snapshot lookups (building one costs
-more than a publish's lookups save), disabling DI's dynamic engine or validation on build
+renderer (no difference), disabling DI's dynamic engine or validation on build
 (no difference), persisting pages on dedicated writer threads (no gain on Windows, much
 slower on ext4), skipping the Markdown warm-up while a profile replays (slower), and disabling W^X (`DOTNET_EnableWriteXorExecute=0`, faster but
 removes a runtime mitigation; a site owner can set it, Kiji does not).

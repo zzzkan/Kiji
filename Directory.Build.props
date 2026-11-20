@@ -32,6 +32,10 @@
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
+  <ItemGroup>
+    <CompilerVisibleProperty Include="IsPackable" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(MSBuildProjectName)' != 'Kiji.Analyzers' and '$(MSBuildProjectName)' != 'Kiji.Runtime'">
     <ProjectReference Include="$(MSBuildThisFileDirectory)src/Kiji.Analyzers/Kiji.Analyzers.csproj"
                       OutputItemType="Analyzer" ReferenceOutputAssembly="false" PrivateAssets="all" />

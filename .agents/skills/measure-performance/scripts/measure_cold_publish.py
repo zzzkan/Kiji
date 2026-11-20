@@ -3,7 +3,7 @@
 
 Packs the baseline revision and the working tree, publishes the frozen synthetic site against
 each package, then times the command KijiGenerateSite executes, alternating the two consumers.
-Reports medians per scenario and checks that both produce identical output.
+Reports medians per scenario and checks after every round that both produce identical output.
 
     python3 measure_cold_publish.py --baseline origin/main --work artifacts/cold-publish
 
@@ -292,14 +292,24 @@ def main():
     for scenario in ("fresh", "profiled", "no-change", "one-edited"):
         samples = {name: [] for name in sites}
         phase_samples = {name: {} for name in sites}
+        previous = None
         for round_index in range(warmup[scenario] + arguments.rounds):
+            digests = {}
             for name, site in sites.items():
                 prepare(site, scenario, round_index)
                 elapsed, phases = generate(site, hook)
+                # Outside the measured process: a round that skipped generating is no speedup.
+                digests[name] = output_digest(site)
                 if round_index >= warmup[scenario]:
                     samples[name].append(elapsed)
                     for phase, duration in phases.items():
                         phase_samples[name].setdefault(phase, []).append(duration)
+            if digests["baseline"] != digests["candidate"]:
+                sys.exit(f"The two packages generate different output ({scenario}, round {round_index + 1}).")
+            # Edits alternate, so every round's output differs from the round before.
+            if scenario == "one-edited" and digests["baseline"] == previous:
+                sys.exit(f"The edit did not change the output ({scenario}, round {round_index + 1}).")
+            previous = digests["baseline"]
         for site in sites.values():
             restore(site)
         baseline = statistics.median(samples["baseline"])
@@ -310,9 +320,6 @@ def main():
                 before = statistics.median(phase_samples["baseline"][phase])
                 after = statistics.median(phase_samples["candidate"][phase])
                 print(f"  {phase:<10}{before:>10.1f}{after:>11.1f}", flush=True)
-
-    if output_digest(sites["baseline"]) != output_digest(sites["candidate"]):
-        sys.exit("The two packages generate different output.")
 
 
 if __name__ == "__main__":

@@ -78,8 +78,6 @@ PROJECT = """\
 
 SITE_SOURCES = ["MainLayout.cs", "PageHead.cs", "PostFrontMatter.cs", "PostSlug.cs"]
 
-# A startup hook that reports Kiji's build phases, as wall-clock offsets from process start.
-# Both revisions report through the same internal observer, so the hook needs no Kiji reference.
 PHASE_HOOK = """\
 using System;
 using System.Diagnostics;
@@ -103,7 +101,6 @@ internal static class StartupHook
         AppDomain.CurrentDomain.ProcessExit += (_, _) =>
         {
             Console.Error.WriteLine($"KIJI_PHASE exit 0 {Now():F1}");
-            // Compilation the process still does, summed over threads: what precompiling could remove.
             Console.Error.WriteLine($"KIJI_STAT jit-ms {System.Runtime.JitInfo.GetCompilationTime().TotalMilliseconds:F1}");
             Console.Error.WriteLine($"KIJI_STAT jit-methods {System.Runtime.JitInfo.GetCompiledMethodCount()}");
         };
@@ -127,7 +124,6 @@ def run(command, cwd, quiet=True):
 
 def pack(source, feed):
     run(["dotnet", "pack", "src/Kiji", "-c", "Release", "-o", str(feed)], source)
-    # Since runtime packages exist, Kiji.Runtime.<rid> packages sit beside Kiji's.
     package = next(path for path in feed.glob("Kiji.*.nupkg") if not path.name.startswith("Kiji.Runtime."))
     return package.name[len("Kiji."):-len(".nupkg")]
 
@@ -146,7 +142,6 @@ def create_site(site, repository, corpus, feed, version, packages):
 
 
 def build_directory(site, kind):
-    # The site builds for the current runtime, into <kind>/Release/net10.0/<rid>/.
     return next((site / kind / "Release" / "net10.0").glob("*/Kiji.SyntheticSite.dll")).parent
 
 
@@ -169,7 +164,6 @@ def generate(site, hook=None):
 
 
 def parse_phases(stderr):
-    """Top-level phase durations, plus the time before the first and after the last."""
     marks = [line.split()[1:] for line in stderr.splitlines() if line.startswith("KIJI_PHASE ")]
     if not marks:
         return {}
@@ -213,7 +207,6 @@ def prepare(site, scenario, round_index):
     if not original.exists():
         shutil.copy(post, original)
     if scenario in ("fresh", "profiled"):
-        # A full generation: nothing to reuse. Fresh also has no JIT profile, as a clean checkout.
         remove(site / ".kiji" / "cache")
         remove(staging(site) / "site")
         if scenario == "fresh":
@@ -222,7 +215,6 @@ def prepare(site, scenario, round_index):
                 remove(profile)
             remove(staging(site) / "jit-session")
     elif scenario == "one-edited":
-        # Equal-length edits, so every round changes exactly one input.
         edit = "A" if round_index % 2 == 0 else "B"
         post.write_text(original.read_text(encoding="utf-8") + f"\n\nEdit {edit}.\n", encoding="utf-8")
 
@@ -256,7 +248,6 @@ def main():
     repository = pathlib.Path.cwd()
     work = pathlib.Path(arguments.work).resolve()
     work.mkdir(parents=True)
-    # A work directory inside the repository must not inherit its build settings.
     (work / "Directory.Build.props").write_text("<Project />", encoding="utf-8")
     (work / "Directory.Build.targets").write_text("<Project />", encoding="utf-8")
     (work / "Directory.Packages.props").write_text(
@@ -286,7 +277,6 @@ def main():
     print("output: identical", flush=True)
     hook = build_hook(work) if arguments.phases else None
 
-    # Discarded rounds let each state settle: the profiled state records its profile first.
     warmup = {"fresh": 1, "profiled": 3, "no-change": 2, "one-edited": 2}
     print(f"{'scenario':<12}{'baseline':>10}{'candidate':>11}{'change':>9}   (median ms, {arguments.rounds} rounds)")
     for scenario in ("fresh", "profiled", "no-change", "one-edited"):
@@ -298,7 +288,6 @@ def main():
             for name, site in sites.items():
                 prepare(site, scenario, round_index)
                 elapsed, phases = generate(site, hook)
-                # Outside the measured process: a round that skipped generating is no speedup.
                 digests[name] = output_digest(site)
                 if round_index >= warmup[scenario]:
                     samples[name].append(elapsed)
@@ -306,7 +295,6 @@ def main():
                         phase_samples[name].setdefault(phase, []).append(duration)
             if digests["baseline"] != digests["candidate"]:
                 sys.exit(f"The two packages generate different output ({scenario}, round {round_index + 1}).")
-            # Edits alternate, so every round's output differs from the round before.
             if scenario == "one-edited" and digests["baseline"] == previous:
                 sys.exit(f"The edit did not change the output ({scenario}, round {round_index + 1}).")
             previous = digests["baseline"]

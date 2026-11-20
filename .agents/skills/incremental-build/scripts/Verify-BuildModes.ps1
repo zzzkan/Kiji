@@ -1,7 +1,6 @@
 param([string] $RunRoot, [string] $Site, [string] $PackageVersion)
 $ErrorActionPreference = 'Stop'
 
-# Read the DLL's own debug directory: an old PDB left on disk is not proof of symbols.
 $inspector = Join-Path $RunRoot 'inspector'
 New-Item -ItemType Directory -Path $inspector -Force | Out-Null
 '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType></PropertyGroup></Project>' | Set-Content (Join-Path $inspector 'Inspector.csproj')
@@ -48,13 +47,10 @@ if ($debug.Mvid -ne $debugPublish.Mvid) { throw 'Debug build/publish changed MVI
 if ($debug.PdbPath.StartsWith('/_/source')) { throw 'Debug source paths were remapped.' }
 $again = Invoke-Mode 'mode-release-again' 'build' 'Release' $false
 if ($release.Mvid -ne $again.Mvid) { throw 'Returning from Debug changed Release identity.' }
-# DebugType alone is not in the SDK's incremental compiler cache. Rebuild when
-# testing an explicit compiler-option override; Kiji does not replace that cache.
 Invoke-Mode 'mode-release-explicit-symbols' 'build' 'Release' $true @('--no-incremental', '-p:DebugType=portable')
 $restored = Invoke-Mode 'mode-release-restored' 'build' 'Release' $false @('--no-incremental')
 if ($release.Mvid -ne $restored.Mvid) { throw 'Returning from explicit symbols changed Release identity.' }
 
-# Import the packaged targets through a direct PackageReference in non-site projects too.
 $nonSite = Join-Path $RunRoot 'non-site'
 New-Item -ItemType Directory -Path $nonSite -Force | Out-Null
 @"
@@ -71,7 +67,6 @@ foreach ($mode in @('library', 'IsTestProject', 'TestProject', 'IsTestingPlatfor
     if (-not $identity.Symbols -or $identity.PdbPath.StartsWith('/_/source')) { throw "Non-site compilation was changed: $mode" }
 }
 
-# Start watch after a Release publish and verify the normal Debug development path.
 $watchLog = Join-Path $RunRoot 'mode-watch.log'
 $watchError = Join-Path $RunRoot 'mode-watch-error.log'
 $oldUrls = $env:ASPNETCORE_URLS
@@ -132,8 +127,6 @@ try {
     if (-not $identity.Symbols -or $identity.PdbPath.StartsWith('/_/source')) { throw 'Watch did not retain Debug symbols and paths.' }
     $identity | ConvertTo-Json | Set-Content (Join-Path $RunRoot 'mode-watch-identity.json')
 
-    # Observe browser reload and served bytes, including a referenced library's assets.
-    # A comment survives CSS isolation rewriting without depending on scope hashes.
     Assert-AssetChange (Join-Path $Site 'Article.razor.css') '/* app scoped update */' { 'Portable.styles.css' }
     Assert-AssetChange (Join-Path $RunRoot 'support/Card.razor.css') '/* library scoped update */' {
         $css = (Invoke-WebRequest ($address + '/Portable.styles.css') -TimeoutSec 2).Content
@@ -143,7 +136,6 @@ try {
     }
     Assert-AssetChange (Join-Path $Site 'wwwroot/css/shared.css') '/* shared asset update */' { 'css/shared.css' }
     Assert-AssetChange (Join-Path $RunRoot 'support/wwwroot/added.txt') 'new library asset' { '_content/Support/added.txt' }
-    # Let dotnet watch process the addition too; Kiji can serve it before SDK handling.
     Start-Sleep -Seconds 2
     if ($watchProcess.HasExited) { throw 'Watch exited after discovering a library asset.' }
     if ((Invoke-WebRequest ($address + '/first.md/') -TimeoutSec 2).StatusCode -ne 200) { throw 'Site stopped after asset changes.' }

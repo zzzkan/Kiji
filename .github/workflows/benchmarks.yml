@@ -1,10 +1,5 @@
 name: Benchmarks
 
-# Runs Kiji.Benchmarks (BenchmarkDotNet): the hot-path microbenchmarks plus
-# SiteBuildBenchmarks, which builds whole 200- and 1000-page sites. Deliberately kept
-# out of the PR-blocking CI pipeline: a full run warms up and iterates every
-# benchmark and can take a long time. Trigger it manually, or let the weekly
-# schedule catch drift on main. Pass a filter to run only part of it.
 on:
   workflow_dispatch:
     inputs:
@@ -13,7 +8,7 @@ on:
         required: false
         default: "*"
   schedule:
-    - cron: "0 3 * * 1" # Mondays 03:00 UTC, main branch
+    - cron: "0 3 * * 1"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

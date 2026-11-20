@@ -2,7 +2,6 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <!-- Internal measurement harness; collection-shaped front matter and console output are fine here. -->
     <NoWarn>$(NoWarn);CA1002;CA2227;CA1819;CA1303</NoWarn>
   </PropertyGroup>
 
@@ -12,9 +11,6 @@
 
   <ItemGroup>
     <ProjectReference Include="../Kiji/Kiji.csproj" />
-    <!-- A Kiji package restores SkiaSharp's Linux libraries through its runtime graph; a project
-         reference does not. -->
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
   </ItemGroup>
-
 </Project>

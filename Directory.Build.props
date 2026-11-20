@@ -26,7 +26,6 @@
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <!-- dotnet watch hot reload compiles without running MinVer (design-time build). -->
     <MinVerSkip Condition="'$(Configuration)' != 'Release'">true</MinVerSkip>
     <MinVerTagPrefix>v</MinVerTagPrefix>
     <MinVerDefaultPreReleaseIdentifiers>preview.0</MinVerDefaultPreReleaseIdentifiers>

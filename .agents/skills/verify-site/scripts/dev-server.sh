@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Usage: dev-server.sh start|doctor|stop [project] [url]
-#   project: the site project directory (default: docs)
-#   url:     the dev server address (default: http://127.0.0.1:8080)
 set -euo pipefail
 
 command=${1:?usage: dev-server.sh start|doctor|stop [project] [url]}
@@ -39,7 +36,6 @@ start)
         echo "$url is already answering; it belongs to another process. Pick another url." >&2
         exit 1
     fi
-    # setsid gives the watch tree its own process group, whose ID is the leader's PID ($$).
     ASPNETCORE_URLS="$url" setsid bash -c 'echo $$ > "$1"; exec dotnet watch --project "$2" --non-interactive' \
         _ "$state/pgid" "$project" >"$state/watch.log" 2>&1 < /dev/null &
     for _ in $(seq 1 180); do
@@ -72,8 +68,6 @@ doctor)
 stop)
     [[ -f "$state/pgid" ]] || { echo "nothing started from $state"; exit 0; }
     pgid=$(cat "$state/pgid")
-    # dotnet watch ends its tree on Ctrl+C (SIGINT); SIGTERM stops the site but can leave
-    # dotnet watch itself running.
     kill -INT -- "-$pgid" 2>/dev/null || true
     if ! wait_for_group_exit 20; then
         kill -TERM -- "-$pgid" 2>/dev/null || true

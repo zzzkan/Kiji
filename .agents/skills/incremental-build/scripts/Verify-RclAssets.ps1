@@ -88,7 +88,6 @@ if ($newLeafAlias.Count -ne 1 -or (Test-Path -LiteralPath $oldLeafAlias[0].FullN
 }
 if ($htmlStamp -ne [IO.File]::GetLastWriteTimeUtc((Join-Path $dist 'index.html'))) { throw 'CSS-only changes rewrote unchanged HTML.' }
 
-# Consume the same graph as NuGet libraries, exercising package asset paths too.
 foreach ($library in @('leaf', 'library')) {
     Invoke-RclBuild "rcl-pack-$library" @('pack', (Join-Path $root $library), '-c', 'Release', '-o', (Join-Path $RunRoot 'feed'))
 }

@@ -2,8 +2,6 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <!-- BenchmarkDotNet requires instance benchmark methods and generates code that
-         trips preview analyzers; measurement code is not a public API surface. -->
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <NoWarn>$(NoWarn);CA1822</NoWarn>
   </PropertyGroup>
@@ -18,9 +16,6 @@
 
   <ItemGroup>
     <ProjectReference Include="../Kiji/Kiji.csproj" />
-    <!-- The synthetic site's definition is the frozen benchmark workload; referencing
-         it keeps the end-to-end benchmark measuring the same site as the harness. -->
     <ProjectReference Include="../Kiji.SyntheticSite/Kiji.SyntheticSite.csproj" />
   </ItemGroup>
-
 </Project>

@@ -13,7 +13,6 @@ try {
     if ($archive.Entries.FullName -contains 'build/Kiji.Inputs.targets') { throw 'Package still contains compiler-input targets.' }
 } finally { $archive.Dispose() }
 
-# Isolate the consuming projects from this repository's build configuration.
 '<Project />' | Set-Content (Join-Path $runRoot 'Directory.Build.targets')
 '<Project><PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup></Project>' | Set-Content (Join-Path $runRoot 'Directory.Build.props')
 '<Project><PropertyGroup><ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally></PropertyGroup></Project>' | Set-Content (Join-Path $runRoot 'Directory.Packages.props')
@@ -136,7 +135,6 @@ $stamp = [IO.File]::GetLastWriteTimeUtc($post)
 Publish-Fixture $second 'content-only' 1
 
 $page = Join-Path $second 'Article.razor'
-# MSBuild owns source recompilation; unlike content inputs, source edits use normal timestamps.
 [IO.File]::WriteAllText($page, [IO.File]::ReadAllText($page).Replace('<strong>@Content.FrontMatter.Title</strong>
 @((Microsoft.AspNetCore.Components.MarkupString)body)', '<p>Changed code</p><strong>@Content.FrontMatter.Title</strong>
 @((Microsoft.AspNetCore.Components.MarkupString)body)'))
@@ -164,8 +162,6 @@ Copy-Item -LiteralPath $scopedCss -Destination (Join-Path $full 'Article.razor.c
 Publish-Fixture $full 'full-comparison' 2
 Assert-SameOutputs $full $second
 
-# Exercise the SDK's repository-wide CI PathMap, with the project below the root.
-# These repositories are local fixtures; the remote supplies Source Link metadata only.
 $ciFirst = New-Fixture 'ci-first/site'
 $ciRepository = Split-Path -Parent $ciFirst
 & git -C $ciRepository init --quiet
@@ -195,7 +191,6 @@ if ($LASTEXITCODE) { throw 'CI content commit failed.' }
 Clear-FixtureOutputs $ciSecond
 Publish-Fixture $ciSecond 'ci-content-commit' 1 $ciSettings
 
-# Use the SDK's repository mapping alone so the project's position is observable.
 @'
 <Project>
   <Target Name="UseRepositoryPathMap" BeforeTargets="_SetPathMapFromSourceRoots">
@@ -207,7 +202,6 @@ Publish-Fixture $ciSecond 'ci-repository-map' 2 $ciSettings
 $repositoryHtml = [IO.File]::ReadAllText((Join-Path $ciSecond 'dist/first.md/index.html'))
 if (-not $repositoryHtml.Contains('/_/site/Article.razor')) { throw 'SDK repository PathMap was not exercised.' }
 
-# Moving the project within its repository changes CallerFilePath and must invalidate.
 $ciMoved = New-Fixture 'ci-second/moved'
 Copy-Item -LiteralPath (Join-Path $ciSecond 'Directory.Build.targets') -Destination (Join-Path $ciMoved 'Directory.Build.targets')
 Copy-Item -LiteralPath $ciPost -Destination (Join-Path $ciMoved 'content/first.md') -Force
@@ -216,7 +210,6 @@ Publish-Fixture $ciMoved 'ci-project-moved' 2 $ciSettings
 $movedHtml = [IO.File]::ReadAllText((Join-Path $ciMoved 'dist/first.md/index.html'))
 if (-not $movedHtml.Contains('/_/moved/Article.razor')) { throw 'Moved project reused stale source paths.' }
 
-# A different virtual source prefix is also observable, even at the same physical path.
 @'
 <Project>
   <Target Name="RemapFixtureSource" BeforeTargets="_SetPathMapFromSourceRoots" DependsOnTargets="InitializeSourceRootMappedPaths">
@@ -229,7 +222,6 @@ Publish-Fixture $ciMoved 'ci-mapping-changed' 2 $ciSettings
 $remappedHtml = [IO.File]::ReadAllText((Join-Path $ciMoved 'dist/first.md/index.html'))
 if (-not $remappedHtml.Contains('/changed/moved/Article.razor')) { throw 'Changed PathMap reused stale source paths.' }
 
-# Ordinary C# and referenced library implementation changes must invalidate HTML too.
 $codeSite = New-Fixture 'code-site'
 $codePage = Join-Path $codeSite 'Article.razor'
 [IO.File]::WriteAllText($codePage, [IO.File]::ReadAllText($codePage).Replace('<small>@SourcePath()</small>', '<small>@SourcePath()</small><p>@Label.Text</p>'))
@@ -251,7 +243,6 @@ $project = Join-Path $codeSite 'Portable.csproj'
 [IO.File]::WriteAllText($project, [IO.File]::ReadAllText($project).Replace('</Project>', '<ItemGroup><ProjectReference Include="../support/Support.csproj" /></ItemGroup></Project>'))
 [IO.File]::WriteAllText($codePage, [IO.File]::ReadAllText($codePage).Replace('@Label.Text', '@Support.Label.Text'))
 Publish-Fixture $codeSite 'reference-initial' 2
-# Hold SourceRevisionId constant so only the implementation changes, not assembly attributes.
 $librarySource = Join-Path $library 'Label.cs'
 [IO.File]::WriteAllText($librarySource, [IO.File]::ReadAllText($librarySource).Replace('Library first', 'Library other'))
 Publish-Fixture $codeSite 'reference-edited' 2 @('-p:SourceRevisionId=reference-initial')
@@ -262,7 +253,6 @@ Publish-Fixture $codeSite 'reference-unchanged' 0 @('-p:SourceRevisionId=referen
 & (Join-Path $PSScriptRoot 'Verify-RclAssets.ps1') -RunRoot $runRoot -PackageVersion $version
 & (Join-Path $PSScriptRoot 'Verify-MinimalSite.ps1') -RunRoot $runRoot -PackageVersion $version
 
-# Development output must stay out of SDK compile globs and be removed by clean.
 $devOutput = Join-Path $first '.kiji/dev-site'
 New-Item -ItemType Directory -Path $devOutput -Force | Out-Null
 'This is generated output, not C# source.' | Set-Content (Join-Path $devOutput 'ignored.cs')

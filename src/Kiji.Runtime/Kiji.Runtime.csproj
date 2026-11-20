@@ -1,21 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Packs Kiji.Runtime.<rid>: ReadyToRun images of Kiji and its Markdown dependencies for one
-       runtime. Kiji's pack stages the files and packs this project once per runtime; see
-       KijiPackRuntimePackages in ../Kiji/Kiji.csproj. Nothing here is built. -->
   <PropertyGroup>
     <IsPackable>true</IsPackable>
     <PackageId>Kiji.Runtime.$(KijiRuntimeIdentifier)</PackageId>
     <Description>Precompiled code of Kiji for $(KijiRuntimeIdentifier). Restored with Kiji for a site that builds for this runtime; not referenced directly.</Description>
     <PackageTags>kiji</PackageTags>
-    <!-- Kiji is MIT; the images of Markdig (BSD-2-Clause) and YamlDotNet (MIT) keep their licenses. -->
     <PackageLicenseExpression>MIT AND BSD-2-Clause</PackageLicenseExpression>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <IncludeSymbols>false</IncludeSymbols>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
     <MinVerSkip>true</MinVerSkip>
-    <!-- No lib/ folder: the images are runtime-specific files that Kiji.targets places itself. -->
     <NoWarn>$(NoWarn);NU5128</NoWarn>
   </PropertyGroup>
 
@@ -23,5 +18,4 @@
     <None Include="$(KijiRuntimeContent)kiji-r2r/**" Pack="true" PackagePath="runtimes/$(KijiRuntimeIdentifier)/native/kiji-r2r/" />
     <None Include="$(KijiThirdPartyNotices)" Pack="true" PackagePath="/" />
   </ItemGroup>
-
 </Project>

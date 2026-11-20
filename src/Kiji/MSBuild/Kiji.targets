@@ -1,13 +1,11 @@
 <Project>
   <PropertyGroup>
-    <!-- Test projects advertise themselves through different SDK properties; only inner builds can run. -->
     <_KijiIsSiteApp Condition="'$(OutputType)' == 'Exe' and
                                '$(IsTestProject)' != 'true' and '$(TestProject)' != 'true' and
                                '$(IsTestingPlatformApplication)' != 'true' and
                                ('$(TargetFrameworks)' == '' or '$(TargetFramework)' != '')">true</_KijiIsSiteApp>
   </PropertyGroup>
 
-  <!-- Stable Release site MVIDs allow cache reuse across checkouts. -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release' and '$(_KijiIsSiteApp)' == 'true'">
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
@@ -16,7 +14,6 @@
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <PathMap Condition="'$(PathMap)' != ''">$(PathMap),</PathMap>
     <PathMap>$(PathMap)$(MSBuildProjectDirectory)=/_/source</PathMap>
-    <!-- NuGet imports may follow the SDK PDB output calculation; honor global DebugType. -->
     <_DebugSymbolsProduced Condition="'$(DebugType)' == 'none'">false</_DebugSymbolsProduced>
   </PropertyGroup>
   <ItemGroup Condition="'$(Configuration)' == 'Release' and '$(_KijiIsSiteApp)' == 'true' and '$(DebugType)' == 'none'">
@@ -28,44 +25,27 @@
     <_KijiDotNetHost>$(DOTNET_HOST_PATH)</_KijiDotNetHost>
     <_KijiDotNetHost Condition="'$(_KijiDotNetHost)' == ''">dotnet</_KijiDotNetHost>
     <StaticWebAssetsEnabled Condition="'$(StaticWebAssetsEnabled)' == ''">true</StaticWebAssetsEnabled>
-    <!-- Compression is opt-in. Kiji compresses the site itself, so the SDK's formats stay empty. -->
     <CompressionEnabled Condition="'$(CompressionEnabled)' == ''">false</CompressionEnabled>
     <EnableDefaultCompressionFormats Condition="'$(EnableDefaultCompressionFormats)' == ''">false</EnableDefaultCompressionFormats>
     <_KijiConfiguredStaticWebAssetBasePath>$(StaticWebAssetBasePath)</_KijiConfiguredStaticWebAssetBasePath>
-    <!-- The site uses root paths; libraries retain their configured paths. -->
     <StaticWebAssetBasePath>/</StaticWebAssetBasePath>
     <CustomAfterStaticWebAssetsSdkTargets>$(MSBuildThisFileDirectory)Kiji.StaticWebAssets.targets</CustomAfterStaticWebAssetsSdkTargets>
 
-    <!-- Kiji loads and watches content itself; keep it and the documented -o dist output
-         out of the SDK's default items. -->
     <DefaultItemExcludes>$(DefaultItemExcludes);content/**;dist/**</DefaultItemExcludes>
   </PropertyGroup>
 
-  <!-- A site builds for one runtime. Kiji's runtime.json then restores that runtime's package:
-       the native image libraries (SkiaSharp's own packages carry those for Windows and macOS) and,
-       where Kiji publishes one, Kiji.Runtime.<rid> with ReadyToRun images. Without a runtime
-       identifier a Linux site would have no image library and every site would copy SkiaSharp's
-       libraries for every platform. -->
   <Target Name="KijiRequireRuntimeIdentifier" BeforeTargets="ResolvePackageAssets"
           Condition="'$(_KijiIsSiteApp)' == 'true' and '$(RuntimeIdentifier)' == '' and '$(DesignTimeBuild)' != 'true'">
     <Error Code="KIJI1007"
            Text="Kiji sites build for the current runtime. Add &lt;UseCurrentRuntimeIdentifier&gt;true&lt;/UseCurrentRuntimeIdentifier&gt; to the project's PropertyGroup, or set a RuntimeIdentifier." />
   </Target>
 
-  <!-- Kiji.Runtime.<rid> carries ReadyToRun images of Kiji, Markdig and YamlDotNet under
-       runtimes/<rid>/native/kiji-r2r/<id>/<version>/, so NuGet selects the site runtime's images
-       and Kiji.targets receives them as native assets. None is copied as such: an image replaces
-       the IL of exactly the package version it was compiled from, and any other version keeps its
-       IL. An image holds the same metadata and module identity, so code identity and caches are
-       unchanged. Generation and the dev server then skip most of their compilation.
-       Set KijiReadyToRunDependencies=false to keep the IL. -->
   <Target Name="KijiSelectReadyToRunImages" AfterTargets="ResolvePackageAssets" Condition="'$(_KijiIsSiteApp)' == 'true'">
     <ItemGroup>
       <_KijiReadyToRunImage Include="@(NativeCopyLocalItems)"
                             Condition="$([System.String]::Copy('%(NativeCopyLocalItems.NuGetPackageId)').StartsWith('Kiji.Runtime.'))
                                        and $([System.String]::Copy('%(NativeCopyLocalItems.PathInPackage)').Contains('/native/kiji-r2r/'))" />
       <NativeCopyLocalItems Remove="@(_KijiReadyToRunImage)" />
-      <!-- The path below kiji-r2r/ is the image's <id>/<version>/<file>; the rest is their shared root. -->
       <_KijiReadyToRunImage>
         <ImagePath>$([System.String]::Copy('%(PathInPackage)').Substring($([MSBuild]::Add($([System.String]::Copy('%(PathInPackage)').IndexOf('/kiji-r2r/')), 10))))</ImagePath>
       </_KijiReadyToRunImage>
@@ -87,13 +67,10 @@
     </ItemGroup>
   </Target>
 
-  <!-- Runtime metadata keeps checkout paths out of code identity. -->
   <ItemGroup Condition="'$(_KijiIsSiteApp)' == 'true'">
     <RuntimeHostConfigurationOption Include="Kiji.ProjectDirectory" Value="$(MSBuildProjectDirectory)" />
   </ItemGroup>
 
-  <!-- dotnet watch reports compilation errors, which the dev server shows, only to ASP.NET Core
-       projects. The Web SDK declares this capability; Razor SDK sites get it only while watching. -->
   <ItemGroup Condition="'$(_KijiIsSiteApp)' == 'true' and '$(DotNetWatchBuild)' == 'true'">
     <ProjectCapability Include="AspNetCore" />
   </ItemGroup>
@@ -110,7 +87,6 @@
 
   <Target Name="KijiGenerateSite"
           Condition="'$(_KijiIsSiteApp)' == 'true' and '$(DesignTimeBuild)' != 'true'" Returns="@(KijiSiteFile)">
-    <!-- Resolve after the SDK finalizes IntermediateOutputPath. Staging stays stable across publish destinations. -->
     <PropertyGroup>
       <_KijiDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'kiji'))</_KijiDir>
       <_KijiStagingDir>$(_KijiDir)site$([System.IO.Path]::DirectorySeparatorChar)</_KijiStagingDir>
@@ -118,19 +94,13 @@
     <Error Condition="!Exists('$(TargetPath)')" Code="KIJI1001"
            Text="Kiji cannot generate the site: '$(TargetPath)' does not exist. Build the project before publishing." />
 
-    <!-- Keep publish context out of the normal runtimeconfig and inherited environment. -->
     <ItemGroup>
       <_KijiHostConfigurationOption Include="@(RuntimeHostConfigurationOption)" />
       <_KijiHostConfigurationOption Include="Kiji.OutputPath" Value="$(_KijiStagingDir)" />
-      <!-- Generation is one short process: hot code never outlives PGO instrumentation, which
-           otherwise costs more than it saves. An explicit TieredPGO setting still applies. -->
       <_KijiHostConfigurationOption Include="System.Runtime.TieredPGO" Value="false" Condition="'$(TieredPGO)' == ''" />
-      <!-- Multicore JIT replays the previous publish's compiled methods; the profile is machine-local. -->
       <_KijiHostConfigurationOption Include="Kiji.JitProfileDirectory" Value="$(_KijiDir)" />
     </ItemGroup>
     <MakeDir Directories="$(_KijiDir)" />
-    <!-- Keep these arguments aligned with the SDK's GenerateBuildRuntimeConfigurationFiles
-         target. Publish uses its own config path and host options, with no dev companion. -->
     <GenerateRuntimeConfigurationFiles AssetsFilePath="$(ProjectAssetsFile)"
                                        TargetFramework="$(TargetFramework)"
                                        TargetFrameworkMoniker="$(TargetFrameworkMoniker)"
@@ -147,7 +117,6 @@
                                        GenerateRuntimeConfigDevFile="false"
                                        AlwaysIncludeCoreFramework="$(AlwaysIncludeCoreFrameworkInRuntimeConfig)" />
 
-    <!-- Only the process exit code fails publish; log lines remain MSBuild messages. -->
     <Exec Command="&quot;$(_KijiDotNetHost)&quot; exec --runtimeconfig &quot;$(_KijiDir)publish.runtimeconfig.json&quot; &quot;$(TargetPath)&quot;"
           WorkingDirectory="$(MSBuildProjectDirectory)"
           IgnoreStandardErrorWarningFormat="true"
@@ -168,12 +137,10 @@
       <_KijiParentPath>..$([System.IO.Path]::DirectorySeparatorChar)</_KijiParentPath>
       <_KijiWorkerSource>@(ServiceWorker->'%(FullPath)')</_KijiWorkerSource>
       <_KijiWorkerPublishedSource>@(ServiceWorker->'%(PublishedContent)')</_KijiWorkerPublishedSource>
-      <!-- Publish where the SDK does: at the worker's path under wwwroot, otherwise under the project. -->
       <_KijiWorkerPath></_KijiWorkerPath>
       <_KijiWorkerPath Condition="'$(_KijiWorkerSource)' != ''">$([MSBuild]::MakeRelative($([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', 'wwwroot')), '$(_KijiWorkerSource)'))</_KijiWorkerPath>
       <_KijiWorkerPath Condition="$(_KijiWorkerPath.StartsWith('$(_KijiParentPath)'))">$([MSBuild]::MakeRelative($([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)')), '$(_KijiWorkerSource)'))</_KijiWorkerPath>
     </PropertyGroup>
-    <!-- A path outside the project would publish outside the publish directory, possibly over a source file. -->
     <Error Condition="'$(_KijiWorkerPath)' != '' and ($(_KijiWorkerPath.StartsWith('$(_KijiParentPath)')) or $([System.IO.Path]::IsPathRooted('$(_KijiWorkerPath)')))"
            Code="KIJI1006" Text="ServiceWorker '$(_KijiWorkerSource)' is outside the project directory. Move it into the project, normally under wwwroot." />
     <Error Condition="'$(_KijiWorkerPath)' != '' and '$(_KijiWorkerPublishedSource)' == ''" Code="KIJI1006"
@@ -219,17 +186,13 @@
   <Target Name="KijiComputeFilesToPublish" AfterTargets="ComputeFilesToPublish"
           DependsOnTargets="KijiGenerateSite;KijiGenerateServiceWorker;KijiCompressSite"
           Condition="'$(_KijiIsSiteApp)' == 'true' and '$(DesignTimeBuild)' != 'true'">
-    <!-- Replace the SDK application list before incremental copy and cleanup. -->
     <ItemGroup>
       <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" />
-      <!-- Always copies when size or time differs (SkipCopyUnchangedFiles), so an older source from another
-           configuration still replaces a newer copy. SDK 10.0.1xx silently drops IfDifferent items. -->
       <ResolvedFileToPublish Include="@(KijiSiteFile);@(_KijiGzipFile);@(_KijiBrotliFile)" CopyToPublishDirectory="Always" />
     </ItemGroup>
   </Target>
 
   <Target Name="KijiClean" AfterTargets="Clean" Condition="'$(_KijiIsSiteApp)' == 'true'">
-    <!-- The staged site is not tracked in FileWrites, and the assembly is gone after Clean. -->
     <RemoveDir Directories="$(MSBuildProjectDirectory)/.kiji;$(IntermediateOutputPath)kiji" ContinueOnError="WarnAndContinue" />
   </Target>
 </Project>

@@ -9,7 +9,6 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
     <PackageReference Include="Microsoft.Testing.Platform" />
     <PackageReference Include="xunit.v3" />
-    <!-- Build ordering only: the runner must not load Kiji or the site's rendering dependencies. -->
     <ProjectReference Include="../Kiji/Kiji.csproj" ReferenceOutputAssembly="false" ExcludeAssets="all" PrivateAssets="all" />
     <Compile Remove="Fixture/**/*.cs" />
     <EmbeddedResource Remove="Fixture/**/*" />

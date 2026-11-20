@@ -1,4 +1,3 @@
-// Usage: node screenshot.mjs <url> <output.png> [width] [height]
 import { createRequire } from 'node:module';
 const require = createRequire(process.cwd() + '/');
 const { chromium } = require('playwright');

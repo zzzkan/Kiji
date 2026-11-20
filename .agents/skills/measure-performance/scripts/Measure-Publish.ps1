@@ -31,7 +31,6 @@ function Get-Properties([string] $variant) {
     $properties = if ($variant -eq 'baseline') { $BaselineProperties } else { $CandidateProperties }
     foreach ($key in @($properties.Keys | Sort-Object)) {
         if ($key -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') { throw "Invalid MSBuild property: $key" }
-        # MSBuild treats semicolons as property separators, even in a single argv.
         $value = [string]$properties[$key]
         $value = $value.Replace('%', '%25').Replace(';', '%3B').Replace(',', '%2C')
         "-p:${key}=$value"
@@ -77,7 +76,6 @@ function Get-FileStates([string] $path) {
     return $states
 }
 
-# Older packages compress under obj/.../compressed, current ones under obj/.../kiji/compressed.
 function Get-CompressedStates([string] $path) {
     $states = Get-FileStates $path
     foreach ($key in @($states.Keys)) { if ([IO.Path]::GetExtension($key) -notin @('.gz', '.br')) { $states.Remove($key) } }
@@ -135,7 +133,6 @@ function Assert-Outputs([string] $scenario, [int] $round) {
             $aliases.Add($relative)
         }
     }
-    # Every retained representation must decode to the actual published bytes.
     foreach ($compressed in [IO.Directory]::EnumerateFiles($candidateDist, '*', [IO.SearchOption]::AllDirectories)) {
         $extension = [IO.Path]::GetExtension($compressed)
         if ($extension -notin @('.gz', '.br')) { continue }
@@ -154,8 +151,6 @@ function Assert-Outputs([string] $scenario, [int] $round) {
     Write-Output "Verified $scenario/${round}: $common common files, $compressedCount decoded compressed files."
 }
 
-# Compile the measurement logger separately from every timed operation. Framework
-# references come from the executing SDK; no NuGet logger dependency is introduced.
 $loggerRoot = Join-Path $root 'logger'
 New-Item -ItemType Directory -Path $loggerRoot | Out-Null
 '<Project />' | Set-Content -LiteralPath (Join-Path $loggerRoot 'Directory.Build.props')
@@ -192,7 +187,6 @@ foreach ($variant in $variants) {
     $code = $code.Replace($createLine, 'StaticSite.CreateBuilder([])').Replace($publishLine, 'await app.RunAsync();')
     $code = $code.Replace('using var host = builder.Build();', 'var app = builder.Build();')
     $code = $code.Replace('using Kiji.Hosting;', 'using Microsoft.Extensions.Hosting;')
-    # The real host validates options at startup; only the direct runner needs the explicit call.
     $code = $code.Replace('        host.Services.GetService<IStartupValidator>()?.Validate();', '')
     [IO.File]::WriteAllText($runner, $code)
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PublishEntry.cs') -Destination (Join-Path $site 'Program.cs')
@@ -209,8 +203,6 @@ foreach ($variant in $variants) {
         try { [xml] $nuspec = $reader.ReadToEnd() } finally { $reader.Dispose() }
         $version = $nuspec.package.metadata.version
     } finally { $zip.Dispose() }
-    # Local NuGet feeds discover packages by their canonical file name, even
-    # when the saved baseline artifact was renamed by the caller.
     Copy-Item -LiteralPath $package -Destination (Join-Path $feed "Kiji.$version.nupkg")
     $feedXml = [Security.SecurityElement]::Escape($feed)
     $cacheXml = [Security.SecurityElement]::Escape((Join-Path $root "packages/$variant"))
@@ -285,8 +277,6 @@ foreach ($scenario in $Scenarios) {
 
 $instrumentation = [Collections.Generic.List[object]]::new()
 if (!$SkipInstrumentationCheck) {
-    # Same compiled adapter and site state. Only the logger and observer/report
-    # switch change. Do not subtract this estimate from the measured breakdown.
     foreach ($variant in $variants) {
         foreach ($round in 0..3) {
             $order = if ($round % 2) { @($false, $true) } else { @($true, $false) }

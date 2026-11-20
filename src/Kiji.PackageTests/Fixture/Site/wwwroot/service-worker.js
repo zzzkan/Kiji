@@ -1,1 +1,1 @@
-// development worker
+self.kijiWorker = 'development worker';

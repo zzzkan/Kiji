@@ -1,15 +1,8 @@
-// Kiji dev server live reload client.
-// Reloads the page when the server broadcasts a change, shows the compilation errors
-// that block hot reload, and survives server restarts (e.g. dotnet watch rebuilds)
-// by polling until the server comes back.
 (() => {
-  // Endpoints are derived from this script's own URL rather than from the page,
-  // so they stay correct when the site is served under a base path.
   const script = new URL(document.currentScript?.src ?? "/_kiji/livereload.js", location.href);
   const base = new URL(".", script);
   const endpoint = base.href.replace(/^http/, "ws") + "reload";
 
-  // Replaces the element with this id; no lines removes it.
   const show = (id, lines, overlayStyle, lineStyle) => {
     document.getElementById(id)?.remove();
     if (lines.length === 0) {
@@ -25,7 +18,6 @@
     }
   };
 
-  // Same look as the error overlay of dotnet watch's own browser refresh script.
   const showCompileErrors = (errors) => show("kiji-compile-errors", errors,
     "inset:0;background:rgba(0,0,0,.5)",
     "padding:8px;border:2px solid red;background:#faa;color:#000;font:14px/1.4 monospace");
@@ -59,7 +51,6 @@
           location.reload();
         }
       } catch {
-        // Server still down; keep polling.
       }
     }, 500);
   };

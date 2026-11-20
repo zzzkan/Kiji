@@ -20,7 +20,6 @@ jobs:
         github.event.workflow_run.event == 'push' &&
         github.event.workflow_run.head_repository.id == github.event.repository.id))
     runs-on: ubuntu-latest
-    # Keep non-deploying CI runs out of the production deployment queue.
     concurrency:
       group: ${{ github.event.workflow_run.event == 'pull_request' && format('docs-preview-{0}-{1}', github.event.workflow_run.head_repository.id, github.event.workflow_run.head_branch) || 'docs-production' }}
       cancel-in-progress: ${{ github.event.workflow_run.event == 'pull_request' }}
@@ -35,8 +34,6 @@ jobs:
             const run = context.payload.workflow_run;
             const headRepo = run.head_repository;
 
-            // Release runs only on v* tag pushes. A PR must never select production,
-            // even if it renames its workflow to Release.
             if (run.name === 'Release' && run.event === 'push' &&
                 headRepo?.id === context.payload.repository.id) {
               core.setOutput('command', 'deploy --config wrangler.jsonc');
@@ -52,7 +49,6 @@ jobs:
               return;
             }
 
-            // Fork runs may have an empty workflow_run.pull_requests list.
             const pulls = await github.paginate(github.rest.pulls.list, {
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -98,8 +94,6 @@ jobs:
             const source = process.env.DOCS_ARTIFACT_PATH;
             const destination = path.join(process.env.GITHUB_WORKSPACE, 'docs', 'dist');
 
-            // PR artifacts are untrusted. Never copy them over the deploy config or
-            // execute their files; even config/package files stay inside assets.
             async function copyStaticFiles(from, to) {
               const stat = await fs.lstat(from);
               if (stat.isDirectory()) {

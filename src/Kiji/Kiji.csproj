@@ -74,6 +74,9 @@
                               PackageId="%(ReferencePath.NuGetPackageId)"
                               PackageVersion="%(ReferencePath.NuGetPackageVersion)"
                               RelativePath="%(ReferencePath.NuGetPackageId)/%(ReferencePath.NuGetPackageVersion)/%(ReferencePath.Filename)%(ReferencePath.Extension)" />
+      <!-- Every image of every runtime, so that losing any of them compiles again. -->
+      <_KijiReadyToRunPair Include="@(KijiReadyToRunAssembly)" Runtime="%(KijiReadyToRunRuntime.Identity)" />
+      <_KijiReadyToRunOutput Include="@(_KijiReadyToRunPair->'$(MSBuildProjectDirectory)/$(IntermediateOutputPath)r2r/%(Runtime)/%(RelativePath)')" />
     </ItemGroup>
     <PropertyGroup>
       <_KijiReadyToRunAssemblyCount>@(KijiReadyToRunAssembly->Count())</_KijiReadyToRunAssemblyCount>
@@ -84,10 +87,15 @@
            Text="_KijiReadyToRunPackages names a package that does not provide exactly one referenced assembly: $(_KijiReadyToRunPackages)." />
   </Target>
 
-  <!-- Runs once per runtime identifier, and only when an input assembly or the restored versions changed. -->
+  <!-- Runs only when an input assembly or the restored versions changed, or an image is missing. -->
   <Target Name="KijiCompileReadyToRun" Condition="'$(KijiReadyToRun)' == 'true'" DependsOnTargets="KijiSelectReadyToRunAssemblies"
           Inputs="@(KijiReadyToRunAssembly);$(MSBuildProjectFullPath);$(ProjectAssetsFile)"
-          Outputs="$(IntermediateOutputPath)r2r/%(KijiReadyToRunRuntime.Identity)/$(TargetFileName)">
+          Outputs="@(_KijiReadyToRunOutput)">
+    <CallTarget Targets="_KijiCompileReadyToRunImages" />
+  </Target>
+
+  <!-- Once per runtime identifier. Outputs alone batches the target and never skips it. -->
+  <Target Name="_KijiCompileReadyToRunImages" Outputs="%(KijiReadyToRunRuntime.Identity)">
     <PropertyGroup>
       <_KijiRuntime>%(KijiReadyToRunRuntime.Identity)</_KijiRuntime>
       <_KijiTargetArchitecture>$(_KijiRuntime.Substring($([MSBuild]::Add($(_KijiRuntime.LastIndexOf('-')), 1))))</_KijiTargetArchitecture>

@@ -7,17 +7,6 @@ namespace Kiji.Generation;
 
 internal static class StaticSiteGenerator
 {
-    /// <param name="previousOutputs">
-    /// What the last build recorded about each output path, keyed by relative path.
-    /// Lets a page whose render produced the bytes already on disk skip the write.
-    /// Null when nothing may be assumed about the output directory.
-    /// </param>
-    /// <param name="logger">Receives a Debug message per page.</param>
-    /// <param name="outputDirectoryCreated">
-    /// The output directory did not exist when this build began, so no page has a file to
-    /// compare with, and each page reads its stamp as it writes instead of reconciliation
-    /// listing the directory afterwards.
-    /// </param>
     internal static async Task<IReadOnlyList<RenderedPage>> RenderPagesAsync(
         ResolvedSitePaths options,
         IReadOnlyList<PageRenderRequest> pageRequests,

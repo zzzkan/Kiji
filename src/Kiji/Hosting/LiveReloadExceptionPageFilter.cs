@@ -3,10 +3,6 @@ using Microsoft.AspNetCore.Http;
 
 namespace Kiji.Hosting;
 
-/// <summary>
-/// Adds the live reload client to the developer exception page, so the page reloads once
-/// a content or code change fixes the error.
-/// </summary>
 internal sealed class LiveReloadExceptionPageFilter(PathString pathBase) : IDeveloperPageExceptionFilter
 {
     public async Task HandleExceptionAsync(ErrorContext errorContext, Func<ErrorContext, Task> next)

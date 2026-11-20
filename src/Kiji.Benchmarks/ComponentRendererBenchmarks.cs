@@ -7,7 +7,6 @@ using Microsoft.Extensions.Logging;
 
 namespace Kiji.Benchmarks;
 
-/// <summary>Measures component renderer setup and page rendering.</summary>
 [MemoryDiagnoser]
 public class ComponentRendererBenchmarks
 {

@@ -1,24 +1,15 @@
 namespace Kiji.Assets;
 
-/// <summary>Configures the default WebP image processor.</summary>
-/// <remarks>
-/// Configure it with <c>builder.Services.Configure&lt;ImageProcessorOptions&gt;(...)</c>. The values are validated
-/// when the site starts running, and the processor reads them once. A replaced <see cref="IImageProcessor"/>
-/// does not use them. Changing them re-encodes images on the next publish.
-/// </remarks>
+/// <summary>Settings of the default WebP processor; a replaced <see cref="IImageProcessor"/> ignores them.</summary>
 public sealed class ImageProcessorOptions
 {
-    /// <summary>Widths in pixels of the smaller variants, or <see langword="null"/> for 320, 640, 960 and 1280.</summary>
-    /// <remarks>
-    /// Widths at or above the source width or <see cref="MaxWidth"/> are skipped. Every image also gets
-    /// a variant at its own width, capped at <see cref="MaxWidth"/> and at the width that keeps both sides
-    /// within WebP's 16383 pixels.
-    /// </remarks>
+    /// <summary>Widths of the smaller variants; null means 320, 640, 960 and 1280.</summary>
+    /// <remarks>Widths not below the image or <see cref="MaxWidth"/> are skipped; the image's own width is always added.</remarks>
     public IReadOnlyList<int>? Widths { get; set; }
 
-    /// <summary>The widest variant in pixels. Wider images are scaled down to it. Defaults to 1920.</summary>
+    /// <summary>The widest variant in pixels. Defaults to 1920.</summary>
     public int MaxWidth { get; set; } = 1920;
 
-    /// <summary>The lossy WebP quality from 1 to 100. Defaults to 80.</summary>
+    /// <summary>WebP quality from 1 to 100. Defaults to 80.</summary>
     public int Quality { get; set; } = 80;
 }

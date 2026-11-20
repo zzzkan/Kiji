@@ -4,9 +4,6 @@ using YamlDotNet.Serialization;
 
 namespace Kiji.Markdown;
 
-/// <summary>
-/// Reads front matter, body and dependency hash from the same bytes.
-/// </summary>
 internal static class MarkdownSourceReader
 {
     internal static MarkdownSource<TFrontMatter> Read<TFrontMatter>(

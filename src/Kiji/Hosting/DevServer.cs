@@ -11,11 +11,6 @@ using Microsoft.Extensions.Logging;
 
 namespace Kiji.Hosting;
 
-/// <summary>
-/// On-demand development server. Pages render per request through the exact same
-/// <c>HtmlRenderer</c> pipeline used by the static build; the only additions are
-/// post-render live-reload script injection and content watching.
-/// </summary>
 internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder, DevServerStatusReporter reporter) : IAsyncDisposable
 {
     private const string DefaultUrl = "http://127.0.0.1:8080";
@@ -212,11 +207,6 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
         return web;
     }
 
-    /// <summary>
-    /// Called after a hot reload (e.g. dotnet watch) applied code updates to this
-    /// process: drops cached snapshots so updated components render fresh, then
-    /// reloads connected browsers.
-    /// </summary>
     internal static Task NotifyCodeUpdated()
     {
         return Task.WhenAll(ActiveServers.Keys.Select(static server => server.ReloadAfterCodeUpdateAsync()));

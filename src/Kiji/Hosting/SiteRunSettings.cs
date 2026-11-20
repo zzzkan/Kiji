@@ -3,22 +3,12 @@ using Microsoft.Extensions.Hosting;
 
 namespace Kiji.Hosting;
 
-/// <summary>How this process runs the site, read once when the builder is created.</summary>
-/// <param name="OutputPath">Where to publish, or <see langword="null"/> to serve.</param>
-/// <param name="EnvironmentName">The host environment name.</param>
 internal sealed record SiteRunSettings(string? OutputPath, string EnvironmentName)
 {
-    /// <summary>The environment name variable read by the .NET generic host.</summary>
     private const string EnvironmentNameVariable = "DOTNET_ENVIRONMENT";
 
     internal bool Publishing => OutputPath is not null;
 
-    /// <param name="hostConfiguration">
-    /// Host configuration, separate from project-local site settings. Tests can supply
-    /// in-memory configuration without mutating process-wide state.
-    /// </param>
-    /// <param name="runtimeMetadata">Typed runtimeconfig metadata supplied for this invocation.</param>
-    /// <param name="args">Command-line arguments. Only <c>--environment</c> is read, and only while serving.</param>
     internal static SiteRunSettings FromExecutionContext(IConfiguration hostConfiguration,
         SiteRuntimeMetadata runtimeMetadata, string[]? args = null)
     {

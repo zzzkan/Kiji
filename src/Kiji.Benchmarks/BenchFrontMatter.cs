@@ -1,8 +1,5 @@
 namespace Kiji.Benchmarks;
 
-/// <summary>
-/// Representative front matter shape for parser benchmarks.
-/// </summary>
 public sealed class BenchFrontMatter
 {
     public string? Title { get; set; }

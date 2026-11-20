@@ -4,16 +4,10 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Kiji.Hosting;
 
-/// <summary>
-/// Owns the materialized state of all content collections for the current site snapshot.
-/// Swapping snapshots (e.g. when content changes during development) simply clears the
-/// materialization cache; they re-materialize lazily on next access.
-/// </summary>
 internal sealed class ContentRuntime
 {
     internal Generation.DependencyCatalog Dependencies { get; } = new();
 
-    /// <summary>Hashes of the content files read in the current snapshot.</summary>
     internal Generation.ContentFileRegistry Files { get; } = new();
 
     private readonly HashSet<(Type Type, string? ServiceKey)> _registrations = [];
@@ -24,9 +18,6 @@ internal sealed class ContentRuntime
     private long _generation;
     private IServiceProvider? _services;
 
-    /// <summary>
-    /// Creates a registration identified by its element type and optional service key.
-    /// </summary>
     internal ServiceDescriptor Register<T>(string? serviceKey, Func<ContentCollection<T>> createCollection)
         where T : class
     {
@@ -58,7 +49,6 @@ internal sealed class ContentRuntime
         }
     }
 
-    /// <remarks>Called during materialization, which holds the materialization lock.</remarks>
     internal void RegisterItem(object item, string sourceId, string id, string? digest)
     {
         if (item is string) { return; }

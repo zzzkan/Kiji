@@ -7,9 +7,6 @@ using Kiji.SyntheticSite;
 
 namespace Kiji.Benchmarks;
 
-/// <summary>
-/// Measures whole-site builds over a frozen workload with warmup and isolated cases.
-/// </summary>
 [SimpleJob(RunStrategy.Monitoring, launchCount: 1, warmupCount: 2, iterationCount: 10, invocationCount: 1)]
 [MemoryDiagnoser]
 public class SiteBuildBenchmarks

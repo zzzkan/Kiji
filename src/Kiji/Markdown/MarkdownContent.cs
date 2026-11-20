@@ -2,7 +2,7 @@ using Kiji.Rendering;
 
 namespace Kiji.Markdown;
 
-/// <summary>A Markdown source with parsed front matter and a lazily rendered body.</summary>
+/// <summary>A Markdown file: its front matter, and a body rendered on demand.</summary>
 public sealed class MarkdownContent<TFrontMatter>
 {
     private readonly Func<MarkdownContent<TFrontMatter>, CancellationToken, Task<string>> _renderAsync;
@@ -43,15 +43,11 @@ public sealed class MarkdownContent<TFrontMatter>
     internal void TrackFrontMatter(string sourceId) =>
         _frontMatterDependencyKey = sourceId + "#front-matter/" + Path.ToUpperInvariant();
 
-    /// <summary>The source path relative to the content directory, using <c>/</c> separators. Also the collection ID.</summary>
+    /// <summary>The path under the content directory, with <c>/</c> separators; also its collection ID.</summary>
     public string Path { get; }
 
     internal string SourcePath { get; }
 
-    /// <summary>
-    /// The markdown body (front matter stripped) captured when the file was read for
-    /// parsing, so rendering does not read the file again.
-    /// </summary>
     internal string Body { get; }
 
     /// <summary>The parsed front matter.</summary>
@@ -72,7 +68,7 @@ public sealed class MarkdownContent<TFrontMatter>
         }
     }
 
-    /// <summary>Renders the Markdown body as HTML and materializes shared image variants.</summary>
+    /// <summary>Renders the body as HTML, writing its image variants.</summary>
     public async ValueTask<string> RenderAsync(CancellationToken cancellationToken = default)
     {
         Interlocked.Exchange(ref _rendered, 1);

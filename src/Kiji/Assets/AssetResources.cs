@@ -5,14 +5,11 @@ using Microsoft.AspNetCore.Components;
 
 namespace Kiji.Assets;
 
-/// <summary>The SDK's public URLs and integrity metadata, shared by one site snapshot.</summary>
 internal sealed class AssetResources
 {
     internal static AssetResources Empty { get; } = new(ResourceAssetCollection.Empty);
     private readonly Lazy<ImportMapDefinition> _importMap;
 
-    /// <param name="collection">The SDK's endpoints, at their public URLs.</param>
-    /// <param name="resolveUrl">Maps a site-relative asset path to its public URL; null keeps relative URLs.</param>
     internal AssetResources(ResourceAssetCollection collection, Func<string, string>? resolveUrl = null)
     {
         Collection = collection;

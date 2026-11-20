@@ -1,17 +1,13 @@
 namespace Kiji.Assets;
 
-/// <summary>Generates optimized image variants in the supplied output directory.</summary>
-/// <remarks>
-/// Register a singleton in builder.Services to replace the default processor.
-/// Implementations must support concurrent calls and retain no page or content state.
-/// Standard DI ownership applies; directly registered instances are disposed by the caller.
-/// </remarks>
+/// <summary>Writes image variants. Register a singleton in builder.Services to replace the default.</summary>
+/// <remarks>Calls run concurrently; keep no page or content state.</remarks>
 public interface IImageProcessor
 {
-    /// <summary>Digest of the implementation and every transformation setting; null disables persistent reuse.</summary>
+    /// <summary>Changes whenever output could change; null disables caching.</summary>
     string? CacheIdentity => null;
 
-    /// <summary>Produces variants of the source image and describes them.</summary>
+    /// <summary>Writes variants of the source into the output directory.</summary>
     Task<ProcessedImageInfo> ProcessAsync(
         string sourceFilePath,
         string outputDirectory,

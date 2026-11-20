@@ -6,13 +6,12 @@ using YamlDotNet.Serialization.NamingConventions;
 
 namespace Kiji.Markdown;
 
-/// <summary>Site-wide Markdown and YAML settings, configured through DI options.</summary>
+/// <summary>Markdown and YAML settings for the whole site; configure them as DI options.</summary>
 public sealed class MarkdownOptions
 {
     private readonly Lock _yamlLock = new();
 
-    /// <summary>The Markdig builder. Defaults to GFM-style tables, task lists, autolinks and strikethrough, footnotes, GitHub heading IDs, and generic attributes.</summary>
-    /// <remarks>Replace or remove existing extensions through <c>Pipeline.Extensions</c>.</remarks>
+    /// <summary>The Markdig pipeline: GitHub-style tables, task lists, autolinks, strikethrough, footnotes, heading IDs and attributes by default.</summary>
     public MarkdownPipelineBuilder Pipeline { get; } = new MarkdownPipelineBuilder()
         .UseAutoIdentifiers(AutoIdentifierOptions.GitHub)
         .UsePipeTables()
@@ -22,7 +21,7 @@ public sealed class MarkdownOptions
         .UseFootnotes()
         .UseGenericAttributes();
 
-    /// <summary>The YAML builder. Defaults to camelCase, case-insensitive property matching, strict unknown keys, and UTC for dates without offsets.</summary>
+    /// <summary>The front matter deserializer: camelCase, case-insensitive, unknown keys rejected, dates without offset in UTC.</summary>
     public DeserializerBuilder Yaml { get; } = new DeserializerBuilder()
         .WithNamingConvention(CamelCaseNamingConvention.Instance)
         .WithCaseInsensitivePropertyMatching()

@@ -5,11 +5,6 @@ using System.Text.Json;
 
 namespace Kiji.Hosting;
 
-/// <summary>
-/// Tracks connected live-reload WebSocket clients and broadcasts reload messages and
-/// compilation errors. Clients receive "reload" or a JSON array of error lines; an empty
-/// array clears the errors.
-/// </summary>
 internal sealed class LiveReloadHub
 {
     private static readonly byte[] ReloadMessage = Encoding.UTF8.GetBytes("reload");
@@ -68,10 +63,6 @@ internal sealed class LiveReloadHub
         return QueueSendAsync(() => SendToClientsAsync(ReloadMessage, cancellationToken));
     }
 
-    /// <summary>
-    /// Shows <paramref name="diagnostics"/> in every connected browser, and in browsers
-    /// that connect later, until the next report. An empty report clears them.
-    /// </summary>
     internal Task<int> ReportDiagnosticsAsync(string[] diagnostics, CancellationToken cancellationToken)
     {
         var message = JsonSerializer.SerializeToUtf8Bytes(diagnostics);

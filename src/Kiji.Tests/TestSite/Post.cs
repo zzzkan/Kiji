@@ -27,7 +27,6 @@ public sealed class Post
         Tags = tags;
     }
 
-    /// <summary>The slug is what routes and feeds correlate on, so it is the key.</summary>
     public string Key => Slug;
 
     public string Id => _content.Path;

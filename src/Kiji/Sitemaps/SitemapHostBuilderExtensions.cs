@@ -2,18 +2,13 @@ using Microsoft.Extensions.Hosting;
 
 namespace Kiji.Sitemaps;
 
-/// <summary>
-/// Sitemap support for <see cref="IHostApplicationBuilder"/>.
-/// </summary>
+/// <summary>Adds sitemaps to a site.</summary>
 public static class SitemapHostBuilderExtensions
 {
-    /// <summary>Adds a sitemap of generated pages.</summary>
+    /// <summary>Adds a sitemap of the generated pages, except <c>404.html</c>.</summary>
     /// <param name="builder">The site builder.</param>
-    /// <param name="path">The output-relative path, defaulting to <c>sitemap.xml</c>.</param>
-    /// <param name="excludedPaths">
-    /// Site-relative page paths to omit, as they appear in the page URL, percent-encoded or not.
-    /// <c>404.html</c> is always omitted.
-    /// </param>
+    /// <param name="path">The output path; <c>sitemap.xml</c> by default.</param>
+    /// <param name="excludedPaths">Page paths to leave out, percent-encoded or not.</param>
     public static IHostApplicationBuilder AddSitemap(
         this IHostApplicationBuilder builder,
         string path = "sitemap.xml",

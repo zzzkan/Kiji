@@ -178,12 +178,6 @@ public sealed class PackageFixture : IAsyncLifetime
         File.WriteAllText(path, File.ReadAllText(path).Replace(before, after, StringComparison.Ordinal));
     }
 
-    /// <summary>
-    /// Finds the site's runtime identifier and the ReadyToRun images restored for it: those of
-    /// the runtime package that Kiji's graph names for the most specific runtime with an entry,
-    /// following the SDK's runtime fallback as NuGet does.
-    /// </summary>
-    /// <returns>The runtime identifier, and the images' directory or <see langword="null"/> when none apply.</returns>
     internal async Task<(string RuntimeIdentifier, string? Images)> ResolveRuntimeImagesAsync(string project)
     {
         var output = await DotnetAsync("msbuild", project, "-getProperty:RuntimeIdentifier", "-getProperty:BundledRuntimeIdentifierGraphFile");

@@ -4,16 +4,6 @@ using Kiji.Generation;
 
 namespace Kiji.Markdown;
 
-/// <summary>
-/// Prepares the Markdown and YAML code on a spare processor while the site is still being
-/// configured. A process uses that code for the first time when it loads content, and the
-/// first use costs far more than the work itself: the runtime loads, compiles and initializes
-/// it then. Content loading and rendering wait on one thread for that, with the others idle.
-/// </summary>
-/// <remarks>
-/// The sample runs the paths every Markdown file takes, with the default options. It reads
-/// nothing, writes nothing and creates no site state, so it cannot affect the output.
-/// </remarks>
 internal static class MarkdownWarmup
 {
     private const string Sample = """
@@ -58,7 +48,6 @@ internal static class MarkdownWarmup
 
     private static int s_started;
 
-    /// <summary>Starts the warm-up once per process. Returns immediately.</summary>
     internal static void Start()
     {
         if (Environment.ProcessorCount < 2 || Interlocked.Exchange(ref s_started, 1) != 0)
@@ -81,7 +70,6 @@ internal static class MarkdownWarmup
         }
     }
 
-    /// <summary>Runs the sample through front matter parsing, Markdown parsing and rendering.</summary>
     internal static string Warm()
     {
         var options = new MarkdownOptions();

@@ -1,8 +1,5 @@
 namespace Kiji.SyntheticSite;
 
-/// <summary>
-/// Front matter shape for the synthetic posts. Mirrors a typical blog site.
-/// </summary>
 public sealed class PostFrontMatter
 {
     public string? Title { get; set; }

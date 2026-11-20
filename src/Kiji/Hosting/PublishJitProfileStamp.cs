@@ -2,15 +2,10 @@ using System.Globalization;
 
 namespace Kiji.Hosting;
 
-/// <summary>What a kept publish JIT profile was recorded with, stored beside it.</summary>
-/// <param name="CodeIdentity">The code that ran.</param>
-/// <param name="RenderedPages">How many pages it rendered.</param>
-/// <param name="Complete">Whether the recording ran to the end of the publish.</param>
 internal sealed record PublishJitProfileStamp(string CodeIdentity, int RenderedPages, bool Complete)
 {
     private const string Version = "1";
 
-    /// <summary>Reads a stamp; a missing or unreadable one is <see langword="null"/>.</summary>
     internal static PublishJitProfileStamp? Read(string path)
     {
         try

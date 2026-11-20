@@ -4,7 +4,6 @@ using Kiji.Markdown;
 
 namespace Kiji.Benchmarks;
 
-/// <summary>Measures Markdown loading against its file I/O cost.</summary>
 [SimpleJob(RunStrategy.Monitoring, launchCount: 1, warmupCount: 2, iterationCount: 10, invocationCount: 1)]
 [MemoryDiagnoser]
 public class ContentLoadBenchmarks
@@ -44,11 +43,6 @@ public class ContentLoadBenchmarks
         Directory.Delete(_contentsDirectory, recursive: true);
     }
 
-    /// <summary>
-    /// The floor: opening and reading every file, nothing else. If the full load is not
-    /// much more than this, no amount of parsing work is worth optimizing and the only
-    /// way forward is to stop reading the files.
-    /// </summary>
     [Benchmark]
     public long ReadBytesOnly()
     {
@@ -58,7 +52,6 @@ public class ContentLoadBenchmarks
         return total;
     }
 
-    /// <summary>Reading, hashing and front-matter parsing — the parallel part.</summary>
     [Benchmark(Baseline = true)]
     public int ReadAndParse()
     {

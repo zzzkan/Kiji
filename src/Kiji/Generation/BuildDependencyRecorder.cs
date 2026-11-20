@@ -1,6 +1,5 @@
 namespace Kiji.Generation;
 
-/// <summary>Inputs and outputs observed by one page. Read after its render completes.</summary>
 internal sealed class BuildDependencyRecorder
 {
     private readonly Lock _gate = new();

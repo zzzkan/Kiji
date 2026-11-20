@@ -5,11 +5,9 @@ using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace Kiji.Analyzers;
 
-/// <summary>Reports every type declared after the first one in a file.</summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class OneTypePerFileAnalyzer : DiagnosticAnalyzer
 {
-    /// <summary>The diagnostic reported for a second top-level type in a file.</summary>
     public static readonly DiagnosticDescriptor Rule = new(
         id: "KR0001",
         title: "One type per file",
@@ -19,10 +17,8 @@ public sealed class OneTypePerFileAnalyzer : DiagnosticAnalyzer
         isEnabledByDefault: true,
         description: "Each file declares one top-level type; nested types stay inside their containing type.");
 
-    /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [Rule];
 
-    /// <inheritdoc />
     public override void Initialize(AnalysisContext context)
     {
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);

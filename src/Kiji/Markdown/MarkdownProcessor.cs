@@ -9,11 +9,6 @@ using Kiji.Rendering;
 
 namespace Kiji.Markdown;
 
-/// <summary>
-/// Processes markdown bodies into HTML through a shared Markdig pipeline. Referenced
-/// local images are materialized into shared site output and rewritten to
-/// root-relative public URLs.
-/// </summary>
 internal sealed class MarkdownProcessor
 {
     private readonly MarkdownPipeline _pipeline;
@@ -26,12 +21,6 @@ internal sealed class MarkdownProcessor
     private readonly string _basePath;
     private readonly ContentPath _contentPaths;
 
-    /// <param name="options">The resolved site paths.</param>
-    /// <param name="paths">The project root used for portable source identities.</param>
-    /// <param name="site">The site's public deployment base path.</param>
-    /// <param name="contentPaths">Registered content roots used to validate local image sources.</param>
-    /// <param name="imageProcessor">The image backend used to process referenced local images.</param>
-    /// <param name="contentOptions">Site-wide pipeline configuration.</param>
     public MarkdownProcessor(
         ResolvedSitePaths options,
         SiteExecutionPaths paths,
@@ -53,13 +42,6 @@ internal sealed class MarkdownProcessor
         _pipeline = BuildPipeline(contentOptions);
     }
 
-    /// <summary>
-    /// Processes an already-read markdown body for the given source file, skipping the
-    /// file read. <paramref name="filePath"/> still identifies the source for image
-    /// resolution and dependency tracking.
-    /// </summary>
-    /// <param name="filePath">Path to the markdown file the body came from.</param>
-    /// <param name="markdownBody">The markdown body with front matter already removed.</param>
     public async Task<string> ProcessBodyAsync(string filePath, string markdownBody, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);

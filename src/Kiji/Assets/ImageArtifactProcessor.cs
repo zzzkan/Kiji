@@ -4,7 +4,6 @@ using Kiji.Rendering;
 
 namespace Kiji.Assets;
 
-/// <summary>Kiji owns persistence; encoders only write to isolated working directories.</summary>
 internal static class ImageArtifactProcessor
 {
     internal static async Task<ProcessedImageInfo> ProcessAsync(IImageProcessor processor,

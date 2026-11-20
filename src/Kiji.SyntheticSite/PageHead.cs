@@ -3,9 +3,6 @@ using Microsoft.AspNetCore.Components.Rendering;
 
 namespace Kiji.SyntheticSite;
 
-/// <summary>
-/// Contributes standard head content (charset, title, description, canonical) for a page.
-/// </summary>
 public sealed class PageHead : ComponentBase
 {
     [Inject]

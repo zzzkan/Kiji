@@ -3,9 +3,6 @@ using Microsoft.AspNetCore.Components.Rendering;
 
 namespace Kiji.SyntheticSite;
 
-/// <summary>
-/// Default layout for the synthetic site: header with navigation, main slot, footer.
-/// </summary>
 public sealed class MainLayout : LayoutComponentBase
 {
     protected override void BuildRenderTree(RenderTreeBuilder builder)

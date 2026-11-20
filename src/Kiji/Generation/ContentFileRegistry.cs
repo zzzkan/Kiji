@@ -2,11 +2,6 @@ using System.Collections.Concurrent;
 
 namespace Kiji.Generation;
 
-/// <summary>
-/// Hashes of the exact bytes parsed in the current content snapshot. Invalidated
-/// together with content before each publish or development reload; timestamps
-/// never establish equivalence across snapshots.
-/// </summary>
 internal sealed class ContentFileRegistry
 {
     private readonly ConcurrentDictionary<string, string> _hashes = new(StringComparer.Ordinal);

@@ -3,7 +3,6 @@ using Kiji.Hosting;
 
 namespace Kiji;
 
-/// <summary>Fixed project and execution paths supplied by the site's build.</summary>
 internal sealed class SiteExecutionPaths
 {
     internal SiteExecutionPaths(string projectDirectory, string? assetManifestBasePath = null)
@@ -38,9 +37,6 @@ internal sealed class SiteExecutionPaths
         return Path.Combine(ResolveKijiPath(), "cache");
     }
 
-    /// <summary>
-    /// Private image work: inside the publish cache, under its lease, or beside the dev mirror.
-    /// </summary>
     internal string ResolveImageWorkPath(ResolvedSitePaths options)
     {
         return options.ImageCacheDirectory is null
@@ -48,10 +44,6 @@ internal sealed class SiteExecutionPaths
             : Path.Combine(ResolveCachePath(), "work");
     }
 
-    /// <summary>
-    /// Paths for a publish: the site is written to <paramref name="outputPath"/>, which
-    /// <c>dotnet publish</c> supplied.
-    /// </summary>
     internal ResolvedSitePaths ResolveForPublish(string outputPath)
     {
         return new ResolvedSitePaths
@@ -63,10 +55,6 @@ internal sealed class SiteExecutionPaths
         };
     }
 
-    /// <summary>
-    /// Paths for development and route planning. Only the dev server creates the mirror;
-    /// the persistent publish cache is never used here.
-    /// </summary>
     internal ResolvedSitePaths ResolveForDevelopment()
     {
         return new ResolvedSitePaths

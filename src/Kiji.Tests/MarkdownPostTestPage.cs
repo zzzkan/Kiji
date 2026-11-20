@@ -4,10 +4,6 @@ using Microsoft.AspNetCore.Components.Rendering;
 
 namespace Kiji.Tests;
 
-/// <summary>
-/// Minimal markdown-backed page used to exercise the full markdown + image pipeline
-/// end to end through <see cref="TestSiteHost.PublishAsync"/>.
-/// </summary>
 [Route("/md/{Slug}/")]
 public sealed class MarkdownPostTestPage : ComponentBase
 {

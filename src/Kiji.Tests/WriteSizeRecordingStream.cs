@@ -1,6 +1,5 @@
 namespace Kiji.Tests;
 
-/// <summary>A memory stream that records the largest single write.</summary>
 internal sealed class WriteSizeRecordingStream : MemoryStream
 {
     public int LargestWrite { get; private set; }

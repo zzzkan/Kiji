@@ -5,12 +5,10 @@ using Microsoft.Extensions.Options;
 
 namespace Kiji.Markdown;
 
-/// <summary>
-/// Markdown content support for <see cref="IHostApplicationBuilder"/>.
-/// </summary>
+/// <summary>Adds Markdown content to a site.</summary>
 public static class MarkdownHostBuilderExtensions
 {
-    /// <summary>Adds Markdown files as a content collection with parsed front matter and lazily rendered bodies.</summary>
+    /// <summary>Adds a <see cref="ContentCollection{T}"/> of Markdown files.</summary>
     public static IHostApplicationBuilder AddMarkdownContent<TFrontMatter>(
         this IHostApplicationBuilder builder,
         Action<MarkdownContentOptions>? configure = null)
@@ -21,8 +19,8 @@ public static class MarkdownHostBuilderExtensions
             configure);
     }
 
-    /// <summary>Adds Markdown files projected into a collection of custom models.</summary>
-    /// <param name="select">Projects each parsed file independently; the result must not depend on other items.</param>
+    /// <summary>Adds a <see cref="ContentCollection{T}"/> of models made from Markdown files.</summary>
+    /// <param name="select">Makes one model from one file, without reading other items.</param>
     public static IHostApplicationBuilder AddMarkdownContent<TFrontMatter, TModel>(
         this IHostApplicationBuilder builder,
         Func<MarkdownContent<TFrontMatter>, TModel> select,
@@ -31,7 +29,7 @@ public static class MarkdownHostBuilderExtensions
         where TModel : class
         => AddMarkdownContentCore(builder, null, select, configure);
 
-    /// <summary>Adds a keyed collection of Markdown files with parsed front matter and lazily rendered bodies.</summary>
+    /// <summary>Adds a keyed <see cref="ContentCollection{T}"/> of Markdown files.</summary>
     public static IHostApplicationBuilder AddKeyedMarkdownContent<TFrontMatter>(
         this IHostApplicationBuilder builder,
         string serviceKey,
@@ -40,11 +38,11 @@ public static class MarkdownHostBuilderExtensions
         => builder.AddKeyedMarkdownContent<TFrontMatter, MarkdownContent<TFrontMatter>>(
             serviceKey, static content => content, configure);
 
-    /// <summary>Adds Markdown files projected into a keyed collection of custom models.</summary>
+    /// <summary>Adds a keyed <see cref="ContentCollection{T}"/> of models made from Markdown files.</summary>
     /// <param name="builder">The site builder.</param>
-    /// <param name="serviceKey">A non-empty service key identifying this collection.</param>
-    /// <param name="select">Projects each parsed file independently; the result must not depend on other items.</param>
-    /// <param name="configure">Selects the source directory and files.</param>
+    /// <param name="serviceKey">The collection's non-empty service key.</param>
+    /// <param name="select">Makes one model from one file, without reading other items.</param>
+    /// <param name="configure">Selects the directory and files.</param>
     public static IHostApplicationBuilder AddKeyedMarkdownContent<TFrontMatter, TModel>(
         this IHostApplicationBuilder builder,
         string serviceKey,

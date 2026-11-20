@@ -1,8 +1,6 @@
 namespace Kiji;
 
-/// <summary>
-/// The full-site input handed to an artifact writer: site metadata and every generated page.
-/// </summary>
+/// <summary>What an artifact writer receives: the site and all its pages.</summary>
 public sealed class SiteOutputContext
 {
     internal SiteOutputContext(SiteInfo site, IReadOnlyList<SitePageInfo> pages, IServiceProvider services)
@@ -12,14 +10,12 @@ public sealed class SiteOutputContext
         Services = services;
     }
 
-    /// <summary>The site metadata supplied to this generation.</summary>
+    /// <summary>The site metadata.</summary>
     public SiteInfo Site { get; }
 
-    /// <summary>
-    /// Every generated page in the site.
-    /// </summary>
+    /// <summary>Every generated page.</summary>
     public IReadOnlyList<SitePageInfo> Pages { get; }
 
-    /// <summary>The site services available during artifact generation.</summary>
+    /// <summary>The site's root services.</summary>
     public IServiceProvider Services { get; }
 }

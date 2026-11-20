@@ -6,12 +6,6 @@ using Markdig.Syntax.Inlines;
 
 namespace Kiji.Markdown;
 
-/// <summary>
-/// Renders local markdown images as responsive images with lazy loading and CLS
-/// optimization. Variant paths are relative to the site, beneath the deployment
-/// base path. Attached per
-/// renderer (not per pipeline) because its state is per document.
-/// </summary>
 internal sealed class ResponsiveImageWriter
 {
     internal ResponsiveImageContext? Context { get; set; }

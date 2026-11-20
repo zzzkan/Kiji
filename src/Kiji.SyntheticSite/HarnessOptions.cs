@@ -1,8 +1,5 @@
 namespace Kiji.SyntheticSite;
 
-/// <summary>
-/// Command line options for the synthetic site build harness.
-/// </summary>
 public sealed record HarnessOptions
 {
     public int Pages { get; init; } = 1000;
@@ -17,10 +14,6 @@ public sealed record HarnessOptions
 
     public bool FullEachRun { get; init; }
 
-    /// <summary>
-    /// Reports how long each build stage took, per run. A total that moved is not an
-    /// explanation until a phase can be pinned on it.
-    /// </summary>
     public bool Phases { get; init; }
 
     public static HarnessOptions Parse(string[] args)

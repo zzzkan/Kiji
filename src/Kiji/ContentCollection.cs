@@ -7,11 +7,8 @@ using Kiji.Rendering;
 
 namespace Kiji;
 
-/// <summary>A lazily loaded, dependency-aware collection of site content.</summary>
-/// <remarks>
-/// Resolve it through dependency injection. Markdown IDs are content-directory-relative
-/// paths with <c>/</c> separators, including <c>.md</c>. IDs are not page URLs.
-/// </remarks>
+/// <summary>Site content, loaded on first use and tracked for incremental builds. Resolve it through DI.</summary>
+/// <remarks>A Markdown ID is its path under the content directory, such as <c>posts/hello.md</c>; it is not a URL.</remarks>
 public sealed class ContentCollection<T> : IReadOnlyCollection<T>
     where T : class
 {
@@ -32,22 +29,16 @@ public sealed class ContentCollection<T> : IReadOnlyCollection<T>
         runtime.Dependencies.RegisterSource(_sourceId + "#front-matter", id => Materialized.Index.GetValueOrDefault(id).FrontMatterDigest);
     }
 
-    /// <summary>
-    /// The number of items in the collection.
-    /// </summary>
+    /// <inheritdoc/>
     public int Count => Observed.Entries.Count;
 
-    /// <summary>
-    /// The item with the given ID, compared case-insensitively.
-    /// </summary>
-    /// <exception cref="KeyNotFoundException">No item carries that ID.</exception>
+    /// <summary>The item with this ID, ignoring case.</summary>
+    /// <exception cref="KeyNotFoundException">No item has the ID.</exception>
     public T this[string id] => TryGetValue(id, out var item)
         ? item
         : throw new KeyNotFoundException($"Content item with ID '{id}' was not found.");
 
-    /// <summary>
-    /// Finds an item by its ID, compared case-insensitively.
-    /// </summary>
+    /// <summary>Finds the item with this ID, ignoring case.</summary>
     public bool TryGetValue(string id, [NotNullWhen(true)] out T? item)
     {
         ArgumentNullException.ThrowIfNull(id);
@@ -69,9 +60,7 @@ public sealed class ContentCollection<T> : IReadOnlyCollection<T>
         return true;
     }
 
-    /// <summary>
-    /// Whether an item with the given ID exists.
-    /// </summary>
+    /// <summary>Whether an item has this ID, ignoring case.</summary>
     public bool Contains(string id)
     {
         return TryGetValue(id, out _);
@@ -90,12 +79,6 @@ public sealed class ContentCollection<T> : IReadOnlyCollection<T>
 
     private MaterializedContent Materialized => _runtime.GetOrMaterialize(this, Materialize);
 
-    /// <summary>
-    /// The collection as seen by a member that exposes its shape (count,
-    /// enumeration). Observing the shape couples the page to the content set: a list
-    /// page has to reflect items being added and removed, not just edited. ID
-    /// lookups deliberately go through <see cref="Materialized"/> instead.
-    /// </summary>
     private MaterializedContent Observed
     {
         get

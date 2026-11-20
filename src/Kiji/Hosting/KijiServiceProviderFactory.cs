@@ -3,7 +3,6 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Kiji.Hosting;
 
-/// <summary>Keeps Kiji's registration and scope validation when building a generic host.</summary>
 internal sealed class KijiServiceProviderFactory(SiteBuilderContext context) : IServiceProviderFactory<IServiceCollection>
 {
     public IServiceCollection CreateBuilder(IServiceCollection services) => services;

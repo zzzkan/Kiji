@@ -4,29 +4,17 @@ using Microsoft.AspNetCore.Components;
 
 namespace Kiji.Routing;
 
-/// <summary>
-/// Resolves Razor components into pages via their <c>@page</c> route templates,
-/// either by scanning an assembly or from an explicit type list.
-/// </summary>
 internal static class PageDiscovery
 {
     private static readonly ConcurrentDictionary<Assembly, IReadOnlyList<DiscoveredPage>> AssemblyCache = new();
     private static readonly ConcurrentDictionary<Type, Dictionary<string, ComponentParameter>> ParameterCache = new();
     private static readonly ConcurrentDictionary<Type, IReadOnlyList<DiscoveredPage>> TypeCache = new();
 
-    /// <summary>
-    /// A component resolved from its <c>@page</c> route template.
-    /// </summary>
     internal sealed record DiscoveredPage(
         string SourceIdentifier,
         Type ComponentType,
         StaticPageDefinition PageDefinition);
 
-    /// <summary>
-    /// Finds all routes on public, non-abstract
-    /// <see cref="IComponent"/> classes in an assembly.
-    /// Results are cached per assembly; the cache is dropped on hot reload.
-    /// </summary>
     public static IReadOnlyList<DiscoveredPage> FromAssembly(Assembly assembly)
     {
         ArgumentNullException.ThrowIfNull(assembly);
@@ -34,12 +22,6 @@ internal static class PageDiscovery
         return AssemblyCache.GetOrAdd(assembly, static assembly => ScanAssembly(assembly));
     }
 
-    /// <summary>
-    /// The <c>[Parameter]</c> properties a component declares, including their types and setters. Page parameters may
-    /// supply values beyond the route template's own parameters; those must name a real
-    /// parameter, or the component would reject them at render time with no indication
-    /// of which registration was at fault.
-    /// </summary>
     internal static Dictionary<string, ComponentParameter> Parameters(Type componentType)
     {
         return ParameterCache.GetOrAdd(
@@ -80,10 +62,6 @@ internal static class PageDiscovery
         return pages;
     }
 
-    /// <summary>
-    /// Resolves one registered component into pages. The type must be a
-    /// non-abstract <see cref="IComponent"/> declaring at least one <c>@page</c> route template.
-    /// </summary>
     internal static IReadOnlyList<DiscoveredPage> FromType(Type pageType)
     {
         if (pageType is not { IsClass: true, IsAbstract: false } || !typeof(IComponent).IsAssignableFrom(pageType))
@@ -99,9 +77,6 @@ internal static class PageDiscovery
             $"Page component '{pageType.FullName}' does not declare a '@page' route template.");
     }
 
-    /// <summary>
-    /// Validates that every route template resolves to exactly one component.
-    /// </summary>
     internal static IReadOnlyList<DiscoveredPage> EnsureUniqueRoutes(IReadOnlyList<DiscoveredPage> pages)
     {
         var routes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -115,9 +90,6 @@ internal static class PageDiscovery
         return pages;
     }
 
-    /// <summary>
-    /// Creates a <see cref="DiscoveredPage"/> for the route template declared by the component.
-    /// </summary>
     private static DiscoveredPage CreateDiscoveredPage(
         string routeTemplate,
         Type componentType)

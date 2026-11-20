@@ -13,11 +13,6 @@ internal static class TestArticleContents
         return CreateSiteInfo(new Uri("https://example.com"));
     }
 
-    /// <summary>
-    /// The same site metadata published under a sub-path, for exercising base-path
-    /// behavior. Kept separate from <see cref="CreateSiteInfo()"/> because most tests
-    /// assert against the domain-root URLs.
-    /// </summary>
     public static SiteInfo CreateSiteInfoWithBasePath()
     {
         return CreateSiteInfo(new Uri("https://example.com/kiji/"));
@@ -35,10 +30,6 @@ internal static class TestArticleContents
         };
     }
 
-    /// <summary>
-    /// Builds a site wired exactly like the real site (pages, not-found, content
-    /// and tag route mappings) over the given posts.
-    /// </summary>
     private static TestSiteHost CreateApp(params (Post Metadata, string Html)[] entries)
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(AppContext.BaseDirectory));
@@ -50,9 +41,6 @@ internal static class TestArticleContents
         return builder.BuildSite();
     }
 
-    /// <summary>
-    /// Includes the shared fixture's fixed pages; callers supply dynamic parameters explicitly.
-    /// </summary>
     public static HostApplicationBuilder MapTestAssemblyPages(HostApplicationBuilder builder)
     {
         builder.AddPageParameters<HomePage>(static _ => [new { }]);

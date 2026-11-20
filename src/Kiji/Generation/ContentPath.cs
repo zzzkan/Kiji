@@ -1,6 +1,5 @@
 namespace Kiji.Generation;
 
-/// <summary>Resolves images within the same registered roots used to load and watch content.</summary>
 internal sealed class ContentPath(IEnumerable<string> roots)
 {
     internal string[] Roots { get; } = [.. roots.Select(path => Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)))

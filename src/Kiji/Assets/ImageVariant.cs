@@ -1,8 +1,6 @@
 namespace Kiji.Assets;
 
-/// <summary>
-/// A single generated variant of a processed image.
-/// </summary>
-/// <param name="FileName">The variant file name, relative to the directory it was written to.</param>
-/// <param name="Width">The pixel width of the variant.</param>
+/// <summary>One generated variant.</summary>
+/// <param name="FileName">The file name in the output directory.</param>
+/// <param name="Width">The width in pixels.</param>
 public sealed record ImageVariant(string FileName, int Width);

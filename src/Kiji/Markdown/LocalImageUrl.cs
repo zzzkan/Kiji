@@ -1,10 +1,5 @@
 namespace Kiji.Markdown;
 
-/// <summary>
-/// Identifies content-local (relative) image URLs by extension. External URLs,
-/// site-root references (<c>/...</c>, served from the static directory), and
-/// non-image files are excluded.
-/// </summary>
 internal static class LocalImageUrl
 {
     private static readonly string[] ImageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp"];

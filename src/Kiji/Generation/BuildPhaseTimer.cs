@@ -2,15 +2,6 @@ using System.Diagnostics;
 
 namespace Kiji.Generation;
 
-/// <summary>
-/// Reports how long each stage of <see cref="Hosting.SiteEngine.PublishAsync"/> took, so a
-/// measurement harness can attribute a build's time without patching the build path.
-/// Nothing listens by default: <see cref="Observer"/> is null and each
-/// <see cref="Mark"/> is a null check.
-/// </summary>
-/// <remarks>
-/// Set <see cref="Observer"/> once per process; it is read on the build thread only.
-/// </remarks>
 internal sealed class BuildPhaseTimer
 {
     internal const string Snapshot = "snapshot";
@@ -32,15 +23,8 @@ internal sealed class BuildPhaseTimer
 
     private long _timestamp = Stopwatch.GetTimestamp();
 
-    /// <summary>
-    /// Receives (phase name, elapsed) as each stage finishes. Null disables timing.
-    /// </summary>
     internal static Action<string, TimeSpan>? Observer { get; set; }
 
-    /// <summary>
-    /// Attributes the time since the previous mark (or since construction) to
-    /// <paramref name="phase"/> and starts the next one.
-    /// </summary>
     internal void Mark(string phase)
     {
         var observer = Observer;

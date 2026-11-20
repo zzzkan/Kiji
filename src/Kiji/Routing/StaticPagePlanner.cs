@@ -2,17 +2,8 @@ using Kiji.Rendering;
 
 namespace Kiji.Routing;
 
-/// <summary>
-/// Provides helper methods to create a plan of static pages from page definitions and site content.
-/// </summary>
 internal static class StaticPagePlanner
 {
-    /// <summary>
-    /// Plans pages using explicit parameter sets, or default parameters for fixed routes.
-    /// </summary>
-    /// <param name="pages">The collection of static page definitions to be planned.</param>
-    /// <param name="parametersByPage">Explicit parameter sets keyed by page source identifier.</param>
-    /// <returns>A read-only list of planned pages ordered by their output relative path.</returns>
     public static IReadOnlyList<PageRenderRequest> PlanPages(
         IReadOnlyList<PageDiscovery.DiscoveredPage> pages,
         IReadOnlyDictionary<string, List<IReadOnlyDictionary<string, object?>>> parametersByPage)

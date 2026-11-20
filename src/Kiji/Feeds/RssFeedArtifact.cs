@@ -3,16 +3,12 @@ using Kiji.Generation;
 
 namespace Kiji.Feeds;
 
-/// <summary>
-/// Generates an RSS 2.0 feed from a sequence of entries, written in the order given.
-/// </summary>
 internal sealed class RssFeedArtifact(
     Func<IServiceProvider, IEnumerable<FeedItem>> items,
     string outputRelativePath = "feed.xml")
 {
     private const string AtomNamespace = "http://www.w3.org/2005/Atom";
 
-    /// <inheritdoc/>
     public async Task WriteAsync(Stream output, SiteOutputContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(output);

@@ -6,11 +6,10 @@ using Microsoft.Extensions.Hosting;
 
 namespace Kiji;
 
-/// <summary>Registers content, pages and generated files on a Kiji host builder.</summary>
+/// <summary>Configures a Kiji site's metadata, pages and output files.</summary>
 public static class StaticSiteHostBuilderExtensions
 {
-    /// <summary>Sets the required site metadata. A later call replaces it.</summary>
-    /// <remarks>Metadata can be bound with Configuration.GetRequiredSection("Site").Get&lt;SiteInfo&gt;().</remarks>
+    /// <summary>Sets the site metadata, which every site needs. A later call replaces it.</summary>
     public static IHostApplicationBuilder UseSiteInfo(this IHostApplicationBuilder builder, SiteInfo siteInfo)
     {
         var context = SiteBuilderContext.Get(builder);
@@ -56,8 +55,7 @@ public static class StaticSiteHostBuilderExtensions
         return builder;
     }
 
-    /// <summary>Uses a default layout for pages without their own <c>@layout</c>.</summary>
-    /// <remarks>Without a default layout, pages render directly inside the document body.</remarks>
+    /// <summary>Sets the layout of pages without their own <c>@layout</c>.</summary>
     public static IHostApplicationBuilder UseDefaultLayout<TLayout>(this IHostApplicationBuilder builder)
         where TLayout : LayoutComponentBase
     {
@@ -66,8 +64,7 @@ public static class StaticSiteHostBuilderExtensions
         return builder;
     }
 
-    /// <summary>Adds an assembly whose public, non-abstract routed components are discovered as pages.</summary>
-    /// <remarks>The entry assembly is included automatically. Repeated registration has no effect.</remarks>
+    /// <summary>Discovers pages in another assembly; the entry assembly is always included.</summary>
     public static IHostApplicationBuilder AddPageAssembly(this IHostApplicationBuilder builder, Assembly assembly)
     {
         var context = SiteBuilderContext.Get(builder);
@@ -77,8 +74,7 @@ public static class StaticSiteHostBuilderExtensions
         return builder;
     }
 
-    /// <summary>Uses a routed page as <c>404.html</c> instead of at its own route.</summary>
-    /// <remarks>The component must belong to a page assembly, declare exactly one route, and cannot also receive <c>AddPageParameters&lt;TPage&gt;</c>. A later call replaces the page.</remarks>
+    /// <summary>Renders a page with one route as <c>404.html</c> instead. A later call replaces it.</summary>
     public static IHostApplicationBuilder UseNotFoundPage<TPage>(this IHostApplicationBuilder builder)
         where TPage : IComponent
     {
@@ -92,13 +88,9 @@ public static class StaticSiteHostBuilderExtensions
         return builder;
     }
 
-    /// <summary>Adds parameter sets rendered at every parameterized route of a page, or at every route when all are fixed.</summary>
-    /// <param name="parameters">A factory run once per build; each object is a complete set of route values and component parameters.</param>
-    /// <remarks>
-    /// The page must belong to the entry assembly or an assembly added with AddPageAssembly. Fixed routes beside
-    /// parameterized routes render once with default values. Registrations concatenate; an empty result generates no pages.
-    /// Values keep their types and are treated as read-only. Values without a stable fingerprint disable HTML reuse.
-    /// </remarks>
+    /// <summary>Renders a page once per parameter set at its parameterized routes.</summary>
+    /// <param name="parameters">Called once per build; each object sets route values and parameters by property name.</param>
+    /// <remarks>Calls add sets. An empty result renders no pages. Values that cannot be fingerprinted render on every publish.</remarks>
     public static IHostApplicationBuilder AddPageParameters<TPage>(this IHostApplicationBuilder builder, Func<IServiceProvider, IEnumerable<object>> parameters)
         where TPage : IComponent
     {
@@ -114,7 +106,7 @@ public static class StaticSiteHostBuilderExtensions
         return builder;
     }
 
-    /// <summary>Adds a site-wide output file written after all pages are rendered.</summary>
+    /// <summary>Adds a file written after all pages.</summary>
     public static IHostApplicationBuilder AddArtifact(
         this IHostApplicationBuilder builder,
         string outputRelativePath,

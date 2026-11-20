@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Components.Rendering;
 
 namespace Kiji.Tests;
 
-/// <summary>Renders a collection item of any model type received as a page parameter.</summary>
 [Route("/content-items/{Slug}/")]
 public sealed class ContentItemPage : ComponentBase
 {

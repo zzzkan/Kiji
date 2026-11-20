@@ -4,12 +4,6 @@ using Microsoft.AspNetCore.Components.Rendering;
 
 namespace Kiji.Tests;
 
-/// <summary>
-/// A detail page that also computes a "related posts" list by enumerating the whole
-/// dictionary — the recommended shape for derived data. Enumerating is what records the
-/// content-set dependency, so this page must re-render when any post changes, not only
-/// when its own does.
-/// </summary>
 [Route("/related/{Slug}/")]
 public sealed class RelatedPostsTestPage : ComponentBase
 {

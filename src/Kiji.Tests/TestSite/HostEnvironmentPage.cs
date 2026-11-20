@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Components.Rendering;
 
 namespace Kiji.Tests.TestSite;
 
-/// <summary>Writes the host environment name, as a site showing drafts only in development would branch on it.</summary>
 [Route("/environment/")]
 public sealed class HostEnvironmentPage : ComponentBase
 {

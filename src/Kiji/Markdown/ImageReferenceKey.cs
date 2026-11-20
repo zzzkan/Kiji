@@ -1,9 +1,5 @@
 namespace Kiji.Markdown;
 
-/// <summary>
-/// Normalizes markdown image URLs into canonical lookup keys: the referenced path
-/// relative to the markdown file, with forward slashes and no <c>./</c> prefix.
-/// </summary>
 internal static class ImageReferenceKey
 {
     public static string FromMarkdownUrl(string url)

@@ -3,7 +3,6 @@ using Kiji.Markdown;
 
 namespace Kiji.Benchmarks;
 
-/// <summary>Measures front matter and body parsing.</summary>
 [MemoryDiagnoser]
 public class FrontMatterParserBenchmarks
 {

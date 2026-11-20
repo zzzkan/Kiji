@@ -3,11 +3,6 @@ using System.Xml;
 
 namespace Kiji.Generation;
 
-/// <summary>
-/// A synchronous <see cref="XmlWriter"/> whose bytes reach the output in chunks. An
-/// asynchronous writer awaits every element, which costs more than the document's I/O;
-/// chunks keep memory bounded, so the output's own buffering still applies.
-/// </summary>
 internal sealed class ChunkedXmlOutput : IDisposable
 {
     private const int ChunkSize = 64 * 1024;
@@ -29,11 +24,9 @@ internal sealed class ChunkedXmlOutput : IDisposable
 
     public XmlWriter Writer { get; }
 
-    /// <summary>Copies the buffered bytes to the output once a chunk has accumulated.</summary>
     public ValueTask WriteChunkAsync(CancellationToken cancellationToken)
         => _buffer.Length < ChunkSize ? ValueTask.CompletedTask : CopyBufferAsync(cancellationToken);
 
-    /// <summary>Ends the document and copies the remaining bytes to the output.</summary>
     public ValueTask CompleteAsync(CancellationToken cancellationToken)
     {
         Writer.WriteEndDocument();

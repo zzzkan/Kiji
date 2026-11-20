@@ -22,13 +22,6 @@ internal static class MarkdownFrontMatterParser
         return (frontMatter, extracted ? content[body] : content);
     }
 
-    /// <summary>
-    /// Locates the YAML front matter block without allocating: an opening <c>---</c>
-    /// line, the YAML payload, and a closing <c>---</c> line (each delimiter may carry
-    /// trailing whitespace; the closer absorbs following blank lines).
-    /// Returns the payload and body as ranges into
-    /// <paramref name="content"/>.
-    /// </summary>
     internal static bool ExtractFrontMatter(ReadOnlySpan<char> content, out Range yaml, out Range body)
     {
         yaml = default;

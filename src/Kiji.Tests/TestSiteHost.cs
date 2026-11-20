@@ -4,7 +4,6 @@ using Microsoft.Extensions.Options;
 
 namespace Kiji.Tests;
 
-/// <summary>Owns a real generic host while rendering tests exercise its shared pipeline repeatedly.</summary>
 internal sealed class TestSiteHost(IHost host) : IAsyncDisposable
 {
     internal IHost Host { get; } = host;

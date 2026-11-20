@@ -5,9 +5,6 @@ using Xunit;
 
 namespace Kiji.Tests;
 
-/// <summary>
-/// Tests for page discovery and route mapping through <see cref="TestSiteHost"/>.
-/// </summary>
 public sealed class PageDiscoveryTests
 {
     [Fact]
@@ -85,11 +82,6 @@ public sealed class PageDiscoveryTests
         Assert.Contains("AddPageParameters", error.Message, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// A mapping may supply values beyond the route template — they reach the component
-    /// as ordinary parameters — but a name the component does not declare is a typo, and
-    /// saying so at plan time beats a render-time failure with no mapping named.
-    /// </summary>
     [Fact]
     public void CreateSnapshot_MappingWithUndeclaredParameter_ThrowsInformativeException()
     {

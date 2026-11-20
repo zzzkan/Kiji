@@ -3,10 +3,6 @@ using Microsoft.AspNetCore.Components.Rendering;
 
 namespace Kiji.Benchmarks;
 
-/// <summary>
-/// A representative page component: head contribution plus a body with headings,
-/// a list, and an embedded markup block (as a rendered markdown article would have).
-/// </summary>
 [Route("/bench/")]
 public sealed class BenchPage : ComponentBase
 {

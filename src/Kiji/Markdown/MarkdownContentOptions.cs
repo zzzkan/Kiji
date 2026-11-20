@@ -1,11 +1,11 @@
 namespace Kiji.Markdown;
 
-/// <summary>File selection for one Markdown content source.</summary>
+/// <summary>Which files one Markdown source loads.</summary>
 public sealed class MarkdownContentOptions
 {
-    /// <summary>The directory to scan recursively for <c>*.md</c>. Absolute or relative to the site project directory; defaults to <c>content</c>.</summary>
+    /// <summary>The directory searched recursively for <c>*.md</c>, relative to the project; <c>content</c> by default.</summary>
     public string Directory { get; set; } = "content";
 
-    /// <summary>An optional file filter applied before loading, defaulting to all Markdown files. Called for one file at a time, in path order.</summary>
+    /// <summary>Selects files before they load; called one file at a time, in path order. All files by default.</summary>
     public Func<FileInfo, bool>? FileFilter { get; set; }
 }

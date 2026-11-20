@@ -3,7 +3,6 @@ using YamlDotNet.Serialization;
 
 namespace Kiji.Markdown;
 
-/// <summary>Caches the reflection-derived converter type of a YAML property.</summary>
 internal sealed class CachedPropertyDescriptor(IPropertyDescriptor inner) : IPropertyDescriptor
 {
     private readonly Lazy<Type?> _converterType = new(() => inner.ConverterType);

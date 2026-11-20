@@ -8,7 +8,6 @@ using Microsoft.JSInterop;
 
 namespace Kiji.Hosting;
 
-/// <summary>Validates site-owned registrations and records code reached through DI.</summary>
 internal static class SiteServiceRegistration
 {
     internal static bool IsManaged(Type type) =>

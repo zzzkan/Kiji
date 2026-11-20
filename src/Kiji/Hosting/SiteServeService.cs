@@ -5,7 +5,6 @@ using Microsoft.Extensions.Logging;
 
 namespace Kiji.Hosting;
 
-/// <summary>Owns the ASP.NET Core development server inside the site's generic host.</summary>
 internal sealed class SiteServeService(IServiceProvider services, IHostApplicationLifetime lifetime,
     SiteServerArguments arguments, ILoggerFactory loggerFactory) : BackgroundService
 {

@@ -3,7 +3,6 @@ using Microsoft.Extensions.Hosting;
 
 namespace Kiji.Hosting;
 
-/// <summary>Identifies a Kiji builder and tracks the descriptors its extensions own.</summary>
 internal sealed class SiteBuilderContext(IHostApplicationBuilder builder, StaticSiteOptions options,
     ContentRuntime runtime, SiteExecutionPaths paths)
 {

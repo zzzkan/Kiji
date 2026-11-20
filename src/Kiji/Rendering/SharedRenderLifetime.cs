@@ -1,6 +1,5 @@
 namespace Kiji.Rendering;
 
-/// <summary>Owns development Markdown work that may outlive its requesting page.</summary>
 internal sealed class SharedRenderLifetime : IAsyncDisposable
 {
     private readonly CancellationTokenSource _stopping;

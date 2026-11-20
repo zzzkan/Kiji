@@ -10,7 +10,6 @@ namespace Kiji.Rendering;
 
 internal sealed class ComponentRenderer(IServiceProvider services)
 {
-    /// <summary>Registers what the renderer needs. Logging comes from the host.</summary>
     internal static void AddComponentRenderingServices(IServiceCollection services)
     {
         services.AddScoped<IErrorBoundaryLogger, StaticErrorBoundaryLogger>();

@@ -1,6 +1,5 @@
 namespace Kiji.Tests;
 
-/// <summary>A user hosted service whose initialization completes asynchronously.</summary>
 internal sealed class SlowHostedService : IHostedService
 {
     public bool Started { get; private set; }

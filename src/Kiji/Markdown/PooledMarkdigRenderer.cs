@@ -4,11 +4,6 @@ using Markdig.Syntax;
 
 namespace Kiji.Markdown;
 
-/// <summary>
-/// A reusable Markdig <see cref="HtmlRenderer"/> with its writer and image try-writer
-/// attached exactly once. Not thread-safe; instances are
-/// handed out one at a time by <see cref="MarkdownProcessor"/>'s pool.
-/// </summary>
 internal sealed class PooledMarkdigRenderer
 {
     private readonly StringWriter _writer;

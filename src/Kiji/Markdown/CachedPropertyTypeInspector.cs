@@ -3,15 +3,6 @@ using YamlDotNet.Serialization;
 
 namespace Kiji.Markdown;
 
-/// <summary>
-/// Memoizes property matches and their attribute-derived metadata. YamlDotNet otherwise
-/// repeats the property search and reads the converter attribute for every key of every
-/// front matter block.
-/// </summary>
-/// <remarks>
-/// Deserialization passes no container, so only container-free lookups are cached. A lookup
-/// that throws is not cached and throws again for the next document.
-/// </remarks>
 internal sealed class CachedPropertyTypeInspector(ITypeInspector inner) : ITypeInspector
 {
     private readonly ConcurrentDictionary<(Type Type, string Name, bool IgnoreUnmatched, bool CaseInsensitive), CachedPropertyDescriptor?> _matches = new();

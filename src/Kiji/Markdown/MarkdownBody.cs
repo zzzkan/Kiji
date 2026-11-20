@@ -3,8 +3,8 @@ using Microsoft.AspNetCore.Components.Rendering;
 
 namespace Kiji.Markdown;
 
-/// <summary>Renders a Markdown body as HTML inside the current page.</summary>
-/// <typeparam name="TFrontMatter">The site's front matter model.</typeparam>
+/// <summary>Renders a Markdown body in the current page.</summary>
+/// <typeparam name="TFrontMatter">The front matter model.</typeparam>
 public sealed class MarkdownBody<TFrontMatter> : ComponentBase
 {
     private string _html = string.Empty;

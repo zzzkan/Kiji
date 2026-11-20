@@ -1,6 +1,5 @@
 namespace Kiji.Assets;
 
-/// <summary>Reference-counted gates include waiters, so a live key never gets two gates.</summary>
 internal static class ImageGenerationLock
 {
     private static readonly Lock Sync = new();

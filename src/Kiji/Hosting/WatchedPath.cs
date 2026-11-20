@@ -1,6 +1,5 @@
 namespace Kiji.Hosting;
 
-/// <summary>A logical input, independent of the shared OS watcher covering it.</summary>
 internal sealed class WatchedPath(string path, WatchedPathSource source, Func<string, bool>? affectsAsset)
 {
     internal string Path { get; } = System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(path));

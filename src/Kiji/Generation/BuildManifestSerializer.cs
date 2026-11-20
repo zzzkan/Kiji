@@ -3,18 +3,6 @@ using System.Text.Json;
 
 namespace Kiji.Generation;
 
-/// <summary>
-/// Reads and writes <c>manifest.json</c> directly with <see cref="Utf8JsonWriter"/> and
-/// <see cref="Utf8JsonReader"/>. A publish is one short process, and a serializer's first use
-/// costs more than writing the whole manifest: its metadata and converters are built and
-/// compiled for every manifest type, where these methods need only precompiled framework code.
-/// </summary>
-/// <remarks>
-/// The format is the one <see cref="JsonSerializer"/> produces for the manifest records with
-/// default options, in both directions: property names are case-sensitive, unknown properties
-/// are skipped, the last duplicate wins and missing or null members are null, left for
-/// <see cref="BuildManifest.IsValid"/> to reject.
-/// </remarks>
 internal static class BuildManifestSerializer
 {
     private static readonly JsonEncodedText SchemaVersion = JsonEncodedText.Encode("SchemaVersion");
@@ -46,7 +34,6 @@ internal static class BuildManifestSerializer
     private static readonly JsonEncodedText Length = JsonEncodedText.Encode("Length");
     private static readonly JsonEncodedText LastWriteTimeUtc = JsonEncodedText.Encode("LastWriteTimeUtc");
 
-    /// <summary>Writes <paramref name="manifest"/> as UTF-8 JSON.</summary>
     internal static void Serialize(IBufferWriter<byte> output, BuildManifest manifest)
     {
         using var writer = new Utf8JsonWriter(output, new JsonWriterOptions { SkipValidation = true });
@@ -71,8 +58,6 @@ internal static class BuildManifestSerializer
         writer.WriteEndObject();
     }
 
-    /// <summary>Reads a manifest, or <see langword="null"/> for JSON <c>null</c>.</summary>
-    /// <exception cref="JsonException">The bytes are not a manifest.</exception>
     internal static BuildManifest? Deserialize(ReadOnlySpan<byte> utf8Json)
     {
         try
@@ -331,7 +316,6 @@ internal static class BuildManifestSerializer
         if (reader.TokenType != JsonTokenType.StartObject) { throw new JsonException("Expected an object."); }
     }
 
-    /// <summary>Advances to the next property name, or returns false at the end of the object.</summary>
     private static bool ReadProperty(ref Utf8JsonReader reader) =>
         reader.Read() && reader.TokenType == JsonTokenType.PropertyName;
 

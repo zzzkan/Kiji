@@ -2,7 +2,6 @@ using Kiji.Assets;
 
 namespace Kiji.Tests.TestSite.PageServices;
 
-/// <summary>Changes the output bytes while retaining its recipe identity and filename.</summary>
 public sealed class VaryingImageProcessor : IImageProcessor
 {
     public string CacheIdentity => "varying-svg-v1";

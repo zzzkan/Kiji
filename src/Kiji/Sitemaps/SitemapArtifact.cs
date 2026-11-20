@@ -2,9 +2,6 @@ using Kiji.Generation;
 
 namespace Kiji.Sitemaps;
 
-/// <summary>
-/// Generates a sitemap from generated pages. URLs are sorted for deterministic output.
-/// </summary>
 internal sealed class SitemapArtifact
 {
     private const string NotFoundRelativePath = "404.html";
@@ -14,7 +11,6 @@ internal sealed class SitemapArtifact
 
     private readonly List<string> _excludedPaths = [NotFoundRelativePath];
 
-    /// <param name="excludedPaths">Site-relative page paths to omit in addition to <c>404.html</c>.</param>
     public SitemapArtifact(IEnumerable<string>? excludedPaths = null)
     {
         if (excludedPaths is null)
@@ -38,7 +34,6 @@ internal sealed class SitemapArtifact
         }
     }
 
-    /// <inheritdoc/>
     public async Task WriteAsync(Stream output, SiteOutputContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(output);

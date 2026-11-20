@@ -5,7 +5,6 @@ using Microsoft.Extensions.Logging;
 
 namespace Kiji.Hosting;
 
-/// <summary>Publishes once and stops the generic host; RunAsync fails when the output is incomplete.</summary>
 internal sealed class SitePublishService(IServiceProvider services, IHostApplicationLifetime lifetime,
     ILoggerFactory loggerFactory) : BackgroundService
 {

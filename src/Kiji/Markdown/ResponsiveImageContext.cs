@@ -2,9 +2,6 @@ using Kiji.Assets;
 
 namespace Kiji.Markdown;
 
-/// <summary>
-/// Per-document image lookup and the shared image directory's public URL.
-/// </summary>
 internal sealed class ResponsiveImageContext(
     IReadOnlyDictionary<string, ProcessedImageInfo> imageInfoLookup,
     string basePath)

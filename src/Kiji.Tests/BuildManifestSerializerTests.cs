@@ -6,10 +6,6 @@ using Xunit;
 
 namespace Kiji.Tests;
 
-/// <summary>
-/// The manifest is written and read by hand to keep a publish process short. The format
-/// remains the serializer's, so a manifest written either way reads back the same.
-/// </summary>
 public sealed class BuildManifestSerializerTests
 {
     [Fact]

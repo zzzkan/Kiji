@@ -1,6 +1,5 @@
 namespace Kiji.Tests;
 
-/// <summary>Holds response transmission after page rendering has completed.</summary>
 internal sealed class BlockingResponseStream : MemoryStream
 {
     internal TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);

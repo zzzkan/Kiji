@@ -6,9 +6,6 @@ using Xunit;
 
 namespace Kiji.Tests;
 
-/// <summary>
-/// Tests for delegate artifact registration and <see cref="SiteOutputContext"/>.
-/// </summary>
 public sealed class SiteArtifactTests : IDisposable
 {
     private readonly string _testDir;

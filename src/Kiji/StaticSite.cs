@@ -13,13 +13,13 @@ using Microsoft.Extensions.Options;
 
 namespace Kiji;
 
-/// <summary>Creates generic host builders configured to publish or serve a Kiji site.</summary>
+/// <summary>Creates the host builder of a Kiji site.</summary>
 public static class StaticSite
 {
-    /// <summary>Creates a site host builder with no development server arguments.</summary>
+    /// <summary>Creates a site host builder.</summary>
     public static HostApplicationBuilder CreateBuilder() => CreateBuilder([]);
 
-    /// <summary>Creates a site host builder. Arguments configure only the development server.</summary>
+    /// <summary>Creates a site host builder; <paramref name="args"/> reach only the dev server.</summary>
     public static HostApplicationBuilder CreateBuilder(string[] args)
     {
         ArgumentNullException.ThrowIfNull(args);

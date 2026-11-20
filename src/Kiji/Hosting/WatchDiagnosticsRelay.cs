@@ -4,14 +4,6 @@ using System.Text.Json;
 
 namespace Kiji.Hosting;
 
-/// <summary>
-/// Receives the compilation errors that dotnet watch reports while they block hot reload.
-/// dotnet watch sends them only to clients of its browser refresh server, and the dev
-/// server deliberately does not load the middleware that connects browsers there: Kiji
-/// alone reloads pages. Kiji connects as a client instead and ignores everything but
-/// these reports. The endpoint, handshake and messages are not a public contract, so any
-/// failure leaves the errors in the terminal only.
-/// </summary>
 internal static class WatchDiagnosticsRelay
 {
     internal const string EndpointKey = "ASPNETCORE_AUTO_RELOAD_WS_ENDPOINT";

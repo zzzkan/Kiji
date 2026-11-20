@@ -82,16 +82,6 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
             : [.. items.Where(static item => item is not null)];
     }
 
-    /// <summary>
-    /// Lists Markdown files as a recursive <c>*.md</c> enumeration does, ordered by path.
-    /// Content directories often hold one directory per post, so their subtrees are
-    /// enumerated in parallel instead of opening every directory serially.
-    /// </summary>
-    /// <remarks>
-    /// The root may itself be a link, as for watching and image resolution. Redirecting
-    /// directories and Markdown files below it are rejected rather than followed, so
-    /// content cannot read outside its registered root or loop.
-    /// </remarks>
     private static FileInfo[] FindMarkdownFiles(DirectoryInfo root)
     {
         var subdirectories = root.EnumerateDirectories().ToArray();

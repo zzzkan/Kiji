@@ -8,13 +8,9 @@ public sealed record FeedItem
     /// <summary>Creates an RSS feed entry.</summary>
     /// <param name="Title">The entry title.</param>
     /// <param name="Description">The entry description.</param>
-    /// <param name="PublishedAt">The publication timestamp.</param>
-    /// <param name="RelativePath">The path relative to <see cref="SiteInfo.BaseUrl"/>.</param>
-    /// <exception cref="ArgumentException">
-    /// <paramref name="RelativePath"/> has a leading slash, a query or a fragment, or is a path
-    /// <see cref="SiteInfo.ResolveUrl"/> rejects; or <paramref name="Title"/> or
-    /// <paramref name="Description"/> contains a character XML cannot represent.
-    /// </exception>
+    /// <param name="PublishedAt">The publication time.</param>
+    /// <param name="RelativePath">The page path under <see cref="SiteInfo.BaseUrl"/>, without a leading slash.</param>
+    /// <exception cref="ArgumentException">The path is not a plain page path, or a text contains a character XML cannot hold.</exception>
     public FeedItem(string Title, string Description, DateTimeOffset PublishedAt, string RelativePath)
     {
         ArgumentNullException.ThrowIfNull(Title);
@@ -36,10 +32,10 @@ public sealed record FeedItem
     /// <summary>The entry description.</summary>
     public string Description { get; }
 
-    /// <summary>The publication timestamp.</summary>
+    /// <summary>The publication time.</summary>
     public DateTimeOffset PublishedAt { get; }
 
-    /// <summary>The path relative to <see cref="SiteInfo.BaseUrl"/>.</summary>
+    /// <summary>The page path under <see cref="SiteInfo.BaseUrl"/>.</summary>
     public string RelativePath { get; }
 
     private static void ValidateXmlText(string value, string parameterName, string relativePath)

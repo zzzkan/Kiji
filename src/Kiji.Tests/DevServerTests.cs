@@ -495,11 +495,6 @@ public sealed class DevServerTests : IAsyncDisposable
             Kiji.Hosting.DevServer.GetDisplayPath(externalFile, displayRoot));
     }
 
-    /// <summary>
-    /// A site published under a sub-path must be browsable at that sub-path locally,
-    /// and must serve nothing outside it — otherwise a link that omits
-    /// <see cref="SiteInfo.BaseUrl"/>'s path works in dev and 404s only once deployed.
-    /// </summary>
     [Fact]
     public async Task Serve_WithBasePath_ServesUnderThePrefixAndRejectsOutsideIt()
     {
@@ -568,10 +563,6 @@ public sealed class DevServerTests : IAsyncDisposable
         }
     }
 
-    /// <summary>
-    /// The developer exception page keeps the live reload client, so fixing the error
-    /// reloads it. ASP.NET Core renders that page outside the base path middleware.
-    /// </summary>
     [Fact]
     public async Task Serve_ExceptionPageKeepsLiveReloadUnderTheBasePath()
     {

@@ -11,13 +11,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Kiji.Generation;
 
-/// <summary>
-/// Drives the incremental build: loads the previous manifest, fingerprints the
-/// current inputs (options, assemblies, content files), decides per page whether the
-/// existing output is still valid, syncs static files by content hash, reconciles the output
-/// directory against what the build produced, and writes the new manifest. Every
-/// ambiguous situation falls back to re-rendering — a stale output is never acceptable.
-/// </summary>
 internal sealed class IncrementalBuildPlanner(
     ResolvedSitePaths options,
     string rootPath,
@@ -42,10 +35,6 @@ internal sealed class IncrementalBuildPlanner(
     private bool _stampsChanged;
     internal bool OutputStampsValid { get; private set; }
 
-    /// <summary>
-    /// The output directory did not exist when planning began, so everything in it comes from
-    /// this build: nothing there needs comparing, and nothing unknown needs removing.
-    /// </summary>
     internal bool OutputDirectoryCreated { get; private set; }
     private readonly ConcurrentDictionary<(string Path, string Hash), Lazy<bool>> _restoredImages = new();
     private readonly ConcurrentDictionary<string, Lazy<BuildManifestOutput>> _imageOutputs = new(StringComparer.Ordinal);
@@ -253,9 +242,6 @@ internal sealed class IncrementalBuildPlanner(
         };
     }
 
-    /// <summary>
-    /// Copies static files whose source and destination content hashes differ.
-    /// </summary>
     internal async Task<IReadOnlyList<string>> SyncStaticFilesAsync(IReadOnlyList<StaticAsset> files)
     {
         var entries = new string[files.Count];
@@ -308,11 +294,6 @@ internal sealed class IncrementalBuildPlanner(
         return entries;
     }
 
-    /// <summary>
-    /// Makes the output directory hold exactly what this build produced: every file it
-    /// does not claim is deleted, and directories left empty are pruned.
-    /// </summary>
-    /// <remarks>Also removes files absent from the previous manifest.</remarks>
     internal void ReconcileOutputs(BuildManifest manifest)
     {
         if (!Directory.Exists(options.OutputDirectory))
@@ -472,10 +453,6 @@ internal sealed class IncrementalBuildPlanner(
         _cache.Collect(manifest.Pages.SelectMany(p => p.AdditionalOutputs.Select(o => o.Hash)));
     }
 
-    /// <summary>
-    /// Reads and validates the previous build's manifest. It depends only on the cache, so a
-    /// publish reads it, under the cache lease, while its content loads.
-    /// </summary>
     internal static BuildManifest? LoadManifest(string cacheDirectory, CancellationToken cancellationToken)
     {
         var manifestPath = Path.Combine(cacheDirectory, "manifest.json");

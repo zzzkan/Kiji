@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 
 namespace Kiji.Generation;
 
-/// <summary>Resolves dependencies against the current snapshot, never against cached data.</summary>
 internal sealed class DependencyCatalog
 {
     private readonly ConcurrentDictionary<string, Lazy<string?>> _snapshot = new(StringComparer.Ordinal);

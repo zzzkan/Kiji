@@ -1,6 +1,5 @@
 namespace Kiji.Generation;
 
-/// <summary>Protects source and cache files from output reconciliation.</summary>
 internal static class OutputPathValidator
 {
     internal static string ResolveUnderRoot(string root, string relativePath, string description)

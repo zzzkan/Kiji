@@ -3,14 +3,6 @@ using Microsoft.AspNetCore.Components.Rendering;
 
 namespace Kiji.Tests;
 
-/// <summary>
-/// Enumerates a second markdown collection, so a build can assert that editing content
-/// in one collection's directory leaves pages that only read another's untouched.
-/// </summary>
-/// <remarks>
-/// The route takes a parameter purely so tests that do not exercise it can neutralize
-/// the page with an empty route set, the way the other test-only templates are handled.
-/// </remarks>
 [Route("/notes/{Kind}/")]
 public sealed class ScopedNotesIndexPage : ComponentBase
 {

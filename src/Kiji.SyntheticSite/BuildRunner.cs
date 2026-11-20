@@ -10,11 +10,6 @@ using Microsoft.Extensions.Options;
 
 namespace Kiji.SyntheticSite;
 
-/// <summary>
-/// Runs a full site build over the synthetic site and measures it. Each run uses a
-/// fresh <see cref="StaticSite"/> so content materialization stays cold, mirroring a
-/// real <c>dotnet run</c> build (minus process startup).
-/// </summary>
 public static class BuildRunner
 {
     public static async Task<RunResult> RunOnceAsync(string root, int run, bool collectPhases = false)
@@ -60,12 +55,6 @@ public static class BuildRunner
             phases);
     }
 
-    /// <summary>
-    /// The frozen benchmark site definition, built once. Public so
-    /// <c>Kiji.Benchmarks</c> can measure the same workload under BenchmarkDotNet
-    /// rather than keep a second copy of it — the definition is what makes numbers
-    /// comparable across commits, so there is exactly one.
-    /// </summary>
     public static async Task BuildSiteAsync(string root)
     {
         var builder = StaticSite.CreateBuilder([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "synthetic")), typeof(BuildRunner).Assembly, runtimeMetadata: new SiteRuntimeMetadata(OutputPath: Path.Combine(root, "dist")));

@@ -1,9 +1,5 @@
 namespace Kiji.SyntheticSite;
 
-/// <summary>
-/// Derives the route slug of a synthetic post from its markdown file location
-/// (posts live at <c>contents/&lt;slug&gt;/index.md</c>).
-/// </summary>
 public static class PostSlug
 {
     public static string From(string path)

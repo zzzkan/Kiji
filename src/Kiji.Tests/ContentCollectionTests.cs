@@ -58,10 +58,6 @@ public sealed class ContentCollectionTests
         Assert.Throws<KeyNotFoundException>(() => collection["missing"]);
     }
 
-    /// <summary>
-    /// Route sets, and therefore every output path, are derived by enumerating a
-    /// collection. A stable order is what keeps a rebuild byte-identical.
-    /// </summary>
     [Fact]
     public void Enumeration_PreservesLoaderOrder()
     {
@@ -94,12 +90,6 @@ public sealed class ContentCollectionTests
         Assert.Contains("SAME", exception.Message, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// Mapping code pulls catalogs out before the build runs. Taking the handle must not
-    /// load anything: the dev server rebuilds catalogs on every snapshot, and resolving
-    /// <c>ResolvedSitePaths</c> this early would hand it the build output path instead of its
-    /// serve mirror.
-    /// </summary>
     [Fact]
     public void ResolvingTheCollection_TakesTheHandleWithoutLoading()
     {

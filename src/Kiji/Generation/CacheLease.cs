@@ -1,6 +1,5 @@
 namespace Kiji.Generation;
 
-/// <summary>Serializes transactions across processes sharing a cache directory.</summary>
 internal static class CacheLease
 {
     internal static async Task<FileStream> AcquireAsync(string directory, CancellationToken cancellationToken)

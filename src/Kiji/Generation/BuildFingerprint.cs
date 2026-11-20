@@ -5,12 +5,8 @@ using Kiji.Hosting;
 
 namespace Kiji.Generation;
 
-/// <summary>
-/// SHA-256-based fingerprints for incremental build inputs and outputs.
-/// </summary>
 internal static class BuildFingerprint
 {
-    /// <summary>Fingerprint reported for inputs that no longer exist.</summary>
     internal const string Missing = "missing";
 
     internal static string HashFile(string path)
@@ -45,7 +41,6 @@ internal static class BuildFingerprint
         return Convert.ToHexStringLower(hash);
     }
 
-    /// <summary>Compares an output with already verified or freshly rendered bytes.</summary>
     internal static bool FileEquals(string path, ReadOnlySpan<byte> expected)
     {
         try

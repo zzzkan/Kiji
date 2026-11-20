@@ -3,7 +3,6 @@ using Microsoft.Extensions.Configuration;
 
 namespace Kiji.Tests;
 
-/// <summary>Creates a site builder over the test assembly that discovers only the given pages by default.</summary>
 internal static class TestSiteFactory
 {
     internal static IConfiguration HostConfiguration(params (string Name, string? Value)[] values)
@@ -16,10 +15,6 @@ internal static class TestSiteFactory
     public static HostApplicationBuilder CreateBuilder(SiteExecutionPaths paths, string? outputPath, params Type[] discoveredPages)
         => CreateBuilder(paths, runtimeMetadata: new SiteRuntimeMetadata(OutputPath: outputPath), discoveredPages: discoveredPages);
 
-    /// <param name="paths">The project and asset paths.</param>
-    /// <param name="runtimeMetadata">Typed runtimeconfig metadata for the test invocation.</param>
-    /// <param name="hostConfiguration">Host configuration for the test invocation.</param>
-    /// <param name="discoveredPages">Test pages discovered with their default rendering.</param>
     public static HostApplicationBuilder CreateBuilder(SiteExecutionPaths paths, SiteRuntimeMetadata? runtimeMetadata,
         IConfiguration? hostConfiguration = null, params Type[] discoveredPages)
     {

@@ -6,17 +6,12 @@ using System.Runtime.InteropServices;
 
 namespace Kiji.Assets;
 
-/// <summary>Generates responsive WebP image variants.</summary>
 internal sealed class ImageProcessor : IImageProcessor
 {
-    /// <summary>
-    /// Caps the number of decoded images alive across pages.
-    /// </summary>
     private static readonly SemaphoreSlim ConcurrencyGate = new(Environment.ProcessorCount);
 
     private static readonly int[] DefaultWidths = [320, 640, 960, 1280];
 
-    /// <summary>The most pixels WebP stores along either side.</summary>
     private const int MaxWebpDimension = 16383;
 
     private static string EncoderIdentity => field ??=
@@ -29,9 +24,6 @@ internal sealed class ImageProcessor : IImageProcessor
     private readonly ILogger _logger;
     internal Func<string, CancellationToken, Task>? BeforeEncodeAsync { get; init; }
 
-    /// <param name="options">Validated settings, copied so later changes cannot alter cached output.</param>
-    /// <param name="generationGate">Overrides the process-wide decode limit. For tests.</param>
-    /// <param name="logger">Receives a Debug message per generated variant.</param>
     internal ImageProcessor(ImageProcessorOptions? options = null, SemaphoreSlim? generationGate = null, ILogger? logger = null)
     {
         _logger = logger ?? NullLogger.Instance;
@@ -46,7 +38,6 @@ internal sealed class ImageProcessor : IImageProcessor
     public string CacheIdentity => field ??= BuildFingerprint.HashText(FormattableString.Invariant(
         $"skia-webp-v2:{_quality}:{_maxWidth}:{string.Join(",", _widths)}:{EncoderIdentity}"));
 
-    /// <inheritdoc/>
     public async Task<ProcessedImageInfo> ProcessAsync(
         string sourceFilePath,
         string outputDirectory,
@@ -169,8 +160,6 @@ internal sealed class ImageProcessor : IImageProcessor
         origin is SKEncodedOrigin.LeftTop or SKEncodedOrigin.RightTop
             or SKEncodedOrigin.RightBottom or SKEncodedOrigin.LeftBottom;
 
-    /// <summary>Rotates or mirrors decoded pixels to the EXIF display orientation.</summary>
-    /// <remarks>Takes ownership of <paramref name="image"/>; returns it unchanged for TopLeft.</remarks>
     private static SKBitmap ApplyOrigin(SKBitmap image, SKEncodedOrigin origin)
     {
         float w = image.Width;

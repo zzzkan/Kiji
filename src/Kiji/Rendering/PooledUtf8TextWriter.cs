@@ -4,9 +4,6 @@ using System.Text.Unicode;
 
 namespace Kiji.Rendering;
 
-/// <summary>
-/// Transcodes UTF-16 writes into a pooled UTF-8 buffer.
-/// </summary>
 internal sealed class PooledUtf8TextWriter(int initialCapacity = 64 * 1024) : TextWriter
 {
     private static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
@@ -49,10 +46,6 @@ internal sealed class PooledUtf8TextWriter(int initialCapacity = 64 * 1024) : Te
         WriteSpan(buffer.AsSpan(index, count));
     }
 
-    /// <summary>
-    /// SHA-256 fingerprint of the accumulated UTF-8 bytes; the incremental build
-    /// records it as the page's output hash without re-reading the file.
-    /// </summary>
     public string GetContentHash()
     {
         FlushPendingSurrogate();
@@ -71,10 +64,6 @@ internal sealed class PooledUtf8TextWriter(int initialCapacity = 64 * 1024) : Te
         return Generation.BuildFingerprint.FileEquals(path, _buffer.AsSpan(0, _written));
     }
 
-    /// <summary>
-    /// Writes the accumulated UTF-8 bytes to <paramref name="path"/> in a single
-    /// write, replacing any existing file.
-    /// </summary>
     public void WriteToFile(string path)
     {
         FlushPendingSurrogate();

@@ -2,13 +2,8 @@ using Microsoft.Extensions.Logging;
 
 namespace Kiji;
 
-/// <summary>
-/// Kiji's own progress messages. Summaries are Information and per-file details are Debug,
-/// which <c>"Logging": { "LogLevel": { "Kiji.Build": "Debug" } }</c> enables.
-/// </summary>
 internal static partial class BuildLoggerExtensions
 {
-    /// <summary>The category of these messages, also the key that configures their level.</summary>
     internal const string CategoryName = "Kiji.Build";
 
     [LoggerMessage(1, LogLevel.Information, "Static files: {Copied} copied, {Unchanged} unchanged.")]

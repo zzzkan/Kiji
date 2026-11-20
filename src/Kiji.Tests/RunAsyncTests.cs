@@ -9,7 +9,6 @@ using Xunit;
 
 namespace Kiji.Tests;
 
-/// <summary>Exercises Kiji through the standard host, including process-independent exit codes.</summary>
 public sealed class RunAsyncTests : IDisposable
 {
     private readonly string _testDir = Path.Combine(Path.GetTempPath(), $"kiji-run-{Guid.NewGuid():N}");

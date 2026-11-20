@@ -5,7 +5,6 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Kiji.Rendering;
 
-/// <summary>Creates components, records render policy, and supplies the site's default import map.</summary>
 internal sealed class StaticComponentActivator(IServiceProvider services) : IComponentActivator
 {
     private static readonly ConcurrentDictionary<Type, (ObjectFactory Create, bool AlwaysRender)> Factories = new();

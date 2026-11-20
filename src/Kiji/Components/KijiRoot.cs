@@ -4,9 +4,6 @@ using Microsoft.AspNetCore.Components.Web;
 
 namespace Kiji.Components;
 
-/// <summary>
-/// Renders the HTML document with a <see cref="HeadOutlet"/> and a <see cref="PageView"/>.
-/// </summary>
 internal sealed class KijiRoot : ComponentBase
 {
     [Inject]

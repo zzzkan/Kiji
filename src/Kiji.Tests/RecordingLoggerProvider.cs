@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging;
 
 namespace Kiji.Tests;
 
-/// <summary>Records every message that the site's logging filters let through.</summary>
 internal sealed class RecordingLoggerProvider : ILoggerProvider
 {
     private readonly ConcurrentQueue<(string Category, LogLevel Level, string Message)> _entries = new();

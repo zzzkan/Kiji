@@ -4,10 +4,6 @@ using SkiaSharp;
 
 namespace Kiji.SyntheticSite;
 
-/// <summary>
-/// Materializes a deterministic synthetic site (markdown contents, static assets,
-/// and optional images) under a root directory.
-/// </summary>
 public static class SyntheticSiteWriter
 {
     private static readonly string[] TagPool =

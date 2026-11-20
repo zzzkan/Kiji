@@ -15,7 +15,6 @@ using Microsoft.Extensions.Logging;
 
 namespace Kiji.Hosting;
 
-/// <summary>The shared publish and development rendering pipeline. Lifetime belongs to the host.</summary>
 internal sealed class SiteEngine
 {
     private readonly ContentRuntime _runtime;
@@ -57,8 +56,6 @@ internal sealed class SiteEngine
     internal IServiceProvider ServiceProvider { get; }
     private ILogger BuildLogger => field ??= ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(BuildLoggerExtensions.CategoryName);
 
-    /// <summary>Generates the site, reusing unchanged output from a previous publish.</summary>
-    /// <remarks>Repeated publication uses the same output directory; switching directories or execution modes requires a new site.</remarks>
     internal async Task PublishAsync(CancellationToken cancellationToken = default)
     {
         BuildLogger.PublishingEnvironment(_environment.EnvironmentName);
@@ -233,15 +230,6 @@ internal sealed class SiteEngine
         BuildLogger.PagesGenerated(written, plan.CarriedPages.Count, rendered.Count - written, stopwatch.ElapsedMilliseconds);
     }
 
-    /// <param name="args">
-    /// Forwarded to <c>WebApplication.CreateSlimBuilder</c>, so <c>--urls</c> works the
-    /// way it does for any ASP.NET Core app. Tests pass an explicit <c>--urls</c> with
-    /// port 0 rather than mutating process-wide state.
-    /// </param>
-    /// <param name="cancellationToken">Stops the server.</param>
-    /// <param name="reporter">Overrides the console reporter. For tests.</param>
-    /// <param name="statusOutput">Overrides the output writer for the default reporter. For tests.</param>
-    /// <param name="isOutputRedirected">Overrides redirection detection. For tests.</param>
     internal async Task<(DevServer DevServer, WebApplication WebApplication)> StartDevServerAsync(
         string[] args,
         CancellationToken cancellationToken,
@@ -327,10 +315,6 @@ internal sealed class SiteEngine
         return new SiteSnapshot(requests);
     }
 
-    /// <summary>
-    /// Selects the routes receiving AddPageParameters: all parameterized routes of the component,
-    /// or all its routes when every route is fixed. Fixed routes beside parameterized ones keep their default rendering.
-    /// </summary>
     private IReadOnlyList<PageDiscovery.DiscoveredPage> FindParameterRoutes(Type componentType)
     {
         ValidatePageAssembly(componentType);
@@ -492,7 +476,6 @@ internal sealed class SiteEngine
             ServiceProvider);
     }
 
-    /// <summary>Resolves every artifact path, in registration order, before any output is written.</summary>
     private string[] ReserveArtifactPaths(ResolvedSitePaths options, Dictionary<string, string> reservedPaths)
     {
         var paths = new string[_artifacts.Length];

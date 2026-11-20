@@ -2,10 +2,6 @@ using Kiji.Markdown;
 
 namespace Kiji.Tests;
 
-/// <summary>
-/// A projected markdown model, used to give a second collection its own element type
-/// so both can live in one site.
-/// </summary>
 public sealed class ScopedNote
 {
     private ScopedNote(string key, string title)

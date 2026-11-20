@@ -1,6 +1,5 @@
 namespace Kiji.Generation;
 
-/// <summary>Immutable, verified image blobs and atomic cache publication.</summary>
 internal sealed class ArtifactCache(string root)
 {
     private static readonly Lock[] Gates = [.. Enumerable.Range(0, 64).Select(static _ => new Lock())];

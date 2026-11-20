@@ -5,13 +5,6 @@ using Microsoft.AspNetCore.Components.Rendering;
 
 namespace Kiji.Components;
 
-/// <summary>
-/// Renders a page component inside its layout chain; Kiji's replacement for
-/// Blazor's <c>RouteView</c> + <c>LayoutView</c>. The page's own
-/// <see cref="LayoutAttribute"/> (<c>@layout</c>) takes precedence over
-/// <see cref="DefaultLayout"/>, and layouts nest via <see cref="LayoutAttribute"/>
-/// on the layout types themselves.
-/// </summary>
 internal sealed class PageView : ComponentBase
 {
     private static readonly ConcurrentDictionary<Type, Type?> LayoutCache = new();

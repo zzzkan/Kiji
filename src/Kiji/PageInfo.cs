@@ -1,10 +1,6 @@
 namespace Kiji;
 
-/// <summary>Read-only information about the page being rendered.</summary>
-/// <remarks>
-/// One instance is shared by the page, layouts, child components, and page services
-/// within a render. It is unavailable outside page rendering.
-/// </remarks>
+/// <summary>The page being rendered; injectable only while a page renders.</summary>
 public sealed class PageInfo
 {
     internal PageInfo(Uri url)
@@ -12,9 +8,6 @@ public sealed class PageInfo
         Url = url;
     }
 
-    /// <summary>
-    /// The absolute public URL of this page, resolved against <see cref="SiteInfo.BaseUrl"/>.
-    /// Development renders use the published URL, not the local request URL.
-    /// </summary>
+    /// <summary>The page's published URL, also when the dev server renders it.</summary>
     public Uri Url { get; }
 }

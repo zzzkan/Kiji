@@ -9,11 +9,6 @@ using Xunit;
 
 namespace Kiji.Tests;
 
-/// <summary>
-/// End-to-end guarantees of the incremental build: outputs are always byte-identical
-/// to a from-scratch build, unchanged pages are genuinely skipped, and every
-/// ambiguous situation falls back to a full rebuild.
-/// </summary>
 public sealed class IncrementalBuildTests : IDisposable
 {
     private readonly string _testDir;
@@ -737,12 +732,6 @@ public sealed class IncrementalBuildTests : IDisposable
         Assert.Contains("beta: Beta Note", await File.ReadAllTextAsync(notesIndex), StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// A page that computes derived data by enumerating the dictionary (related posts, a tag
-    /// list) depends on the whole content set by construction. Editing a *different* post
-    /// must therefore re-render it — this is the guarantee that makes "just compute it in
-    /// the page" the recommended shape for derived data.
-    /// </summary>
     [Fact]
     public async Task IncrementalBuild_PageEnumeratingTheDictionary_ReRendersWhenAnotherPostChanges()
     {

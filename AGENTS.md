@@ -50,7 +50,7 @@ below once a check covers them.
 | Docs site builds | CI `Build docs` step |
 | User-visible changes are driven before they are called done | `verify-site` skill (judgment) |
 | No new comments outside the allowed kinds | none. Baseline: 606 `//` lines in tracked `.cs` files (2026-11-20); see `no-comments` |
-| One type per file | none |
+| One type per file | `Kiji.Analyzers` KR0001 in every project |
 | Kiji reads environment variables through IConfiguration | `src/Kiji/BannedSymbols.txt` (RS0030) |
 | Kiji never sets `Environment.ExitCode` | `src/Kiji/BannedSymbols.txt` (RS0030) |
 | Library components are hand-written `ComponentBase` classes, no `.razor` in `src/Kiji` | none |
@@ -71,6 +71,8 @@ below once a check covers them.
   `MSBuild/Kiji.targets` integrates publish, watch and clean.
 - `src/Kiji.Tests` contains library unit/component tests and TestSite fixtures.
   Classes run in parallel; never mutate process-wide state. It does not pack or build consumers.
+- `src/Kiji.Analyzers` holds the repository's own analyzers (KR*), referenced by every project
+  through `Directory.Build.props`.
 - `src/Kiji.PackageTests` contains serial, black-box package scenarios with one fixed
   consumer workspace. External dependencies use NuGet's global cache; only Kiji
   is isolated. See its README for execution and cleanup.
@@ -101,7 +103,7 @@ one, the `correct` skill decides whether it can become a check.
   levels come from the Logging section, not MSBuild properties.
 - Dev and publish share SiteEngine.RenderPageAsync. Never emit stale output;
   ambiguous incremental state requires rendering.
-- One type per file. Library components and library test components are hand-written ComponentBase classes;
+- Library components and library test components are hand-written ComponentBase classes;
   docs and the package consumer fixture use .razor files and the Razor SDK.
 - Update the `docs/content/api-*` pages (one per namespace) for author-facing API changes.
   Keep pack's baseline validation enabled; intentional breaks get only their specific

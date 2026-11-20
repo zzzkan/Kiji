@@ -42,6 +42,10 @@ jobs:
       - name: Build
         run: dotnet build -c Release
 
+      - name: Repository checks
+        working-directory: src/Kiji.RepositoryTests
+        run: dotnet test -c Release
+
       - name: Library tests
         working-directory: src/Kiji.Tests
         run: dotnet test -c Release

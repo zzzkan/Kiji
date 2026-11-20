@@ -50,15 +50,26 @@ the symbol and run the tests before keeping or removing what they guard.
 
 - New and changed lines: always. A change adds no comments outside the list above.
 - Existing comments: clean them in the files a change already touches, or in a dedicated
-  cleanup change per area. Each cleanup lowers the comment baseline in AGENTS.md's rule
-  table; never raise it.
+  cleanup change per area.
 - Do not change behavior while removing comments, except to fix a workaround the comment
   excused. Run `dotnet build -c Release` and `dotnet test -c Release` after each file.
 
-Count `//` comment lines in tracked C# files (the baseline in AGENTS.md uses this command):
+## The check
+
+`CommentBaselineTests` in `src/Kiji.RepositoryTests` reads every C# file that git tracks or
+would track. Consecutive `//` lines form one block; `/* */` is one block; `///` is not
+counted; a block that contains a URL is allowed (an external constraint citing its source).
+Every other block must be listed in `src/Kiji.RepositoryTests/comment-baseline.txt` by a
+hash of its text and its path. So:
+
+- A new or reworded comment fails with its file and line. Delete it.
+- A deleted comment fails until its line is removed from the baseline. Remove the line the
+  failure names.
+- Moving a file or class drops its allowance: the moved comments are new. Delete them.
+- Never add lines to the baseline.
 
 ```sh
-git ls-files -z '*.cs' | xargs -0 grep -hE '^\s*//[^/]' | wc -l
+cd src/Kiji.RepositoryTests && dotnet test -c Release
 ```
 
 ## Report

@@ -49,12 +49,12 @@ below once a check covers them.
 | The package works through the SDK in a real consumer | `Kiji.PackageTests` in CI |
 | Docs site builds | CI `Build docs` step |
 | User-visible changes are driven before they are called done | `verify-site` skill (judgment) |
-| No new comments outside the allowed kinds | none. Baseline: 606 `//` lines in tracked `.cs` files (2026-11-20); see `no-comments` |
+| No new comments outside the allowed kinds (in `.cs` files) | `CommentBaselineTests`: every comment block must be in `src/Kiji.RepositoryTests/comment-baseline.txt`, which only shrinks; blocks that link a source are allowed |
 | One type per file | `Kiji.Analyzers` KR0001 in every project |
 | Kiji reads environment variables through IConfiguration | `src/Kiji/BannedSymbols.txt` (RS0030) |
 | Kiji never sets `Environment.ExitCode` | `src/Kiji/BannedSymbols.txt` (RS0030) |
 | `src/Kiji` and `Kiji.Tests` components are hand-written `ComponentBase` classes | `Directory.Build.targets` KR0002 (no Razor SDK, no `.razor`) |
-| `src/Kiji.SyntheticSite` workload stays frozen | none |
+| `src/Kiji.SyntheticSite` workload stays frozen | `SyntheticWorkloadTests` against `src/Kiji.RepositoryTests/synthetic-workload.sha256` |
 | `docs/content/api-*` pages follow author-facing API changes | judgment |
 | Design and constraint decisions below | judgment |
 
@@ -73,12 +73,13 @@ below once a check covers them.
   Classes run in parallel; never mutate process-wide state. It does not pack or build consumers.
 - `src/Kiji.Analyzers` holds the repository's own analyzers (KR*), referenced by every project
   through `Directory.Build.props`; `Directory.Build.targets` holds MSBuild rule checks.
+  `src/Kiji.RepositoryTests` checks the repository itself (comment baseline, frozen workload).
 - `src/Kiji.PackageTests` contains serial, black-box package scenarios with one fixed
   consumer workspace. External dependencies use NuGet's global cache; only Kiji
   is isolated. See its README for execution and cleanup.
-  Run `dotnet test -c Release` from either test project to select that level.
+  Run `dotnet test -c Release` from a test project to select that level.
 - `src/Kiji.SyntheticSite` is the frozen end-to-end workload; `src/Kiji.Benchmarks`
-  contains BenchmarkDotNet measurements. Do not change the workload to improve results.
+  contains BenchmarkDotNet measurements.
 - Stop any verification server/watch process before completion. Stop only processes
   started by the current task (`verify-site`'s `dev-server.sh stop` does this).
 

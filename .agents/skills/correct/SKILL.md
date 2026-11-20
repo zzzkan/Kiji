@@ -27,11 +27,14 @@ Try each level in order and record why a higher one did not work.
 3. **Static checks.** When the bad code still compiles, make the build fail:
    - Raise an existing analyzer or IDE rule to `error` in `.editorconfig`.
      `TreatWarningsAsErrors` and `EnforceCodeStyleInBuild` are already on.
-   - Ban an API with `Microsoft.CodeAnalysis.BannedApiAnalyzers` and a `BannedSymbols.txt`
-     whose message names what to use instead (for example
-     `M:System.Environment.GetEnvironmentVariable(System.String);Read it through IConfiguration`).
-   - Check structure (files, directories, references, packaging) in an MSBuild target or a
-     CI step whose message names the file or type to use.
+   - Ban an API in a project's `BannedSymbols.txt` (`Microsoft.CodeAnalysis.BannedApiAnalyzers`,
+     RS0030) with a message that names what to use instead; see `src/Kiji/BannedSymbols.txt`.
+   - Write a syntax or semantic rule in `src/Kiji.Analyzers` (IDs `KR0001`...; record each in
+     `AnalyzerReleases.Unshipped.md`). Every project already references it.
+   - Check project structure (files, SDKs, references, packaging) in `Directory.Build.targets`
+     with an `<Error Code="KR...">` whose text names the file or type to use.
+   - Check repository-wide state (baselines, frozen files) in `src/Kiji.RepositoryTests`,
+     which CI runs and `dotnet test -c Release` at the root includes.
    The error text must say how to fix the root cause, not only what is wrong: an agent does
    what the error tells it.
 4. **Tests.** A test that fails when the behavior breaks. Fix or delete tests that pass while

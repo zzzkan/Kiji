@@ -1,0 +1,18 @@
+<Project>
+
+  <Target Name="KijiRequireHandWrittenComponents" BeforeTargets="CoreCompile"
+          Condition="'$(MSBuildProjectName)' == 'Kiji' or '$(MSBuildProjectName)' == 'Kiji.Tests'">
+    <ItemGroup>
+      <_KijiRazorFile Include="$(MSBuildProjectDirectory)/**/*.razor;$(MSBuildProjectDirectory)/**/*.cshtml"
+                      Exclude="$(MSBuildProjectDirectory)/bin/**;$(MSBuildProjectDirectory)/obj/**" />
+    </ItemGroup>
+    <Error Condition="'$(UsingMicrosoftNETSdkRazor)' == 'true'"
+           Code="KR0002"
+           Text="$(MSBuildProjectName) builds with Microsoft.NET.Sdk, not the Razor SDK. Write components as ComponentBase classes that override BuildRenderTree, as in src/Kiji/Components." />
+    <Error Condition="'@(_KijiRazorFile)' != ''"
+           Code="KR0002"
+           File="%(_KijiRazorFile.Identity)"
+           Text="$(MSBuildProjectName) does not use Razor files. Rewrite %(_KijiRazorFile.Filename)%(_KijiRazorFile.Extension) as a ComponentBase class that overrides BuildRenderTree, as in src/Kiji/Components." />
+  </Target>
+
+</Project>

@@ -51,8 +51,8 @@ below once a check covers them.
 | User-visible changes are driven before they are called done | `verify-site` skill (judgment) |
 | No new comments outside the allowed kinds | none. Baseline: 606 `//` lines in tracked `.cs` files (2026-11-20); see `no-comments` |
 | One type per file | none |
-| Environment variables are read through IConfiguration | none (no current violations; a `BannedSymbols.txt` entry fits) |
-| Kiji never sets `Environment.ExitCode` | none (a `BannedSymbols.txt` entry fits) |
+| Kiji reads environment variables through IConfiguration | `src/Kiji/BannedSymbols.txt` (RS0030) |
+| Kiji never sets `Environment.ExitCode` | `src/Kiji/BannedSymbols.txt` (RS0030) |
 | Library components are hand-written `ComponentBase` classes, no `.razor` in `src/Kiji` | none |
 | `src/Kiji.SyntheticSite` workload stays frozen | none |
 | `docs/content/api-*` pages follow author-facing API changes | judgment |
@@ -85,7 +85,6 @@ below once a check covers them.
 This section and the next record design decisions that need judgment. When a change breaks
 one, the `correct` skill decides whether it can become a check.
 
-- Read environment variables through IConfiguration providers, not Environment.GetEnvironmentVariable.
 - Follow the .NET host builder shape: CreateBuilder -> builder.Services/Add*/Use* -> Build
   -> RunAsync. StaticSite.CreateBuilder returns HostApplicationBuilder; Kiji registrations are
   IHostApplicationBuilder extensions stored in DI. Publish and serve are hosted services that
@@ -98,9 +97,8 @@ one, the `correct` skill decides whether it can become a check.
   server's watch-style status lines and the runtime's unhandled exception report. Publish uses
   the standard console formatter; MSBuild receives every line as a high-importance message and
   ignores its error/warning format. Only the exit code fails a publish: failed or canceled runs
-  make RunAsync throw from the hosted service's StopAsync (avoiding duplicate host logs); Kiji
-  never sets Environment.ExitCode. Log levels come from the Logging section, not MSBuild
-  properties.
+  make RunAsync throw from the hosted service's StopAsync (avoiding duplicate host logs). Log
+  levels come from the Logging section, not MSBuild properties.
 - Dev and publish share SiteEngine.RenderPageAsync. Never emit stale output;
   ambiguous incremental state requires rendering.
 - One type per file. Library components and library test components are hand-written ComponentBase classes;

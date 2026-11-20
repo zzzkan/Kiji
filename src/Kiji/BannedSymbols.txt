@@ -1,0 +1,5 @@
+M:System.Environment.GetEnvironmentVariable(System.String);Kiji reads environment variables through IConfiguration providers: add a configuration key and read it from IConfiguration.
+M:System.Environment.GetEnvironmentVariable(System.String,System.EnvironmentVariableTarget);Kiji reads environment variables through IConfiguration providers: add a configuration key and read it from IConfiguration.
+M:System.Environment.GetEnvironmentVariables;Kiji reads environment variables through IConfiguration providers: add a configuration key and read it from IConfiguration.
+M:System.Environment.GetEnvironmentVariables(System.EnvironmentVariableTarget);Kiji reads environment variables through IConfiguration providers: add a configuration key and read it from IConfiguration.
+P:System.Environment.ExitCode;Kiji never sets the exit code: let the publish hosted service's StopAsync throw so RunAsync fails.

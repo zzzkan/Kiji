@@ -20,7 +20,6 @@ internal sealed class StaticAssetManifest
         }
         using var stream = File.OpenRead(path);
         using var document = JsonDocument.Parse(stream);
-        // Read directly: a serializer's first use costs far more than this whole file.
         string[] roots = [.. document.RootElement.GetProperty(nameof(ContentRoots)).EnumerateArray()
             .Select(static root => root.GetString()!)];
         if (roots.Any(static root => string.IsNullOrWhiteSpace(root) || !Path.IsPathFullyQualified(root)))

@@ -276,8 +276,6 @@ public sealed class MarkdownProcessorTests : IDisposable
         var name = "photo\uD800.png";
         await CreateTestImageAsync(Path.Combine(_testFilesDir, name), 32, 32);
         var processor = CreateProcessor();
-        // UTF-8 Markdown cannot store an unpaired surrogate. The already-read body
-        // entry point still exercises both NTFS alias lookup and URI-safe output.
         var html = await WithPageContextAsync("/surrogate/", () => processor.ProcessBodyAsync(
             Path.Combine(_testFilesDir, "surrogate.md"), $"![Photo]({name.ToUpperInvariant()})"));
         Assert.Contains("photo%25d800.png.", html, StringComparison.Ordinal);

@@ -7,7 +7,6 @@ internal sealed class SharedRenderLifetime : IAsyncDisposable
     private readonly Lock _gate = new();
     private readonly HashSet<Task> _pending = [];
     private bool _disposed;
-    // Built-in variants persist; only custom processor outputs retire with the snapshot.
     private readonly HashSet<string> _outputs = new(StringComparer.Ordinal);
 
     internal void AddOutput(string path) { lock (_gate) { _outputs.Add(path); } }

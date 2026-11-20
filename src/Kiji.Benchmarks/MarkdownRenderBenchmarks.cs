@@ -53,7 +53,6 @@ public class MarkdownRenderBenchmarks : IDisposable
         _reusableRenderer = new HtmlRenderer(_reusableWriter);
         _pipeline.Setup(_reusableRenderer);
 
-        // Sanity: both strategies must produce identical HTML.
         var perCall = RendererPerCall();
         var reused = RendererReused();
         if (!string.Equals(perCall, reused, StringComparison.Ordinal))

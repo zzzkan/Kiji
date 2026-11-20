@@ -24,8 +24,6 @@ internal sealed class ResponsiveImageWriter
 
     private static bool TryWriteResponsiveImage(HtmlRenderer renderer, LinkInline link, ResponsiveImageContext? context)
     {
-        // Only handle images rendered with a current context (i.e. through the
-        // markdown processor); otherwise fall back to Markdig's default writer.
         if (context is null || !link.IsImage || !renderer.EnableHtmlForInline)
         {
             return false;
@@ -64,7 +62,6 @@ internal sealed class ResponsiveImageWriter
                 : GetDimension(attributes, "height", imageInfo.OriginalWidth, imageInfo.OriginalHeight);
 
             var srcset = string.Join(", ", variants.Select(variant => $"{CreateVariantUrl(publicDirectory, variant.FileName)} {variant.Width}w"));
-            // Auto sizes requires lazy loading, including an explicit loading override.
             var displayWidth = ParseDimension(width);
             if (displayWidth == 0) { displayWidth = largest.Width; }
             var sizes = FormattableString.Invariant($"(max-width: {displayWidth}px) 100vw, {displayWidth}px");
@@ -78,7 +75,6 @@ internal sealed class ResponsiveImageWriter
         }
         else
         {
-            // Processing may have been skipped upstream.
             WriteAttribute(renderer, attributes, "src", url, escapeUrl: true);
         }
 
@@ -97,8 +93,6 @@ internal sealed class ResponsiveImageWriter
 
     private static string CreateVariantUrl(string publicDirectory, string fileName)
     {
-        // srcset uses spaces and commas as syntax, so HTML escaping alone is not
-        // enough. Encode each path segment while preserving directory separators.
         return publicDirectory + EncodeRelativePath(fileName);
     }
 
@@ -133,7 +127,6 @@ internal sealed class ResponsiveImageWriter
         var other = ParseDimension(value);
         if (other == 0) { return null; }
 
-        // Round to the nearest pixel, keeping small positive dimensions visible.
         return Math.Max(1, ((long)original * other + otherOriginal / 2) / otherOriginal).ToString(CultureInfo.InvariantCulture);
     }
 

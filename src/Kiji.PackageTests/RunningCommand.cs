@@ -5,8 +5,6 @@ using System.Text.RegularExpressions;
 
 namespace Kiji.PackageTests;
 
-// Capture a bounded diagnostic tail, including on startup failure and timeout.
-// Only this instance's process tree is ever terminated.
 internal sealed class RunningCommand : IAsyncDisposable
 {
     private static readonly ConcurrentDictionary<RunningCommand, byte> Running = new();
@@ -29,9 +27,6 @@ internal sealed class RunningCommand : IAsyncDisposable
             WorkingDirectory = directory,
             UseShellExecute = false,
             CreateNoWindow = true,
-            // Never share the runner's input. A child that touches an inherited terminal from
-            // a background process group stops every process in that group, the test host and
-            // the CI runner included, which no timeout can then end.
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -49,7 +44,6 @@ internal sealed class RunningCommand : IAsyncDisposable
 
     internal string Output { get { lock (_gate) { return _tail.ToString(); } } }
 
-    // A server's output is the only sign of how far it got before a stall.
     internal static RunningCommand Start(string directory, params string[] arguments) => new(directory, arguments, traceOutput: true);
 
     internal static async Task<string> RunAsync(string directory, params string[] arguments)
@@ -111,10 +105,6 @@ internal sealed class RunningCommand : IAsyncDisposable
         }
     }
 
-    // The pipes close only when every process holding them has exited. A descendant
-    // that outlives the tree kill (a build server, or a child started while the tree
-    // was being enumerated) inherits them, so waiting for the end of the output would
-    // hang the whole test run. Everything the command itself wrote is already read.
     private async Task DrainAsync()
     {
         try { await _drain.WaitAsync(TimeSpan.FromSeconds(10)); }

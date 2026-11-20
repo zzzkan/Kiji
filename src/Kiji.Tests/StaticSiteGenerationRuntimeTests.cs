@@ -125,13 +125,12 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         var feedXml = await File.ReadAllTextAsync(Path.Combine(_outputDir, "feed.xml"));
         Assert.Contains("<title>Hello World</title>", feedXml, StringComparison.Ordinal);
         Assert.Contains("https://example.com/blog/hello-world/", feedXml, StringComparison.Ordinal);
-        // Feed entries appear in the order AddRssFeed produced them (newest first).
         Assert.True(
             feedXml.IndexOf("Hello World", StringComparison.Ordinal) < feedXml.IndexOf("Other Post", StringComparison.Ordinal));
 
         var manifest = await ReadManifestAsync();
         var detail = manifest.Pages.Single(page => page.OutputRelativePath == Path.Combine("blog", "hello-world", "index.html"));
-        Assert.Null(detail.ParametersHash); // This fixture has no data digest, so its readers cannot be reused.
+        Assert.Null(detail.ParametersHash);
     }
 
     [Fact]
@@ -143,7 +142,6 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         builder.RegisterContent<Post>(_ => []);
         TestArticleContents.MapSite(builder);
 
-        // Site code may prepare values in an artifact registered before the feed.
         var title = "not prepared";
         builder.AddArtifact("prepare.txt", async (output, _, ct) =>
         {
@@ -202,7 +200,6 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         Assert.Contains("href=\"/kiji/css/app.css\"", home, StringComparison.Ordinal);
         Assert.Contains("href=\"https://example.com/kiji/\"", home, StringComparison.Ordinal);
 
-        // Shared variants use the deployment base path and never live beside the page.
         Assert.Contains("src=\"/kiji/_images/", html, StringComparison.Ordinal);
         var variants = Directory.GetFiles(Path.Combine(_outputDir, "_images"), "*.webp", SearchOption.AllDirectories);
         Assert.Contains(variants, path => Path.GetFileName(path).StartsWith("photo.png.", StringComparison.Ordinal));
@@ -211,7 +208,6 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
             "/kiji/" + Path.GetRelativePath(_outputDir, path).Replace('\\', '/'), html, StringComparison.Ordinal));
         Assert.Empty(Directory.GetFiles(pageDir, "*.webp", SearchOption.AllDirectories));
 
-        // Encoded variants are kept in the persistent cache under .kiji/cache.
         var imageCacheDir = Path.Combine(_testDir, ".kiji", "cache", "images");
         Assert.NotEmpty(Directory.GetFiles(imageCacheDir, "*", SearchOption.AllDirectories));
 

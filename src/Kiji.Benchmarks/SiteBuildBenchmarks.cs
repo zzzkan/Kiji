@@ -47,14 +47,9 @@ public class SiteBuildBenchmarks
                 $"Benchmark corpus '{_root}' contains {actualPages} posts; expected {Pages}. Use a fresh temporary directory or regenerate this corpus before measuring.");
         }
 
-        // Every scenario starts from a site that has already been built once: the
-        // output directory populated and a manifest on disk.
         await BuildRunner.BuildSiteAsync(_root);
         _originalPost = File.ReadAllText(_editedPost);
 
-        // Phase attribution under the same conditions as the headline number. Warmup
-        // and measured iterations are pooled, so read these as proportions, not as
-        // per-iteration times.
         _phaseTotals.Clear();
         _builds = 0;
         BuildPhaseTimer.Observer = (phase, elapsed) =>
@@ -86,8 +81,6 @@ public class SiteBuildBenchmarks
         switch (Scenario)
         {
             case BuildScenario.Full:
-                // Removing the manifest is what forces every page to re-render; the
-                // output directory stays populated, as it would on a CI rebuild.
                 var cache = Path.Combine(_root, ".kiji");
                 if (Directory.Exists(cache))
                 {
@@ -102,8 +95,6 @@ public class SiteBuildBenchmarks
                 break;
 
             case BuildScenario.CodeChanged:
-                // Change a recorded code dependency while retaining valid output hashes.
-                // This simulates a code update without changing the frozen workload.
                 var manifest = JsonNode.Parse(File.ReadAllText(_manifestPath))!;
                 manifest["CodeDependencies"]!.AsArray()[0] = "benchmark-code-change";
                 File.WriteAllText(_manifestPath, manifest.ToJsonString());
@@ -126,5 +117,4 @@ public class SiteBuildBenchmarks
         _builds++;
         return BuildRunner.BuildSiteAsync(_root);
     }
-
 }

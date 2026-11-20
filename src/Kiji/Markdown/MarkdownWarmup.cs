@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Kiji.Assets;
 using Kiji.Generation;
 
@@ -60,25 +61,22 @@ internal static class MarkdownWarmup
     /// <summary>Starts the warm-up once per process. Returns immediately.</summary>
     internal static void Start()
     {
-        // With a single processor it would only delay the site's own work.
         if (Environment.ProcessorCount < 2 || Interlocked.Exchange(ref s_started, 1) != 0)
         {
             return;
         }
 
-        // A background thread never keeps a finished process alive.
         new Thread(Run) { IsBackground = true, Name = "Kiji Markdown warm-up" }.Start();
     }
 
+    [SuppressMessage("Design", "CA1031", Justification = "A failed warm-up changes only timing; the site reports its own errors.")]
     private static void Run()
     {
         try
         {
             Warm();
         }
-#pragma warning disable CA1031 // The site reports its own errors; a failed warm-up changes only timing.
         catch (Exception)
-#pragma warning restore CA1031
         {
         }
     }

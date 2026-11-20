@@ -24,7 +24,6 @@ internal sealed class LiveReloadExceptionPageFilter(PathString pathBase) : IDeve
             response.Body = body;
         }
 
-        // Requests that do not accept HTML get a plain-text page.
         if (response.ContentType?.StartsWith("text/html", StringComparison.OrdinalIgnoreCase) != true)
         {
             page.Position = 0;

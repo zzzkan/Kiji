@@ -58,7 +58,6 @@ internal sealed class IncrementalBuildPlanner(
         CancellationToken cancellationToken,
         Task<BuildManifest?>? previousManifest = null)
     {
-        // Before planning, which may already restore outputs.
         OutputDirectoryCreated = !Directory.Exists(options.OutputDirectory);
         var optionsHash = ComputeOptionsHash();
         var codeDependencies = CollectCodeDependencies(assemblies);
@@ -67,7 +66,6 @@ internal sealed class IncrementalBuildPlanner(
         OutputStampsValid = oldManifest?.OutputDirectoryHash == _outputDirectoryHash;
         if (OutputDirectoryCreated && oldManifest is not null)
         {
-            // The stamps describe files that no longer exist; whatever is restored is stamped afresh.
             foreach (var page in oldManifest.Pages)
             {
                 page.Stamp = null;
@@ -75,10 +73,6 @@ internal sealed class IncrementalBuildPlanner(
             }
         }
 
-        // Without a manifest nothing about the previous build can be proven, so every
-        // page renders. Unrecognized files in the output directory are not a reason to
-        // re-render anything: the reconciliation pass at the end of the build deletes
-        // whatever this build did not produce.
         if (oldManifest is null
             || codeDependencies.Any(static input => input.EndsWith(":unavailable", StringComparison.Ordinal))
             || oldManifest.OptionsHash != optionsHash
@@ -91,8 +85,6 @@ internal sealed class IncrementalBuildPlanner(
             static page => page.OutputRelativePath,
             StringComparer.OrdinalIgnoreCase);
 
-        // Code changes need only the old output hashes. Load HTML only after the
-        // global code/options check has established that pages may be reused.
         LoadHtml(oldManifest);
 
         var decisions = new (PageRenderRequest? Render, BuildManifestPage? Carried)[pages.Count];
@@ -155,11 +147,10 @@ internal sealed class IncrementalBuildPlanner(
                     break;
 
                 default:
-                    return false; // Unknown kind from a newer schema: re-render.
+                    return false;
             }
         }
 
-        // Reuse and cache-only repair must enforce the same source rules as rendering.
         foreach (var image in oldPage.ImageRequests)
         {
             try
@@ -187,8 +178,6 @@ internal sealed class IncrementalBuildPlanner(
                 return false;
             }
         }
-        // Verify cached bytes even when output remains: successful publication must
-        // leave a usable cache for the next clean checkout as well.
         if (oldPage.Html is not { } html || BuildFingerprint.HashBytes(html.Span) != oldPage.OutputHash)
         {
             return false;
@@ -204,7 +193,6 @@ internal sealed class IncrementalBuildPlanner(
         return true;
     }
 
-    // Many pages share one image; validate each source once per plan.
     private string ResolveImageSource(string source) => _imageSources.GetOrAdd(source, source => new Lazy<string>(() =>
         contentPaths?.ResolveFile(ResolveDependencyPath(source)) ?? ResolveDependencyPath(source))).Value;
 
@@ -216,7 +204,6 @@ internal sealed class IncrementalBuildPlanner(
             return (OutputStampsValid && output.Stamp is { } stamp && OutputStamp.Read(path) == stamp)
                 || _cache.Restore(output.Hash, path);
         })).Value;
-        // A failed restore may become possible after an encoder repairs the blob.
         if (!restored) { _restoredImages.TryRemove((output.RelativePath, output.Hash), out _); }
         return restored;
     }
@@ -228,7 +215,6 @@ internal sealed class IncrementalBuildPlanner(
         byte[] html,
         OutputStamp? stamp = null)
     {
-        // A deterministic dependency order makes cache records reproducible.
         var dependencies = new List<BuildManifestDependency>();
 
         foreach (var (file, recorded) in recorder.FileInputs.OrderBy(static entry => entry.Key, StringComparer.Ordinal))
@@ -262,8 +248,6 @@ internal sealed class IncrementalBuildPlanner(
             Html = html,
             Stamp = stamp,
             Images = recorder.Images,
-            // Pages that always render need no repair recipes. In particular,
-            // external sources have no portable, root-relative identity.
             ImageRequests = parametersHash is null ? [] : [.. recorder.ImageRequests.Select(image => new BuildManifestImage(
                 ToDependencyKey(image.Source), Path.GetRelativePath(options.OutputDirectory, image.OutputDirectory).Replace(Path.DirectorySeparatorChar, '/')))],
         };
@@ -292,8 +276,6 @@ internal sealed class IncrementalBuildPlanner(
                     throw new FileNotFoundException("A static asset is missing. Rebuild the site to refresh its asset manifest.", source.Source);
                 }
 
-                // SDK URLs identify exact bytes. Otherwise a missing output needs
-                // only copying; two unreadable files must never count as equal.
                 var outputHash = BuildFingerprint.HashFile(destinationPath);
                 var inputHash = source.ExpectedHash is not null || outputHash != BuildFingerprint.Missing
                     ? BuildFingerprint.HashFile(source.Source) : null;
@@ -312,9 +294,6 @@ internal sealed class IncrementalBuildPlanner(
                 {
                     throw new IOException($"Static asset '{source.Source}' changed while being copied. Rebuild the site before publishing.");
                 }
-                // File.Copy preserves the input timestamp. The SDK's final
-                // PreserveNewest copy must see a changed staging file even when
-                // source bytes changed without a timestamp change.
                 File.SetLastWriteTimeUtc(destinationPath, DateTime.UtcNow);
                 Interlocked.Increment(ref copied);
 
@@ -343,9 +322,7 @@ internal sealed class IncrementalBuildPlanner(
 
         if (OutputDirectoryCreated)
         {
-            // Rendered pages read their stamps as they wrote; read the rest one file at a time.
             _stampsChanged = true;
-            // Shared images appear on many pages; read each once.
             var imageStamps = new Dictionary<string, OutputStamp?>(StringComparer.OrdinalIgnoreCase);
             foreach (var page in manifest.Pages)
             {
@@ -371,8 +348,6 @@ internal sealed class IncrementalBuildPlanner(
         DirectoryInfo[] directories = [new(options.OutputDirectory)];
         while (directories.Length > 0)
         {
-            // Scan independent directories together. A recursive enumerator opens
-            // every output directory serially even when no output needs changing.
             var children = new ConcurrentBag<DirectoryInfo>();
             Parallel.ForEach(directories, directory =>
             {
@@ -383,7 +358,6 @@ internal sealed class IncrementalBuildPlanner(
                     var relativePath = Path.GetRelativePath(options.OutputDirectory, file.FullName).Replace(Path.DirectorySeparatorChar, '/');
                     if (expected.TryGetValue(relativePath, out var page))
                     {
-                        // Enumeration already supplies size and time; no second stat.
                         var stamp = new OutputStamp(file.Length, file.LastWriteTimeUtc);
                         if (page is not null)
                         {
@@ -427,17 +401,12 @@ internal sealed class IncrementalBuildPlanner(
                 _cache.EnsureStored(output.Hash, Path.Combine(options.OutputDirectory, output.RelativePath));
             }
         }
-        // Carried entries are the same objects loaded from the verified manifest.
-        // Restoring output changes only its stamps; retain the HTML bundle on
-        // no-change builds, including a clean CI checkout.
         if (previous is null || manifest.OptionsHash != previous.OptionsHash
             || !manifest.CodeDependencies.SequenceEqual(previous.CodeDependencies)
             || !manifest.Pages.SequenceEqual(previous.Pages)
             || !manifest.StaticFiles.SequenceEqual(previous.StaticFiles)
             || !manifest.Artifacts.SequenceEqual(previous.Artifacts))
         {
-            // The manifest publishes a complete immutable bundle. Until its atomic
-            // replacement succeeds, the previous bundle remains usable.
             var htmlFile = "html-" + Guid.NewGuid().ToString("N") + ".bin";
             var htmlPath = Path.Combine(cacheDirectory, htmlFile);
             try
@@ -447,8 +416,6 @@ internal sealed class IncrementalBuildPlanner(
                     foreach (var page in manifest.Pages)
                     {
                         page.HtmlOffset = checked((int)stream.Position);
-                        // An explicitly uncacheable page must render on every build.
-                        // Keep its output metadata for reconciliation, but not its HTML.
                         if (page.ParametersHash is null) { page.HtmlLength = 0; continue; }
                         var html = page.Html ?? throw new InvalidDataException("Missing rendered HTML.");
                         page.HtmlLength = html.Length;
@@ -473,7 +440,6 @@ internal sealed class IncrementalBuildPlanner(
 
     private void WriteManifest(BuildManifest manifest)
     {
-        // Sized for a typical page entry so a large site's manifest seldom regrows.
         var json = new System.Buffers.ArrayBufferWriter<byte>(Math.Max(64 * 1024, manifest.Pages.Count * 1024));
         BuildManifestSerializer.Serialize(json, manifest);
         ArtifactCache.WriteAtomic(_manifestPath, json.WrittenSpan);
@@ -481,7 +447,7 @@ internal sealed class IncrementalBuildPlanner(
 
     private void Collect(BuildManifest manifest)
     {
-        File.Delete(Path.Combine(cacheDirectory, "build-manifest.json")); // Retired legacy manifest.
+        File.Delete(Path.Combine(cacheDirectory, "build-manifest.json"));
         foreach (var path in Directory.EnumerateFiles(cacheDirectory, "html-*.bin"))
         {
             if (Path.GetFileName(path) != manifest.HtmlFile) { File.Delete(path); }
@@ -551,8 +517,6 @@ internal sealed class IncrementalBuildPlanner(
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
     }
 
-    // Validate every consumed file once after rendering. An index page may read
-    // thousands of files; parallelizing by file also keeps a one-page edit cheap.
     internal static void VerifyInputs(IEnumerable<BuildDependencyRecorder> recorders)
     {
         var inputs = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -567,8 +531,6 @@ internal sealed class IncrementalBuildPlanner(
                 inputs[path] = digest;
             }
         }
-        // An indexed loop: partitioning the dictionary itself compiles a second parallel loop
-        // for its entry type.
         var files = new string[inputs.Count];
         inputs.Keys.CopyTo(files, 0);
         Parallel.For(0, files.Length, index =>
@@ -621,17 +583,12 @@ internal sealed class IncrementalBuildPlanner(
     private string ComputeOptionsHash()
     {
         var builder = new StringBuilder();
-        // Components can branch on the host environment, so its name is a site-wide input.
         foreach (var value in new[] { site.BaseUrl.AbsoluteUri, site.Name, site.Description,
             site.Language, site.Author, environmentName })
         {
             BuildFingerprint.AppendPart(builder, value);
         }
 
-        // Which values a page reads is not tracked, so any configuration change renders
-        // every page. Null values count: binding a key set to null differs from a missing
-        // key. The manifest keeps only this SHA-256 digest, not the values.
-        // Logging and Metrics configure diagnostics, not output; changing them keeps reuse.
         foreach (var (key, value) in configuration.AsEnumerable()
             .Where(static pair => !IsDiagnosticsKey(pair.Key))
             .OrderBy(static pair => pair.Key, StringComparer.Ordinal))
@@ -643,7 +600,6 @@ internal sealed class IncrementalBuildPlanner(
         return BuildFingerprint.HashText(builder.ToString());
     }
 
-    // Match whole sections, ignoring case, without excluding keys such as MetricsTheme.
     private static bool IsDiagnosticsKey(string key) => IsSection(key, "Logging") || IsSection(key, "Metrics");
 
     private static bool IsSection(string key, string section) =>
@@ -652,10 +608,6 @@ internal sealed class IncrementalBuildPlanner(
 
     internal static IReadOnlyList<string> CollectCodeDependencies(IEnumerable<Assembly> roots)
     {
-        // A loaded assembly's references and code identity cannot change. Reuse
-        // its complete dependency list across publishes, including framework code.
-        // A publish starts this walk while its content loads; a lazy value lets planning wait
-        // for a walk in progress instead of repeating it.
         return [.. roots.Distinct().SelectMany(root => CodeDependencies.GetValue(root,
                 static root => new Lazy<List<string>>(() => CollectAssemblyDependencies(root))).Value)
             .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
@@ -680,8 +632,6 @@ internal sealed class IncrementalBuildPlanner(
                 fingerprints.Add($"{name}:unavailable");
                 continue;
             }
-            // Trust the compiler's module identity. Recompilation belongs to MSBuild;
-            // Kiji does not reconstruct compiler inputs or inspect binary contents.
             var mvid = assembly.ManifestModule.ModuleVersionId;
             fingerprints.Add(mvid == Guid.Empty ? $"{name}:unavailable" : $"{name}:mvid:{mvid:N}");
 
@@ -698,7 +648,6 @@ internal sealed class IncrementalBuildPlanner(
                 }
                 catch (Exception exception) when (exception is FileNotFoundException or FileLoadException or BadImageFormatException)
                 {
-                    // An unreadable dependency cannot establish code equivalence.
                     visited.Add(reference.Name ?? string.Empty);
                     fingerprints.Add($"{reference.Name}:unavailable");
                 }
@@ -711,7 +660,6 @@ internal sealed class IncrementalBuildPlanner(
 
     private string HashFileCached(string path)
     {
-        // Cache fresh hashes only within this plan, never across build snapshots.
         return _fileFingerprints.GetOrAdd(
             Path.GetFullPath(path),
             static (fullPath, registry) => new Lazy<string>(

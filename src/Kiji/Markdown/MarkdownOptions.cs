@@ -31,7 +31,6 @@ public sealed class MarkdownOptions
 
     internal IDeserializer CreateDeserializer()
     {
-        // Build serially; each parsing worker owns its own deserializer.
         lock (_yamlLock) { return Yaml.Build(); }
     }
 }

@@ -10,7 +10,6 @@ internal sealed class WatchedPath(string path, WatchedPathSource source, Func<st
     {
         get
         {
-            // Keep watching when the input itself is deleted or replaced.
             var ancestor = Directory.GetParent(Path);
             while (ancestor is not null && !ancestor.Exists) { ancestor = ancestor.Parent; }
             return ancestor?.FullName ?? Path;
@@ -19,7 +18,6 @@ internal sealed class WatchedPath(string path, WatchedPathSource source, Func<st
 
     internal bool Affects(string candidate, WatcherChangeTypes change)
     {
-        // A rename/delete of an ancestor can move an entire source tree at once.
         if (change != WatcherChangeTypes.Changed && Contains(candidate, Path)) { return true; }
         return Contains(Path, candidate) && (affectsAsset is null || affectsAsset(candidate));
     }

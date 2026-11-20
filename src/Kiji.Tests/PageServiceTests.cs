@@ -25,7 +25,6 @@ public sealed class PageServiceTests : IDisposable
         var renders = requests.Select(request => app.RenderPageAsync(request, CancellationToken.None)).ToArray();
         try
         {
-            // Both renders reach their asynchronous lifecycle before either can finish.
             Assert.Equal(2, probe.Created.Count);
             Assert.All(probe.Created, service => Assert.Equal(0, service.DisposeCount));
         }
@@ -125,7 +124,6 @@ public sealed class PageServiceTests : IDisposable
     {
         var builder = CreateBuilder();
         builder.Services.AddSingleton(provider => provider.GetRequiredService<ResolvedSitePaths>().OutputDirectory);
-        // Managed registrations are present from the start, so ordinary extension methods see them.
         builder.Services.TryAddSingleton(new SiteInfo { Name = "Replacement", BaseUrl = new Uri("https://replacement.test/") });
         await using var app = builder.BuildSite();
         Assert.Throws<InvalidOperationException>(() => builder.Services.AddSingleton("late"));
@@ -165,8 +163,6 @@ public sealed class PageServiceTests : IDisposable
     [InlineData("stable")]
     public async Task ServiceCode_OnlyReusesPagesWhenItsIdentityIsAvailable(string registration)
     {
-        // Plugin code need not be referenced by a page assembly. If its identity cannot
-        // be recorded, a registration must make the build conservative even before resolution.
         var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName($"Plugin{Guid.NewGuid():N}"), AssemblyBuilderAccess.RunAndCollect);
         var typeBuilder = assembly.DefineDynamicModule("Plugin").DefineType("PluginService", TypeAttributes.Public);
         var constructor = typeBuilder.DefineDefaultConstructor(MethodAttributes.Public);

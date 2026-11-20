@@ -28,7 +28,6 @@ public sealed class PageInfoTests : IDisposable
             + $"|/{escapedBasePath}about/|/{escapedBasePath}page-info/{escapedKey}/image.png|page-info/{escapedKey}/",
             html, StringComparison.Ordinal);
 
-        // The completed render must not leave a page available to an unrelated scope.
         using var scope = app.ServiceProvider.CreateScope();
         var exception = Assert.Throws<InvalidOperationException>(() => scope.ServiceProvider.GetRequiredService<PageInfo>());
         Assert.Contains("only available during page rendering", exception.Message, StringComparison.Ordinal);

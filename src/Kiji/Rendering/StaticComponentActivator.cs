@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Collections.Concurrent;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
@@ -9,15 +10,12 @@ internal sealed class StaticComponentActivator(IServiceProvider services) : ICom
 {
     private static readonly ConcurrentDictionary<Type, (ObjectFactory Create, bool AlwaysRender)> Factories = new();
 
+    [SuppressMessage("Usage", "BL0005", Justification = "Sets ImportMap's default before rendering; explicit parameters still replace it.")]
     public IComponent CreateInstance(Type componentType)
     {
         if (componentType == typeof(ImportMap))
         {
-            // This is the framework component, with a default for its public parameter.
-            // Explicit component parameters can still replace the default during rendering.
-#pragma warning disable BL0005
             return new ImportMap { ImportMapDefinition = (PageRenderContext.Current?.Assets ?? Assets.AssetResources.Empty).ReadImportMap() };
-#pragma warning restore BL0005
         }
 
         var (create, alwaysRender) = Factories.GetOrAdd(componentType,

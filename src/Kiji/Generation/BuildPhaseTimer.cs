@@ -15,7 +15,6 @@ internal sealed class BuildPhaseTimer
 {
     internal const string Snapshot = "snapshot";
 
-    // Sub-phases of the snapshot, reported alongside it rather than instead of it.
     internal const string Discovery = "snapshot.discovery";
     internal const string Routes = "snapshot.routes";
     internal const string RouteEntries = "snapshot.routes.entries";

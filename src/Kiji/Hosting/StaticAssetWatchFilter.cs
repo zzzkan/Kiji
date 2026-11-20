@@ -3,8 +3,6 @@ using Microsoft.Extensions.FileSystemGlobbing;
 
 namespace Kiji.Hosting;
 
-// ContentRoots are physical lookup roots, not declarations that every file below
-// them is public (a collocated .razor.js can put the whole project in a root).
 internal sealed class StaticAssetWatchFilter
 {
     private readonly string _root;
@@ -43,8 +41,6 @@ internal sealed class StaticAssetWatchFilter
         path = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
         lock (_lock)
         {
-            // Retain ancestor paths after deletion: a directory move/delete may
-            // emit no individual file events, and replacing it must still reload.
             if (_files.Contains(path) || _directories.Contains(path)) { return true; }
             if (!_hasDiscovery || !IsUnderRoot(path)) { return false; }
             if (Directory.Exists(path))
@@ -61,8 +57,6 @@ internal sealed class StaticAssetWatchFilter
                 }
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
                 {
-                    // Directory replacement can race discovery. Reload when its
-                    // contents cannot be determined instead of losing the event.
                     return true;
                 }
                 return found;

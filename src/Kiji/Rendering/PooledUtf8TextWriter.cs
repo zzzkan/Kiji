@@ -142,7 +142,6 @@ internal sealed class PooledUtf8TextWriter(int initialCapacity = 64 * 1024) : Te
                     break;
 
                 case OperationStatus.NeedMoreData:
-                    // A high surrogate ended the chunk; hold it for the next write.
                     _pendingHighSurrogate = value[0];
                     _hasPendingHighSurrogate = true;
                     return;
@@ -160,8 +159,6 @@ internal sealed class PooledUtf8TextWriter(int initialCapacity = 64 * 1024) : Te
             return;
         }
 
-        // An unpaired trailing high surrogate encodes as U+FFFD, matching
-        // replaceInvalidSequences semantics.
         _hasPendingHighSurrogate = false;
         TranscodeCore(['�'], isFinalBlock: true);
     }

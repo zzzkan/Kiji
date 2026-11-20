@@ -20,7 +20,6 @@ public sealed class PublishJitProfileStampTests : IDisposable
     }
 
     [Theory]
-    // A stamp that cannot be trusted reads as no stamp, so the profile is recorded again.
     [InlineData("")]
     [InlineData("2 code 10 complete")]
     [InlineData("1 code ten complete")]

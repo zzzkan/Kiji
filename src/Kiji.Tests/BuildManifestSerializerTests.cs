@@ -31,12 +31,10 @@ public sealed class BuildManifestSerializerTests
 
         Assert.NotNull(manifest);
         Assert.True(manifest.IsValid());
-        // Lists compare by reference, so compare what each reader would write back.
         Assert.Equal(Encoding.UTF8.GetString(json), Encoding.UTF8.GetString(Serialize(manifest)));
     }
 
     [Theory]
-    // Members may be missing, null, unknown, repeated or in any order.
     [InlineData("""{}""")]
     [InlineData("""{"Pages":null,"CodeDependencies":null,"OptionsHash":null}""")]
     [InlineData("""{"Unknown":{"nested":[1,{"a":null}]},"SchemaVersion":6,"SchemaVersion":7,"Pages":[null,{"Stamp":null,"Unknown":1,"Dependencies":[null,{}],"AdditionalOutputs":[{"Stamp":null},{}],"ImageRequests":[null,{}],"Images":[null]}]}""")]
@@ -60,7 +58,6 @@ public sealed class BuildManifestSerializerTests
     }
 
     [Theory]
-    // A cache that is not a manifest must read as corrupt, never as a different manifest.
     [InlineData("")]
     [InlineData("[]")]
     [InlineData("""{"SchemaVersion":"6"}""")]
@@ -100,7 +97,6 @@ public sealed class BuildManifestSerializerTests
             OutputDirectoryHash = new string('b', 64),
             Pages =
             [
-                // Characters the JSON writer escapes, and text outside ASCII.
                 new BuildManifestPage("blog/日本語 <&'\"+>/index.html", "/blog/日本語 <&'\"+>/", hash, hash,
                     [new BuildManifestDependency("file", "content/a\\b\u0001.md", hash), new BuildManifestDependency("value", "", "x")],
                     [new BuildManifestOutput("_images/a.webp", hash) { Stamp = stamp }, new BuildManifestOutput("_images/b.webp", hash)])
@@ -111,7 +107,6 @@ public sealed class BuildManifestSerializerTests
                     ImageRequests = [new BuildManifestImage("content/a.png", ".")],
                     Images = [hash],
                 },
-                // An uncacheable page keeps no parameters hash and no stamp.
                 new BuildManifestPage("index.html", "/", null, hash, [], []),
             ],
             StaticFiles = ["css/site.css"],

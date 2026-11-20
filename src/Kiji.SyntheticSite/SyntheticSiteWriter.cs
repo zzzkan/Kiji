@@ -33,8 +33,6 @@ public static class SyntheticSiteWriter
                 $"static asset {i}\n{new string('x', 2048)}\n");
         }
 
-        // The harness materializes its inputs without MSBuild. Supply the same
-        // resolved asset contract as a built site, keeping the workload unchanged.
         Directory.CreateDirectory(Path.Combine(root, "obj"));
         var manifestRoot = new System.Text.Json.Nodes.JsonObject();
         foreach (var source in Directory.EnumerateFiles(staticDir, "*", SearchOption.AllDirectories))

@@ -45,7 +45,6 @@ internal sealed class RssFeedArtifact(
             cancellationToken.ThrowIfCancellationRequested();
 
             var itemUrl = site.ResolveUrl(item.RelativePath).AbsoluteUri;
-            // RFC 1123 date; converting to UTC keeps the offset correct for any zone.
             var pubDate = item.PublishedAt.UtcDateTime.ToString("r", CultureInfo.InvariantCulture);
 
             writer.WriteStartElement(prefix: null, "item", ns: null);

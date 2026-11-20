@@ -7,10 +7,6 @@ namespace Kiji.Hosting;
 
 internal static class StaticAssetRequestHandler
 {
-    // SDK development endpoints evaluate conditions against build-time metadata,
-    // before patching the response with live bytes, and discard range offsets
-    // (dotnet/aspnetcore#63320). Use a live file result for these requests; ordinary
-    // requests retain the SDK's optimized endpoints and compression.
     internal static async Task HandleAsync(HttpContext context, RequestDelegate next, IReadOnlyDictionary<string, string> files)
     {
         if (context.GetEndpoint()?.Metadata.GetMetadata<StaticAssetDescriptor>() is not { } asset

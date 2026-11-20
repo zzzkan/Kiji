@@ -57,7 +57,6 @@ internal static class MarkdownFrontMatterParser
 
         var yamlStart = index + 1;
 
-        // Search from the opening line's newline so the closer can immediately follow it.
         var searchFrom = index;
         while (true)
         {
@@ -82,7 +81,6 @@ internal static class MarkdownFrontMatterParser
 
             if (lastNewline < 0 && runIndex != content.Length)
             {
-                // Not a delimiter line (e.g. '----' or trailing text); keep scanning.
                 searchFrom = closerStart;
                 continue;
             }

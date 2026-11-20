@@ -30,7 +30,6 @@ internal static class SiteServiceRegistration
             .ToLookup(static descriptor => descriptor.ServiceType);
         foreach (var type in expected.Select(static group => group.Key).Concat(actual.Select(static group => group.Key)).Distinct())
         {
-            // Descriptor identity preserves the lifetime, factory and instance owned by Kiji.
             if (!expected[type].SequenceEqual(actual[type]))
             {
                 throw new InvalidOperationException(
@@ -81,7 +80,6 @@ internal static class SiteServiceRegistration
             if (callback is null) { return; }
             foreach (var entry in callback.GetInvocationList())
             {
-                // A DynamicMethod's host module does not identify its generated code.
                 AddType(entry.Method.DeclaringType ?? throw new NotSupportedException(
                     "Service factories must use a regular C# lambda or method, not a standalone runtime-generated method."));
                 AddType(entry.Target?.GetType());

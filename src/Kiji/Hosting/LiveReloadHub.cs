@@ -18,20 +18,15 @@ internal sealed class LiveReloadHub
     private readonly Lock _sendLock = new();
     private Task _pendingSend = Task.CompletedTask;
 
-    // Changed only inside queued operations, which run one at a time.
     private byte[]? _diagnosticsMessage;
 
     internal async Task HandleClientAsync(Func<Task<WebSocket>> acceptWebSocket, CancellationToken cancellationToken)
     {
         var id = Guid.NewGuid();
-        // A client can finish its handshake before the server's accept continuation
-        // resumes. Queue acceptance and registration together so a broadcast in that
-        // gap waits for the client instead of silently missing it.
         using var socket = await QueueSendAsync(async () =>
         {
             var accepted = await acceptWebSocket();
             _clients.TryAdd(id, accepted);
-            // Pages opened or reloaded while the build is broken still show its errors.
             if (_diagnosticsMessage is { } diagnostics)
             {
                 await SendAsync(id, accepted, diagnostics, cancellationToken);
@@ -58,11 +53,9 @@ internal sealed class LiveReloadHub
         }
         catch (OperationCanceledException)
         {
-            // Server shutting down.
         }
         catch (WebSocketException)
         {
-            // Client disconnected abruptly.
         }
         finally
         {
@@ -72,8 +65,6 @@ internal sealed class LiveReloadHub
 
     internal Task<int> BroadcastReloadAsync(CancellationToken cancellationToken)
     {
-        // WebSocket supports only one concurrent send. File saves and code updates
-        // can arrive together, so serialize acceptance, broadcasts and close acknowledgements.
         return QueueSendAsync(() => SendToClientsAsync(ReloadMessage, cancellationToken));
     }
 
@@ -86,7 +77,6 @@ internal sealed class LiveReloadHub
         var message = JsonSerializer.SerializeToUtf8Bytes(diagnostics);
         return QueueSendAsync(() =>
         {
-            // dotnet watch also reports no errors after edits that had none.
             if (diagnostics.Length == 0 && _diagnosticsMessage is null)
             {
                 return Task.FromResult(0);
@@ -109,7 +99,6 @@ internal sealed class LiveReloadHub
 
     private static async Task<T> SendAfterAsync<T>(Task previous, Func<Task<T>> send)
     {
-        // A failed or cancelled operation must not poison subsequent notifications.
         await previous.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
         return await send();
     }

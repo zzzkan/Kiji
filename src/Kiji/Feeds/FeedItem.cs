@@ -20,8 +20,6 @@ public sealed record FeedItem
         ArgumentNullException.ThrowIfNull(Title);
         ArgumentNullException.ThrowIfNull(Description);
         global::Kiji.RelativePath.Validate(RelativePath, nameof(RelativePath));
-        // Reject here what the feed writer could not resolve or serialize, while the caller
-        // still knows which entry is at fault.
         SiteInfo.ParseRelativePath(RelativePath, nameof(RelativePath));
         ValidateXmlText(Title, nameof(Title), RelativePath);
         ValidateXmlText(Description, nameof(Description), RelativePath);
@@ -48,7 +46,6 @@ public sealed record FeedItem
     {
         foreach (var character in value)
         {
-            // Surrogates are left to the encoder, as the XML writer leaves them.
             if (!XmlConvert.IsXmlChar(character) && !char.IsSurrogate(character))
             {
                 throw new ArgumentException(

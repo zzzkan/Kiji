@@ -54,7 +54,6 @@ public sealed class StaticAssetTests : IDisposable
         var html = await ReadPage("importmap");
         var start = html.IndexOf('>', html.IndexOf("type=\"importmap\"", StringComparison.Ordinal)) + 1;
         using var map = JsonDocument.Parse(System.Net.WebUtility.HtmlDecode(html[start..html.IndexOf("</script>", start, StringComparison.Ordinal)]));
-        // Browsers resolve both sides against the page, so only absolute paths work at every depth.
         Assert.Equal("/kiji/app.first.js", map.RootElement.GetProperty("imports").GetProperty("/kiji/app.js").GetString());
         Assert.StartsWith("sha256-", map.RootElement.GetProperty("integrity").GetProperty("/kiji/app.first.js").GetString(), StringComparison.Ordinal);
         var custom = await ReadPage("custom");

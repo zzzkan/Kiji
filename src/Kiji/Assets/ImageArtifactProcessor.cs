@@ -23,14 +23,12 @@ internal static class ImageArtifactProcessor
             dependencies?.DisableCache();
             if (processor is ImageProcessor builtIn)
             {
-                // Development can reuse the deterministic built-in variants already on disk.
                 return await builtIn.ProcessBytesAsync(sourceBytes, sourceName, sourceHash, output, cancellationToken);
             }
             return await GenerateAsync(processor, sourceBytes, sourceHash, output, null, null, sourceName, workDirectory, cancellationToken);
         }
         var root = Path.GetDirectoryName(cacheDirectory)!;
         var cache = new ArtifactCache(root);
-        // Older recipes may contain mutable or platform-specific variant paths.
         var key = BuildFingerprint.HashText("shared-images-v1:" + identity + ":" + sourceName + ":" + sourceHash);
         dependencies?.AddImage(key);
         var recordPath = Path.Combine(root, "image-records", key + ".json");
@@ -59,8 +57,6 @@ internal static class ImageArtifactProcessor
         return await GenerateAsync(processor, sourceBytes, sourceHash, output, cache, recordPath, sourceName, workDirectory, cancellationToken);
     }
 
-    // Abandoned work is private and uniquely named, so a leftover a scanner still
-    // holds is harmless: it must not fail startup, and the next run retries.
     internal static void ClearWork(string workDirectory)
     {
         try { Directory.Delete(workDirectory, recursive: true); }
@@ -70,7 +66,6 @@ internal static class ImageArtifactProcessor
     private static async Task<ProcessedImageInfo> GenerateAsync(IImageProcessor processor,
         byte[] sourceBytes, string sourceHash, string output, ArtifactCache? cache, string? recordPath, string sourceName, string workDirectory, CancellationToken cancellationToken)
     {
-        // Work never belongs to public output, including canceled/terminated builds.
         var work = Path.Combine(workDirectory, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(work);
         try
@@ -88,14 +83,11 @@ internal static class ImageArtifactProcessor
                 Directory.CreateDirectory(Path.GetDirectoryName(sourceCopy)!);
                 await File.WriteAllBytesAsync(sourceCopy, sourceBytes, cancellationToken);
                 info = await processor.ProcessAsync(sourceCopy, generated, cancellationToken);
-                // Custom processors may change bytes without changing their filenames.
-                // Immutable destinations preserve the versions used by carried pages.
                 var frozen = new Dictionary<string, string>(StringComparer.Ordinal);
                 info = info with
                 {
                     Variants = [.. info.Variants.Select(variant =>
                 {
-                    // Several widths may intentionally use the same generated file.
                     if (!frozen.TryGetValue(variant.FileName, out var name))
                     {
                         name = FreezeVariant(generated, variant.FileName);
@@ -126,7 +118,6 @@ internal static class ImageArtifactProcessor
                     }
                     catch (IOException) when (BuildFingerprint.HashFile(destination) == artifact.Hash)
                     {
-                        // Another writer published the same immutable bytes first.
                     }
                 }
                 else if (!cache.Restore(artifact.Hash, destination))
@@ -146,21 +137,15 @@ internal static class ImageArtifactProcessor
         }
         finally
         {
-            // A scanner or encoder handle can briefly hold a generated file on Windows.
-            // Never replace the result with a cleanup error.
             ClearWork(work);
         }
     }
 
-    // Fold through uppercase before choosing lowercase URI spelling, so simple
-    // case aliases (including the Greek sigma forms) publish the same filename.
     private static string NormalizeCasing(string path) => NormalizeFileName(path).ToUpperInvariant().ToLowerInvariant().Replace(":", "%3A", StringComparison.Ordinal);
 
     private static string NormalizeFileName(string name)
     {
         if (name.AsSpan().IndexOfAnyInRange('\uD800', '\uDFFF') < 0) { return name.Normalize(); }
-        // Invariant globalization may leave invalid UTF-16 unchanged instead of
-        // throwing from Normalize. Escape it before creating filenames and URLs.
         var result = new System.Text.StringBuilder();
         for (var index = 0; index < name.Length; index++)
         {

@@ -35,7 +35,6 @@ public sealed class PageServiceContentTests : IDisposable
         Assert.Contains(change == "add" ? "related:second,third" : "related:</p>",
             incremental[Path.Combine("service-related", "first", "index.html")], StringComparison.Ordinal);
 
-        // A different output can restore the portable cache while its manifest exists.
         File.Delete(Path.Combine(_root, ".kiji", "cache", "manifest.json"));
         var full = Path.Combine(_root, "full");
         await using var fullApp = CreateApp(new RelatedProbe(), output: "full");

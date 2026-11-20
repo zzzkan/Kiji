@@ -6,8 +6,6 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
-// External process/HTTP probe. No production hooks, synthetic sleeps in timings,
-// forced GC, browser rendering, or changes to the frozen site definition.
 using var config = JsonDocument.Parse(File.ReadAllText(args[0]));
 var root = config.RootElement.GetProperty("Root").GetString()!;
 var rounds = config.RootElement.GetProperty("Rounds").GetInt32();
@@ -32,8 +30,6 @@ foreach (var variant in round % 2 == 0 ? new[] { "candidate", "baseline" } : new
                 try { Directory.Delete(path, true); }
                 catch (Exception error) when (error is IOException or UnauthorizedAccessException && retry < 40)
                 {
-                    // Outside timing: Windows may finish releasing an exited
-                    // child process's image after the parent exit notification.
                     await Task.Delay(50);
                 }
             }
@@ -59,7 +55,7 @@ foreach (var variant in round % 2 == 0 ? new[] { "candidate", "baseline" } : new
         if (e.Data.StartsWith(pidPrefix) && int.TryParse(e.Data[pidPrefix.Length..], out var pid))
         {
             try { applications.TryAdd(pid, Process.GetProcessById(pid)); }
-            catch (ArgumentException) { /* Application already exited. */ }
+            catch (ArgumentException) { }
         }
         var match = Regex.Match(e.Data, @"http://127\.0\.0\.1:\d+");
         if (match.Success && !ready.Task.IsCompleted)
@@ -98,8 +94,6 @@ foreach (var variant in round % 2 == 0 ? new[] { "candidate", "baseline" } : new
                     if (request >= 5) { Add(metric, response.Elapsed); }
                 }
             }
-            // First edit is warmup. Each subsequent edit starts from the original
-            // bytes, and a fresh socket avoids consuming an earlier reload event.
             foreach (var kind in new[] { "Content", "Css" })
             for (var edit = 0; edit < 6; edit++)
             {
@@ -131,7 +125,7 @@ foreach (var variant in round % 2 == 0 ? new[] { "candidate", "baseline" } : new
     {
         if (!process.HasExited) { process.Kill(entireProcessTree: true); }
         await process.WaitForExitAsync();
-        process.WaitForExit(); // Drain async stdout/stderr before persisting the log.
+        process.WaitForExit();
         foreach (var application in applications.Values)
         {
             using (application)
@@ -148,8 +142,6 @@ foreach (var variant in round % 2 == 0 ? new[] { "candidate", "baseline" } : new
     }
     void Add(string metric, double ms) => rows.Add(new(pages, mode, round, variant, metric, ms));
 }
-// Each process is one independent sample. Aggregate within it first; do not treat
-// thirty requests from one process as thirty independent startup experiments.
 var processRows = rows.Where(r => r.Round > 0).GroupBy(r => new { r.Pages, r.Mode, r.Round, r.Variant, r.Metric })
     .Select(g => new { g.Key.Pages, g.Key.Mode, g.Key.Round, g.Key.Variant, g.Key.Metric, MedianMs = Median(g.Select(r => r.Milliseconds)), P95Ms = Percentile(g.Select(r => r.Milliseconds), .95) }).ToArray();
 var summary = processRows.GroupBy(r => new { r.Pages, r.Mode, r.Variant, r.Metric }).Select(g => new

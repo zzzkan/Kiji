@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Components;
 
 namespace Kiji.Tests.TestSite.TypedParameters;
@@ -6,7 +7,6 @@ namespace Kiji.Tests.TestSite.TypedParameters;
 public sealed class ReadOnlyParameterPage : ComponentBase
 {
     [Parameter] public int Id { get; set; }
-#pragma warning disable BL0001 // Deliberately invalid component for planning diagnostics.
+    [SuppressMessage("Usage", "BL0001", Justification = "Invalid on purpose: planning must reject it.")]
     [Parameter] public string Value { get; private set; } = string.Empty;
-#pragma warning restore BL0001
 }

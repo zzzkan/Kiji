@@ -63,8 +63,6 @@ internal static class PageDiscovery
 
     private static List<DiscoveredPage> ScanAssembly(Assembly assembly)
     {
-        // Cheapest checks first: metadata flags, then the component hierarchy,
-        // then a single attribute read reused for page creation.
         var pages = new List<DiscoveredPage>();
         foreach (var type in assembly.ExportedTypes)
         {
@@ -79,7 +77,6 @@ internal static class PageDiscovery
             }
         }
 
-        // Check registered routes after the not-found override has replaced its source route.
         return pages;
     }
 

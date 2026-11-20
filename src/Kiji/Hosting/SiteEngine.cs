@@ -61,24 +61,16 @@ internal sealed class SiteEngine
     /// <remarks>Repeated publication uses the same output directory; switching directories or execution modes requires a new site.</remarks>
     internal async Task PublishAsync(CancellationToken cancellationToken = default)
     {
-        // The name may come from an inherited DOTNET_ENVIRONMENT, so show it before anything can fail.
         BuildLogger.PublishingEnvironment(_environment.EnvironmentName);
 
         await using var cacheLease = await CacheLease.AcquireAsync(Paths.ResolveCachePath(), cancellationToken);
         var options = _options;
         ImageArtifactProcessor.ClearWork(Paths.ResolveImageWorkPath(options));
         cancellationToken.ThrowIfCancellationRequested();
-        // Snapshot planning requires every page type to come from a page assembly.
-        // Helpers and custom encoder factories may live outside the page assemblies.
-        // Their code is a build input even when pages only reach it through injection.
         Assembly[] codeAssemblies = [.. _pageAssemblies, .. _serviceAssemblies, typeof(StaticSite).Assembly];
-        // Following every reference loads most of the framework, which needs nothing from the
-        // content: do it while the content loads. Planning reads the result, or its failure.
         var codeIdentity = Task.Run(() => IncrementalBuildPlanner.CollectCodeDependencies(codeAssemblies), CancellationToken.None);
-        // The previous manifest depends only on the cache, which the lease now holds.
         var cachePath = Paths.ResolveCachePath();
         var previousManifest = Task.Run(() => IncrementalBuildPlanner.LoadManifest(cachePath, cancellationToken), CancellationToken.None);
-        // The asset manifest and the content are independent inputs, so they load together.
         var baseUrl = options.AssetManifestPath is null ? null : SiteInfo.BaseUrl;
         var assetsLoaded = Task.Run(() =>
         {
@@ -98,7 +90,6 @@ internal sealed class SiteEngine
         }
         catch
         {
-            // An invalid manifest or output location is the error to report, as when it was read first.
             await assetsLoaded;
             throw;
         }
@@ -111,10 +102,6 @@ internal sealed class SiteEngine
         var artifactPaths = ReserveArtifactPaths(options, reservedPaths);
         phases.Mark(BuildPhaseTimer.Snapshot);
 
-        // The sitemap reads only the page list, so it is generated while pages are planned and
-        // rendered, then written once they all succeed: a failed build keeps the previous file.
-        // Artifacts that run site code, including the feed factory, still run after all pages
-        // in registration order.
         var artifactContext = _artifacts.Length == 0 ? null : CreateOutputContext(snapshot);
         using var artifactCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var pagesRendered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -143,19 +130,12 @@ internal sealed class SiteEngine
             await ((Task)codeIdentity).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
             phases.Mark(BuildPhaseTimer.Plan);
 
-            // The output directory is kept, never wiped: whatever this build does not
-            // produce is deleted by the reconciliation pass below, which is both cheaper
-            // than a delete-and-rewrite and checked against the directory itself.
             Directory.CreateDirectory(options.OutputDirectory);
             phases.Mark(BuildPhaseTimer.Clean);
 
             staticFiles = await planner.SyncStaticFilesAsync(assets);
             phases.Mark(BuildPhaseTimer.Static);
 
-            // Render only the pages the plan could not prove unchanged, recording what
-            // each render reads and writes for the next build's skip checks. The previous
-            // manifest comes along so a render that reproduces the bytes already on disk
-            // skips the write.
             rendered = await StaticSiteGenerator.RenderPagesAsync(
                 options,
                 plan.PagesToRender,
@@ -172,12 +152,10 @@ internal sealed class SiteEngine
                 BuildLogger,
                 planner.OutputDirectoryCreated);
             phases.Mark(BuildPhaseTimer.Render);
-            // Rendering is what the profile is for; writing it overlaps the rest of the publish.
             _jitProfile?.Stop(PublishJitProfile.CodeIdentity(plan.CodeDependencies), rendered.Count, publishCompleted: false);
         }
         catch
         {
-            // Report the build failure, not a write it interrupted.
             await artifactCancellation.CancelAsync();
             pagesRendered.SetCanceled(artifactCancellation.Token);
             try { await independentArtifacts; }
@@ -186,13 +164,8 @@ internal sealed class SiteEngine
         }
 
         pagesRendered.SetResult();
-        // Page entries and input verification need only the finished renders, so they run
-        // while the remaining artifacts are written. Both are joined before the cache is
-        // published, including on failure.
         var verification = recorders.IsEmpty ? Task.CompletedTask : Task.Run(
             () => IncrementalBuildPlanner.VerifyInputs(recorders.Values), cancellationToken);
-        // One entry per rendered page: independent work, so it runs in parallel and lands
-        // at its own index to keep the manifest order deterministic.
         var entries = Task.Run(() =>
         {
             var renderedEntries = new BuildManifestPage[rendered.Count];
@@ -215,7 +188,6 @@ internal sealed class SiteEngine
         }
         catch
         {
-            // Report the artifact's failure, once nothing else is still using the build.
             await Task.WhenAll(entries, verification).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
             throw;
         }
@@ -250,7 +222,6 @@ internal sealed class SiteEngine
         phases.Mark(BuildPhaseTimer.Reconcile);
 
         planner.SaveManifest(manifest, plan.OldManifest, cancellationToken);
-        // Still under the cache lease, so concurrent publishes cannot interleave the save.
         if (_jitProfile is not null)
         {
             _jitProfile.Stop(PublishJitProfile.CodeIdentity(plan.CodeDependencies), rendered.Count, publishCompleted: true);
@@ -305,7 +276,6 @@ internal sealed class SiteEngine
 
     internal SiteSnapshot CreateSnapshot()
     {
-
         var snapshotPhases = new BuildPhaseTimer();
         var scanned = new List<PageDiscovery.DiscoveredPage>();
         foreach (var assembly in _pageAssemblies)
@@ -315,7 +285,6 @@ internal sealed class SiteEngine
 
         var parameterRoutes = _pageParameters.Select(static registration => registration.ComponentType)
             .Distinct().ToDictionary(static type => type, FindParameterRoutes);
-        // Registered non-public components are pages too, with all of their routes.
         var scannedTypes = scanned.Select(static page => page.ComponentType).ToHashSet();
         scanned.AddRange(parameterRoutes.Keys.Where(type => !scannedTypes.Contains(type)).SelectMany(PageDiscovery.FromType));
 
@@ -343,8 +312,6 @@ internal sealed class SiteEngine
             }
         }
 
-        // Expanding a page parameter factory is where content is first read, so this is where
-        // loading and parsing every markdown file lands.
         snapshotPhases.Mark(BuildPhaseTimer.Routes);
 
         var plannedPages = StaticPagePlanner.PlanPages(
@@ -480,7 +447,6 @@ internal sealed class SiteEngine
             await renderer.RenderComponentToAsync<KijiRoot>(
                 output,
                 request.RootParameters ?? CreateRootParameters(request));
-            // Component lifecycle methods can absorb cancellation exceptions.
             cancellationToken.ThrowIfCancellationRequested();
         }
         finally
@@ -563,7 +529,6 @@ internal sealed class SiteEngine
 
             if (independentOfPages)
             {
-                // Leave the planning and rendering path before writing.
                 await Task.Yield();
             }
 

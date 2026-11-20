@@ -103,7 +103,6 @@ public sealed class ResponsiveImageExtensionTests
     {
         var tag = Regex.Match(html, "<img[^>]*>").Value;
         Assert.NotEmpty(tag);
-        // A duplicate attribute, including a case variant, fails ToDictionary.
         return Regex.Matches(tag, "([a-zA-Z]+)=\"([^\"]*)\"")
             .ToDictionary(match => match.Groups[1].Value, match => match.Groups[2].Value, StringComparer.OrdinalIgnoreCase);
     }
@@ -188,7 +187,6 @@ public sealed class ResponsiveImageExtensionTests
     [Fact]
     public void Process_UnknownLocalImage_FallsBackToSimpleImage()
     {
-        // No image info provided (only reachable when processing was skipped upstream).
         var imageInfoLookup = new Dictionary<string, ProcessedImageInfo>();
         var markdown = "![Unknown](unknown-image.png)";
 
@@ -214,5 +212,4 @@ public sealed class ResponsiveImageExtensionTests
         Assert.Contains("/kiji/_images/foo.jpg.jpg12345.", html);
         Assert.Contains("/kiji/_images/foo.png.png67890.", html);
     }
-
 }

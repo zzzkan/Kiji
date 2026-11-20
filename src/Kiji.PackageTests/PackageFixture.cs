@@ -20,7 +20,6 @@ public sealed class PackageFixture : IAsyncLifetime
     private string Work => Path.Combine(_root, "work");
     internal string Site => Path.Combine(Work, "Site");
     private string Packages => Path.Combine(_root, "packages");
-    // Kiji's runtime graph: the runtime package each runtime with an entry restores, if any.
     private readonly Dictionary<string, string?> _runtimePackages = new(StringComparer.Ordinal);
     private string Template => Path.Combine(_repository, "src", "Kiji.PackageTests", "Fixture");
 
@@ -31,7 +30,6 @@ public sealed class PackageFixture : IAsyncLifetime
         Assert.NotNull(repository);
         _repository = repository.FullName;
         _root = Path.Combine(_repository, "artifacts", "package-tests");
-        // Read environment variables through configuration providers, not direct process APIs.
         using var configuration = new ConfigurationManager();
         configuration.AddEnvironmentVariables();
         _watchdog = new ScenarioWatchdog(configuration["KIJI_TEST_TRACE"] is { Length: > 0 } trace ? trace : null);
@@ -51,14 +49,12 @@ public sealed class PackageFixture : IAsyncLifetime
         }
         try
         {
-            await DeleteGeneratedFilesAsync(); // Also recover an interrupted previous run.
+            await DeleteGeneratedFilesAsync();
             var feed = Path.Combine(_root, "feed");
             Directory.CreateDirectory(feed);
             string package;
             if (configuration["KIJI_TEST_PACKAGE"] is { Length: > 0 } supplied)
             {
-                // CI supplies the exact package it will release, with the runtime packages packed
-                // beside it; never select an old glob match.
                 package = Path.Combine(feed, Path.GetFileName(supplied));
                 File.Copy(Path.GetFullPath(supplied), package);
                 var version = Path.GetFileNameWithoutExtension(supplied)["Kiji.".Length..];
@@ -85,8 +81,6 @@ public sealed class PackageFixture : IAsyncLifetime
                 _runtimePackages[runtime.Name] = runtime.Value.GetProperty("Kiji").EnumerateObject()
                     .Select(dependency => dependency.Name).SingleOrDefault(id => id.StartsWith("Kiji.Runtime.", StringComparison.Ordinal));
             }
-            // A package without images (KijiReadyToRun=false, a Debug pack) names none. Nothing
-            // else fails when one it names is missing for a runtime; publishing is only slower.
             foreach (var runtimePackage in _runtimePackages.Values.OfType<string>())
             {
                 Assert.True(File.Exists(Path.Combine(feed, $"{runtimePackage}.{_version}.nupkg")), $"{runtimePackage} was not packed.");
@@ -102,15 +96,12 @@ public sealed class PackageFixture : IAsyncLifetime
 
     private async Task PreparePackagesAsync(XElement metadata, JsonDocument runtimeGraph, string feed)
     {
-        // Restore-only projects: resolve the tested package's dependencies into the normal
-        // global cache, then install just Kiji privately before enabling the fallback cache.
         Write("Directory.Build.props", "<Project><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
         Write("Directory.Build.targets", "<Project />");
         Write("Directory.Packages.props", "<Project><PropertyGroup><ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally></PropertyGroup></Project>");
         Write("NuGet.Config", "<configuration><packageSources><clear/><add key=\"nuget\" value=\"https://api.nuget.org/v3/index.json\"/></packageSources><fallbackPackageFolders><clear/></fallbackPackageFolders></configuration>");
         var group = metadata.Elements().Single(element => element.Name.LocalName == "dependencies")
             .Elements().Single(element => (string?)element.Attribute("targetFramework") == "net10.0");
-        // The runtime graph adds packages for a site's runtime, such as SkiaSharp's Linux libraries.
         var runtimeDependencies = runtimeGraph.RootElement.GetProperty("runtimes").EnumerateObject()
             .SelectMany(runtime => runtime.Value.GetProperty("Kiji").EnumerateObject())
             .Where(dependency => !dependency.Name.StartsWith("Kiji.", StringComparison.Ordinal))
@@ -119,9 +110,7 @@ public sealed class PackageFixture : IAsyncLifetime
         var references = group.Elements().Select(dependency => (Id: dependency.Attribute("id")!.Value, Version: dependency.Attribute("version")!.Value))
             .Concat(runtimeDependencies)
             .Select(dependency => new XElement("PackageReference", new XAttribute("Include", dependency.Id), new XAttribute("Version", dependency.Version)));
-        // The Web SDK also restores implicit static-web-asset packages used by both SDKs.
         Write("restore/dependencies/Dependencies.csproj", new XElement("Project", new XAttribute("Sdk", "Microsoft.NET.Sdk.Web"), new XElement("ItemGroup", references)).ToString());
-        // The SDK requests its internal web-assets pack only when Razor content exists.
         Write("restore/dependencies/Placeholder.razor", "@* Restore only; this project is never built. *@");
         await DotnetAsync("restore", "restore/dependencies/Dependencies.csproj", "--packages", _globalPackages, "--configfile", Path.Combine(Work, "NuGet.Config"));
         Write("restore/kiji/Kiji.csproj", $"""
@@ -158,11 +147,8 @@ public sealed class PackageFixture : IAsyncLifetime
                 """);
             Write("Directory.Packages.props", "<Project><PropertyGroup><ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally></PropertyGroup></Project>");
             Write("Directory.Build.targets", "<Project />");
-            // External dependencies must already exist in the global fallback cache.
-            // A local-only source prevents accidental private restores of SkiaSharp.
             Write("NuGet.Config", $"<configuration><packageSources><clear/><add key=\"local\" value=\"{SecurityElement.Escape(Path.Combine(_root, "feed"))}\"/></packageSources><fallbackPackageFolders><clear/></fallbackPackageFolders></configuration>");
             Replace("Site/PackageSite.csproj", "Microsoft.NET.Sdk.Razor", sdk);
-            // Tiny valid PNG, kept textual in the fixture source tree.
             File.WriteAllBytes(Path.Combine(Site, "content", "source.png"), Convert.FromBase64String(File.ReadAllText(Path.Combine(Site, "content", "source.png.base64"))));
             await action();
             _watchdog?.Trace($"scenario {scenario} ({sdk}) passed; cleaning up");
@@ -252,8 +238,6 @@ public sealed class PackageFixture : IAsyncLifetime
         while (Directory.Exists(full))
         {
             try { Directory.Delete(full, recursive: true); return; }
-            // Kill(entireProcessTree: true) requests child termination, but WaitForExitAsync
-            // waits only for the parent. Windows can still have the child's executable mapped.
             catch (Exception exception) when (OperatingSystem.IsWindows()
                 && exception is IOException or UnauthorizedAccessException
                 && (exception.HResult & 0xffff) is 5 or 32 or 33 or 145

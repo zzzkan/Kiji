@@ -33,8 +33,6 @@ internal sealed record SiteRunSettings(string? OutputPath, string EnvironmentNam
         }
         if (!publishing && args is { Length: > 0 })
         {
-            // Use ASP.NET Core's command-line provider only to select the host environment.
-            // Application configuration remains project-local.
             using var commandLine = new ConfigurationManager();
             commandLine.AddCommandLine(args);
             environmentName = commandLine[HostDefaults.EnvironmentKey] ?? environmentName;

@@ -15,8 +15,6 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
     public Task Publish_UsesSdkDefaultDestination() => fixture.ScenarioAsync(async () =>
     {
         const string project = "Site/PackageSite.csproj";
-        // Without a runtime identifier a Linux site would have no image library, and every site
-        // would copy SkiaSharp's libraries for every platform: the build stops and says why.
         var portable = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             fixture.DotnetAsync("build", project, "-c", "Release", "-p:UseCurrentRuntimeIdentifier=false"));
         Assert.Contains("KIJI1007", portable.Message, StringComparison.Ordinal);
@@ -29,9 +27,6 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         Assert.False(File.Exists(Path.Combine(buildDirectory, "dist", "previous.json")));
         Assert.False(File.Exists(Path.Combine(fixture.Site, "dist", "index.html")));
 
-        // The build copies the runtime package's images in place of the IL of the versions they
-        // were compiled from. A wrong path or version leaves the IL, which only shows as a slower
-        // publish; an image copied as a native asset would leave the IL too.
         if (images is not null)
         {
             foreach (var name in (string[])["Kiji", "Markdig", "YamlDotNet"])
@@ -46,7 +41,6 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
     [Fact]
     public Task Publish_Edit_AndClean() => fixture.ScenarioAsync(async () =>
     {
-        // Content sources must not become SDK compilation inputs; nested public content stays an asset.
         fixture.Write("Site/content/nested/source.cs", "This content is not valid C#.");
         fixture.Write("Site/content/nested/Source.razor", "@code { This content is not valid C#. }");
         fixture.Write("Site/wwwroot/content/public.txt", "Public content asset");
@@ -86,7 +80,6 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
 
         Assert.Contains("Unhandled exception rendering component: boundary-publish-warning", output, StringComparison.Ordinal);
         Assert.DoesNotContain("boundary-publish-information", output, StringComparison.Ordinal);
-        // Logs are high-importance messages, which a redirected publish shows by default.
         Assert.Matches(@"Generated \d+ pages \(\d+ unchanged, skipped", output);
         Assert.DoesNotContain("Unchanged: ", output, StringComparison.Ordinal);
         Assert.Contains("Boundary fallback", Read("boundary/index.html"), StringComparison.Ordinal);
@@ -98,15 +91,12 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         Assert.Contains("color: teal", Read("PackageSite.styles.css"), StringComparison.Ordinal);
         Assert.Contains("Linked asset original.", Read("nested/linked.txt"), StringComparison.Ordinal);
         Assert.Equal("Public content asset", Read("content/public.txt"));
-        // Never on the selected publish variant must not expose the All-kind fallback.
         Assert.False(File.Exists(Path.Combine(fixture.Site, "dist", "selected.txt")));
         var rclCss = Regex.Match(Read("PackageSite.styles.css"), "@import '([^']+)'").Groups[1].Value;
         Assert.Contains("color: purple", Read(rclCss), StringComparison.Ordinal);
         Assert.Contains("export const library = true", File.ReadAllText(PublicFile(AssetUrl(html, "library"))), StringComparison.Ordinal);
         Assert.NotEmpty(Directory.GetFiles(Path.Combine(fixture.Site, "dist"), "*.webp", SearchOption.AllDirectories));
         Assert.Empty(Directory.GetFiles(Path.Combine(fixture.Site, "dist"), "*.dll", SearchOption.AllDirectories));
-        // By default, neither the site nor a referenced library may publish compressed copies.
-        // The SDK compresses both unless Kiji's default is applied.
         Assert.DoesNotContain(Directory.EnumerateFiles(Path.Combine(fixture.Site, "dist"), "*", SearchOption.AllDirectories),
             path => Path.GetExtension(path) is ".gz" or ".br");
 
@@ -115,7 +105,6 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         fixture.Replace("Site/wwwroot/app.js", "original", "modified");
         fixture.Replace("Site/assets/linked.txt", "original", "modified");
         fixture.Replace("Library/Card.resx", "Hello", "Welcome");
-        // Opt in before the next HTML change, so the compressed copy must be refreshed.
         await fixture.PublishAsync("-p:CompressionEnabled=true");
         html = Read("index.html");
         Assert.Contains("Edited body.", html, StringComparison.Ordinal);
@@ -125,7 +114,6 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         Assert.False(File.Exists(PublicFile(oldUrl)));
         Assert.Contains("modified", File.ReadAllText(PublicFile(AssetUrl(html))), StringComparison.Ordinal);
 
-        // Run must serve after publish even when its environment contains publish paths.
         await using (var server = RunningCommand.Start(Path.GetDirectoryName(fixture.Site)!,
             "run", "--project", "Site/PackageSite.csproj", "-c", "Release", "--no-build",
             "-e", "KIJI_OUTPUT=inherited-output", "-e", "Kiji.OutputPath=inherited-output",
@@ -135,7 +123,6 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
             Assert.Contains("Edited body.", await client.GetStringAsync("/kiji/"), StringComparison.Ordinal);
         }
 
-        // SDK post-processing must include Kiji's generated HTML.
         Assert.Contains("published worker", Read("service-worker.js"), StringComparison.Ordinal);
         var manifestText = Read("service-worker-assets.js");
         using var manifest = JsonDocument.Parse(manifestText[manifestText.IndexOf('{')..].Trim().TrimEnd(';'));
@@ -147,7 +134,6 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         { Assert.Equal(Read("index.html"), await reader.ReadToEndAsync()); }
         Assert.True(File.Exists(PublicFile(AssetUrl(Read("index.html"), "library")) + ".gz"));
 
-        // An exception fails the publish through the exit code, and the output says why.
         fixture.Write("Site/UnregisteredPage.razor", """
             @page "/unregistered/{Slug}/"
             @code { [Parameter] public string Slug { get; set; } = ""; }
@@ -156,13 +142,10 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         Assert.Matches(@"InvalidOperationException: Page component '[^']*UnregisteredPage'.*AddPageParameters<UnregisteredPage>", failure.Message);
         File.Delete(Path.Combine(fixture.Site, "UnregisteredPage.razor"));
 
-        // A worker outside wwwroot keeps its project path, which must never resolve to its source.
         fixture.Replace("Site/PackageSite.csproj", "wwwroot/service-worker.js", "worker/service-worker.js");
         Directory.CreateDirectory(Path.Combine(fixture.Site, "worker"));
         File.Move(Path.Combine(fixture.Site, "wwwroot", "service-worker.js"), Path.Combine(fixture.Site, "worker", "service-worker.js"));
 
-        // Logs never fail a publish, even when a message reads like an MSBuild error:
-        // its HTML is cached, and a later publish would reuse it without the message.
         fixture.Write("Site/LoggingPage.razor", """
             @page "/logging/"
             @using Microsoft.Extensions.Logging
@@ -176,13 +159,9 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         Assert.DoesNotContain("published worker", File.ReadAllText(Path.Combine(fixture.Site, "worker", "service-worker.js")), StringComparison.Ordinal);
 
         var stagingDirectory = Assert.Single(Directory.GetDirectories(Path.Combine(fixture.Site, "obj"), "site", SearchOption.AllDirectories));
-        // Publishes replay the previous publish's JIT profile; losing it only makes publishing slower.
-        // The portable copy lets a clean checkout restore it without the page cache.
         Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(stagingDirectory)!, "publish.jitprofile")));
         Assert.True(File.Exists(Path.Combine(fixture.Site, ".kiji", "jit", "publish.jitprofile")));
-        // The stamp lets a publish keep a profile recorded by the same code instead of rewriting it.
         Assert.True(File.Exists(Path.Combine(fixture.Site, ".kiji", "jit", "publish.jitprofile.stamp")));
-        // This file is deliberately untracked. Cleaning must make the next publish render it again.
         Assert.Contains("external-value-1", Read("index.html"), StringComparison.Ordinal);
         fixture.Write("Site/value.txt", "external-value-2");
         await fixture.DotnetAsync("clean", "Site/PackageSite.csproj", "-c", "Release");
@@ -197,9 +176,6 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
     [InlineData("Microsoft.NET.Sdk.Web")]
     public Task Watch_ReloadsChanges_AndShowsCompilationErrors(string sdk)
     {
-        // On GitHub's macOS runners this scenario stops the whole runner once dotnet watch
-        // reports the compilation error: output ends, and neither the step timeout nor a
-        // cancellation is honored. The cause is unknown, so the scenario is not run there.
         Assert.SkipWhen(OperatingSystem.IsMacOS(), "dotnet watch stalls GitHub's macOS runners; see the README.");
         return WatchScenarioAsync(sdk);
     }
@@ -234,9 +210,6 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
             await ReloadAsync(client, () => fixture.Replace("Site/Home.razor.css", "teal", "magenta"));
             Assert.Contains("magenta", await client.GetStringAsync(AssetUrl(html, "scoped")), StringComparison.Ordinal);
 
-            // dotnet watch reports compilation errors only through its private browser
-            // refresh server, which Razor SDK sites get from Kiji's targets. Kiji relays
-            // them to open pages and pages opened later.
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
             using var socket = await ConnectReloadAsync(client, timeout.Token);
             await EditAsync(() => fixture.Replace("Site/Home.razor", "Updated Razor", "@MissingMember"), timeout.Token);
@@ -245,8 +218,6 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
             {
                 Assert.Contains("MissingMember", await ReceiveAsync(opened, timeout.Token), StringComparison.Ordinal);
             }
-            // Diagnostics contain local source paths. A foreign page, opaque origin,
-            // or rebinding domain must not subscribe even while errors are retained.
             await AssertReloadRejectedAsync(client, "https://attacker.example");
             await AssertReloadRejectedAsync(client, "null");
             await AssertReloadRejectedAsync(client, "http://attacker.example", "attacker.example");

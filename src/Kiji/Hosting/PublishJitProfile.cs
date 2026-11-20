@@ -23,13 +23,8 @@ internal sealed class PublishJitProfile
 
     private const string RecordingName = "recording.jitprofile";
 
-    // The runtime replays and records the same file, and offers no way to drop a recording:
-    // it writes whenever the file can be opened. The recording therefore has a directory of
-    // its own, which is removed to discard it. A concurrent publish of the same project that
-    // loses its recording this way only leaves the kept profile as it was.
     private const string SessionName = "jit-session";
 
-    // Multicore JIT belongs to the runtime, one per process: a second host never restarts it.
     private static int s_started;
 
     private readonly string _directory;
@@ -61,7 +56,6 @@ internal sealed class PublishJitProfile
         if (runtimeMetadata.ProjectDirectory is string project && Path.IsPathFullyQualified(project)
             && !File.Exists(kept))
         {
-            // A restored portable profile seeds a staging directory that has none.
             var portable = PortablePath(Path.Combine(project, ".kiji"));
             if (TryCopy(portable, kept)) { TryCopy(portable + ".stamp", kept + ".stamp"); }
         }
@@ -71,10 +65,7 @@ internal sealed class PublishJitProfile
         try
         {
             Directory.CreateDirectory(sessionDirectory);
-            // A run that ended between the two renames below left the profile here.
             if (!File.Exists(kept) && File.Exists(recording)) { File.Move(recording, kept); }
-            // The runtime replays the file it records to. A rename, unlike a copy, writes no
-            // file, and on Windows nothing new for a scanner to read.
             if (File.Exists(kept)) { File.Move(kept, recording, overwrite: true); }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -82,9 +73,6 @@ internal sealed class PublishJitProfile
             return null;
         }
 
-        // The runtime replays the profile, ignores one it cannot use, and records a new one.
-        // It reads the whole profile before StartProfile returns, so the file can move back at
-        // once: the session directory then holds only a recording worth keeping.
         ProfileOptimization.SetProfileRoot(sessionDirectory);
         ProfileOptimization.StartProfile(RecordingName);
         try
@@ -93,7 +81,6 @@ internal sealed class PublishJitProfile
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            // Left in the session directory, the profile moves back at the next publish.
         }
         return new PublishJitProfile(directory, sessionDirectory);
     }
@@ -127,28 +114,23 @@ internal sealed class PublishJitProfile
         var sameCode = recorded?.CodeIdentity == codeIdentity;
         if (recorded is null || (renderedPages > 0 && !sameCode))
         {
-            // Nothing usable was replayed. Any recording is an improvement.
             _keep = true;
         }
         else if (renderedPages == 0 || (recorded.Complete && recorded.RenderedPages >= renderedPages))
         {
-            // Without its directory the runtime cannot open the recording, and skips the write.
             TryDeleteDirectory(_sessionDirectory);
         }
         else if (!publishCompleted)
         {
-            // Replaying a profile of this code: record the rest of the publish as well.
             return;
         }
         else
         {
-            // Keep the wider rendering coverage of a profile that only lacks the end of a publish.
             _keep = recorded.Complete || renderedPages >= recorded.RenderedPages;
             if (!_keep) { TryDeleteDirectory(_sessionDirectory); }
         }
 
         _stamp = new PublishJitProfileStamp(codeIdentity, renderedPages, publishCompleted);
-        // Stopping writes the recorded profile now instead of at process exit.
         _written = Task.Run(static () => ProfileOptimization.StartProfile(null));
     }
 
@@ -175,15 +157,12 @@ internal sealed class PublishJitProfile
                 var stamp = System.Text.Encoding.UTF8.GetBytes(_stamp!.ToString());
                 var kept = Path.Combine(_directory, FileName);
                 var portable = PortablePath(kijiDirectory);
-                // A stamp never describes a profile other than the one beside it: it is
-                // removed before its profile changes and written after.
                 Replace(kept, bytes, stamp);
                 Replace(portable, bytes, stamp);
             }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            // Only a later publish's startup time depends on it.
         }
         TryDeleteDirectory(_sessionDirectory);
     }

@@ -3,8 +3,6 @@ namespace Kiji.Generation;
 /// <summary>Inputs and outputs observed by one page. Read after its render completes.</summary>
 internal sealed class BuildDependencyRecorder
 {
-    // Concurrent work within one page shares a lock; separate pages never contend.
-    // Pages without images allocate no image collections.
     private readonly Lock _gate = new();
     private readonly Dictionary<string, string> _files = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (string Digest, string Hash)> _values = new(StringComparer.Ordinal);

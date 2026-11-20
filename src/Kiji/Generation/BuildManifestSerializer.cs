@@ -49,7 +49,6 @@ internal static class BuildManifestSerializer
     /// <summary>Writes <paramref name="manifest"/> as UTF-8 JSON.</summary>
     internal static void Serialize(IBufferWriter<byte> output, BuildManifest manifest)
     {
-        // The manifest was validated; skipping the writer's structural checks changes nothing.
         using var writer = new Utf8JsonWriter(output, new JsonWriterOptions { SkipValidation = true });
         writer.WriteStartObject();
         writer.WriteNumber(SchemaVersion, manifest.SchemaVersion);
@@ -60,7 +59,6 @@ internal static class BuildManifestSerializer
         if (manifest.Pages is { } pages)
         {
             writer.WriteStartArray(Pages);
-            // A list's indexer avoids an enumerator allocation per page list.
             for (var i = 0; i < pages.Count; i++) { WritePage(writer, pages[i]); }
             writer.WriteEndArray();
         }
@@ -82,12 +80,10 @@ internal static class BuildManifestSerializer
             var reader = new Utf8JsonReader(utf8Json);
             reader.Read();
             var manifest = reader.TokenType == JsonTokenType.Null ? null : ReadManifest(ref reader);
-            // Anything after the root value is an error, as it is for the serializer.
             return reader.Read() ? throw new JsonException("Unexpected content after the manifest.") : manifest;
         }
         catch (Exception exception) when (exception is InvalidOperationException or FormatException)
         {
-            // A token of the wrong type, or a number or date out of range.
             throw new JsonException("The manifest has an unexpected shape.", exception);
         }
     }
@@ -127,7 +123,6 @@ internal static class BuildManifestSerializer
                 writer.WriteStartObject();
                 writer.WriteString(RelativePath, output.RelativePath);
                 writer.WriteString(Hash, output.Hash);
-                // Recipe records carry no stamp, and omit the property.
                 if (output.Stamp is { } stamp) { WriteStamp(writer, stamp); }
                 writer.WriteEndObject();
             }
@@ -181,8 +176,6 @@ internal static class BuildManifestSerializer
     private static BuildManifest ReadManifest(ref Utf8JsonReader reader)
     {
         ExpectStartObject(ref reader);
-        // A member the JSON omits is left null, not at its initial value, as the serializer
-        // leaves it: an incomplete manifest must not pass for a valid one.
         var schemaVersion = 0;
         string? optionsHash = null, htmlFile = null, outputDirectoryHash = null;
         IReadOnlyList<string>? codeDependencies = null, staticFiles = null, artifacts = null;
@@ -314,7 +307,6 @@ internal static class BuildManifestSerializer
         var values = new List<string>();
         while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
         {
-            // GetString rejects every token but a string or null.
             values.Add(reader.GetString()!);
         }
         return values;

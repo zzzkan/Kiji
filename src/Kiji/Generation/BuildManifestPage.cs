@@ -14,7 +14,6 @@ internal sealed record BuildManifestPage(
     IReadOnlyList<BuildManifestDependency> Dependencies,
     IReadOnlyList<BuildManifestOutput> AdditionalOutputs)
 {
-    // Slices share one HTML bundle in memory. JSON contains only the slice location.
     [System.Text.Json.Serialization.JsonIgnore]
     public ReadOnlyMemory<byte>? Html { get; set; }
     public int HtmlOffset { get; set; }

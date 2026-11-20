@@ -15,7 +15,6 @@ public static class StaticSiteHostBuilderExtensions
     {
         var context = SiteBuilderContext.Get(builder);
         ArgumentNullException.ThrowIfNull(siteInfo);
-        // Configuration binding sets only keys present in the section, bypassing required members.
         if (siteInfo.BaseUrl is null || siteInfo.Name is null)
         {
             throw new ArgumentException(
@@ -46,8 +45,6 @@ public static class StaticSiteHostBuilderExtensions
         where T : class
     {
         var context = SiteBuilderContext.Get(builder);
-        // Source identities use the project directory, including when a caller supplied
-        // an absolute path inside the checkout, keeping those identities portable.
         var scope = directory is null
             ? contentSetScope
             : Path.GetRelativePath(Path.GetFullPath(context.Paths.ProjectDirectory), context.Paths.ResolveAgainstRoot(directory)).Replace('\\', '/');
@@ -138,5 +135,4 @@ public static class StaticSiteHostBuilderExtensions
         builder.Services.AddSingleton(new SiteArtifactRegistration(outputRelativePath, write, preserveUnchangedOutput, independentOfPages));
         return builder;
     }
-
 }

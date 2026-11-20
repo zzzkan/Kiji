@@ -9,8 +9,6 @@ namespace Kiji.Hosting;
 internal sealed class SiteServeService(IServiceProvider services, IHostApplicationLifetime lifetime,
     SiteServerArguments arguments, ILoggerFactory loggerFactory) : BackgroundService
 {
-    // Hosted services are constructed before the host runs options validators. Detect
-    // a replaced factory before a content-reading validator can use an unattached runtime.
     private readonly IServiceProvider _services = SiteServiceRegistration.RequireProvider(services);
     private ExceptionDispatchInfo? _failure;
 
@@ -29,7 +27,6 @@ internal sealed class SiteServeService(IServiceProvider services, IHostApplicati
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
-            // Stopping the development server is a successful exit.
         }
         catch (Exception exception)
         {
@@ -39,7 +36,6 @@ internal sealed class SiteServeService(IServiceProvider services, IHostApplicati
         finally { lifetime.StopApplication(); }
     }
 
-    // Failing StopAsync rather than ExecuteAsync makes RunAsync throw without duplicate host logs.
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
         await base.StopAsync(cancellationToken);

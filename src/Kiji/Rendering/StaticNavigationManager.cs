@@ -7,8 +7,6 @@ internal sealed class StaticNavigationManager : NavigationManager
 {
     public StaticNavigationManager(IServiceProvider services)
     {
-        // StaticHtmlRenderer also resolves this for standalone component renders,
-        // which have no page URL. Page renders must initialize before any API use.
         if (PageRenderContext.Current is null) { return; }
 
         var site = services.GetRequiredService<SiteInfo>();

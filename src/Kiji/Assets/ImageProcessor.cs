@@ -19,10 +19,6 @@ internal sealed class ImageProcessor : IImageProcessor
     /// <summary>The most pixels WebP stores along either side.</summary>
     private const int MaxWebpDimension = 16383;
 
-    // Native code is not covered by managed assembly dependency tracking. Include
-    // its version and platform so caches cannot cross incompatible native builds.
-    // Not a static initializer: those all run with the first use of the type, and reading
-    // the version loads the native library.
     private static string EncoderIdentity => field ??=
         $"mvid:{typeof(SKWebpEncoder).Assembly.ManifestModule.ModuleVersionId:N}:{SkiaSharpVersion.Native}:{RuntimeInformation.RuntimeIdentifier}";
 
@@ -42,14 +38,11 @@ internal sealed class ImageProcessor : IImageProcessor
         options ??= new ImageProcessorOptions();
         _maxWidth = options.MaxWidth;
         _quality = options.Quality;
-        // Equivalent width lists share one identity, and so one image cache.
         _widths = [.. (options.Widths ?? DefaultWidths)
             .Where(width => width < _maxWidth).Distinct().Order()];
         _generationGate = generationGate ?? ConcurrencyGate;
     }
 
-    // Computed on first use: the encoder identity loads the native library, which a site
-    // without images never needs. The settings it covers were copied above and cannot change.
     public string CacheIdentity => field ??= BuildFingerprint.HashText(FormattableString.Invariant(
         $"skia-webp-v2:{_quality}:{_maxWidth}:{string.Join(",", _widths)}:{EncoderIdentity}"));
 
@@ -72,24 +65,16 @@ internal sealed class ImageProcessor : IImageProcessor
         string outputDirectory, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        // The source name already separates unrelated images, so 64 bits identify
-        // a version. A full digest left too little of the 255-byte file name limit
-        // for long names, which multi-byte scripts reach quickly.
         var contentHash = BuildFingerprint.HashText(CacheIdentity + ":" + sourceHash)[..16];
         using var source = new MemoryStream(bytes, writable: false);
         using var codec = SKCodec.Create(source) ?? throw new InvalidDataException($"Cannot read image '{fileNameBase}'.");
-        // Report and generate the displayed orientation, as browsers show the source.
         var origin = codec.EncodedOrigin;
         var swapsAxes = SwapsAxes(origin);
         var originalWidth = swapsAxes ? codec.Info.Height : codec.Info.Width;
         var originalHeight = swapsAxes ? codec.Info.Width : codec.Info.Height;
 
         Directory.CreateDirectory(outputDirectory);
-        // Another page may still reference an older variant with this basename.
-        // Only output reconciliation knows which files are safe to remove.
 
-        // The encoder rejects larger sides outright. Scale the largest variant to
-        // fit, so a long screenshot or a panorama still publishes.
         var largestWidth = Math.Min(Math.Min(originalWidth, _maxWidth), MaxWebpDimension);
         if ((long)originalHeight * largestWidth > (long)MaxWebpDimension * originalWidth)
         {
@@ -106,9 +91,6 @@ internal sealed class ImageProcessor : IImageProcessor
             .Append(largestWidth)
             .ToArray();
 
-        // Lock the materialized image family, not its source: differing requested
-        // width sets must still serialize overlapping variants. Acquire before a
-        // global slot so duplicate callers never hold scarce generation capacity.
         var variants = new List<ImageVariant>(targetWidths.Length);
         using (await ImageGenerationLock.AcquireAsync(
             Path.Combine(outputDirectory, $"{fileNameBase}.{contentHash}"), cancellationToken))
@@ -144,7 +126,6 @@ internal sealed class ImageProcessor : IImageProcessor
 
                     variants.Add(new ImageVariant(fileName, targetWidth));
                 }
-
             }
             finally
             {
@@ -164,8 +145,6 @@ internal sealed class ImageProcessor : IImageProcessor
     private static SKBitmap DecodeImage(SKCodec codec, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        // Decode the first frame into sRGB pixels. Re-encoding pixels alone drops
-        // source EXIF/IPTC/XMP metadata without changing the interpreted colors.
         using var colorSpace = SKColorSpace.CreateSrgb();
         var info = new SKImageInfo(codec.Info.Width, codec.Info.Height, SKColorType.Rgba8888, SKAlphaType.Premul, colorSpace);
         var image = new SKBitmap(info);
@@ -196,7 +175,6 @@ internal sealed class ImageProcessor : IImageProcessor
     {
         float w = image.Width;
         float h = image.Height;
-        // Maps stored (x, y) to displayed (x', y'): x' = scaleX*x + skewX*y + transX.
         SKMatrix? transform = origin switch
         {
             SKEncodedOrigin.TopRight => new SKMatrix(-1, 0, w, 0, 1, 0, 0, 0, 1),
@@ -220,7 +198,6 @@ internal sealed class ImageProcessor : IImageProcessor
             using (var canvas = new SKCanvas(oriented))
             using (var paint = new SKPaint { BlendMode = SKBlendMode.Src })
             {
-                // Axis-aligned integer transforms copy pixels exactly with nearest sampling.
                 canvas.SetMatrix(matrix);
                 canvas.DrawBitmap(image, 0, 0, new SKSamplingOptions(SKFilterMode.Nearest), paint);
             }
@@ -243,9 +220,6 @@ internal sealed class ImageProcessor : IImageProcessor
         string destinationPath,
         CancellationToken cancellationToken)
     {
-        // Write to a temp file and move into place so concurrent renders of the same
-        // image never observe a partially written variant.
-        // The temporary name omits the variant's, which may already be near the limit.
         var temporaryPath = Path.Combine(Path.GetDirectoryName(destinationPath)!, $"{Guid.NewGuid():N}.tmp");
         try
         {
@@ -275,5 +249,4 @@ internal sealed class ImageProcessor : IImageProcessor
             }
         }
     }
-
 }

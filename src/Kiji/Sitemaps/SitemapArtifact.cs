@@ -10,8 +10,6 @@ internal sealed class SitemapArtifact
     private const string NotFoundRelativePath = "404.html";
     private const string SitemapNamespace = "http://www.sitemaps.org/schemas/sitemap/0.9";
 
-    // Validation is independent of the base URL, so registration can reject a path the
-    // site would fail to resolve.
     private static readonly SiteInfo ValidationSite = new() { BaseUrl = new Uri("https://localhost/"), Name = "validation" };
 
     private readonly List<string> _excludedPaths = [NotFoundRelativePath];
@@ -48,8 +46,6 @@ internal sealed class SitemapArtifact
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        // Route parameter values are percent-encoded in page paths while literal segments are
-        // not, so compare resolved URLs: an exclusion matches in either spelling.
         var site = context.Site;
         var excludedUrls = _excludedPaths
             .Select(path => site.ResolveUrl(path).AbsoluteUri)

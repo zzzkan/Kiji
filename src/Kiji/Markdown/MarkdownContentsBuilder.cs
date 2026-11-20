@@ -18,7 +18,6 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
 
     private static readonly string MarkdownPattern = FileSystemName.TranslateWin32Expression("*.md");
 
-    // The platform default of the pattern overloads this enumeration replaces.
     private static readonly bool IgnoreCase = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
         || OperatingSystem.IsIOS() || OperatingSystem.IsTvOS();
 
@@ -31,13 +30,6 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
 
         var markdownFiles = FindMarkdownFiles(new DirectoryInfo(contentsDirectory));
 
-        // Files are read and parsed in parallel; results land at their enumeration
-        // index so the collection order stays deterministic. YamlDotNet deserializers
-        // are not documented as thread-safe, so each worker uses its own instance.
-        // Each file is read exactly once: the same read yields front matter, the body
-        // used for rendering, and the content hash the incremental planner needs.
-        // The filter is site code with no thread-safety requirement, so it runs serially
-        // in path order, before the parallel reads.
         var included = filter is null ? null : Array.ConvertAll(markdownFiles, file => filter(file));
         var items = new MarkdownContent<TFrontMatter>[markdownFiles.Length];
         var errors = new Exception?[markdownFiles.Length];
@@ -66,16 +58,12 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
             }
         });
 
-        // Surface the first failing file (in collection order) unwrapped, matching
-        // the sequential behavior instead of an AggregateException.
         var firstError = Array.Find(errors, static error => error is not null);
         if (firstError is not null)
         {
             ExceptionDispatchInfo.Capture(firstError).Throw();
         }
 
-        // The collection compares IDs case-insensitively and '\' becomes '/', so distinct
-        // files can share one. Name both instead of failing later without either path.
         var ids = new Dictionary<string, MarkdownContent<TFrontMatter>>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in items)
         {
@@ -89,7 +77,6 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
 
         sourceCache?.Prune(markdownFiles.Select(static file => file.FullName).ToHashSet(StringComparer.OrdinalIgnoreCase));
 
-        // Filtered-out slots were never assigned; compacting keeps the order above.
         return filter is null
             ? items
             : [.. items.Where(static item => item is not null)];
@@ -137,7 +124,6 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
 
     private static FileSystemEnumerable<FileInfo> EnumerateMarkdownFiles(string directory, bool recurse)
     {
-        // Same matching as EnumerateFiles("*.md"), which cannot report the links it follows.
         return new FileSystemEnumerable<FileInfo>(
             directory,
             static (ref entry) => (FileInfo)entry.ToFileSystemInfo(),
@@ -168,7 +154,6 @@ internal sealed class MarkdownContentsBuilder<TFrontMatter>(
 
     private static void RejectLink(ref FileSystemEntry entry)
     {
-        // Reparse points also include cloud placeholders and deduplicated files.
         if ((entry.Attributes & FileAttributes.ReparsePoint) != 0) { RejectLink(entry.ToFileSystemInfo()); }
     }
 

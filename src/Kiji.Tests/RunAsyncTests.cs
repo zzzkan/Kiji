@@ -109,7 +109,6 @@ public sealed class RunAsyncTests : IDisposable
         }
         finally
         {
-            // The abandoned publish still holds the build lock; let it finish before cleanup.
             release.SetResult();
             await publish.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(10));
         }

@@ -2,7 +2,6 @@ using Microsoft.JSInterop;
 
 namespace Kiji.Rendering;
 
-// Match Blazor static SSR: injection succeeds, but interop fails when called.
 internal sealed class UnsupportedJavaScriptRuntime : IJSRuntime
 {
     private const string Message = "JavaScript interop calls cannot be issued during static rendering. "

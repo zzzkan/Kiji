@@ -60,7 +60,7 @@ public sealed class ImageConcurrencyTests : IDisposable
         var first = ImageArtifactProcessor.ProcessAsync(processor, source, output, null, Path.Combine(_root, "work"), default);
         var second = ImageArtifactProcessor.ProcessAsync(processor, source, output, null, Path.Combine(_root, "work"), default);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        Assert.False(Directory.Exists(output)); // In-progress work is never publicly visible.
+        Assert.False(Directory.Exists(output));
         release.SetResult();
         var results = await Task.WhenAll(first, second);
         Assert.Equal(2, processor.Calls);
@@ -151,7 +151,6 @@ public sealed class ImageConcurrencyTests : IDisposable
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => waiter);
             next = ImageGenerationLock.AcquireAsync(key, default).AsTask();
             Assert.False(next.IsCompleted);
-            // The gate remains live until the owner and waiting acquisition leave.
         }
         using (await next) { }
         var source = await Source("failure");

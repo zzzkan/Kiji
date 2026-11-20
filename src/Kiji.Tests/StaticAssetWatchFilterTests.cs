@@ -17,7 +17,6 @@ public sealed class StaticAssetWatchFilterTests
             var manifestPath = Path.Combine(root, "assets.json");
             TestSiteAssets.WriteManifest(manifestPath, [], [root], discover: true);
             var json = JsonNode.Parse(File.ReadAllText(manifestPath))!;
-            // A nested URL mount still matches paths relative to the physical root.
             var pattern = json["Root"]!["Patterns"]!.DeepClone();
             pattern[0]!["Pattern"] = "**/*.css";
             pattern[0]!["Depth"] = 2;

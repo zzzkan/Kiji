@@ -46,7 +46,6 @@ public sealed class HostConfigurationTests : IDisposable
 
         Assert.Equal(expected, builder.Configuration["Site:Title"]);
         Assert.Equal("yes", builder.Configuration["Site:Kept"]);
-        // Bootstrap inputs must not enter the portable publish configuration.
         Assert.Null(builder.Configuration["HostOnly:Value"]);
         await using var site = builder.BuildSite();
         Assert.Same(builder.Configuration, site.ServiceProvider.GetRequiredService<IConfiguration>());
@@ -91,7 +90,6 @@ public sealed class HostConfigurationTests : IDisposable
         WriteSettings("appsettings.json", """{ "Feature": { "Other": "x" } }""");
         Assert.Contains("enabled:True", await PublishAsync(), StringComparison.Ordinal);
 
-        // Every non-null value stays the same, but binding the explicit null changes the option.
         WriteSettings("appsettings.json", """{ "Feature": { "Other": "x", "Enabled": null } }""");
         Assert.Contains("enabled:False", await PublishAsync(), StringComparison.Ordinal);
     }
@@ -118,7 +116,6 @@ public sealed class HostConfigurationTests : IDisposable
         var first = await PublishAsync();
         WriteSettings("appsettings.json", changed);
 
-        // Changing diagnostics must not render every page again; similarly named site keys must.
         Assert.Equal(reused, first == await PublishAsync());
     }
 

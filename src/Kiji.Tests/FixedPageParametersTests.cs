@@ -28,7 +28,6 @@ public sealed class FixedPageParametersTests : IDisposable
         Assert.Equal(1, log.Count);
         Assert.Contains("Default title|7|", await File.ReadAllTextAsync(output), StringComparison.Ordinal);
 
-        // Supplied sets replace the default rendering; omitted parameters, even EditorRequired ones, keep defaults.
         await PublishAsync([new { Title = "Supplied" }]);
         Assert.Equal(2, log.Count);
         Assert.Contains("Supplied|7|", await File.ReadAllTextAsync(output), StringComparison.Ordinal);

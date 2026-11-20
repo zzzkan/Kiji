@@ -23,7 +23,6 @@ internal static class WatchDiagnosticsRelay
         Func<string[], Task> report,
         CancellationToken cancellationToken)
     {
-        // Set only for ASP.NET Core projects; Kiji.targets marks Razor SDK sites as one while watching.
         if (string.IsNullOrEmpty(endpoints) || string.IsNullOrEmpty(serverKey))
         {
             return;
@@ -32,14 +31,12 @@ internal static class WatchDiagnosticsRelay
         try
         {
             using var socket = new ClientWebSocket();
-            // The server accepts clients that prove they received its public key.
             using (var rsa = RSA.Create())
             {
                 rsa.ImportSubjectPublicKeyInfo(Convert.FromBase64String(serverKey), out _);
                 var secret = rsa.Encrypt(RandomNumberGenerator.GetBytes(32), RSAEncryptionPadding.OaepSHA256);
                 socket.Options.AddSubProtocol(Uri.EscapeDataString(Convert.ToBase64String(secret)));
             }
-            // It also accepts only loopback origins, like pages served by the dev server.
             socket.Options.SetRequestHeader("Origin", "http://localhost");
             await socket.ConnectAsync(new Uri(endpoints.Split(',')[0]), cancellationToken);
 
@@ -69,16 +66,13 @@ internal static class WatchDiagnosticsRelay
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            // The dev server is stopping.
         }
         catch (Exception exception) when (exception is WebSocketException or JsonException
             or FormatException or CryptographicException or InvalidOperationException or KeyNotFoundException)
         {
-            // dotnet watch exited or changed its protocol: errors stay in the terminal.
         }
     }
 
-    // {"type":"ReportDiagnostics","diagnostics":["..."]}; an empty array clears them.
     private static string[]? ReadDiagnostics(ReadOnlyMemory<byte> message)
     {
         using var json = JsonDocument.Parse(message);

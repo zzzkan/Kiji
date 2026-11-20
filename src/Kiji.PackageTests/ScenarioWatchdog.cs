@@ -3,9 +3,6 @@ using System.Globalization;
 
 namespace Kiji.PackageTests;
 
-// A hung run shows nothing: the platform reports only skipped and failed tests, and a
-// descendant holding the runner's output can outlive the CI step timeout. Record progress
-// where CI can follow it, and end the run from inside with the evidence.
 internal sealed class ScenarioWatchdog : IDisposable
 {
     private static readonly TimeSpan Limit = TimeSpan.FromMinutes(6);
@@ -17,7 +14,6 @@ internal sealed class ScenarioWatchdog : IDisposable
     internal ScenarioWatchdog(string? tracePath)
     {
         _tracePath = tracePath;
-        // A dedicated thread still runs when the pool is starved or a test blocks in a system call.
         new Thread(Watch) { IsBackground = true, Name = "Package scenario watchdog" }.Start();
     }
 

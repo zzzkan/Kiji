@@ -32,8 +32,6 @@ internal sealed class ArtifactCache(string root)
     internal void EnsureStored(string hash, string source)
     {
         var path = BlobPath(hash);
-        // The stage was verified by the planner. An existing blob is not consumed
-        // here: its bytes will be checked if a later build actually restores it.
         if (_stored.ContainsKey(path) || File.Exists(path)) { return; }
         lock (Gates[hash[0] % Gates.Length])
         {
@@ -57,7 +55,6 @@ internal sealed class ArtifactCache(string root)
                 var bytes = File.ReadAllBytes(path);
                 if (BuildFingerprint.HashBytes(bytes) != hash) { return false; }
                 _stored.TryAdd(path, 0);
-                // Only persistent cache blobs and the manifest need atomic replacement.
                 Directory.CreateDirectory(Path.GetDirectoryName(output)!);
                 File.WriteAllBytes(output, bytes);
                 return true;
@@ -83,7 +80,6 @@ internal sealed class ArtifactCache(string root)
         var directory = Path.Combine(root, "images");
         if (!Directory.Exists(directory)) { return; }
         var live = references.ToHashSet(StringComparer.Ordinal);
-        // Nested directories belong to the retired directory-addressed image cache.
         var fullDirectory = Path.GetFullPath(directory);
         foreach (var child in Directory.EnumerateDirectories(fullDirectory))
         {

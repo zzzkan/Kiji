@@ -77,7 +77,6 @@ public sealed class PageDiscoveryTests
         builder.UseNotFoundPage<NotFoundPage>();
         builder.AddPageParameters<PostPage>(static services => services.GetRequiredService<ContentCollection<Post>>()
             .Select(static post => new { post.Slug, ContentKey = post.Id }));
-        // No mapping for the dynamic /tags/{TagSlug}/ template.
         var app = builder.BuildSite();
 
         var error = Assert.Throws<InvalidOperationException>(() => app.CreateSnapshot());

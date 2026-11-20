@@ -18,7 +18,6 @@ internal sealed record BuildManifest
 
     public string HtmlFile { get; init; } = string.Empty;
 
-    // Only scopes the output stamps; it never invalidates the portable HTML cache.
     public string OutputDirectoryHash { get; init; } = string.Empty;
 
     public IReadOnlyList<BuildManifestPage> Pages { get; init; } = [];

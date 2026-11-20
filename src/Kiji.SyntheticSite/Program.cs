@@ -24,7 +24,6 @@ try
     {
         if (options.FullEachRun)
         {
-            // Removing the manifest forces a from-scratch build every run.
             var kijiDir = Path.Combine(root, ".kiji");
             if (Directory.Exists(kijiDir))
             {
@@ -37,7 +36,6 @@ try
         Report($"run {run} ({(options.FullEachRun || run == 1 ? "full" : "no-change")})", result);
     }
 
-    // One-post-touched rebuild: the headline incremental metric.
     var mutatedPost = Path.Combine(root, "contents", "post-00000", "index.md");
     var originalPost = await File.ReadAllTextAsync(mutatedPost);
     RunResult mutationRun;
@@ -63,7 +61,6 @@ try
             return;
         }
 
-        // Phases are reported on one line so a run stays greppable as a unit.
         var breakdown = string.Join(
             " ",
             phases.Select(static phase => string.Create(CultureInfo.InvariantCulture, $"{phase.Phase}={phase.ElapsedMs:F0}")));

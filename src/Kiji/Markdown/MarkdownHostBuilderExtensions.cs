@@ -75,8 +75,6 @@ public static class MarkdownHostBuilderExtensions
         var directory = contentOptions.Directory;
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
 
-        // Created once per registration so it survives content re-materializations
-        // in the dev server; fresh hashes let it re-parse only changed files.
         var sourceCache = new MarkdownSourceCache<TFrontMatter>();
 
         return builder.RegisterContent(
@@ -98,8 +96,6 @@ public static class MarkdownHostBuilderExtensions
                     contentOptions.FileFilter)
                     .Build();
 
-                // Item lookups retain the parsed-byte hash even when the projection
-                // hides its source. Collection readers usually depend only on metadata.
                 var items = new (string Id, TModel Item, string? Digest, string? ProjectionDigest, string? FrontMatterDigest)[sources.Count];
                 for (var i = 0; i < sources.Count; i++)
                 {

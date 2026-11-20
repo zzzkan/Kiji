@@ -68,9 +68,6 @@ internal sealed class MarkdownProcessor
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        // MarkdownContent records the source hash of this already-read body.
-        // Reopening the file here would duplicate input verification and could
-        // fingerprint bytes different from the body being converted.
         var document = global::Markdig.Markdown.Parse(markdownBody, _pipeline);
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -153,7 +150,6 @@ internal sealed class MarkdownProcessor
 
     private string Render(MarkdownDocument document, ResponsiveImageContext imageContext)
     {
-        // A failed renderer may retain partial state; do not return it to the pool.
         if (!_rendererPool.TryTake(out var pooled))
         {
             pooled = PooledMarkdigRenderer.Create(_pipeline);

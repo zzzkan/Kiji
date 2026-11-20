@@ -104,8 +104,6 @@ public sealed class IncrementalBuildTests : IDisposable
     [Fact]
     public async Task CachedFrontMatterItems_StayIdentifiedAcrossSnapshots()
     {
-        // Unchanged files reuse their parsed front matter, so the next snapshot
-        // registers the same instances again.
         var root = CreateSiteRoot("front-matter-items");
         var log = new ContentRenderLog();
         await using var site = CreateItemBuilder(root, log, static content => content.FrontMatter).BuildSite();
@@ -129,7 +127,6 @@ public sealed class IncrementalBuildTests : IDisposable
         var root = CreateSiteRoot("shared-items");
         var log = new ContentRenderLog();
         var shared = new FrontMatter { Title = "Shared" };
-        // Equal strings are fingerprinted by value; a shared object identifies neither item.
         var builder = strings
             ? CreateItemBuilder(root, log, static _ => "")
             : CreateItemBuilder(root, log, _ => shared);
@@ -171,8 +168,6 @@ public sealed class IncrementalBuildTests : IDisposable
         FrontMatter? retained = null;
         builder.AddPageParameters<ContentItemPage>(services =>
         {
-            // Enumerate once so both source items register the same instance. Later
-            // builds mimic a singleton holding that item without reading the collection.
             retained ??= services.GetRequiredService<ContentCollection<FrontMatter>>().First();
             return [new { Slug = "shared", Item = retained }];
         });
@@ -224,12 +219,10 @@ public sealed class IncrementalBuildTests : IDisposable
             Assert.Contains("Post", await development.RenderPageAsync(developmentPage, CancellationToken.None), StringComparison.Ordinal);
         }
         await site.PublishAsync("dist");
-        // With no manifest the stale parameter must be caught before rendering.
         File.Delete(Path.Combine(root, ".kiji", "cache", "manifest.json"));
         var renderError = await Assert.ThrowsAnyAsync<Exception>(() => site.PublishAsync("dist"));
         Assert.Contains("previous content snapshot", renderError.ToString(), StringComparison.Ordinal);
 
-        // Publish a valid snapshot, then retain its item into the next planning pass.
         retained = null;
         await site.PublishAsync("dist");
         var planningError = await Assert.ThrowsAnyAsync<Exception>(() => site.PublishAsync("dist"));
@@ -343,7 +336,6 @@ public sealed class IncrementalBuildTests : IDisposable
         var root = CreateSiteRoot("projection-images");
         await WritePostAsync(root, "stable", "Stable Post", "![Photo](photo.png)");
         await File.WriteAllBytesAsync(Path.Combine(root, "content", "photo.png"), [1, 2, 3]);
-        // The list pages, not a parameter factory, read the collection first.
         var builder = CreateArticleBuilder(root, new ContentRenderLog(), mapPages: false, projectionRendersBody: true);
         builder.AddPageParameters<ContentArticleListPage>(_ => [new { Kind = "metadata" }, new { Kind = "front-matter" }]);
         await using var site = builder.BuildSite();
@@ -560,7 +552,6 @@ public sealed class IncrementalBuildTests : IDisposable
         {
             Assert.Equal(bytes, after[path].Bytes);
 
-            // Page outputs must not have been rewritten (the whole point of skipping).
             if (path.EndsWith("index.html", StringComparison.OrdinalIgnoreCase))
             {
                 Assert.Equal(lastWrite, after[path].LastWriteTimeUtc);
@@ -577,16 +568,13 @@ public sealed class IncrementalBuildTests : IDisposable
         var unchangedPage = Path.Combine(incrementalRoot, "dist", "md", "stable", "index.html");
         var unchangedStampBefore = File.GetLastWriteTimeUtc(unchangedPage);
 
-        // Mutate one post, then rebuild incrementally.
         await WritePostAsync(incrementalRoot, "changing", "Changing Reloaded", "Updated body text.");
         await BuildAsync(incrementalRoot);
 
-        // The changed page reflects the edit; the untouched page was not rewritten.
         var changedHtml = await File.ReadAllTextAsync(Path.Combine(incrementalRoot, "dist", "md", "changing", "index.html"));
         Assert.Contains("Updated body text.", changedHtml, StringComparison.Ordinal);
         Assert.Equal(unchangedStampBefore, File.GetLastWriteTimeUtc(unchangedPage));
 
-        // A from-scratch build over the same final content produces identical bytes.
         var scratchRoot = CreateSiteRoot("scratch");
         await WritePostAsync(scratchRoot, "changing", "Changing Reloaded", "Updated body text.");
         await BuildAsync(scratchRoot);
@@ -732,8 +720,6 @@ public sealed class IncrementalBuildTests : IDisposable
             await File.ReadAllTextAsync(manifestPath), BuildManifestJsonContext.Default.BuildManifest)!;
         var notesOutput = Path.GetRelativePath(Path.Combine(root, "dist"), notesIndex);
 
-        // Touch content in posts/ only. The notes index enumerates its own collection,
-        // so its content-set dependency is scoped to notes/ and still holds.
         await WriteMarkdownAsync(root, Path.Combine("posts", "first"), "First Post", "Edited post body.");
         await BuildScopedAsync(root, notesDirectory);
 
@@ -741,13 +727,10 @@ public sealed class IncrementalBuildTests : IDisposable
         Assert.Equal(notesStampBefore, File.GetLastWriteTimeUtc(notesIndex));
         var after = System.Text.Json.JsonSerializer.Deserialize(
             await File.ReadAllTextAsync(manifestPath), BuildManifestJsonContext.Default.BuildManifest)!;
-        // An unchanged HTML file alone cannot prove the scope stayed unchanged:
-        // rendering can produce identical HTML and skip the write.
         Assert.Equal(
             before.Pages.Single(page => page.OutputRelativePath == notesOutput).Dependencies,
             after.Pages.Single(page => page.OutputRelativePath == notesOutput).Dependencies);
 
-        // Editing notes/ must still re-render it, or the scoping would be unsound.
         await WriteMarkdownAsync(root, Path.Combine(notesDirectory, "beta"), "Beta Note", "Second note.");
         await BuildScopedAsync(root, notesDirectory);
 
@@ -771,15 +754,12 @@ public sealed class IncrementalBuildTests : IDisposable
         var relatedStampBefore = File.GetLastWriteTimeUtc(relatedPage);
         var detailStampBefore = File.GetLastWriteTimeUtc(detailPage);
 
-        // Edit a different post than the one these pages are for.
         await WritePostAsync(root, "changing", "Changing Renamed", "Body.");
         await BuildRelatedAsync(root);
 
-        // The related list names every other post, so it must reflect the rename.
         Assert.Contains("Changing Renamed", await File.ReadAllTextAsync(relatedPage), StringComparison.Ordinal);
         Assert.NotEqual(relatedStampBefore, File.GetLastWriteTimeUtc(relatedPage));
 
-        // The plain detail page reads only its own file, so it is still skipped.
         Assert.Equal(detailStampBefore, File.GetLastWriteTimeUtc(detailPage));
     }
 
@@ -1067,7 +1047,6 @@ public sealed class IncrementalBuildTests : IDisposable
         await site.PublishAsync("dist");
         Assert.Equal(initialRenders, renders);
         var initialOutput = SnapshotDirectory(Path.Combine(root, "dist"));
-        // Force cache-only restoration and encoder repair of one damaged blob.
         var damaged = pages[0].AdditionalOutputs[0];
         await File.WriteAllTextAsync(Path.Combine(root, ".kiji", "cache", "images", damaged.Hash), "broken");
         Directory.Delete(Path.Combine(root, "dist"), recursive: true);
@@ -1214,8 +1193,6 @@ public sealed class IncrementalBuildTests : IDisposable
         await using var site = builder.BuildSite();
         await site.PublishAsync("dist");
         var page = (await ReadCacheManifest(root)).Pages.Single(page => page.RoutePath == "/md/stable/");
-        // External roots follow Markdown's existing nonportable input policy. A linked
-        // root inside the project is portable when the checkout recreates that root.
         if (rootKind != "linked-root")
         {
             Assert.Null(page.ParametersHash);
@@ -1376,7 +1353,6 @@ public sealed class IncrementalBuildTests : IDisposable
             using var client = new HttpClient { BaseAddress = new Uri(web.Urls.First()) };
             var first = ImageSource(await client.GetStringAsync("/md/stable/"));
             var path = Path.Combine(root, ".kiji", "dev-site", first.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
-            // A directory at the retired file path makes File.Delete fail on every OS.
             File.Delete(path);
             Directory.CreateDirectory(path);
             await server.ReloadAfterCodeUpdateAsync();
@@ -1444,8 +1420,6 @@ public sealed class IncrementalBuildTests : IDisposable
                     using var response = await client.GetAsync(basePath + "md/stable/", timeout.Token);
                     var body = await response.Content.ReadAsStringAsync(timeout.Token);
                     if (matches(response.StatusCode, body)) { return body; }
-                    // Native events can arrive in several batches. A prior change's
-                    // notification must not stand in for the edit under examination.
                     reload = socket.ReceiveAsync(new ArraySegment<byte>(new byte[64]), timeout.Token);
                 }
             }
@@ -1457,7 +1431,6 @@ public sealed class IncrementalBuildTests : IDisposable
             var updatedBytes = await client.GetByteArrayAsync(updated);
             Assert.NotEqual(original, updatedBytes);
 
-            // Replacing a name must invalidate directory lookups as well as HTML.
             reload = socket.ReceiveAsync(new ArraySegment<byte>(new byte[64]), timeout.Token);
             File.Move(source, Path.Combine(contentSite, "content", "renamed.png"));
             await WritePostAsync(contentSite, "stable", "Image", "![image](renamed.png)");
@@ -1476,7 +1449,6 @@ public sealed class IncrementalBuildTests : IDisposable
                 Directory.Delete(directory);
                 Directory.CreateSymbolicLink(directory, Path.Combine(replacement, "content"));
                 await ReloadedPageAsync((status, body) => status == System.Net.HttpStatusCode.OK && body.Contains("Retargeted body.", StringComparison.Ordinal));
-                // The direct watcher must follow the new target after a retarget.
                 reload = socket.ReceiveAsync(new ArraySegment<byte>(new byte[64]), timeout.Token);
                 await WritePostAsync(replacement, "stable", "Retargeted edit", "Retargeted edit body.\n\n![image](source.png)");
                 await ReloadedPageAsync((status, body) => status == System.Net.HttpStatusCode.OK && body.Contains("Retargeted edit body.", StringComparison.Ordinal));
@@ -1585,9 +1557,6 @@ public sealed class IncrementalBuildTests : IDisposable
         AssertDirectoriesIdentical(Path.Combine(scratch, "dist"), Path.Combine(root, "dist"));
     }
 
-    // A build into a new output directory reads each file's stamp as it writes, instead of
-    // listing the directory afterwards. A stamp that differs from a listing's would make every
-    // later build compare those files byte by byte.
     [Fact]
     public async Task NewOutputDirectory_RecordsTheStampsAListingReports()
     {

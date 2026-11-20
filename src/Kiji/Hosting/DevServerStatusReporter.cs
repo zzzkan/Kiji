@@ -6,8 +6,6 @@ internal sealed class DevServerStatusReporter
 {
     private const string KijiPrefix = "kiji";
     private const int DotNetWatchPrefixWidth = 12;
-    // Colors match dotnet watch's ConsoleReporter (DarkGray prefix+emoji, default
-    // message text, yellow warnings) so interleaved output reads as one stream.
     private const string Yellow = "\u001b[33m";
     private const string EmphasizedUrl = "\u001b[1;4:4;36m";
     private const string Reset = "\u001b[0m";

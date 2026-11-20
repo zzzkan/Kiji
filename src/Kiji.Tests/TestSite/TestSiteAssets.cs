@@ -41,9 +41,6 @@ internal static class TestSiteAssets
         {
             rootNode["Patterns"] = JsonSerializer.SerializeToNode(new[] { new { ContentRootIndex = 0, Pattern = "**", Depth = 0 } });
         }
-        // Concurrent builders of one site write the same manifest while a publish reads it. Each
-        // writes a file of its own and moves it into place complete, so a reader never sees a
-        // partial manifest. Replacing an open manifest fails on Windows, so the same bytes stay.
         var bytes = System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { ContentRoots = roots, Root = rootNode }));
         if (File.Exists(path))
         {
@@ -56,7 +53,6 @@ internal static class TestSiteAssets
         }
         catch (IOException) when (File.Exists(path) && HasContent(path, bytes))
         {
-            // Another builder created it first.
         }
     }
 

@@ -80,8 +80,6 @@ public sealed class SiteInfo
             throw new ArgumentException("A site-relative path with at most one leading slash and no surrounding whitespace is required.", parameterName);
         }
 
-        // Inspect decoded path segments before Uri can normalize away '..'. Query and
-        // fragment values are not path segments and must retain their original meaning.
         var decodedPath = pathPart.Contains('%') ? Uri.UnescapeDataString(pathPart.ToString()).AsSpan() : pathPart;
         foreach (var character in decodedPath)
         {

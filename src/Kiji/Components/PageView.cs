@@ -14,8 +14,6 @@ namespace Kiji.Components;
 /// </summary>
 internal sealed class PageView : ComponentBase
 {
-    // LayoutAttribute lookups cached per type; cleared on hot reload so
-    // @layout edits apply in the dev server.
     private static readonly ConcurrentDictionary<Type, Type?> LayoutCache = new();
 
     [Parameter, EditorRequired]

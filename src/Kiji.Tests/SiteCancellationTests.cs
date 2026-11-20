@@ -133,7 +133,6 @@ public sealed class SiteCancellationTests : IDisposable
             if (trigger == "run") { runStop.Cancel(); }
             else if (trigger == "host") { hostShutdown = web.StopAsync(); }
             else { shutdown = server.ReloadAfterCodeUpdateAsync(); }
-            // Observe the selected stop signal before disposal can cancel the producer itself.
             await canceled.Task.WaitAsync(TimeSpan.FromSeconds(10));
             await hostShutdown.WaitAsync(TimeSpan.FromSeconds(10));
             shutdown ??= server.DisposeAsync().AsTask();

@@ -25,8 +25,6 @@ internal sealed class SiteBuilderContext(IHostApplicationBuilder builder, Static
         {
             throw new InvalidOperationException("Create the builder with StaticSite.CreateBuilder before registering Kiji services.");
         }
-        // HostApplicationBuilder owns the read-only transition. Check it before invoking user callbacks
-        // or changing singleton options, which do not themselves mutate the service collection.
         if (builder.Services.IsReadOnly) { throw new InvalidOperationException("Configure the builder before calling Build."); }
         return context;
     }

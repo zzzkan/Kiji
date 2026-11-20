@@ -39,8 +39,6 @@ internal static class MarkdownSourceReader
 
     internal static string DecodeText(byte[] bytes)
     {
-        // UTF-8 needs no stream or intermediate decoder buffers. Keep StreamReader
-        // for UTF-16/32 BOMs so its encoding detection and fallback remain intact.
         if (bytes is [0xEF, 0xBB, 0xBF, ..]) { return Encoding.UTF8.GetString(bytes.AsSpan(3)); }
         if (bytes is not ([0xFF, 0xFE, ..] or [0xFE, 0xFF, ..] or [0, 0, 0xFE, 0xFF, ..]))
         {

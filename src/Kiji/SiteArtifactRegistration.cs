@@ -39,9 +39,6 @@ internal sealed record SiteArtifactRegistration(
             return;
         }
 
-        // Built-in feeds always regenerate. Buffering avoids rewriting identical
-        // bytes and retriggering SDK compression. Larger feeds spill to disk.
-        // Only a spill needs the directory before the pages finish.
         await using var buffer = new FileBufferingWriteStream(1024 * 1024, null, () => Directory.CreateDirectory(directory).FullName);
         using var hash = SHA256.Create();
         await using (var hashing = new CryptoStream(buffer, hash, CryptoStreamMode.Write, leaveOpen: true))

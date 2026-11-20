@@ -5,8 +5,6 @@ namespace Kiji.Tests;
 
 public sealed class MarkdownWarmupTests
 {
-    // The warm-up swallows its own failures, so a sample that stopped parsing, or stopped
-    // reaching a default extension, would only show up as a slower publish.
     [Fact]
     public void Sample_RunsFrontMatterAndEveryDefaultExtension()
     {

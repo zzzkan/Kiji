@@ -14,7 +14,6 @@ internal sealed class ComponentRenderer(IServiceProvider services)
     internal static void AddComponentRenderingServices(IServiceCollection services)
     {
         services.AddScoped<IErrorBoundaryLogger, StaticErrorBoundaryLogger>();
-        // HtmlRenderer resolves its encoder from services; the default one escapes all non-ASCII text.
         services.AddSingleton(_ => HtmlEncoder.Create(UnicodeRanges.All));
         services.AddScoped(static provider =>
         {
@@ -43,7 +42,6 @@ internal sealed class ComponentRenderer(IServiceProvider services)
         where TComponent : IComponent
     {
         await using var scope = services.CreateAsyncScope();
-        // Each page needs its own scope and renderer to isolate components and head content.
         await using var renderer = new AssetHtmlRenderer(
             scope.ServiceProvider, scope.ServiceProvider.GetRequiredService<ILoggerFactory>(),
             PageRenderContext.Current?.Assets ?? Assets.AssetResources.Empty);
@@ -62,7 +60,6 @@ internal sealed class ComponentRenderer(IServiceProvider services)
             return ParameterView.Empty;
         }
 
-        // ParameterView reads the dictionary only during rendering.
         return ParameterView.FromDictionary(parameters as IDictionary<string, object?>
             ?? parameters.ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.Ordinal));
     }

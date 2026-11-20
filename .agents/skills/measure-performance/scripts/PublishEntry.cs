@@ -4,8 +4,6 @@ using System.Text.Json;
 using Kiji.Generation;
 using Kiji.SyntheticSite;
 
-// Both packages compile this identical adapter around the frozen site definition.
-// Do not force GC or add warmup work to a real publish process.
 var reportPath = Environment.GetEnvironmentVariable("KIJI_PERFORMANCE_REPORT");
 if (string.IsNullOrEmpty(reportPath))
 {

@@ -66,7 +66,6 @@ public sealed class FeedsTests
         var artifact = new RssFeedArtifact(_ => Enumerable.Range(0, 500)
             .Select(i => new FeedItem($"Post {i}", description, DateTimeOffset.UnixEpoch, $"blog/{i}/")));
 
-        // The output's own buffering spills large feeds to disk; the writer must not hold the feed.
         using var output = new WriteSizeRecordingStream();
         await artifact.WriteAsync(output, CreateContext(), CancellationToken.None);
 
@@ -139,5 +138,4 @@ public sealed class FeedsTests
         var item = Assert.Single(document.Root!.Element("channel")!.Elements("item"));
         Assert.Equal(text, item.Element("title")!.Value);
     }
-
 }

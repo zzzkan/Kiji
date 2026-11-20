@@ -7,7 +7,6 @@ namespace Kiji.Tests.TestSite;
 [Route("/navigation/{Id}/")]
 public sealed class NavigationTestPage(NavigationManager navigation, SiteInfo site) : ComponentBase
 {
-    // This API must work even before any property is read.
     private readonly string _relative = navigation.ToBaseRelativePath(site.ResolveUrl("about/").AbsoluteUri);
 
     [Inject] public NavigationManager Navigation { get; set; } = default!;
@@ -17,7 +16,6 @@ public sealed class NavigationTestPage(NavigationManager navigation, SiteInfo si
 
     protected override async Task OnInitializedAsync()
     {
-        // Overlap page renders to catch navigation state shared across scopes.
         await Task.Yield();
         Navigate?.Invoke(Navigation);
     }

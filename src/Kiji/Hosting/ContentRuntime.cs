@@ -61,19 +61,15 @@ internal sealed class ContentRuntime
     /// <remarks>Called during materialization, which holds the materialization lock.</remarks>
     internal void RegisterItem(object item, string sourceId, string id, string? digest)
     {
-        // Strings are fingerprinted by value, and equal strings may share an instance.
         if (item is string) { return; }
 
         if (_items.TryGetValue(item, out var existing) && existing.Generation == _generation
             && !(existing.SourceId == sourceId && existing.Id == id))
         {
-            // A parameter holding a shared instance cannot name its item: render it every time.
             _items.AddOrUpdate(item, existing with { Shared = true });
             return;
         }
 
-        // Parsed sources are reused across snapshots, so an unchanged file's front matter can
-        // return as the same instance and replace its previous registration.
         _items.AddOrUpdate(item, new ContentItemIdentity(sourceId, id, digest, _generation));
     }
 
@@ -96,9 +92,6 @@ internal sealed class ContentRuntime
             return (TMaterialized)existing;
         }
 
-        // GetOrAdd alone may invoke the factory multiple times. Serialize first
-        // materialization and invalidation, so an old
-        // in-flight loader cannot repopulate the cache after a content change.
         lock (_materializationLock)
         {
             return Materialize(handle, factory);

@@ -59,7 +59,6 @@ public sealed class DevServerTests : IAsyncDisposable
             "--DOTNET_WATCH_SUPPRESS_EMOJIS", suppressEmoji ? "true" : "false",
             "--NO_COLOR", "false", "--TERM", "xterm"];
 
-        // Use the production factory without supplying a reporter.
         var (server, web) = await _app.StartDevServerAsync(args, CancellationToken.None,
             statusOutput: output, isOutputRedirected: redirected);
         await using (server)
@@ -222,7 +221,6 @@ public sealed class DevServerTests : IAsyncDisposable
             Assert.Contains("<h1>Hello Updated</h1>", updatedHtml, StringComparison.Ordinal);
 
             var output = logs.ToString();
-            // FileSystemWatcher may report an overwrite as Created on macOS.
             Assert.Contains(output.Split('\n'), line => line.Contains("Content ", StringComparison.Ordinal)
                 && line.Contains("hello-world.md", StringComparison.Ordinal));
             Assert.Contains("Reloaded 1 browser client(s).", output, StringComparison.Ordinal);
@@ -269,7 +267,6 @@ public sealed class DevServerTests : IAsyncDisposable
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             using var socket = new ClientWebSocket();
             socket.Options.SetRequestHeader("Origin", page.Uri.GetLeftPart(UriPartial.Authority));
-            // Connect over the bound IP even when the browser uses its localhost alias.
             socket.Options.SetRequestHeader("Host", page.Uri.Authority);
             await socket.ConnectAsync(new UriBuilder(baseAddress) { Scheme = "ws", Path = "/kiji/_kiji/reload" }.Uri, timeout.Token);
 
@@ -291,7 +288,6 @@ public sealed class DevServerTests : IAsyncDisposable
         var (baseAddress, devServer) = await StartServerAsync(new StringWriter(), serverArgs: args);
         await using (devServer)
         {
-            // A page opened through the configured host reaches live reload at its own origin.
             var page = new UriBuilder(baseAddress) { Host = host }.Uri;
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             using var socket = new ClientWebSocket();
@@ -429,7 +425,6 @@ public sealed class DevServerTests : IAsyncDisposable
             await Task.Delay(750, timeout.Token);
             Assert.False(reload.IsCompleted, logs.ToString());
 
-            // Atomic replacement must still recognize the registered destination.
             var temporary = Path.Combine(components, "save.tmp");
             await File.WriteAllTextAsync(temporary, "updated", timeout.Token);
             File.Move(temporary, script, overwrite: true);
@@ -542,12 +537,10 @@ public sealed class DevServerTests : IAsyncDisposable
                 await post.Content.ReadAsStringAsync(),
                 StringComparison.Ordinal);
 
-            // Trailing-slash resolution still works underneath the prefix.
             Assert.Equal(
                 HttpStatusCode.Found,
                 (await client.GetAsync(new Uri(baseAddress, "/kiji/blog/hello-world"))).StatusCode);
 
-            // The server root stays outside the configured base path, matching production.
             var root = await client.GetAsync(new Uri(baseAddress, "/"));
             Assert.Equal(HttpStatusCode.NotFound, root.StatusCode);
             Assert.Null(root.Headers.Location);
@@ -556,13 +549,11 @@ public sealed class DevServerTests : IAsyncDisposable
             Assert.Equal(HttpStatusCode.NotFound, rootWithUntrustedQuery.StatusCode);
             Assert.Null(rootWithUntrustedQuery.Headers.Location);
 
-            // Static assets resolve under the prefix exposed by Site.BaseUrl.AbsolutePath.
             await File.WriteAllTextAsync(Path.Combine(_staticDir, "site.css"), "body{}");
             Assert.Equal(
                 HttpStatusCode.OK,
                 (await client.GetAsync(new Uri(baseAddress, "/kiji/site.css"))).StatusCode);
 
-            // Anything else outside the prefix is a 404, exactly as after deployment.
             Assert.Equal(
                 HttpStatusCode.NotFound,
                 (await client.GetAsync(new Uri(baseAddress, "/blog/hello-world/"))).StatusCode);
@@ -625,7 +616,6 @@ public sealed class DevServerTests : IAsyncDisposable
             using var client = CreateClient();
             using var response = await client.GetAsync(new Uri(new Uri(web.Urls.First()), "/missing/"));
 
-            // ASP.NET Core logs the request through the site's providers and filters.
             Assert.Contains(logs.Entries, static entry => entry.Category == "Microsoft.AspNetCore.Hosting.Diagnostics"
                 && entry.Message.StartsWith("Request starting", StringComparison.Ordinal));
         }
@@ -685,8 +675,6 @@ public sealed class DevServerTests : IAsyncDisposable
             await socket.ReceiveAsync(new byte[64], timeout.Token);
             Assert.Contains("Edited note", await client.GetStringAsync(notePage), StringComparison.Ordinal);
 
-            // Each registered root is watched from its parent. No unrelated external
-            // input is registered just to install a broader ancestor watcher.
             Directory.Move(posts, Path.Combine(inputs, "old-posts"));
             Directory.Move(notes, Path.Combine(inputs, "old-notes"));
             Directory.CreateDirectory(posts);

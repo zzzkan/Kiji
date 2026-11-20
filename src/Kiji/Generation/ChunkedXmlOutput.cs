@@ -49,7 +49,6 @@ internal sealed class ChunkedXmlOutput : IDisposable
 
     private async ValueTask CopyBufferAsync(CancellationToken cancellationToken)
     {
-        // The writer only appends, so the buffer can restart once its bytes are copied.
         await _output.WriteAsync(_buffer.GetBuffer().AsMemory(0, (int)_buffer.Length), cancellationToken);
         _buffer.SetLength(0);
     }

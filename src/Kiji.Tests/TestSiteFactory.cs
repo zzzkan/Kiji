@@ -26,7 +26,6 @@ internal static class TestSiteFactory
         Directory.CreateDirectory(paths.ProjectDirectory);
         var builder = StaticSite.CreateBuilder([], paths, typeof(TestSiteFactory).Assembly,
             hostConfiguration, runtimeMetadata);
-        // Empty parameter sets leave out the other test pages.
         var omit = typeof(StaticSiteHostBuilderExtensions).GetMethod(nameof(StaticSiteHostBuilderExtensions.AddPageParameters))!;
         foreach (var type in PageDiscovery.FromAssembly(typeof(TestSiteFactory).Assembly)
             .Select(static page => page.ComponentType).Distinct().Except(discoveredPages))

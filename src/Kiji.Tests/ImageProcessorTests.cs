@@ -70,7 +70,6 @@ public sealed class ImageProcessorTests : IDisposable
     [Fact]
     public async Task ProcessImage_LongMultiByteName_FitsTheFileNameLimit()
     {
-        // 184 UTF-8 bytes: a valid source name that must leave room for the variant suffix.
         var imagePath = Path.Combine(_sourceDir, new string('写', 60) + ".png");
         await CreateTestImageAsync(imagePath, 500, 300);
 
@@ -135,7 +134,6 @@ public sealed class ImageProcessorTests : IDisposable
         var lowInfo = await low.ProcessAsync(imagePath, Path.Combine(_outputDir, "low"));
         var defaultInfo = await _processor.ProcessAsync(imagePath, Path.Combine(_outputDir, "default"));
 
-        // Each setting must reach the identity, or cached variants would outlive a change.
         Assert.Equal(_processor.CacheIdentity, new ImageProcessor(new ImageProcessorOptions { Widths = [1280, 320, 960, 640, 320] }).CacheIdentity);
         Assert.Equal(4, new[]
         {
@@ -222,7 +220,6 @@ public sealed class ImageProcessorTests : IDisposable
         var initialEncodes = encodes;
         Assert.True(initialEncodes > 0);
 
-        // Simulate a clean build: output is wiped, cache survives.
         Directory.Delete(_outputDir, recursive: true);
 
         var info = await ImageArtifactProcessor.ProcessAsync(processor, imagePath, _outputDir, _cacheDir, Path.Combine(_testDir, "work"), default);
@@ -295,7 +292,6 @@ public sealed class ImageProcessorTests : IDisposable
     [Fact]
     public async Task ProcessImage_AnimatedGifUsesFirstFrame()
     {
-        // Two one-pixel frames, red then blue, with a global two-color palette.
         var path = Path.Combine(_sourceDir, "animated.gif");
         await File.WriteAllBytesAsync(path, Convert.FromHexString(
             "47494638396101000100800000FF00000000FF" +
@@ -319,7 +315,6 @@ public sealed class ImageProcessorTests : IDisposable
         source.Erase(SKColors.Blue);
         using var encoded = source.Encode(SKEncodedImageFormat.Jpeg, 100);
         var jpeg = encoded.ToArray();
-        // Valid little-endian EXIF with one ImageDescription ASCII entry.
         var exif = Convert.FromHexString("45786966000049492A000800000001000E010200080000001A00000000000000")
             .Concat("private\0"u8.ToArray()).ToArray();
         var path = Path.Combine(_sourceDir, "metadata.jpg");
@@ -340,8 +335,6 @@ public sealed class ImageProcessorTests : IDisposable
         }
     }
 
-    // Stored quadrants are red, green / blue, white; each row lists the displayed
-    // top-left, top-right, bottom-left and bottom-right colors for that EXIF value.
     [Theory]
     [InlineData(1, "RGBW")]
     [InlineData(2, "GRWB")]
@@ -363,7 +356,6 @@ public sealed class ImageProcessorTests : IDisposable
             }
         }
         using var encoded = source.Encode(SKEncodedImageFormat.Jpeg, 100);
-        // Little-endian EXIF with one Orientation SHORT entry.
         var exif = Convert.FromHexString(
             $"45786966000049492A0008000000010012010300010000000{orientation}00000000000000");
         var path = Path.Combine(_sourceDir, $"orientation-{orientation}.jpg");
@@ -414,7 +406,6 @@ public sealed class ImageProcessorTests : IDisposable
 
     private static byte[] InsertExif(byte[] jpeg, byte[] exif)
     {
-        // Place an APP1 segment directly after the JPEG start-of-image marker.
         var withMetadata = new byte[jpeg.Length + exif.Length + 4];
         jpeg.AsSpan(0, 2).CopyTo(withMetadata);
         withMetadata[2] = 0xff;
@@ -429,7 +420,6 @@ public sealed class ImageProcessorTests : IDisposable
     {
         using var image = new SKBitmap(width, height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
 
-        // Fill with a gradient for more realistic content
         for (var y = 0; y < height; y++)
         {
             for (var x = 0; x < width; x++)
@@ -452,5 +442,4 @@ public sealed class ImageProcessorTests : IDisposable
             await File.WriteAllBytesAsync(path, encoded.ToArray());
         }
     }
-
 }

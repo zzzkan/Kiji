@@ -78,7 +78,6 @@ public sealed class SitemapsTests
     [Fact]
     public async Task WriteAsync_ExcludesPagesWithEncodedRouteValues_InEitherSpelling()
     {
-        // Route parameter values reach the page path percent-encoded; literal segments do not.
         var context = CreateContext([
             new SitePageInfo("posts/%E6%97%A5%E6%9C%AC%E8%AA%9E/", "posts/日本語/index.html"),
             new SitePageInfo("posts/my%20post/", "posts/my post/index.html"),
@@ -104,5 +103,4 @@ public sealed class SitemapsTests
         var exception = Assert.Throws<ArgumentException>(() => new SitemapArtifact(excludedPaths: [path]));
         Assert.Equal("excludedPaths", exception.ParamName);
     }
-
 }

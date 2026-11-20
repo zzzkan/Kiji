@@ -52,14 +52,11 @@ public sealed class LiveReloadHubTests
         try
         {
             Assert.Equal(0, await hub.ReportDiagnosticsAsync(["Home.razor(1,1): error CS0103: x"], timeout.Token));
-            // A page opened or reloaded while the build is broken still shows the error.
             var opened = await ConnectAsync();
             Assert.Equal("""["Home.razor(1,1): error CS0103: x"]""", await ReceiveAsync(opened));
             Assert.Equal(1, await hub.ReportDiagnosticsAsync([], timeout.Token));
             Assert.Equal("[]", await ReceiveAsync(opened));
 
-            // Once cleared, pages reloaded by the fix get no stale error, and later
-            // reports without errors, such as after a CSS edit, send nothing.
             var reloaded = await ConnectAsync();
             Assert.Equal(0, await hub.ReportDiagnosticsAsync([], timeout.Token));
             Assert.Equal(2, await hub.BroadcastReloadAsync(timeout.Token));
@@ -87,8 +84,6 @@ public sealed class LiveReloadHubTests
         var hub = new LiveReloadHub();
         var accepted = new TaskCompletionSource<WebSocket>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        // The client handshake has finished, but the server's accept continuation
-        // has not resumed yet. A code update arriving here must not lose the client.
         var handling = hub.HandleClientAsync(() => accepted.Task, timeout.Token);
         var broadcast = hub.BroadcastReloadAsync(timeout.Token);
         var waitedForRegistration = !broadcast.IsCompleted;

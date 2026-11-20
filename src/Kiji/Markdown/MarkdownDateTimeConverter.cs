@@ -22,8 +22,6 @@ internal sealed class MarkdownDateTimeConverter : IYamlTypeConverter
         {
             return null;
         }
-        // Parse accepts partial dates and times by filling in today's date/year.
-        // Require a complete ISO date so identical YAML always has the same value.
         if (scalar.Value.Length < 10 || !DateOnly.TryParseExact(scalar.Value.AsSpan(0, 10),
             "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
         {

@@ -66,7 +66,6 @@ public sealed class MarkdownContent<TFrontMatter>
             }
             else
             {
-                // Directly constructed internal content has no collection resolver.
                 dependencies?.AddFile(SourcePath, ContentHash);
             }
             return field;
@@ -85,8 +84,6 @@ public sealed class MarkdownContent<TFrontMatter>
         cancellationToken = linked?.Token ?? (cancellationToken.CanBeCanceled ? cancellationToken : pageToken);
         cancellationToken.ThrowIfCancellationRequested();
         context?.Dependencies?.AddFile(SourcePath, ContentHash);
-        // A tracked render must observe all dependencies and materialize its outputs
-        // again, even if the same content instance was rendered in an earlier build.
         if (context?.Dependencies is not null)
         {
             var html = await _renderAsync(this, cancellationToken);
@@ -109,7 +106,6 @@ public sealed class MarkdownContent<TFrontMatter>
         }
         catch
         {
-            // Do not evict a shared render merely because one waiting request left.
             if (!cached.IsValueCreated || (cached.Value.IsCompleted && !cached.Value.IsCompletedSuccessfully))
             {
                 RemoveSharedRender(cached);

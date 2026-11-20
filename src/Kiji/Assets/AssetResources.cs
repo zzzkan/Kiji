@@ -32,8 +32,6 @@ internal sealed class AssetResources
             : CreateImportMap(collection, resolveUrl));
     }
 
-    // The framework prefixes "./" to every URL, which assumes relative URLs under a
-    // <base> element. Kiji's URLs are absolute paths, shared by pages at any depth.
     private static ImportMapDefinition CreateImportMap(ResourceAssetCollection collection, Func<string, string> resolveUrl)
     {
         Dictionary<string, string>? imports = null;

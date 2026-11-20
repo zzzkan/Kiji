@@ -16,8 +16,6 @@ public sealed class MarkdownSourceReaderTests
         {
             byte[] bytes = [.. encoding.GetPreamble(), .. encoding.GetBytes(content)];
             Assert.Equal(content, MarkdownSourceReader.DecodeText(bytes));
-            // Truncated preambles and partial multibyte characters must retain the
-            // old replacement behavior, including an empty or BOM-only input.
             for (var length = 0; length <= bytes.Length; length++)
             {
                 AssertSameDecoding(bytes[..length]);

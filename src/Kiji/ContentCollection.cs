@@ -55,8 +55,6 @@ public sealed class ContentCollection<T> : IReadOnlyCollection<T>
         var materialized = Materialized;
         if (!materialized.Index.TryGetValue(id, out var entry))
         {
-            // A miss still observed the ID set, so it is only valid while the ID set
-            // holds — that is the content set, not any one file.
             MarkContentSetDependency();
             item = null;
             return false;
@@ -66,8 +64,6 @@ public sealed class ContentCollection<T> : IReadOnlyCollection<T>
         var dependencies = PageRenderContext.Current?.Dependencies;
         if (dependencies is not null)
         {
-            // The lookup depends on collection membership as well as file contents:
-            // a loader can filter out an unchanged file in the next snapshot.
             dependencies.AddValue(_sourceId + "/" + id.ToUpperInvariant(), entry.Digest);
         }
         return true;
@@ -121,12 +117,6 @@ public sealed class ContentCollection<T> : IReadOnlyCollection<T>
 
     private MaterializedContent Materialize(IServiceProvider services)
     {
-        // The collection belongs to the snapshot, not to the page whose read happened to load it.
-        // A projection that renders a body must not materialize images against that page: the
-        // other pages reading the result would not record them, and a later publish that loads
-        // the collection while planning has no page at all. With no ambient page, such a render
-        // fails the same way everywhere instead of waiting, under the materialization lock, for
-        // work that needs the blocked renderer.
         var page = PageRenderContext.Current;
         PageRenderContext.SetCurrent(null);
         IReadOnlyList<(string Id, T Item, string? Digest, string? ProjectionDigest, string? FrontMatterDigest)> loaded;
@@ -180,9 +170,6 @@ public sealed class ContentCollection<T> : IReadOnlyCollection<T>
         });
         public IReadOnlyList<T> Entries { get; } = entries;
 
-        // Built once per snapshot and only read afterwards. A frozen dictionary costs more to
-        // build than a publish gets back from its lookups.
         public Dictionary<string, (T Item, string? Digest, string? FrontMatterDigest)> Index { get; } = index;
-
     }
 }

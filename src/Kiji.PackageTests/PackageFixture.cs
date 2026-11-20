@@ -20,11 +20,8 @@ public sealed class PackageFixture : IAsyncLifetime
     private string Work => Path.Combine(_root, "work");
     internal string Site => Path.Combine(Work, "Site");
     private string Packages => Path.Combine(_root, "packages");
-    /// <summary>This machine's Kiji.Runtime package, where Kiji publishes one for its runtime.</summary>
-    internal static string RuntimePackageId => "Kiji.Runtime." + System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier;
-    internal string InstalledRuntimePackage => Path.Combine(Packages, RuntimePackageId.ToLowerInvariant(), _version.ToLowerInvariant());
-    /// <summary>A Release pack also makes the runtime packages of ReadyToRun images; a Debug pack makes Kiji's alone.</summary>
-    internal bool HasReadyToRunImages { get; private set; }
+    // Kiji's runtime graph: the runtime package each runtime with an entry restores, if any.
+    private readonly Dictionary<string, string?> _runtimePackages = new(StringComparer.Ordinal);
     private string Template => Path.Combine(_repository, "src", "Kiji.PackageTests", "Fixture");
 
     public async ValueTask InitializeAsync()
@@ -81,15 +78,20 @@ public sealed class PackageFixture : IAsyncLifetime
             var metadata = XDocument.Load(manifest).Root!.Elements().Single(element => element.Name.LocalName == "metadata");
             Assert.Equal("Kiji", metadata.Elements().Single(element => element.Name.LocalName == "id").Value);
             _version = metadata.Elements().Single(element => element.Name.LocalName == "version").Value;
-            // Nothing else fails when the precompiled images are missing; publishing is only slower.
-            HasReadyToRunImages = configuration["KIJI_TEST_PACKAGE"] is { Length: > 0 }
-                || typeof(PackageFixture).Assembly.GetCustomAttribute<AssemblyConfigurationAttribute>()!.Configuration == "Release";
-            if (HasReadyToRunImages)
-            {
-                Assert.True(File.Exists(Path.Combine(feed, $"{RuntimePackageId}.{_version}.nupkg")), $"{RuntimePackageId} was not packed.");
-            }
             using var graph = archive.GetEntry("runtime.json")!.Open();
-            await PreparePackagesAsync(metadata, JsonDocument.Parse(graph), feed);
+            using var runtimeGraph = JsonDocument.Parse(graph);
+            foreach (var runtime in runtimeGraph.RootElement.GetProperty("runtimes").EnumerateObject())
+            {
+                _runtimePackages[runtime.Name] = runtime.Value.GetProperty("Kiji").EnumerateObject()
+                    .Select(dependency => dependency.Name).SingleOrDefault(id => id.StartsWith("Kiji.Runtime.", StringComparison.Ordinal));
+            }
+            // A package without images (KijiReadyToRun=false, a Debug pack) names none. Nothing
+            // else fails when one it names is missing for a runtime; publishing is only slower.
+            foreach (var runtimePackage in _runtimePackages.Values.OfType<string>())
+            {
+                Assert.True(File.Exists(Path.Combine(feed, $"{runtimePackage}.{_version}.nupkg")), $"{runtimePackage} was not packed.");
+            }
+            await PreparePackagesAsync(metadata, runtimeGraph, feed);
         }
         catch
         {
@@ -124,7 +126,7 @@ public sealed class PackageFixture : IAsyncLifetime
         await DotnetAsync("restore", "restore/dependencies/Dependencies.csproj", "--packages", _globalPackages, "--configfile", Path.Combine(Work, "NuGet.Config"));
         Write("restore/kiji/Kiji.csproj", $"""
             <Project Sdk="Microsoft.NET.Sdk"><ItemGroup>
-              <PackageDownload Include="Kiji{string.Concat(Directory.GetFiles(feed, $"Kiji.Runtime.*.{_version}.nupkg").Select(path => ";" + Path.GetFileName(path)[..^$".{_version}.nupkg".Length]))}" Version="[{SecurityElement.Escape(_version)}]" />
+              <PackageDownload Include="Kiji{string.Concat(_runtimePackages.Values.OfType<string>().Select(id => ";" + id))}" Version="[{SecurityElement.Escape(_version)}]" />
             </ItemGroup></Project>
             """);
         await DotnetAsync("restore", "restore/kiji/Kiji.csproj", "--packages", Packages, "--source", feed, "--configfile", Path.Combine(Work, "NuGet.Config"));
@@ -188,6 +190,38 @@ public sealed class PackageFixture : IAsyncLifetime
     {
         var path = Path.Combine(Work, relative);
         File.WriteAllText(path, File.ReadAllText(path).Replace(before, after, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Finds the site's runtime identifier and the ReadyToRun images restored for it: those of
+    /// the runtime package that Kiji's graph names for the most specific runtime with an entry,
+    /// following the SDK's runtime fallback as NuGet does.
+    /// </summary>
+    /// <returns>The runtime identifier, and the images' directory or <see langword="null"/> when none apply.</returns>
+    internal async Task<(string RuntimeIdentifier, string? Images)> ResolveRuntimeImagesAsync(string project)
+    {
+        var output = await DotnetAsync("msbuild", project, "-getProperty:RuntimeIdentifier", "-getProperty:BundledRuntimeIdentifierGraphFile");
+        using var properties = JsonDocument.Parse(output[output.IndexOf('{', StringComparison.Ordinal)..]);
+        var runtimeIdentifier = properties.RootElement.GetProperty("Properties").GetProperty("RuntimeIdentifier").GetString()!;
+        var graphFile = properties.RootElement.GetProperty("Properties").GetProperty("BundledRuntimeIdentifierGraphFile").GetString()!;
+        using var sdkGraph = JsonDocument.Parse(File.ReadAllText(graphFile));
+        var runtimes = sdkGraph.RootElement.GetProperty("runtimes");
+        var pending = new Queue<string>([runtimeIdentifier]);
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        while (pending.TryDequeue(out var runtime))
+        {
+            if (!visited.Add(runtime)) { continue; }
+            if (_runtimePackages.TryGetValue(runtime, out var runtimePackage))
+            {
+                return (runtimeIdentifier, runtimePackage is null ? null
+                    : Path.Combine(Packages, runtimePackage.ToLowerInvariant(), _version.ToLowerInvariant(), "runtimes", runtimePackage["Kiji.Runtime.".Length..], "native", "kiji-r2r"));
+            }
+            if (runtimes.TryGetProperty(runtime, out var entry) && entry.TryGetProperty("#import", out var imports))
+            {
+                foreach (var import in imports.EnumerateArray()) { pending.Enqueue(import.GetString()!); }
+            }
+        }
+        return (runtimeIdentifier, null);
     }
 
     internal Task<string> DotnetAsync(params string[] arguments) => RunningCommand.RunAsync(Work, arguments);

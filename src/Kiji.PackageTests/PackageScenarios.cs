@@ -23,7 +23,8 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
 
         fixture.Write("Site/dist/previous.json", "{}");
         await fixture.DotnetAsync("publish", project, "-c", "Release");
-        var buildDirectory = Path.Combine(fixture.Site, "bin", "Release", "net10.0", System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier);
+        var (runtimeIdentifier, images) = await fixture.ResolveRuntimeImagesAsync(project);
+        var buildDirectory = Path.Combine(fixture.Site, "bin", "Release", "net10.0", runtimeIdentifier);
         Assert.True(File.Exists(Path.Combine(buildDirectory, "publish", "index.html")));
         Assert.False(File.Exists(Path.Combine(buildDirectory, "dist", "previous.json")));
         Assert.False(File.Exists(Path.Combine(fixture.Site, "dist", "index.html")));
@@ -31,9 +32,8 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         // The build copies the runtime package's images in place of the IL of the versions they
         // were compiled from. A wrong path or version leaves the IL, which only shows as a slower
         // publish; an image copied as a native asset would leave the IL too.
-        if (fixture.HasReadyToRunImages)
+        if (images is not null)
         {
-            var images = Path.Combine(fixture.InstalledRuntimePackage, "runtimes", System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier, "native", "kiji-r2r");
             foreach (var name in (string[])["Kiji", "Markdig", "YamlDotNet"])
             {
                 var image = Assert.Single(Directory.GetFiles(Path.Combine(images, name), name + ".dll", SearchOption.AllDirectories));

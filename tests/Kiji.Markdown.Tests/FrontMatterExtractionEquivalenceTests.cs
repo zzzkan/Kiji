@@ -1,0 +1,39 @@
+using Kiji.Testing;
+using Xunit;
+
+namespace Kiji.Markdown.Tests;
+
+public sealed class FrontMatterExtractionEquivalenceTests
+{
+    [Theory]
+    [InlineData("---\ntitle: Test\n---\n# Body\n", "title: Test", "# Body\n")]
+    [InlineData("---  \r\ntitle: Test\r\n---  \r\n\r\nBody\r\n", "title: Test", "Body\r\n")]
+    [InlineData("---\ntitle: a---b\n----\nnote: text\n---\nIntro\n\n---\nOutro", "title: a---b\n----\nnote: text", "Intro\n\n---\nOutro")]
+    [InlineData("---\n\n---\nBody", "", "Body")]
+    [InlineData("---\n---\nBody", "", "Body")]
+    [InlineData("---\r\n---\r\nBody", "", "Body")]
+    [InlineData("---\n---", "", "")]
+    [InlineData("# Body", null, null)]
+    [InlineData("----\ntitle: Test\n---\nBody", null, null)]
+    [InlineData("---title: Test\n---\nBody", null, null)]
+    [InlineData("---\ntitle: Test\n---", "title: Test", "")]
+    public void ExtractsDelimitedYamlAndPreservesBody(string content, string? expectedYaml, string? expectedBody)
+    {
+        var extracted = MarkdownFrontMatterParser.ExtractFrontMatter(content, out var yaml, out var body);
+        Assert.Equal(expectedYaml is not null, extracted);
+        if (extracted)
+        {
+            Assert.Equal(expectedYaml, content[yaml]);
+            Assert.Equal(expectedBody, content[body]);
+        }
+    }
+
+    [Fact]
+    public void LeadingBlankLineInFrontMatter_Deserializes()
+    {
+        var (frontMatter, _) = MarkdownFrontMatterParser.ParseContentAndBody<FrontMatter>(
+            "---\n\ntitle: Blank Lead\ncreatedAt: 2024-01-15\n---\nBody\n",
+            new MarkdownOptions().CreateDeserializer());
+        Assert.Equal("Blank Lead", frontMatter.Title);
+    }
+}

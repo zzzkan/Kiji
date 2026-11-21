@@ -1,0 +1,13 @@
+M:System.Environment.SetEnvironmentVariable(System.String,System.String);Test classes run in parallel, so process-wide state leaks between tests. Pass the value through configuration, options or a parameter.
+M:System.Environment.SetEnvironmentVariable(System.String,System.String,System.EnvironmentVariableTarget);Test classes run in parallel, so process-wide state leaks between tests. Pass the value through configuration, options or a parameter.
+P:System.Environment.CurrentDirectory;Test classes run in parallel, so process-wide state leaks between tests. Pass the value through configuration, options or a parameter.
+M:System.IO.Directory.SetCurrentDirectory(System.String);Test classes run in parallel, so process-wide state leaks between tests. Pass the value through configuration, options or a parameter.
+P:System.Globalization.CultureInfo.CurrentCulture;Test classes run in parallel, so process-wide state leaks between tests. Pass the value through configuration, options or a parameter.
+P:System.Globalization.CultureInfo.CurrentUICulture;Test classes run in parallel, so process-wide state leaks between tests. Pass the value through configuration, options or a parameter.
+P:System.Globalization.CultureInfo.DefaultThreadCurrentCulture;Test classes run in parallel, so process-wide state leaks between tests. Pass the value through configuration, options or a parameter.
+P:System.Globalization.CultureInfo.DefaultThreadCurrentUICulture;Test classes run in parallel, so process-wide state leaks between tests. Pass the value through configuration, options or a parameter.
+M:System.Console.SetOut(System.IO.TextWriter);Test classes run in parallel, so process-wide state leaks between tests. Pass the value through configuration, options or a parameter.
+M:System.Console.SetError(System.IO.TextWriter);Test classes run in parallel, so process-wide state leaks between tests. Pass the value through configuration, options or a parameter.
+M:System.Console.SetIn(System.IO.TextReader);Test classes run in parallel, so process-wide state leaks between tests. Pass the value through configuration, options or a parameter.
+M:System.AppContext.SetSwitch(System.String,System.Boolean);Test classes run in parallel, so process-wide state leaks between tests. Pass the value through configuration, options or a parameter.
+M:System.AppContext.SetData(System.String,System.Object);Test classes run in parallel, so process-wide state leaks between tests. Pass the value through configuration, options or a parameter.

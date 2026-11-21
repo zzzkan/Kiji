@@ -8,8 +8,10 @@
 
 ## Verification
 
-<!-- List the commands or manual checks you ran and their results, such as
-dotnet build -c Release and dotnet test -c Release. If none, explain why. -->
+<!-- List the commands you ran and the output they printed, such as
+dotnet build -c Release and dotnet test -c Release. For user-visible changes, add the
+evidence from driving a real site (publish/serve output, generated files, screenshots);
+see .agents/skills/verify-site. Name anything left unverified and why. -->
 
 ## Compatibility
 

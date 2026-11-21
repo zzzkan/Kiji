@@ -13,7 +13,7 @@ section: API reference
 - [`Kiji` namespace](../api-kiji/): the site builder, site and page metadata, content
   collections, and site-wide files
 - [`Kiji.Markdown` namespace](../api-markdown/): Markdown content
-- [`Kiji.Assets` namespace](../api-assets/): image processing
+- [`Kiji.Images` namespace](../api-images/): image processing
 - [`Kiji.Feeds` namespace](../api-feeds/): RSS feeds
 - [`Kiji.Sitemaps` namespace](../api-sitemaps/): sitemaps
 - [Blazor APIs](../api-blazor/): ASP.NET Core components and services in static pages

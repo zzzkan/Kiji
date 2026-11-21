@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Kiji.Core/Kiji.Core.csproj" />
+    <ProjectReference Include="../../src/Kiji.Markdown/Kiji.Markdown.csproj" />
+    <ProjectReference Include="../Kiji.Testing/Kiji.Testing.csproj" />
+  </ItemGroup>
+
+</Project>

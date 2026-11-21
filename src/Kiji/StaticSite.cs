@@ -1,8 +1,14 @@
-using Kiji.Generation;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
-using Kiji.Assets;
+using Kiji.Definition;
+using Kiji.Diagnostics;
+using Kiji.Generation;
 using Kiji.Hosting;
+using Kiji.Images.Skia;
+using Kiji.Images;
+using Kiji.Incremental;
 using Kiji.Markdown;
+using Kiji.Paths;
 using Kiji.Rendering;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,21 +19,20 @@ using Microsoft.Extensions.Options;
 
 namespace Kiji;
 
-/// <summary>Creates generic host builders configured to publish or serve a Kiji site.</summary>
+/// <summary>Creates the host builder of a Kiji site.</summary>
 public static class StaticSite
 {
-    /// <summary>Creates a site host builder with no development server arguments.</summary>
+    /// <summary>Creates a site host builder.</summary>
     public static HostApplicationBuilder CreateBuilder() => CreateBuilder([]);
 
-    /// <summary>Creates a site host builder. Arguments configure only the development server.</summary>
+    /// <summary>Creates a site host builder; <paramref name="args"/> reach only the dev server.</summary>
+    [SuppressMessage("ApiDesign", "RS0030", Justification = "Host configuration reads only the environment name.")]
     public static HostApplicationBuilder CreateBuilder(string[] args)
     {
         ArgumentNullException.ThrowIfNull(args);
-        // Start early so the host and rendering pipeline can use background-compiled methods.
         var runtimeMetadata = SiteRuntimeMetadata.Read(AppContext.GetData);
         var jitProfile = PublishJitProfile.Start(runtimeMetadata);
         var entryAssembly = Assembly.GetEntryAssembly() ?? throw new InvalidOperationException("No entry assembly is available. Run the site project as an application.");
-        // Read environment variables through configuration providers, not direct process APIs.
         using var hostConfiguration = new ConfigurationManager();
         hostConfiguration.AddEnvironmentVariables();
         return CreateBuilder(args, SiteExecutionPaths.FromRuntimeMetadata(runtimeMetadata, entryAssembly),
@@ -47,15 +52,10 @@ public static class StaticSite
             EnvironmentName = settings.EnvironmentName,
             ApplicationName = entryAssembly.GetName().Name,
         });
-        // Host settings bootstrap IHostEnvironment but must not fingerprint an absolute
-        // checkout path or become application configuration. Keep only project sources.
         builder.Configuration.Sources.Clear();
         builder.Configuration.AddJsonFile("appsettings.json", optional: true, reloadOnChange: false);
         builder.Configuration.AddJsonFile($"appsettings.{settings.EnvironmentName}.json", optional: true, reloadOnChange: false);
         builder.Logging.SetMinimumLevel(LogLevel.Warning);
-        // Kiji's summary is a default, so a configured Default level governs it as it does every
-        // other category. A category rule added here would outrank that level. Read lazily: the
-        // site may add configuration sources after the builder is created.
         builder.Services.AddOptions<LoggerFilterOptions>().Configure<IConfiguration>(static (options, configuration) =>
         {
             if (configuration["Logging:LogLevel:Default"] is null)
@@ -96,6 +96,7 @@ public static class StaticSite
         var options = new StaticSiteOptions();
         builder.Services.AddSingleton(_ => options.SiteInfo ?? throw new InvalidOperationException("Call UseSiteInfo before running the site."));
         options.PageAssemblies.Add(entryAssembly);
+        options.CodeAssemblies.Add(typeof(StaticSite).Assembly);
         var runtime = new ContentRuntime();
         builder.Services.AddSingleton(options);
         builder.Services.AddSingleton(runtime);
@@ -107,7 +108,10 @@ public static class StaticSite
         builder.Services.AddSingleton(new SiteServerArguments([.. args]));
         if (settings.Publishing) { builder.Services.AddHostedService<SitePublishService>(); }
         else { builder.Services.AddHostedService<SiteServeService>(); }
-        var context = new SiteBuilderContext(builder, options, runtime, paths);
+        var context = new SiteBuilderContext(builder, options, runtime, paths,
+            builder.Services.Where(static descriptor => SiteServiceRegistration.IsManaged(descriptor.ServiceType)),
+            builder.Services.Single(static descriptor => descriptor.ImplementationType == typeof(SitePublishService)
+                || descriptor.ImplementationType == typeof(SiteServeService)));
         ((IHostApplicationBuilder)builder).Properties[SiteBuilderContext.Key] = context;
         builder.ConfigureContainer(new KijiServiceProviderFactory(context));
         return builder;

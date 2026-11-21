@@ -1,0 +1,116 @@
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Kiji.Incremental;
+
+internal sealed class ContentRuntime
+{
+    internal DependencyCatalog Dependencies { get; } = new();
+
+    internal ContentFileRegistry Files { get; } = new();
+
+    private readonly HashSet<(Type Type, string? ServiceKey)> _registrations = [];
+    private readonly ConcurrentDictionary<object, object> _materialized = new();
+    private readonly Lock _materializationLock = new();
+    private readonly HashSet<object> _materializing = [];
+    private readonly ConditionalWeakTable<object, ContentItemIdentity> _items = [];
+    private long _generation;
+    private IServiceProvider? _services;
+
+    internal ServiceDescriptor Register<T>(string? serviceKey, Func<ContentCollection<T>> createCollection)
+        where T : class
+    {
+        if (!_registrations.Add((typeof(T), serviceKey)))
+        {
+            throw new InvalidOperationException(
+                $"A content collection of type '{typeof(T).Name}' with service key '{serviceKey ?? "(unkeyed)"}' is already registered. Use AddKeyedMarkdownContent with a different key, or project into a distinct model type per source.");
+        }
+
+        var collection = createCollection();
+        return serviceKey is null
+            ? ServiceDescriptor.Singleton(collection)
+            : ServiceDescriptor.KeyedSingleton(serviceKey, collection);
+    }
+
+    internal void Attach(IServiceProvider services)
+    {
+        _services = services;
+    }
+
+    internal void Invalidate()
+    {
+        lock (_materializationLock)
+        {
+            _generation++;
+            _materialized.Clear();
+            Dependencies.Invalidate();
+            Files.Invalidate();
+        }
+    }
+
+    internal void RegisterItem(object item, string sourceId, string id, string? digest)
+    {
+        if (item is string) { return; }
+
+        if (_items.TryGetValue(item, out var existing) && existing.Generation == _generation
+            && !(existing.SourceId == sourceId && existing.Id == id))
+        {
+            _items.AddOrUpdate(item, existing with { Shared = true });
+            return;
+        }
+
+        _items.AddOrUpdate(item, new ContentItemIdentity(sourceId, id, digest, _generation));
+    }
+
+    internal ContentItemIdentity? ResolveItem(object item)
+    {
+        if (!_items.TryGetValue(item, out var identity)) { return null; }
+        if (identity.Generation != Volatile.Read(ref _generation))
+        {
+            throw new InvalidOperationException(
+                $"Content item '{identity.Id}' belongs to a previous content snapshot. Resolve current collection items in the AddPageParameters factory for each build.");
+        }
+        return identity.Shared ? null : identity;
+    }
+
+    internal TMaterialized GetOrMaterialize<TMaterialized>(object handle, Func<IServiceProvider, TMaterialized> factory)
+        where TMaterialized : class
+    {
+        if (_materialized.TryGetValue(handle, out var existing))
+        {
+            return (TMaterialized)existing;
+        }
+
+        lock (_materializationLock)
+        {
+            return Materialize(handle, factory);
+        }
+    }
+
+    private TMaterialized Materialize<TMaterialized>(object handle, Func<IServiceProvider, TMaterialized> factory)
+        where TMaterialized : class
+    {
+        if (_materialized.TryGetValue(handle, out var existing))
+        {
+            return (TMaterialized)existing;
+        }
+
+        var services = _services
+            ?? throw new InvalidOperationException(
+                "Content cannot be materialized before the site's services have been initialized.");
+
+        if (!_materializing.Add(handle))
+        {
+            throw new InvalidOperationException(
+                "A content collection cannot be read recursively while it is being materialized. Check the collection's projection and services for circular content dependencies.");
+        }
+        try
+        {
+            var materialized = factory(services);
+            _materialized[handle] = materialized;
+            return materialized;
+        }
+        finally { _materializing.Remove(handle); }
+    }
+}

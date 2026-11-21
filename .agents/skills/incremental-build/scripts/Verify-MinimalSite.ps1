@@ -20,8 +20,6 @@ await builder.Build().RunAsync();
 $project = Join-Path $site 'Minimal.csproj'
 $original = [IO.File]::ReadAllText($project)
 try {
-# Compression is opt-in. The order adds and then retires the copies, both through a
-# command-line and a project setting; the command line wins over the project.
 foreach ($mode in @('publish', 'no-build', 'compressed', 'compressed-no-build', 'default-restored', 'project-compressed', 'global-uncompressed')) {
     $projectText = $original
     if ($mode -in @('project-compressed', 'global-uncompressed')) {
@@ -60,8 +58,6 @@ foreach ($mode in @('publish', 'no-build', 'compressed', 'compressed-no-build', 
 }
 } finally { [IO.File]::WriteAllText($project, $original) }
 
-# Keep SDK variants in separate projects: the Web SDK supplies framework assets
-# and hosting configuration in addition to Kiji's generated HTML.
 $webSite = Join-Path $RunRoot 'minimal-web-options'
 New-Item -ItemType Directory -Force $webSite | Out-Null
 Copy-Item -LiteralPath (Join-Path $site 'Program.cs'), (Join-Path $site 'Home.razor') -Destination $webSite
@@ -79,8 +75,6 @@ foreach ($mode in @('default', 'project-compressed', 'global-uncompressed')) {
     }
 }
 
-# Exercise an external linked source, then remove the site's last isolated stylesheet.
-# Neither physical source roots nor an old SDK manifest may prevent an empty site.
 try {
     [IO.File]::WriteAllText((Join-Path $RunRoot 'linked.txt'), 'linked bytes')
     [IO.File]::WriteAllText($project, $original.Replace('</Project>', '<ItemGroup><Content Include="../linked.txt" Link="wwwroot/linked.txt" CopyToPublishDirectory="PreserveNewest" /></ItemGroup></Project>'))

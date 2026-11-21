@@ -8,7 +8,6 @@ updates:
       timezone: Asia/Tokyo
     cooldown:
       default-days: 3
-    # One stalled update must not block all other packages.
     open-pull-requests-limit: 10
     groups:
       test-framework:

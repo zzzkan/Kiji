@@ -1,0 +1,256 @@
+using System.Reflection.Emit;
+using System.Reflection;
+using Kiji.Feeds;
+using Kiji.Markdown;
+using Kiji.Paths;
+using Kiji.Tests.TestSite.PageServices;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
+
+namespace Kiji.Tests;
+
+public sealed class PageServiceTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), $"kiji-services-{Guid.NewGuid():N}");
+
+    [Fact]
+    public async Task Renders_ShareWithinPage_IsolateConcurrentPages_AndDispose()
+    {
+        var probe = new ServiceProbe { Release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously) };
+        var builder = CreateBuilder(probe);
+        builder.AddPageParameters<ServicePage>(_ => [new { Key = "first" }, new { Key = "second" }]);
+        await using var app = builder.BuildSite();
+        var requests = app.CreateSnapshot().Pages;
+
+        var renders = requests.Select(request => app.RenderPageAsync(request, CancellationToken.None)).ToArray();
+        try
+        {
+            Assert.Equal(2, probe.Created.Count);
+            Assert.All(probe.Created, service => Assert.Equal(0, service.DisposeCount));
+        }
+        finally
+        {
+            probe.Release.SetResult();
+        }
+        await Task.WhenAll(renders);
+
+        probe.Release = null;
+        await app.RenderPageAsync(requests[0], CancellationToken.None);
+        Assert.Equal(3, probe.Created.Count);
+        Assert.Equal(3, probe.Created.Distinct().Count());
+        Assert.Equal(3, probe.Created.Select(service => service.Page).Distinct().Count());
+        foreach (var service in probe.Created)
+        {
+            Assert.Equal(1, service.DisposeCount);
+            Assert.Equal(1, service.Dependency.DisposeCount);
+            var places = probe.Reads.Where(read => ReferenceEquals(read.Service, service)).Select(read => read.Place);
+            Assert.Contains("page", places);
+            Assert.Contains("layout", places);
+            Assert.Contains("child", places);
+            Assert.Equal(new Uri(app.SiteInfo.BaseUrl, $"services/{service.Key}/"), service.Page.Url);
+            var pageReads = probe.PageReads.Where(read => ReferenceEquals(read.Service, service)).ToArray();
+            Assert.Equal(3, pageReads.Length);
+            Assert.All(pageReads, read => Assert.Same(service.Page, read.Page));
+        }
+        Assert.Contains("firstfirst", await renders[0], StringComparison.Ordinal);
+        Assert.Contains("secondsecond", await renders[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task FailedRender_DisposesBothAsyncAndSyncServices()
+    {
+        var probe = new ServiceProbe();
+        var builder = CreateBuilder(probe);
+        builder.AddPageParameters<ServicePage>(_ => [new { Key = "failure", Fail = true }]);
+        await using var app = builder.BuildSite();
+        var request = Assert.Single(app.CreateSnapshot().Pages);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => app.RenderPageAsync(request, CancellationToken.None));
+        var service = Assert.Single(probe.Created);
+        Assert.Equal(1, service.DisposeCount);
+        Assert.Equal(1, service.Dependency.DisposeCount);
+    }
+
+    [Theory]
+    [InlineData("duplicate")]
+    [InlineData("remove")]
+    [InlineData("replace")]
+    [InlineData("remove-site")]
+    [InlineData("duplicate-site")]
+    [InlineData("keyed")]
+    [InlineData("open-generic")]
+    [InlineData("provider")]
+    [InlineData("environment")]
+    [InlineData("lifetime")]
+    [InlineData("content")]
+    [InlineData("configuration")]
+    [InlineData("hosted-service-remove")]
+    [InlineData("hosted-service-duplicate")]
+    [InlineData("keyed-content-remove")]
+    [InlineData("keyed-content-replace")]
+    public void Build_ValidatesTheFinalManagedRegistrations(string operation)
+    {
+        var builder = CreateBuilder(new ServiceProbe());
+        builder.AddKeyedMarkdownContent<FrontMatter>("posts");
+        var services = builder.Services;
+        switch (operation)
+        {
+            case "hosted-service-remove": services.RemoveAll<IHostedService>(); break;
+            case "hosted-service-duplicate": services.Add(services.Single(descriptor => descriptor.ServiceType == typeof(IHostedService))); break;
+            case "duplicate": services.Add(services.Single(descriptor => descriptor.ServiceType == typeof(PageInfo))); break;
+            case "remove": services.RemoveAll<PageInfo>(); break;
+            case "replace": services.Replace(ServiceDescriptor.Singleton(builder.GetSiteInfo())); break;
+            case "remove-site": services.RemoveAll<SiteInfo>(); break;
+            case "duplicate-site": services.AddSingleton(builder.GetSiteInfo()); break;
+            case "keyed": services.AddKeyedSingleton("alternate", builder.GetSiteInfo()); break;
+            case "open-generic": services.AddSingleton(typeof(ContentCollection<>), typeof(ContentCollection<>)); break;
+            case "provider": services.AddSingleton<IServiceProvider>(_ => throw new NotSupportedException()); break;
+            case "lifetime": services.RemoveAll<Microsoft.Extensions.Hosting.IHostApplicationLifetime>(); break;
+            case "environment": services.Replace(ServiceDescriptor.Singleton(builder.Environment)); break;
+            case "content": services.RemoveAll<ContentCollection<object>>(); break;
+            case "configuration": services.AddSingleton<Microsoft.Extensions.Configuration.IConfiguration>(new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build()); break;
+            case "keyed-content-remove": services.Remove(services.Single(descriptor => descriptor.IsKeyedService)); break;
+            case "keyed-content-replace":
+                var keyed = services.Single(descriptor => descriptor.IsKeyedService);
+                services.Remove(keyed);
+                services.Add(ServiceDescriptor.KeyedSingleton(keyed.ServiceType, "replacement", keyed.KeyedImplementationInstance!));
+                break;
+        }
+        var exception = Assert.Throws<InvalidOperationException>(() => builder.BuildSite());
+        Assert.Contains("managed by Kiji", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Services_AreVisibleToExtensionsAndFrozenByBuild_AndFactoriesResolveSettledPaths()
+    {
+        var builder = CreateBuilder();
+        builder.Services.AddSingleton(provider => provider.GetRequiredService<ResolvedSitePaths>().OutputDirectory);
+        builder.Services.TryAddSingleton(new SiteInfo { Name = "Replacement", BaseUrl = new Uri("https://replacement.test/") });
+        await using var app = builder.BuildSite();
+        Assert.Throws<InvalidOperationException>(() => builder.Services.AddSingleton("late"));
+
+        app.CreateSnapshot();
+        Assert.Same(builder.GetSiteInfo(), app.ServiceProvider.GetRequiredService<SiteInfo>());
+        Assert.Equal(Path.Combine(_root, "dist"), app.ServiceProvider.GetRequiredService<string>());
+    }
+
+    [Fact]
+    public void MissingDependency_FailsBuild()
+    {
+        var builder = CreateBuilder();
+        builder.Services.AddScoped<object, MissingDependencyService>();
+        var exception = Assert.Throws<AggregateException>(() => builder.BuildSite());
+        Assert.Contains(nameof(MissingDependencyService), exception.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DynamicFactory_WithAStableHostModule_IsRejected()
+    {
+        var builder = CreateBuilder();
+        var method = new DynamicMethod("Create", typeof(object), [typeof(IServiceProvider)], typeof(PageServiceTests).Module);
+        var il = method.GetILGenerator();
+        il.Emit(OpCodes.Newobj, typeof(object).GetConstructor(Type.EmptyTypes)!);
+        il.Emit(OpCodes.Ret);
+        builder.Services.AddSingleton(method.CreateDelegate<Func<IServiceProvider, object>>());
+
+        var exception = Assert.Throws<NotSupportedException>(() => builder.BuildSite());
+        Assert.Contains("regular C# lambda or method", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("type")]
+    [InlineData("instance")]
+    [InlineData("factory")]
+    [InlineData("stable")]
+    public async Task ServiceCode_OnlyReusesPagesWhenItsIdentityIsAvailable(string registration)
+    {
+        var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName($"Plugin{Guid.NewGuid():N}"), AssemblyBuilderAccess.RunAndCollect);
+        var typeBuilder = assembly.DefineDynamicModule("Plugin").DefineType("PluginService", TypeAttributes.Public);
+        var constructor = typeBuilder.DefineDefaultConstructor(MethodAttributes.Public);
+        var create = typeBuilder.DefineMethod("Create", MethodAttributes.Public | MethodAttributes.Static, typeof(object), [typeof(IServiceProvider)]);
+        var il = create.GetILGenerator();
+        il.Emit(OpCodes.Newobj, constructor);
+        il.Emit(OpCodes.Ret);
+        var type = typeBuilder.CreateType()!;
+        var probe = new ServiceProbe();
+        var builder = CreateBuilder(probe);
+        builder.AddPageParameters<ServicePage>(_ => [new { Key = "test" }]);
+        switch (registration)
+        {
+            case "type": builder.Services.Add(new ServiceDescriptor(typeof(object), type, ServiceLifetime.Singleton)); break;
+            case "instance": builder.Services.AddSingleton(Activator.CreateInstance(type)!); break;
+            case "factory": builder.Services.AddSingleton(type.GetMethod("Create")!.CreateDelegate<Func<IServiceProvider, object>>()); break;
+        }
+        await using var app = builder.BuildSite();
+        var output = Path.Combine(_root, "dist");
+        await app.PublishAsync(output);
+        Assert.Single(probe.Created);
+        var original = await File.ReadAllTextAsync(Path.Combine(output, "services/test/index.html"));
+        await app.PublishAsync(output);
+        Assert.Equal(registration == "stable" ? 1 : 2, probe.Created.Count);
+        Assert.Equal(original, await File.ReadAllTextAsync(Path.Combine(output, "services/test/index.html")));
+    }
+
+    [Theory]
+    [InlineData("route")]
+    [InlineData("feed")]
+    [InlineData("artifact")]
+    public async Task PageServices_CannotBeResolvedOutsidePage(string consumer)
+    {
+        var builder = CreateBuilder();
+        builder.Services.AddScoped<IDisposable, RenderDependency>();
+        switch (consumer)
+        {
+            case "route":
+                builder.AddPageParameters<ServicePage>(provider =>
+                {
+                    _ = provider.GetRequiredService<IDisposable>();
+                    return [new { Key = "test" }];
+                });
+                break;
+            case "feed":
+                builder.AddRssFeed(provider =>
+                {
+                    _ = provider.GetRequiredService<IDisposable>();
+                    return [];
+                });
+                break;
+            case "artifact":
+                builder.AddArtifact("service.txt", static (_, context, _) =>
+                {
+                    _ = context.Services.GetRequiredService<IDisposable>();
+                    return Task.CompletedTask;
+                });
+                break;
+        }
+        await using var app = builder.BuildSite();
+        var exception = await Assert.ThrowsAnyAsync<Exception>(() => app.PublishAsync(Path.Combine(_root, "dist")));
+        Assert.Contains("scoped service", exception.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(nameof(IDisposable), exception.ToString(), StringComparison.Ordinal);
+    }
+
+    private HostApplicationBuilder CreateBuilder(ServiceProbe? probe = null)
+    {
+        var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root));
+        builder.UseSiteInfo(new SiteInfo { Name = "Services", BaseUrl = new Uri("https://example.test/") });
+        if (probe is not null)
+        {
+            builder.Services.AddSingleton(probe);
+            builder.RegisterContent<object>(_ => []);
+            builder.Services.AddScoped<RenderDependency>();
+            builder.Services.AddScoped<IRenderService>(provider => new RenderService(
+                provider.GetRequiredService<ServiceProbe>(),
+                provider.GetRequiredService<RenderDependency>(), provider.GetRequiredService<PageInfo>()));
+            builder.UseDefaultLayout<ServiceLayout>();
+        }
+        return builder;
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_root))
+        {
+            Directory.Delete(_root, recursive: true);
+        }
+    }
+}

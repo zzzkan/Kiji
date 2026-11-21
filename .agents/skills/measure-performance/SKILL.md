@@ -13,9 +13,9 @@ description: Measure Kiji build performance and validate an optimization. Use wh
   binaries in interleaved runs. Its absolute times are not comparable with BDN.
 
 ```pwsh
-dotnet run -c Release --project src/Kiji.Benchmarks -- --filter "*SiteBuildBenchmarks*"
-dotnet run -c Release --project src/Kiji.Benchmarks -- --filter "*Markdown*"
-dotnet run -c Release --project src/Kiji.SyntheticSite -- --pages 1000 --runs 5 --full --phases --root <dir> --out <json>
+dotnet run -c Release --project benchmarks/Kiji.Benchmarks -- --filter "*SiteBuildBenchmarks*"
+dotnet run -c Release --project benchmarks/Kiji.Benchmarks -- --filter "*Markdown*"
+dotnet run -c Release --project benchmarks/Kiji.SyntheticSite -- --pages 1000 --runs 5 --full --phases --root <dir> --out <json>
 ```
 
 ImageProcessingBenchmarks covers shared/distinct images, cold/warm output and
@@ -50,13 +50,13 @@ Do not normalize output differences unless the task explicitly permits them.
 
 ## Measure the cold publish process
 
-`scripts/measure_cold_publish.py --baseline <revision> --work <new directory>` does all of
-this on any platform: it packs the baseline revision and the working tree, publishes the
+`dotnet pwsh scripts/Measure-ColdPublish.ps1 -Baseline <revision> -Work <new directory>` does
+all of this on any platform: it packs the baseline revision and the working tree, publishes the
 frozen site against each package, alternates the two consumers through four scenarios and
 checks after every round that their output is identical and that each one-edited round
-changes it. `--phases` adds a startup hook that reports each
+changes it. `-Phases` adds a startup hook that reports each
 generation's build phases, the time before the first and after the last, and the JIT time and
-compiled-method count; use it to attribute a platform's time, not for headline numbers, since
+compiled-method count, and fails if no phase is reported; use it to attribute a platform's time, not for headline numbers, since
 the hook itself adds time to both sides. Push a branch with a temporary CI step to measure on
 Windows and macOS runners. By hand, publish a consumer of each saved package once,
 then time the command `KijiGenerateSite` executes, alternating the two consumers:

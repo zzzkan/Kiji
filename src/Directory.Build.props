@@ -1,0 +1,13 @@
+<Project>
+  <Import Project="../Directory.Build.props" />
+
+  <PropertyGroup Condition="'$(MSBuildProjectName)' != 'Kiji.Runtime'">
+    <KijiPublicApi>true</KijiPublicApi>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(KijiPublicApi)' == 'true'">
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" />
+  </ItemGroup>
+</Project>

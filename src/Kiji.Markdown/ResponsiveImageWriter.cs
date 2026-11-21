@@ -1,0 +1,146 @@
+using System.Globalization;
+using Markdig.Renderers;
+using Markdig.Renderers.Html;
+using Markdig.Renderers.Html.Inlines;
+using Markdig.Syntax.Inlines;
+
+namespace Kiji.Markdown;
+
+internal sealed class ResponsiveImageWriter
+{
+    internal ResponsiveImageContext? Context { get; set; }
+
+    internal ResponsiveImageWriter(HtmlRenderer renderer)
+    {
+        var linkRenderer = renderer.ObjectRenderers.FindExact<LinkInlineRenderer>();
+        linkRenderer?.TryWriters.Add((r, link) => TryWriteResponsiveImage(r, link, Context));
+    }
+
+    private static bool TryWriteResponsiveImage(HtmlRenderer renderer, LinkInline link, ResponsiveImageContext? context)
+    {
+        if (context is null || !link.IsImage || !renderer.EnableHtmlForInline)
+        {
+            return false;
+        }
+
+        var url = link.Url ?? string.Empty;
+        var title = link.Title ?? string.Empty;
+
+        if (LocalImageUrl.IsLocalImage(url))
+        {
+            WriteResponsiveImage(renderer, context, link, url, title);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static void WriteResponsiveImage(HtmlRenderer renderer, ResponsiveImageContext context, LinkInline link, string url, string title)
+    {
+        var isLazy = context.ImageCount++ > 0;
+        var referenceKey = ImageReferenceKey.FromMarkdownUrl(url);
+        var attributes = link.TryGetAttributes();
+        if (TryGetAttribute(attributes, "loading", out var loading))
+        {
+            isLazy = string.Equals(loading, "lazy", StringComparison.OrdinalIgnoreCase);
+        }
+
+        renderer.Write("<img");
+        if (context.ImageInfoLookup.TryGetValue(referenceKey, out var imageInfo) && imageInfo.Variants.Count > 0)
+        {
+            var publicDirectory = context.BasePath;
+            var variants = imageInfo.Variants;
+            var largest = variants[^1];
+            var width = TryGetAttribute(attributes, "width", out var explicitWidth)
+                ? explicitWidth
+                : GetDimension(attributes, "height", imageInfo.OriginalWidth, imageInfo.OriginalHeight);
+
+            var srcset = string.Join(", ", variants.Select(variant => $"{CreateVariantUrl(publicDirectory, variant.FileName)} {variant.Width}w"));
+            var displayWidth = ParseDimension(width);
+            if (displayWidth == 0) { displayWidth = largest.Width; }
+            var sizes = FormattableString.Invariant($"(max-width: {displayWidth}px) 100vw, {displayWidth}px");
+            if (isLazy) { sizes = "auto, " + sizes; }
+
+            WriteAttribute(renderer, attributes, "src", CreateVariantUrl(publicDirectory, largest.FileName), escapeUrl: true);
+            WriteAttribute(renderer, attributes, "srcset", srcset);
+            WriteAttribute(renderer, attributes, "sizes", sizes);
+            WriteAttribute(renderer, attributes, "width", width);
+            WriteAttribute(renderer, attributes, "height", GetDimension(attributes, "width", imageInfo.OriginalHeight, imageInfo.OriginalWidth));
+        }
+        else
+        {
+            WriteAttribute(renderer, attributes, "src", url, escapeUrl: true);
+        }
+
+        if (!TryGetAttribute(attributes, "alt", out _))
+        {
+            renderer.Write(" alt=\"");
+            WriteAltText(renderer, link);
+            renderer.Write('"');
+        }
+        WriteAttribute(renderer, attributes, "loading", isLazy ? "lazy" : "eager");
+        WriteAttribute(renderer, attributes, "decoding", "async");
+        if (!string.IsNullOrEmpty(title)) { WriteAttribute(renderer, attributes, "title", title); }
+        renderer.WriteAttributes(link);
+        renderer.Write(">");
+    }
+
+    private static string CreateVariantUrl(string publicDirectory, string fileName)
+    {
+        return publicDirectory + EncodeRelativePath(fileName);
+    }
+
+    private static string EncodeRelativePath(string path)
+    {
+        return string.Join('/', path.Split('/').Select(Uri.EscapeDataString));
+    }
+
+    private static bool TryGetAttribute(HtmlAttributes? attributes, string name, out string? value)
+    {
+        if (attributes?.Properties is { } properties)
+        {
+            foreach (var property in properties)
+            {
+                if (string.Equals(property.Key, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = property.Value;
+                    return true;
+                }
+            }
+        }
+        value = null;
+        return false;
+    }
+
+    private static int ParseDimension(string? value)
+        => int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var dimension) && dimension > 0 ? dimension : 0;
+
+    private static string? GetDimension(HtmlAttributes? attributes, string otherName, int original, int otherOriginal)
+    {
+        if (!TryGetAttribute(attributes, otherName, out var value)) { return original.ToString(CultureInfo.InvariantCulture); }
+        var other = ParseDimension(value);
+        if (other == 0) { return null; }
+
+        return Math.Max(1, ((long)original * other + otherOriginal / 2) / otherOriginal).ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static void WriteAttribute(HtmlRenderer renderer, HtmlAttributes? attributes, string name, string? value, bool escapeUrl = false)
+    {
+        if (value is null || TryGetAttribute(attributes, name, out _)) { return; }
+        renderer.Write(' ').Write(name).Write("=\"");
+        if (escapeUrl) { renderer.WriteEscapeUrl(value); }
+        else { renderer.WriteEscape(value); }
+        renderer.Write('"');
+    }
+
+    private static void WriteAltText(HtmlRenderer renderer, LinkInline link)
+    {
+        var enabled = renderer.EnableHtmlForInline;
+        renderer.EnableHtmlForInline = false;
+        try
+        {
+            renderer.WriteChildren(link);
+        }
+        finally { renderer.EnableHtmlForInline = enabled; }
+    }
+}

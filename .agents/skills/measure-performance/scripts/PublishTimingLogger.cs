@@ -3,9 +3,6 @@ using Microsoft.Build.Framework;
 
 namespace Kiji.Performance;
 
-// A measurement-only logger. Compiled into the run's artifacts directory, never
-// referenced by Kiji or shipped in its package. Event timestamps include inline
-// MSBuild item operations that task-only performance summaries miss.
 public sealed class PublishTimingLogger : ILogger
 {
     private readonly object gate = new();
@@ -86,8 +83,6 @@ public sealed class PublishTimingLogger : ILogger
                 .Where(s => s.Class.Category.Length != 0 && s.Span.End > s.Span.Start).ToArray();
             var boundaries = classified.SelectMany(s => new[] { s.Span.Start, s.Span.End }).Distinct().Order().ToArray();
             var exclusive = new Dictionary<string, double>();
-            // Every segment is assigned once. More specific task work takes priority
-            // over a surrounding target, so parent and child durations never add up.
             for (var i = 1; i < boundaries.Length; i++)
             {
                 var a = boundaries[i - 1];

@@ -1,0 +1,153 @@
+<Project>
+
+  <ItemGroup Condition="'$(KijiExample)' != 'true' and '$(MSBuildProjectName)' != 'Kiji.Analyzers' and '$(MSBuildProjectName)' != 'Kiji.Runtime'">
+    <AdditionalFiles Include="$(MSBuildProjectFullPath);**/*.props;**/*.targets;**/*.css;**/*.js;**/*.mjs;**/*.cs"
+                     Exclude="@(Compile);@(AdditionalFiles);bin/**;obj/**;dist/**;.kiji/**" />
+    <AdditionalFiles Include="**/*.razor;**/*.csproj" Exclude="@(AdditionalFiles);bin/**;obj/**;dist/**;.kiji/**"
+                     Condition="'$(UsingMicrosoftNETSdkRazor)' != 'true'" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Kiji'">
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)Directory.Build.props;$(MSBuildThisFileDirectory)Directory.Build.targets;$(MSBuildThisFileDirectory)Directory.Packages.props;$(MSBuildThisFileDirectory)src/Directory.Build.props;$(MSBuildThisFileDirectory)tests/Directory.Build.props" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory).editorconfig;$(MSBuildThisFileDirectory).gitignore" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory).github/**/*.yml" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory).agents/**/*.ps1;$(MSBuildThisFileDirectory).agents/**/*.mjs;$(MSBuildThisFileDirectory).agents/**/*.cs" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)tools/Kiji.Analyzers/**/*.cs;$(MSBuildThisFileDirectory)tools/Kiji.Analyzers/*.csproj;$(MSBuildThisFileDirectory)src/Kiji.Runtime/*.csproj"
+                     Exclude="$(MSBuildThisFileDirectory)tools/Kiji.Analyzers/obj/**;$(MSBuildThisFileDirectory)tools/Kiji.Analyzers/bin/**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <KijiProject Include="Kiji.Core" Path="src/Kiji.Core" Packed="true" />
+    <KijiProject Include="Kiji.Hosting" Path="src/Kiji.Hosting" Packed="true" References="Kiji.Core" />
+    <KijiProject Include="Kiji.Markdown" Path="src/Kiji.Markdown" Packed="true" References="Kiji.Core" Packages="Markdig;YamlDotNet" />
+    <KijiProject Include="Kiji.Images.Skia" Path="src/Kiji.Images.Skia" Packed="true" References="Kiji.Core" Packages="SkiaSharp" />
+    <KijiProject Include="Kiji.Feeds" Path="src/Kiji.Feeds" Packed="true" References="Kiji.Core" />
+    <KijiProject Include="Kiji.Sitemaps" Path="src/Kiji.Sitemaps" Packed="true" References="Kiji.Core" />
+    <KijiProject Include="Kiji" Path="src/Kiji" SeesInternals="true" Packages="SkiaSharp.NativeAssets.Linux.NoDependencies" />
+    <KijiProject Include="Kiji.Runtime" Path="src/Kiji.Runtime" />
+    <KijiProject Include="Kiji.Testing" Path="tests/Kiji.Testing" References="Kiji.Core" />
+    <KijiProject Include="Kiji.Core.Tests" Path="tests/Kiji.Core.Tests" References="Kiji.Core;Kiji.Testing" />
+    <KijiProject Include="Kiji.Hosting.Tests" Path="tests/Kiji.Hosting.Tests" References="Kiji.Core;Kiji.Hosting;Kiji.Testing" />
+    <KijiProject Include="Kiji.Markdown.Tests" Path="tests/Kiji.Markdown.Tests" References="Kiji.Core;Kiji.Markdown;Kiji.Testing" />
+    <KijiProject Include="Kiji.Images.Skia.Tests" Path="tests/Kiji.Images.Skia.Tests" References="Kiji.Core;Kiji.Images.Skia;Kiji.Testing" />
+    <KijiProject Include="Kiji.Feeds.Tests" Path="tests/Kiji.Feeds.Tests" References="Kiji.Core;Kiji.Feeds" />
+    <KijiProject Include="Kiji.Sitemaps.Tests" Path="tests/Kiji.Sitemaps.Tests" References="Kiji.Core;Kiji.Sitemaps" />
+    <KijiProject Include="Kiji.Analyzers.Tests" Path="tests/Kiji.Analyzers.Tests" References="Kiji.Analyzers" />
+    <KijiProject Include="Kiji.Tests" Path="tests/Kiji.Tests" References="Kiji;Kiji.Testing" SeesInternals="true" />
+    <KijiProject Include="Kiji.PackageTests" Path="tests/Kiji.PackageTests" References="Kiji" />
+    <KijiProject Include="Kiji.RepositoryTests" Path="tests/Kiji.RepositoryTests" />
+    <KijiProject Include="Kiji.SyntheticSite" Path="benchmarks/Kiji.SyntheticSite" References="Kiji" SeesInternals="true" />
+    <KijiProject Include="Kiji.Benchmarks" Path="benchmarks/Kiji.Benchmarks" References="Kiji;Kiji.SyntheticSite" SeesInternals="true" />
+    <KijiProject Include="Kiji.Analyzers" Path="tools/Kiji.Analyzers" />
+    <KijiInfrastructurePackage Include="MinVer;Microsoft.CodeAnalysis.BannedApiAnalyzers;ReferenceTrimmer" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Kiji'">
+    <_KijiPackedPackage Include="@(KijiProject->WithMetadataValue('Packed', 'true')->Metadata('Packages'))" />
+    <PackageReference Include="@(_KijiPackedPackage->Distinct())" KijiPackedDependency="true" TreatAsUsed="true" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <_KijiReferenceToKiji Include="@(ProjectReference->WithMetadataValue('Filename', 'Kiji')->WithoutMetadataValue('ReferenceOutputAssembly', 'false'))" />
+    <ProjectReference Include="@(KijiProject->WithMetadataValue('Packed', 'true')->'$(MSBuildThisFileDirectory)%(Path)/%(Identity).csproj')"
+                      Condition="'@(_KijiReferenceToKiji)' != ''" KijiPackedInKiji="true" TreatAsUsed="true" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Kiji'">
+    <KijiScriptException Include="$(MSBuildThisFileDirectory).agents/skills/verify-site/scripts/screenshot.mjs"
+                         Reason="Node's Playwright drives the preinstalled browser; Playwright for .NET would download another." />
+  </ItemGroup>
+
+  <Target Name="KijiRequirePowerShellScripts" BeforeTargets="CoreCompile" Condition="'$(MSBuildProjectName)' == 'Kiji'">
+    <ItemGroup>
+      <_KijiScriptRoot Include="$(MSBuildThisFileDirectory)*;$(MSBuildThisFileDirectory).agents/**/*;$(MSBuildThisFileDirectory).github/**/*;$(MSBuildThisFileDirectory)tools/**/*"
+                       Exclude="$(MSBuildThisFileDirectory)tools/**/bin/**;$(MSBuildThisFileDirectory)tools/**/obj/**" />
+      <_KijiForeignScript Include="@(_KijiScriptRoot)" Exclude="@(KijiScriptException)"
+                          Condition="'%(Extension)' == '.py' or '%(Extension)' == '.sh' or '%(Extension)' == '.bash' or '%(Extension)' == '.js' or '%(Extension)' == '.mjs' or '%(Extension)' == '.rb' or '%(Extension)' == '.bat' or '%(Extension)' == '.cmd'" />
+    </ItemGroup>
+    <Error Condition="'@(_KijiForeignScript)' != ''" Code="KR0009" File="%(_KijiForeignScript.Identity)"
+           Text="Write repository scripts in PowerShell (run with dotnet pwsh) or C#, not %(_KijiForeignScript.Extension). If another language has a real advantage, add a KijiScriptException with its Reason in Directory.Build.targets." />
+  </Target>
+
+  <Target Name="KijiResolveProjectGraph" BeforeTargets="GenerateMSBuildEditorConfigFileShouldRun">
+    <ItemGroup>
+      <_KijiThisProject Include="@(KijiProject->WithMetadataValue('Identity', '$(MSBuildProjectName)'))" />
+    </ItemGroup>
+    <PropertyGroup>
+      <KijiProjectDirectory>@(_KijiThisProject->'%(Path)')</KijiProjectDirectory>
+      <KijiAllowedProjectReferences>@(_KijiThisProject->'%(References)')</KijiAllowedProjectReferences>
+      <KijiAllowedProjectReferences Condition="'$(MSBuildProjectName)' == 'Kiji'">@(KijiProject->WithMetadataValue('Packed', 'true'))</KijiAllowedProjectReferences>
+      <KijiAllowedPackages>@(_KijiThisProject->'%(Packages)')</KijiAllowedPackages>
+      <KijiPacked>@(_KijiThisProject->'%(Packed)')</KijiPacked>
+      <KijiPackedProjects>@(KijiProject->WithMetadataValue('Packed', 'true'), ',')</KijiPackedProjects>
+      <KijiPackageProject>Kiji</KijiPackageProject>
+    </PropertyGroup>
+  </Target>
+
+  <Target Name="KijiCheckProjectPlacement" Condition="'$(KijiExample)' != 'true'" BeforeTargets="CollectPackageReferences;ResolveProjectReferences" DependsOnTargets="KijiResolveProjectGraph">
+    <Error Condition="'$(KijiProjectDirectory)' == ''" Code="KR0003"
+           Text="$(MSBuildProjectName) is not in the project graph. Add a KijiProject item for it in Directory.Build.targets, under src/ (library code packed into Kiji), tests/, benchmarks/ or tools/, as a reviewed design change. A usage example goes under docs/, which sets KijiExample and is outside these checks." />
+    <Error Condition="'$(KijiProjectDirectory)' != '' and '$([MSBuild]::NormalizeDirectory($(MSBuildProjectDirectory)))' != '$([MSBuild]::NormalizeDirectory($(MSBuildThisFileDirectory), $(KijiProjectDirectory)))'" Code="KR0003"
+           Text="$(MSBuildProjectName) must live in $(KijiProjectDirectory)/, as its KijiProject item in Directory.Build.targets says." />
+    <Error Condition="$(KijiProjectDirectory.StartsWith('src/')) and '$(MSBuildProjectName)' != 'Kiji' and '$(MSBuildProjectName)' != 'Kiji.Runtime' and '$(KijiPacked)' != 'true'" Code="KR0003"
+           Text="$(MSBuildProjectName) is under src/, which holds only what Kiji's package ships. Mark its KijiProject item Packed=&quot;true&quot;, or move it to tests/, benchmarks/ or tools/." />
+  </Target>
+
+  <Target Name="KijiCheckProjectReferences" Condition="'$(KijiExample)' != 'true'" BeforeTargets="ResolveProjectReferences" DependsOnTargets="KijiCheckProjectPlacement">
+    <ItemGroup>
+      <_KijiProjectReference Include="@(ProjectReference->'%(Filename)')" Condition="'%(ProjectReference.OutputItemType)' != 'Analyzer' and '%(ProjectReference.KijiPackedInKiji)' != 'true'" />
+      <_KijiAllowedProjectReference Include="$(KijiAllowedProjectReferences)" />
+      <_KijiForbiddenProjectReference Include="@(_KijiProjectReference)" Exclude="@(_KijiAllowedProjectReference)" />
+      <_KijiPackageTestsCompileReference Include="@(ProjectReference)"
+                                         Condition="'$(MSBuildProjectName)' == 'Kiji.PackageTests' and '%(ProjectReference.OutputItemType)' != 'Analyzer' and '%(ProjectReference.ReferenceOutputAssembly)' != 'false'" />
+    </ItemGroup>
+    <Error Condition="'@(_KijiForbiddenProjectReference)' != ''"
+           Code="KR0003"
+           Text="$(MSBuildProjectName) may not reference @(_KijiForbiddenProjectReference). Allowed: '$(KijiAllowedProjectReferences)'. Remove the reference, or change the KijiProject graph in Directory.Build.targets as a reviewed design change." />
+    <Error Condition="'@(_KijiPackageTestsCompileReference)' != ''"
+           Code="KR0003"
+           Text="Kiji.PackageTests tests the packed package as a black box. Keep ReferenceOutputAssembly=&quot;false&quot; on its reference to @(_KijiPackageTestsCompileReference->'%(Filename)'); it only orders the build." />
+  </Target>
+
+  <Target Name="KijiCheckPackageReferences" Condition="'$(KijiPublicApi)' == 'true'" BeforeTargets="CollectPackageReferences" DependsOnTargets="KijiCheckProjectPlacement">
+    <ItemGroup>
+      <_KijiAllowedPackage Include="$(KijiAllowedPackages);@(KijiInfrastructurePackage)" />
+      <_KijiForbiddenPackage Include="@(PackageReference)" Exclude="@(_KijiAllowedPackage)"
+                             Condition="'%(PackageReference.IsImplicitlyDefined)' != 'true' and '%(PackageReference.KijiPackedDependency)' != 'true'" />
+    </ItemGroup>
+    <Error Condition="'@(_KijiForbiddenPackage)' != ''" Code="KR0006"
+           Text="$(MSBuildProjectName) may not reference the package @(_KijiForbiddenPackage). Allowed: '$(KijiAllowedPackages)'. Remove the reference, or add the package to the project's KijiProject item in Directory.Build.targets as a reviewed design change. Library dependencies belong to the one src project that uses them; Kiji's package dependencies follow from them." />
+  </Target>
+
+  <Target Name="KijiAddInternalsVisibleTo" BeforeTargets="GetAssemblyAttributes">
+    <ItemGroup>
+      <_KijiFriend Include="@(KijiProject)"
+                   Condition="('%(KijiProject.SeesInternals)' == 'true' and '$(KijiPublicApi)' == 'true') or $([System.String]::Copy(';%(KijiProject.References);').Contains(';$(MSBuildProjectName);'))" />
+    </ItemGroup>
+    <PropertyGroup>
+      <_KijiFriends>@(_KijiFriend)</_KijiFriends>
+    </PropertyGroup>
+    <ItemGroup>
+      <_KijiFriendName Include="$(_KijiFriends)" />
+      <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute" Condition="'@(_KijiFriendName)' != ''">
+        <_Parameter1>%(_KijiFriendName.Identity)</_Parameter1>
+      </AssemblyAttribute>
+    </ItemGroup>
+  </Target>
+
+  <Target Name="KijiRequireHandWrittenComponents" BeforeTargets="CoreCompile"
+          Condition="'$(KijiPublicApi)' == 'true' or $(MSBuildProjectName.EndsWith('.Tests')) or '$(MSBuildProjectName)' == 'Kiji.Testing'">
+    <ItemGroup>
+      <_KijiRazorFile Include="$(MSBuildProjectDirectory)/**/*.razor;$(MSBuildProjectDirectory)/**/*.cshtml"
+                      Exclude="$(MSBuildProjectDirectory)/bin/**;$(MSBuildProjectDirectory)/obj/**" />
+    </ItemGroup>
+    <Error Condition="'$(UsingMicrosoftNETSdkRazor)' == 'true'"
+           Code="KR0002"
+           Text="$(MSBuildProjectName) builds with Microsoft.NET.Sdk, not the Razor SDK. Write components as ComponentBase classes that override BuildRenderTree, as in src/Kiji.Core/Components." />
+    <Error Condition="'@(_KijiRazorFile)' != ''"
+           Code="KR0002"
+           File="%(_KijiRazorFile.Identity)"
+           Text="$(MSBuildProjectName) does not use Razor files. Rewrite %(_KijiRazorFile.Filename)%(_KijiRazorFile.Extension) as a ComponentBase class that overrides BuildRenderTree, as in src/Kiji.Core/Components." />
+  </Target>
+
+</Project>

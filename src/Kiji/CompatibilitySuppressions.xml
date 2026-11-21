@@ -248,4 +248,26 @@
     <Right>lib/net10.0/Kiji.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
+  <!-- The image API moved from Kiji.Assets to Kiji.Images. -->
+  <Suppression>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:Kiji.Assets.IImageProcessor</Target>
+    <Left>lib/net10.0/Kiji.dll</Left>
+    <Right>lib/net10.0/Kiji.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:Kiji.Assets.ImageVariant</Target>
+    <Left>lib/net10.0/Kiji.dll</Left>
+    <Right>lib/net10.0/Kiji.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:Kiji.Assets.ProcessedImageInfo</Target>
+    <Left>lib/net10.0/Kiji.dll</Left>
+    <Right>lib/net10.0/Kiji.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
 </Suppressions>

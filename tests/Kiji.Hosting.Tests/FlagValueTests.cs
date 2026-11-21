@@ -1,0 +1,17 @@
+using Xunit;
+
+namespace Kiji.Hosting.Tests;
+
+public sealed class FlagValueTests
+{
+    [Theory]
+    [InlineData("1", true)]
+    [InlineData("TrUe", true)]
+    [InlineData(null, false)]
+    [InlineData("false", false)]
+    [InlineData(" true ", false)]
+    public void BuildFlags_AcceptOnlyExplicitTruthyValues(string? value, bool expected)
+    {
+        Assert.Equal(expected, FlagValue.IsTruthy(value));
+    }
+}

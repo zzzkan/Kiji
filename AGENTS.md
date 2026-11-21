@@ -33,9 +33,10 @@ below once a check covers them.
 | Warnings and recommended .NET analyzers fail the build | `Directory.Build.props` (`TreatWarningsAsErrors`, `AnalysisLevel`, `EnforceCodeStyleInBuild`) |
 | File-scoped namespaces | `.editorconfig` IDE0160 at `error` |
 | A namespace matches its folder | `.editorconfig` IDE0130 at `error` |
-| A namespace is declared in one `src` library project (a project may declare several); the package project adds only its entry point to `Kiji` | `Kiji.Analyzers` KR0008 |
+| A namespace is declared in one `src` library project (a project may declare several); the package project adds only `StaticSite` to `Kiji` | `Kiji.Analyzers` KR0008 |
 | Internal namespaces depend in one direction; public types are exempt | `Kiji.Analyzers` KR0007 |
 | Public API stays compatible, except listed breaks | Package validation against 0.1.0, `src/Kiji/CompatibilitySuppressions.xml` |
+| Consumers use the matching ReadyToRun image for every packaged library assembly | `PackageScenarios.Publish_UsesSdkDefaultDestination` |
 | ReadyToRun images have third-party notices | Pack error in `src/Kiji/Kiji.csproj` |
 | Incremental output equals a clean build | `IncrementalBuildTests` |
 | The package works through the SDK in a real consumer | `Kiji.PackageTests` in CI |

@@ -17,13 +17,13 @@ function Get-StartTime([System.Diagnostics.Process] $process) { $process.StartTi
 
 function Get-OwnedProcess {
     if (-not (Test-Path -LiteralPath $record)) { return $null }
-    $saved = Get-Content -Raw -LiteralPath $record | ConvertFrom-Json
+    $saved = Get-Content -Raw -LiteralPath $record | ConvertFrom-Json -DateKind Utc
     $process = Get-Process -Id $saved.Id -ErrorAction SilentlyContinue
     if ($null -eq $process) {
         Remove-Item -LiteralPath $record
         return $null
     }
-    if ([Math]::Abs(((Get-StartTime $process) - [DateTime]::Parse($saved.StartTime).ToUniversalTime()).TotalSeconds) -ge 1) {
+    if ([Math]::Abs(((Get-StartTime $process) - $saved.StartTime).TotalSeconds) -ge 1) {
         Write-Warning "Process $($saved.Id) started after this dev server; it is not ours. Forgetting $state."
         Remove-Item -LiteralPath $record
         return $null
@@ -82,7 +82,10 @@ switch ($Command) {
             return
         }
         $process.Kill($true)
-        $process.WaitForExit()
+        if (-not $process.WaitForExit(5000)) {
+            $isZombie = $IsLinux -and ((Get-Content -Raw -LiteralPath "/proc/$($process.Id)/stat" -ErrorAction SilentlyContinue) -match '\) Z ')
+            if (-not $isZombie -and -not $process.HasExited) { throw "Process $($process.Id) did not stop." }
+        }
         Remove-Item -LiteralPath $record
         Write-Output "stopped process $($process.Id)"
     }

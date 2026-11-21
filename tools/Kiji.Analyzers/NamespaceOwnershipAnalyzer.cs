@@ -50,7 +50,7 @@ public sealed class NamespaceOwnershipAnalyzer : DiagnosticAnalyzer
         var type = (INamedTypeSymbol)context.Symbol;
         if (type.ContainingType is not null || type.IsImplicitlyDeclared || type.ContainingNamespace.IsGlobalNamespace) { return; }
         var name = type.ContainingNamespace.ToDisplayString();
-        if (name == entryNamespace) { return; }
+        if (name == entryNamespace && type.MetadataName == "StaticSite") { return; }
         foreach (var library in libraries.Where(library => library.Namespaces.Contains(name)))
         {
             foreach (var location in type.Locations.Where(static location => location.IsInSource))

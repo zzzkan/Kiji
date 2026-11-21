@@ -62,6 +62,7 @@ below once a check covers them.
 | Library tests never mutate process-wide state | `tests/BannedSymbols.txt` (RS0030) in every `*.Tests` project and `Kiji.Testing` |
 | Every project is in the graph and lives at its path under `src`, `tests`, `benchmarks` or `tools` | `KijiProject` items in `Directory.Build.targets`, KR0003 |
 | `docs` is a usage example, built like an author's site: none of the rules above apply to it | `KijiExample` in `docs/Directory.Build.props` |
+| Repository scripts are PowerShell or C#; another language needs a stated advantage | KR0009 in `Directory.Build.targets` (`KijiScriptException` with `Reason`) |
 | Projects reference only the projects the graph allows (library layers point toward `Kiji.Core`; each library's tests reference that library, its dependencies and `Kiji.Testing`); `Kiji.PackageTests` stays black-box | `Directory.Build.targets` KR0003 |
 | Packages are referenced only by the projects the graph allows (Markdig and YamlDotNet in `Kiji.Markdown`, SkiaSharp in `Kiji.Images.Skia`) | `Directory.Build.targets` KR0006 |
 | No unused project or package references | ReferenceTrimmer (RT0001-RT0003) in every project, from `Directory.Build.props` |
@@ -76,6 +77,8 @@ below once a check covers them.
 
 - `dotnet build -c Release` and `dotnet test -c Release` cover the whole solution.
   Pass no extra flags to test: unsupported flags reach Microsoft.Testing.Platform.
+- Scripts are PowerShell: `dotnet tool restore` once, then `dotnet pwsh <script>.ps1` (the version
+  is pinned in `dotnet-tools.json`). CI steps use `shell: pwsh`.
 - `dotnet publish docs -c Release -o docs/dist` generates docs;
   `dotnet watch --project docs` serves it. Docs is a usage example, not Kiji's code: it
   references the local Kiji project, imports its publish targets, and is outside the
@@ -113,7 +116,7 @@ below once a check covers them.
 - `benchmarks/Kiji.SyntheticSite` is the frozen end-to-end workload; `benchmarks/Kiji.Benchmarks`
   contains BenchmarkDotNet measurements.
 - Stop any verification server/watch process before completion. Stop only processes
-  started by the current task (`verify-site`'s `dev-server.sh stop` does this).
+  started by the current task (`verify-site`'s `dev-server.ps1 stop` does this).
 
 ## Design
 

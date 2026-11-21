@@ -41,11 +41,15 @@ jobs:
         run: dotnet test -c Release
 
       - name: Library tests
-        shell: bash
+        shell: pwsh
         run: |
-          for project in tests/*.Tests; do
-            (cd "$project" && dotnet test -c Release) || exit 1
-          done
+          foreach ($project in Get-ChildItem tests -Directory -Filter '*.Tests') {
+            Push-Location $project.FullName
+            dotnet test -c Release
+            $code = $LASTEXITCODE
+            Pop-Location
+            if ($code) { exit $code }
+          }
 
       - name: Pack
         shell: pwsh
@@ -61,16 +65,20 @@ jobs:
       - name: Package scenarios
         timeout-minutes: 10
         working-directory: tests/Kiji.PackageTests
-        shell: bash
+        shell: pwsh
         env:
           KIJI_TEST_TRACE: ${{ runner.temp }}/package-scenarios.log
         run: |
-          : > "$KIJI_TEST_TRACE"
-          tail -f "$KIJI_TEST_TRACE" &
-          code=0
-          dotnet test -c Release || code=$?
-          kill $!
-          exit $code
+          New-Item -ItemType File -Force $env:KIJI_TEST_TRACE | Out-Null
+          $test = Start-Process dotnet -ArgumentList 'test', '-c', 'Release' -NoNewWindow -PassThru
+          $null = $test.Handle
+          $trace = [IO.StreamReader]::new([IO.FileStream]::new($env:KIJI_TEST_TRACE, 'Open', 'Read', 'ReadWrite'))
+          while (-not $test.HasExited) {
+            while ($null -ne ($line = $trace.ReadLine())) { $line }
+            Start-Sleep -Milliseconds 500
+          }
+          while ($null -ne ($line = $trace.ReadLine())) { $line }
+          exit $test.ExitCode
 
       - name: Build docs
         if: matrix.os == 'ubuntu-latest'

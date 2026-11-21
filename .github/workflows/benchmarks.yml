@@ -36,7 +36,8 @@ jobs:
 
       - name: Publish run summary
         if: always()
-        run: cat BenchmarkDotNet.Artifacts/results/*-report-github.md >> "$GITHUB_STEP_SUMMARY" || true
+        shell: pwsh
+        run: Get-ChildItem BenchmarkDotNet.Artifacts/results -Filter '*-report-github.md' -ErrorAction SilentlyContinue | Get-Content | Add-Content $env:GITHUB_STEP_SUMMARY
 
       - name: Upload results
         if: always()

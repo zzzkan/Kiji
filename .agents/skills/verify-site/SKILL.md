@@ -19,7 +19,8 @@ package instead: `Kiji.PackageTests` does this, and `features/package.md` covers
 
 - Publish: `dotnet publish docs -c Release -o artifacts/verify/<run>/site`. Ready when the
   command exits 0 and `Kiji.Build` reports `Generated N pages`.
-- Serve: `.agents/skills/verify-site/scripts/dev-server.sh start [project] [url]`.
+- Serve: `dotnet pwsh .agents/skills/verify-site/scripts/dev-server.ps1 start [project] [url]`
+  (run `dotnet tool restore` once for `dotnet pwsh`).
   The default address is `http://127.0.0.1:8080`. Pass another url (for example
   `http://127.0.0.1:8081`) to run beside a server you did not start; the script refuses an
   address that is already answering. Ready means the log says `Dev server started`, not
@@ -29,8 +30,8 @@ Everything a run writes goes under `artifacts/verify/` (ignored). Keep one direc
 
 ## Doctor
 
-`.agents/skills/verify-site/scripts/dev-server.sh doctor [project] [url]` checks without
-changing anything: the process group is alive, `GET /` answers, and the watch log has no
+`dotnet pwsh .agents/skills/verify-site/scripts/dev-server.ps1 doctor [project] [url]` checks
+without changing anything: the recorded process is alive, `GET /` answers, and the watch log has no
 errors. Run it before the first drive, and again after any failed drive. If doctor fails and
 the log does not explain it, stop and restart the server instead of driving a wedged one.
 
@@ -66,21 +67,23 @@ browser. Not test-only endpoints, not a hand-built host.
 
 ## Cleanup
 
-- `.agents/skills/verify-site/scripts/dev-server.sh stop [project] [url]` stops only the
-  process group that script started (SIGINT, as Ctrl+C would; then TERM, then KILL) and
-  fails if a live member remains. Never stop processes by name.
+- `dotnet pwsh .agents/skills/verify-site/scripts/dev-server.ps1 stop [project] [url]` stops only
+  the process tree that script started. Never stop processes by name.
 - Restore every content file you edited; confirm with `git status --short`.
 - Remove scratch output you no longer need, but keep the evidence files the report cites.
 - Run cleanup after a failed drive too.
 
 ## Helpers
 
-- `scripts/dev-server.sh start|doctor|stop [project] [url]`: Linux and stock macOS; it needs only
-  bash, `ps`, `curl`, `awk` and `grep`, and checks for them first. State goes in
-  `artifacts/verify/dev-server-<port>/` (`pgid`, `started`, `watch.log`); `stop` signals the
-  process group only while its leader's start time still matches `started`.
+- `scripts/dev-server.ps1 start|doctor|stop [project] [url]`: PowerShell (`dotnet pwsh`) on Linux,
+  macOS and Windows. State goes in `artifacts/verify/dev-server-<port>/` (`process.json`,
+  `watch.log`). `stop` kills the process tree (`dotnet watch`, `dotnet run`, the site) only
+  while the recorded process still has the recorded start time; build nodes are not reused,
+  so none outlive the server. `/bin/sh` (or `cmd.exe` on Windows) only redirects the
+  server's output to the log, so it keeps writing after PowerShell exits.
 - `scripts/screenshot.mjs <url> <out.png> [width] [height]`: the preinstalled Playwright and
-  Chromium. Take screenshots a reviewer will see at the default size.
+  Chromium. It stays in JavaScript because the browser is installed for Node's Playwright;
+  Playwright for .NET would download a second browser. Take screenshots a reviewer will see at the default size.
 
 ## Keep this skill true
 

@@ -13,10 +13,10 @@
 
 The author runs `dotnet watch` in the site project and opens the printed address.
 
-## Driving it with dev-server.sh, curl and Playwright
+## Driving it with dev-server.ps1, curl and Playwright
 
 ```sh
-S=.agents/skills/verify-site/scripts/dev-server.sh
+S="dotnet pwsh .agents/skills/verify-site/scripts/dev-server.ps1"
 $S start docs http://127.0.0.1:8081 && $S doctor docs http://127.0.0.1:8081
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8081/docs/routing/
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8081/docs/nope/
@@ -32,6 +32,6 @@ few seconds and disappears after the file is restored.
 
 - The first start builds the site in Debug and takes tens of seconds; `start` waits up to
   180 s for `Dev server started`.
-- SIGTERM stops the site but can leave `dotnet watch` running. `dev-server.sh stop` sends
-  SIGINT first; never stop a server by process name.
-- In this container, exited children can stay as zombies under PID 1. `stop` ignores them.
+- Signalling only `dotnet watch` leaves its inner `dotnet-watch` process running, and that
+  one restarts the site on the same port. `dev-server.ps1 stop` kills the whole tree; never
+  stop a server by process name.

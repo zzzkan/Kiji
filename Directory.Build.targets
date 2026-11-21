@@ -59,6 +59,22 @@
                       Condition="'@(_KijiReferenceToKiji)' != ''" KijiPackedInKiji="true" TreatAsUsed="true" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Kiji'">
+    <KijiScriptException Include="$(MSBuildThisFileDirectory).agents/skills/verify-site/scripts/screenshot.mjs"
+                         Reason="Node's Playwright drives the preinstalled browser; Playwright for .NET would download another." />
+  </ItemGroup>
+
+  <Target Name="KijiRequirePowerShellScripts" BeforeTargets="CoreCompile" Condition="'$(MSBuildProjectName)' == 'Kiji'">
+    <ItemGroup>
+      <_KijiScriptRoot Include="$(MSBuildThisFileDirectory)*;$(MSBuildThisFileDirectory).agents/**/*;$(MSBuildThisFileDirectory).github/**/*;$(MSBuildThisFileDirectory)tools/**/*"
+                       Exclude="$(MSBuildThisFileDirectory)tools/**/bin/**;$(MSBuildThisFileDirectory)tools/**/obj/**" />
+      <_KijiForeignScript Include="@(_KijiScriptRoot)" Exclude="@(KijiScriptException)"
+                          Condition="'%(Extension)' == '.py' or '%(Extension)' == '.sh' or '%(Extension)' == '.bash' or '%(Extension)' == '.js' or '%(Extension)' == '.mjs' or '%(Extension)' == '.rb' or '%(Extension)' == '.bat' or '%(Extension)' == '.cmd'" />
+    </ItemGroup>
+    <Error Condition="'@(_KijiForeignScript)' != ''" Code="KR0009" File="%(_KijiForeignScript.Identity)"
+           Text="Write repository scripts in PowerShell (run with dotnet pwsh) or C#, not %(_KijiForeignScript.Extension). If another language has a real advantage, add a KijiScriptException with its Reason in Directory.Build.targets." />
+  </Target>
+
   <Target Name="KijiResolveProjectGraph" BeforeTargets="GenerateMSBuildEditorConfigFileShouldRun">
     <ItemGroup>
       <_KijiThisProject Include="@(KijiProject->WithMetadataValue('Identity', '$(MSBuildProjectName)'))" />

@@ -32,11 +32,15 @@ jobs:
         run: dotnet build -c Release
 
       - name: Library tests
-        shell: bash
+        shell: pwsh
         run: |
-          for project in tests/*.Tests; do
-            (cd "$project" && dotnet test -c Release) || exit 1
-          done
+          foreach ($project in Get-ChildItem tests -Directory -Filter '*.Tests') {
+            Push-Location $project.FullName
+            dotnet test -c Release
+            $code = $LASTEXITCODE
+            Pop-Location
+            if ($code) { exit $code }
+          }
 
       - name: Pack
         shell: pwsh

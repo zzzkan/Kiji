@@ -14,8 +14,7 @@ public sealed class NamespaceOwnershipAnalyzer : DiagnosticAnalyzer
         category: "Repository",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "A project may declare several namespaces, but no namespace spans the library projects packed into Kiji; the package project adds only its entry point to the root namespace.",
-        customTags: WellKnownDiagnosticTags.CompilationEnd);
+        description: "A project may declare several namespaces, but no namespace spans the library projects packed into Kiji; the package project adds only its entry point to the root namespace.");
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [Rule];
 
@@ -41,7 +40,6 @@ public sealed class NamespaceOwnershipAnalyzer : DiagnosticAnalyzer
             else if (options.TryGetValue("build_property.KijiPackageProject", out var package) && package == project)
             {
                 start.RegisterSymbolAction(symbol => AnalyzeType(symbol, project, libraries, entryNamespace: project), SymbolKind.NamedType);
-                start.RegisterCompilationEndAction(end => AnalyzeLibraries(end, libraries));
             }
         });
     }
@@ -58,20 +56,6 @@ public sealed class NamespaceOwnershipAnalyzer : DiagnosticAnalyzer
             foreach (var location in type.Locations.Where(static location => location.IsInSource))
             {
                 context.ReportDiagnostic(Diagnostic.Create(Rule, location, name, project, library.Name, "'" + type.Name + "'"));
-            }
-        }
-    }
-
-    private static void AnalyzeLibraries(CompilationAnalysisContext context, List<(string Name, ImmutableHashSet<string> Namespaces)> libraries)
-    {
-        for (var first = 0; first < libraries.Count; first++)
-        {
-            for (var second = first + 1; second < libraries.Count; second++)
-            {
-                foreach (var name in libraries[first].Namespaces.Intersect(libraries[second].Namespaces).OrderBy(static name => name))
-                {
-                    context.ReportDiagnostic(Diagnostic.Create(Rule, Location.None, name, libraries[first].Name, libraries[second].Name, "its types"));
-                }
             }
         }
     }

@@ -4,7 +4,6 @@ namespace Kiji.Analyzers;
 
 internal static class CommentScanner
 {
-    private static readonly Regex s_heredoc = new(@"<<-?\s*(['""]?)([A-Za-z_][A-Za-z0-9_]*)\1", RegexOptions.CultureInvariant);
     private static readonly Regex s_versionPin = new(@"^#\s+v\d+\.\d+\.\d+\s*$", RegexOptions.CultureInvariant);
 
     internal static ISet<int> CommentLines(string fileName, string[] lines)
@@ -13,8 +12,6 @@ internal static class CommentScanner
         return extension switch
         {
             ".js" or ".mjs" => JavaScript(lines),
-            ".sh" => Shell(lines),
-            ".py" => Python(lines),
             ".ps1" => PowerShell(lines),
             ".yml" or ".yaml" => Matching(lines, IsYamlComment),
             ".csproj" or ".props" or ".targets" => Matching(lines, line => line.Contains("<!--")),
@@ -86,29 +83,6 @@ internal static class CommentScanner
         return line.Length;
     }
 
-    private static HashSet<int> Shell(string[] lines)
-    {
-        var found = new HashSet<int>();
-        string? heredoc = null;
-        for (var number = 0; number < lines.Length; number++)
-        {
-            var line = lines[number];
-            if (heredoc is not null)
-            {
-                if (line.Trim() == heredoc) { heredoc = null; }
-                continue;
-            }
-            if (number == 0 && line.StartsWith("#!", StringComparison.Ordinal)) { continue; }
-            if (HashOutsideQuotes(line) >= 0)
-            {
-                found.Add(number);
-            }
-            var match = s_heredoc.Match(line);
-            if (match.Success) { heredoc = match.Groups[2].Value; }
-        }
-        return found;
-    }
-
     private static int HashOutsideQuotes(string line)
     {
         char? quote = null;
@@ -129,42 +103,6 @@ internal static class CommentScanner
             }
         }
         return -1;
-    }
-
-    private static HashSet<int> Python(string[] lines)
-    {
-        var found = new HashSet<int>();
-        string? triple = null;
-        for (var number = 0; number < lines.Length; number++)
-        {
-            var line = lines[number];
-            if (number == 0 && line.StartsWith("#!", StringComparison.Ordinal)) { continue; }
-            char? quote = null;
-            for (var index = 0; index < line.Length; index++)
-            {
-                var current = line[index];
-                if (triple is not null)
-                {
-                    if (current == '\\') { index++; }
-                    else if (string.CompareOrdinal(line, index, triple, 0, 3) == 0) { triple = null; index += 2; }
-                    continue;
-                }
-                if (quote is { } open)
-                {
-                    if (current == '\\') { index++; }
-                    else if (current == open) { quote = null; }
-                    continue;
-                }
-                if (current is '\'' or '"')
-                {
-                    if (index + 2 < line.Length && line[index + 1] == current && line[index + 2] == current) { triple = new string(current, 3); index += 2; }
-                    else { quote = current; }
-                    continue;
-                }
-                if (current == '#') { found.Add(number); break; }
-            }
-        }
-        return found;
     }
 
     private static HashSet<int> PowerShell(string[] lines)

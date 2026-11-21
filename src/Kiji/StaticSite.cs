@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Kiji.Generation;
 using System.Reflection;
 using Kiji.Assets;
@@ -20,6 +21,7 @@ public static class StaticSite
     public static HostApplicationBuilder CreateBuilder() => CreateBuilder([]);
 
     /// <summary>Creates a site host builder; <paramref name="args"/> reach only the dev server.</summary>
+    [SuppressMessage("ApiDesign", "RS0030", Justification = "Host configuration reads only the environment name.")]
     public static HostApplicationBuilder CreateBuilder(string[] args)
     {
         ArgumentNullException.ThrowIfNull(args);

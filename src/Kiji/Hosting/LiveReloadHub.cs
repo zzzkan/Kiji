@@ -63,9 +63,26 @@ internal sealed class LiveReloadHub
         return QueueSendAsync(() => SendToClientsAsync(ReloadMessage, cancellationToken));
     }
 
+    private static byte[] SerializeDiagnostics(string[] diagnostics)
+    {
+        var buffer = new System.Buffers.ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartArray();
+            foreach (var diagnostic in diagnostics)
+            {
+                writer.WriteStringValue(diagnostic);
+            }
+
+            writer.WriteEndArray();
+        }
+
+        return buffer.WrittenSpan.ToArray();
+    }
+
     internal Task<int> ReportDiagnosticsAsync(string[] diagnostics, CancellationToken cancellationToken)
     {
-        var message = JsonSerializer.SerializeToUtf8Bytes(diagnostics);
+        var message = SerializeDiagnostics(diagnostics);
         return QueueSendAsync(() =>
         {
             if (diagnostics.Length == 0 && _diagnosticsMessage is null)

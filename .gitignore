@@ -43,3 +43,4 @@ dist/
 .kiji/
 
 BenchmarkDotNet.Artifacts/
+__pycache__/

@@ -52,6 +52,10 @@ below once a check covers them.
 | Kiji reads environment variables through IConfiguration | `src/Kiji/BannedSymbols.txt` (RS0030) |
 | Kiji never sets `Environment.ExitCode` | `src/Kiji/BannedSymbols.txt` (RS0030) |
 | Kiji uses no frozen collections (measured slower for a publish) | `src/Kiji/BannedSymbols.txt` (RS0030) |
+| Kiji configuration stays project-local: no environment variable, command-line or user-secrets sources | `src/Kiji/BannedSymbols.txt` (RS0030) |
+| Kiji serializes JSON without reflection | `src/Kiji/BannedSymbols.txt` (RS0030) |
+| Kiji's redirects stay inside the site | `src/Kiji/BannedSymbols.txt` (RS0030) |
+| `Kiji.targets` packs under `build/`, never `buildTransitive/` | KR0005 in `src/Kiji/Kiji.csproj` |
 | `Kiji.Tests` never mutates process-wide state | `src/Kiji.Tests/BannedSymbols.txt` (RS0030) |
 | Each project references only its allowed projects; `Kiji.PackageTests` stays black-box | `Directory.Build.targets` KR0003 |
 | `src/Kiji` and `Kiji.Tests` components are hand-written `ComponentBase` classes | `Directory.Build.targets` KR0002 (no Razor SDK, no `.razor`) |
@@ -128,9 +132,7 @@ one, the `correct` skill decides whether it can become a check.
   paths at creation, so the provider factory rejects changes. Publish takes the name
   only from DOTNET_ENVIRONMENT, the generic host convention and the one machine-dependent input
   kept, and logs it; serving follows WebApplicationBuilder's order (--environment,
-  DOTNET_ENVIRONMENT, ASPNETCORE_ENVIRONMENT). Default configuration sources stay
-  project-local (no environment variables, command line or user secrets, which differ between
-  machines). The dev server uses standard ASP.NET Core configuration with the same project
+  DOTNET_ENVIRONMENT, ASPNETCORE_ENVIRONMENT). The dev server uses standard ASP.NET Core configuration with the same project
   directory and environment. Per-key reads are not tracked, so the environment name and all
   configuration outside the Logging and Metrics sections are in the publish options
   fingerprint.
@@ -142,8 +144,8 @@ one, the `correct` skill decides whether it can become a check.
   read their own stamps, and reconciliation reads the rest one file at a time instead of
   listing the tree. Stamps from an earlier manifest are cleared then.
 - A publish is one short process whose time is mostly first use of code. Keep its cold path
-  short: no serializer or reflection where a reader or writer does (the manifest is written
-  by `BuildManifestSerializer` in the serializer's own format, which tests compare); no
+  short: no reflection where a reader or writer does (the manifest is written by
+  `BuildManifestSerializer` in the serializer's own format, which tests compare); no
   static initializer that loads what a site may not use; independent inputs load together
   (asset manifest, code identity and content; page entries, input verification and
   artifacts). `MarkdownWarmup` prepares the Markdown and YAML code on a spare processor

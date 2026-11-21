@@ -44,6 +44,7 @@ below once a check covers them.
 | A namespace is declared in one `src` library project (a project may declare several); the package project adds only `StaticSite` to `Kiji` | `Kiji.Analyzers` KR0008 |
 | Internal namespaces depend in one direction; public types are exempt | `Kiji.Analyzers` KR0007 |
 | Public API stays compatible, except listed breaks | Package validation against 0.1.0, `src/Kiji/CompatibilitySuppressions.xml` |
+| Consumers use the matching ReadyToRun image for every packaged library assembly | `PackageScenarios.Publish_UsesSdkDefaultDestination` |
 | ReadyToRun images have third-party notices | Pack error in `src/Kiji/Kiji.csproj` |
 | Incremental output equals a clean build | `IncrementalBuildTests` |
 | The package works through the SDK in a real consumer | `Kiji.PackageTests` in CI |

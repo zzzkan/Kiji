@@ -20,6 +20,9 @@ public sealed class PackageFixture : IAsyncLifetime
     private string Work => Path.Combine(_root, "work");
     internal string Site => Path.Combine(Work, "Site");
     private string Packages => Path.Combine(_root, "packages");
+    internal IEnumerable<string> LibraryAssemblyFiles => Directory.EnumerateFiles(
+        Path.Combine(Packages, "kiji", _version.ToLowerInvariant(), "lib", "net10.0"), "*.dll");
+
     private readonly Dictionary<string, string?> _runtimePackages = new(StringComparer.Ordinal);
     private string Template => Path.Combine(_repository, "tests", "Kiji.PackageTests", "Fixture");
 

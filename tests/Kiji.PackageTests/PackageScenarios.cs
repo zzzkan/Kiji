@@ -33,7 +33,13 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
 
         if (images is not null)
         {
-            foreach (var name in (string[])["Kiji", "Markdig", "YamlDotNet"])
+            foreach (var library in fixture.LibraryAssemblyFiles)
+            {
+                var fileName = Path.GetFileName(library);
+                var image = Assert.Single(Directory.GetFiles(Path.Combine(images, "Kiji"), fileName, SearchOption.AllDirectories));
+                Assert.Equal(File.ReadAllBytes(image), File.ReadAllBytes(Path.Combine(buildDirectory, fileName)));
+            }
+            foreach (var name in (string[])["Markdig", "YamlDotNet"])
             {
                 var image = Assert.Single(Directory.GetFiles(Path.Combine(images, name), name + ".dll", SearchOption.AllDirectories));
                 Assert.Equal(File.ReadAllBytes(image), File.ReadAllBytes(Path.Combine(buildDirectory, name + ".dll")));

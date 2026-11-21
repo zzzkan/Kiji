@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
-using Kiji.Assets;
 using Kiji.Generation;
+using Kiji.Images;
 using Kiji.Paths;
 using Kiji.Rendering;
 using Markdig.Extensions.GenericAttributes;

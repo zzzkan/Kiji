@@ -1,4 +1,4 @@
-using Kiji.Assets;
+using Kiji.Images;
 
 namespace Kiji.Testing;
 

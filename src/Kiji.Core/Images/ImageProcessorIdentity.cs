@@ -2,7 +2,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using Kiji.Incremental;
 
-namespace Kiji.Assets;
+namespace Kiji.Images;
 
 internal static class ImageProcessorIdentity
 {

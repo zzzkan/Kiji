@@ -1,5 +1,5 @@
-using Kiji.Assets;
 using Kiji.Definition;
+using Kiji.Images;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Kiji.Hosting;

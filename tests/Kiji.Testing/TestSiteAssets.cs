@@ -1,8 +1,8 @@
 using System.Text.Json.Nodes;
 using System.Text.Json;
-using Kiji.Assets;
 using Kiji.Incremental;
 using Kiji.Paths;
+using Kiji.StaticAssets;
 
 namespace Kiji.Testing;
 

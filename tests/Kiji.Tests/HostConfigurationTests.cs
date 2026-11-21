@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Kiji.Assets;
+using Kiji.Images;
 using Kiji.Paths;
 using Kiji.Tests.TestSite;
 using Microsoft.Extensions.Configuration;

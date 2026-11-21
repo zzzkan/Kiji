@@ -1,10 +1,9 @@
 using System.Buffers.Binary;
-using Kiji.Assets;
 using Kiji.Incremental;
 using SkiaSharp;
 using Xunit;
 
-namespace Kiji.Imaging.Tests;
+namespace Kiji.Images.Skia.Tests;
 
 public sealed class ImageProcessorTests : IDisposable
 {

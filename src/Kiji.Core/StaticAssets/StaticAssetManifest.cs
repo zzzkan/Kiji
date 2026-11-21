@@ -4,7 +4,7 @@ using Kiji.Paths;
 using Kiji.Rendering;
 using Microsoft.AspNetCore.Components;
 
-namespace Kiji.Assets;
+namespace Kiji.StaticAssets;
 
 internal sealed class StaticAssetManifest
 {

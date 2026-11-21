@@ -1,4 +1,4 @@
-namespace Kiji.Assets;
+namespace Kiji.Images;
 
 /// <summary>Settings of the default WebP processor; a replaced <see cref="IImageProcessor"/> ignores them.</summary>
 public sealed class ImageProcessorOptions

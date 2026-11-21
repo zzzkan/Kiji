@@ -1,4 +1,4 @@
-using Kiji.Assets;
+using Kiji.Images;
 using Kiji.Markdown;
 using Kiji.Paths;
 using Microsoft.Extensions.DependencyInjection.Extensions;

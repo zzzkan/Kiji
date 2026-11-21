@@ -1,5 +1,5 @@
 using Kiji.Incremental;
 
-namespace Kiji.Assets;
+namespace Kiji.Images;
 
 internal sealed record CachedImageResult(ProcessedImageInfo Info, IReadOnlyList<BuildManifestOutput> Outputs);

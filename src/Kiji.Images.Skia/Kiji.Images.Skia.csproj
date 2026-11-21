@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <RootNamespace>Kiji.Imaging</RootNamespace>
+    <RootNamespace>Kiji.Images.Skia</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>

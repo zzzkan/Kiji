@@ -18,7 +18,7 @@
     <ProjectReference Include="../Kiji.Core/Kiji.Core.csproj" PrivateAssets="all" />
     <ProjectReference Include="../Kiji.Hosting/Kiji.Hosting.csproj" PrivateAssets="all" />
     <ProjectReference Include="../Kiji.Markdown/Kiji.Markdown.csproj" PrivateAssets="all" />
-    <ProjectReference Include="../Kiji.Imaging/Kiji.Imaging.csproj" PrivateAssets="all" />
+    <ProjectReference Include="../Kiji.Images.Skia/Kiji.Images.Skia.csproj" PrivateAssets="all" />
     <ProjectReference Include="../Kiji.Feeds/Kiji.Feeds.csproj" PrivateAssets="all" />
     <ProjectReference Include="../Kiji.Sitemaps/Kiji.Sitemaps.csproj" PrivateAssets="all" />
   </ItemGroup>

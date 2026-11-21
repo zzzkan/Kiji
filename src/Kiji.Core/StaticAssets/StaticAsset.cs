@@ -1,4 +1,4 @@
-namespace Kiji.Assets;
+namespace Kiji.StaticAssets;
 
 internal sealed record StaticAsset(string Source, string Target)
 {

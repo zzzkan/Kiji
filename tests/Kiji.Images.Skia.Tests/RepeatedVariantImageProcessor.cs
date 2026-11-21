@@ -1,6 +1,5 @@
-using Kiji.Assets;
 
-namespace Kiji.Imaging.Tests;
+namespace Kiji.Images.Skia.Tests;
 
 public sealed class RepeatedVariantImageProcessor : IImageProcessor
 {

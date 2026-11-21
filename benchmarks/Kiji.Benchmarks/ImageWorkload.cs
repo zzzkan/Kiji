@@ -1,4 +1,4 @@
-using Kiji.Assets;
+using Kiji.Images;
 using SkiaSharp;
 
 namespace Kiji.Benchmarks;

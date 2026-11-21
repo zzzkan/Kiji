@@ -1,4 +1,4 @@
-using Kiji.Assets;
+using Kiji.StaticAssets;
 using Microsoft.Extensions.FileSystemGlobbing;
 
 namespace Kiji.Hosting;

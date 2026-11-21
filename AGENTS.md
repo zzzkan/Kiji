@@ -41,7 +41,7 @@ below once a check covers them.
 | Warnings and recommended .NET analyzers fail the build | `Directory.Build.props` (`TreatWarningsAsErrors`, `AnalysisLevel`, `EnforceCodeStyleInBuild`) |
 | File-scoped namespaces | `.editorconfig` IDE0160 at `error` |
 | A namespace matches its folder | `.editorconfig` IDE0130 at `error` |
-| Each namespace belongs to one `src` project (the one whose `Namespace` is its longest prefix) | `Kiji.Analyzers` KR0008, `Namespace` on `KijiProject` items |
+| A namespace is declared in one `src` library project (a project may declare several); the package project adds only its entry point to `Kiji` | `Kiji.Analyzers` KR0008 |
 | Internal namespaces depend in one direction; public types are exempt | `Kiji.Analyzers` KR0007 |
 | Public API stays compatible, except listed breaks | Package validation against 0.1.0, `src/Kiji/CompatibilitySuppressions.xml` |
 | ReadyToRun images have third-party notices | Pack error in `src/Kiji/Kiji.csproj` |
@@ -62,7 +62,7 @@ below once a check covers them.
 | Library tests never mutate process-wide state | `tests/BannedSymbols.txt` (RS0030) in every `*.Tests` project and `Kiji.Testing` |
 | Every project is in the graph and lives at its path under `src`, `tests`, `benchmarks`, `tools` or `docs` | `KijiProject` items in `Directory.Build.targets`, KR0003 |
 | Projects reference only the projects the graph allows (library layers point toward `Kiji.Core`; each library's tests reference that library, its dependencies and `Kiji.Testing`); `Kiji.PackageTests` stays black-box | `Directory.Build.targets` KR0003 |
-| Packages are referenced only by the projects the graph allows (Markdig and YamlDotNet in `Kiji.Markdown`, SkiaSharp in `Kiji.Imaging`) | `Directory.Build.targets` KR0006 |
+| Packages are referenced only by the projects the graph allows (Markdig and YamlDotNet in `Kiji.Markdown`, SkiaSharp in `Kiji.Images.Skia`) | `Directory.Build.targets` KR0006 |
 | No unused project or package references | ReferenceTrimmer (RT0001-RT0003) in every project, from `Directory.Build.props` |
 | `src` holds only what ships: library projects all pack into the one Kiji package, whose dependencies follow from theirs | `Packed` projects in `Directory.Build.targets` (KR0003), pack targets in `src/Kiji/Kiji.csproj` |
 | Public types that move out of `Kiji.dll` stay reachable through it | Package validation (`src/Kiji/TypeForwards.cs`) |
@@ -82,20 +82,20 @@ below once a check covers them.
 - `src` holds only what ships: the library projects packed into the single Kiji package,
   and `src/Kiji.Runtime`, which only packs per-runtime images (`Kiji.Runtime.<rid>`) during
   Kiji's pack. `Kiji.Core` holds the model, generation, rendering, routing, assets and builder
-  state; `Kiji.Hosting` (publish, dev server), `Kiji.Markdown`, `Kiji.Imaging` (SkiaSharp),
+  state; `Kiji.Hosting` (publish, dev server), `Kiji.Markdown`, `Kiji.Images.Skia` (SkiaSharp),
   `Kiji.Feeds` and `Kiji.Sitemaps` build on it; `src/Kiji` holds `StaticSite`, wires the
   defaults, forwards moved public types and packs them all. A project reference to Kiji brings
   the packed projects, as the package does. `src/Kiji/MSBuild/Kiji.targets` integrates
   publish, watch and clean. Tests go in `tests`, measurements in `benchmarks`, build tooling
   in `tools`.
-- Public namespaces are what an author imports: `Kiji` (site, pages, content, builder),
-  `Kiji.Markdown`, `Kiji.Assets` (images), `Kiji.Feeds`, `Kiji.Sitemaps`; package validation keeps
-  them stable. Internal namespaces in `Kiji.Core`, from the bottom: `Kiji.Paths`,
-  `Kiji.Diagnostics`, `Kiji.Incremental` (fingerprints, dependency recording, manifest, caches,
-  code identity), `Kiji.Definition` (what the builder records), `Kiji.Rendering`,
-  `Kiji.Routing`, `Kiji.Components`, then the image and static-asset pipeline in `Kiji.Assets` and
-  `Kiji.Generation` on top. Other projects' internals use their own namespace (`Kiji.Hosting`,
-  `Kiji.Imaging`, ...).
+- Public namespaces are what an author imports, one per feature: `Kiji` (site, pages, content,
+  builder), `Kiji.Images` (the image processor and its options), `Kiji.Markdown`, `Kiji.Feeds`,
+  `Kiji.Sitemaps`; package validation keeps them stable. Internal namespaces in `Kiji.Core`, from
+  the bottom: `Kiji.Paths`, `Kiji.Diagnostics`, `Kiji.Incremental` (fingerprints, dependency
+  recording, manifest, caches, code identity), `Kiji.Definition` (what the builder records),
+  `Kiji.Rendering`, `Kiji.Routing`, `Kiji.Components`, `Kiji.StaticAssets`, then the image
+  pipeline in `Kiji.Images` and `Kiji.Generation` on top. Other projects use their own namespace
+  (`Kiji.Hosting`, `Kiji.Images.Skia` for the default SkiaSharp processor, ...).
 - Each `src` library project has `tests/<Project>.Tests`, which references only that project,
   its dependencies and `tests/Kiji.Testing` (shared helpers over `Kiji.Core`). A test belongs to
   the lowest project it can reference; `tests/Kiji.Tests` holds the tests that run a whole

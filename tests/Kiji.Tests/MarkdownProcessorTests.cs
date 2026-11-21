@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
-using Kiji.Assets;
 using Kiji.Generation;
-using Kiji.Imaging;
+using Kiji.Images.Skia;
+using Kiji.Images;
 using Kiji.Incremental;
 using Kiji.Markdown;
 using Kiji.Paths;

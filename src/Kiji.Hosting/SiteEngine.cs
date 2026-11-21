@@ -1,15 +1,16 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Reflection;
-using Kiji.Assets;
 using Kiji.Components;
 using Kiji.Definition;
 using Kiji.Diagnostics;
 using Kiji.Generation;
+using Kiji.Images;
 using Kiji.Incremental;
 using Kiji.Paths;
 using Kiji.Rendering;
 using Kiji.Routing;
+using Kiji.StaticAssets;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;

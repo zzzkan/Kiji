@@ -1,6 +1,6 @@
 using System.Reflection;
-using Kiji.Assets;
 using Kiji.Definition;
+using Kiji.Images;
 using Kiji.Incremental;
 using Kiji.Paths;
 using Microsoft.AspNetCore.Components;

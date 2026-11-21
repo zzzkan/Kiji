@@ -177,7 +177,7 @@ For `.jpg`, `.jpeg`, `.png`, `.gif`, and `.webp` files, Kiji writes WebP version
 the site's `_images/` directory: 320, 640, 960, and 1280 pixels wide when the source is wider,
 plus one at the source width, up to 1920 pixels. The `<img>` gets a `srcset` and the source
 dimensions, and every image after the first loads lazily. To change the widths or the
-quality, see [`ImageProcessorOptions`](../api-assets/#imageprocessoroptions).
+quality, see [`ImageProcessorOptions`](../api-images/#imageprocessoroptions).
 
 Attributes such as `![Photo](photo.jpg){width=300 loading=eager}` replace the ones Kiji
 generates. When only `width` or `height` is a positive integer, Kiji computes the other from
@@ -226,4 +226,4 @@ when it passes through a symbolic link or junction below one.
 
 During development, unchanged images are not encoded again after a reload.
 
-To replace the image processor, see [`IImageProcessor`](../api-assets/#iimageprocessor).
+To replace the image processor, see [`IImageProcessor`](../api-images/#iimageprocessor).

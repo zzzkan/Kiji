@@ -1,4 +1,5 @@
 using Kiji.Feeds;
+using Kiji.Images;
 using Kiji.Incremental;
 using Kiji.Markdown;
 using Kiji.Paths;
@@ -225,7 +226,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
         await CreateTestImageAsync(Path.Combine(_contentsDir, "photo.png"), 1400, 700);
         var pageDir = Path.Combine(_outputDir, "md", "photos");
 
-        async Task<string> PublishAsync(Action<Kiji.Assets.ImageProcessorOptions>? configure = null)
+        async Task<string> PublishAsync(Action<ImageProcessorOptions>? configure = null)
         {
             var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_testDir), outputPath: _outputDir);
             builder.UseSiteInfo(TestArticleContents.CreateSiteInfo());

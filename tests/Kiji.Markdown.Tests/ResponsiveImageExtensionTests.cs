@@ -1,7 +1,7 @@
+using System.Text.RegularExpressions;
+using Kiji.Images;
 using Markdig;
 using Xunit;
-using Kiji.Assets;
-using System.Text.RegularExpressions;
 
 namespace Kiji.Markdown.Tests;
 

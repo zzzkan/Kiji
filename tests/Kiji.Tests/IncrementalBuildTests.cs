@@ -1,9 +1,10 @@
-using Kiji.Assets;
-using Kiji.Imaging;
+using Kiji.Images.Skia;
+using Kiji.Images;
 using Kiji.Incremental;
 using Kiji.Markdown;
 using Kiji.Paths;
 using Kiji.Sitemaps;
+using Kiji.StaticAssets;
 using Kiji.Tests.TestSite.ErrorHandling;
 using Kiji.Tests.TestSite.Pages;
 using Kiji.Tests.TestSite;
@@ -350,7 +351,7 @@ public sealed class IncrementalBuildTests : IDisposable
         var catalogPath = Path.Combine(_testDir, "assets.json");
         void WriteCatalog(string target)
         {
-            TestSiteAssets.WriteManifest(catalogPath, [new Assets.StaticAsset(source, target)], []);
+            TestSiteAssets.WriteManifest(catalogPath, [new StaticAsset(source, target)], []);
         }
         WriteCatalog("_content/library/first.css");
         var options = new ResolvedSitePaths
@@ -362,7 +363,7 @@ public sealed class IncrementalBuildTests : IDisposable
             TestArticleContents.CreateSiteInfo(), "Production", new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build());
         async Task Sync()
         {
-            var files = await planner.SyncStaticFilesAsync(Assets.StaticAssetManifest.Load(catalogPath).Assets);
+            var files = await planner.SyncStaticFilesAsync(StaticAssetManifest.Load(catalogPath).Assets);
             planner.ReconcileOutputs(new BuildManifest { StaticFiles = files });
         }
         await Sync();

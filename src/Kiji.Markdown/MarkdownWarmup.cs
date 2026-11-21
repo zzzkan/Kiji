@@ -1,5 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
-using Kiji.Assets;
+using Kiji.Images;
 using Kiji.Incremental;
 
 namespace Kiji.Markdown;

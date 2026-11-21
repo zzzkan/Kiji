@@ -2,7 +2,7 @@ using System.Text.Json;
 using Kiji.Incremental;
 using Kiji.Rendering;
 
-namespace Kiji.Assets;
+namespace Kiji.Images;
 
 internal static class ImageArtifactProcessor
 {

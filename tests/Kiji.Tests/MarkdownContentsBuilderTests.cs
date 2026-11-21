@@ -1,5 +1,5 @@
 using Kiji.Generation;
-using Kiji.Imaging;
+using Kiji.Images.Skia;
 using Kiji.Markdown;
 using Kiji.Paths;
 using Xunit;

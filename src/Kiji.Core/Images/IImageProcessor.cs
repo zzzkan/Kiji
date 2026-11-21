@@ -1,4 +1,4 @@
-namespace Kiji.Assets;
+namespace Kiji.Images;
 
 /// <summary>Writes image variants. Register a singleton in builder.Services to replace the default.</summary>
 /// <remarks>Calls run concurrently; keep no page or content state.</remarks>

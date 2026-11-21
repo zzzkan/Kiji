@@ -1,5 +1,5 @@
 using System.Text.Json.Nodes;
-using Kiji.Assets;
+using Kiji.StaticAssets;
 using Kiji.Testing;
 using Xunit;
 

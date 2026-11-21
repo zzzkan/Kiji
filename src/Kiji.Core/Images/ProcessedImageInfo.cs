@@ -1,4 +1,4 @@
-namespace Kiji.Assets;
+namespace Kiji.Images;
 
 /// <summary>The source size and its variants; the largest variant is the default <c>src</c>.</summary>
 public sealed record ProcessedImageInfo

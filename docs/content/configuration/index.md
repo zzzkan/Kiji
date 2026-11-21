@@ -61,7 +61,7 @@ var pageSize = services.GetRequiredService<IOptions<SiteSettings>>().Value.Posts
 
 For a single value, inject `IConfiguration` and read `Configuration["Site:RepositoryUrl"]`.
 Kiji's own options bind the same way; see
-[`ImageProcessorOptions`](../api-assets/#imageprocessoroptions).
+[`ImageProcessorOptions`](../api-images/#imageprocessoroptions).
 
 ## Environments
 

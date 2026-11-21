@@ -1,4 +1,4 @@
-namespace Kiji.Assets;
+namespace Kiji.Images;
 
 internal sealed class ImageGenerationLease(string key) : IDisposable
 {

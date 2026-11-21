@@ -1,10 +1,11 @@
 using Kiji.Paths;
+using Kiji.StaticAssets;
 
 namespace Kiji.Generation;
 
 internal static class OutputPathValidator
 {
-    internal static void Validate(ResolvedSitePaths options, Kiji.Assets.StaticAssetManifest assets, string? siteRoot = null, string? cachePath = null,
+    internal static void Validate(ResolvedSitePaths options, StaticAssetManifest assets, string? siteRoot = null, string? cachePath = null,
         IEnumerable<string>? inputPaths = null)
     {
         var output = PathContainment.Normalize(options.OutputDirectory);

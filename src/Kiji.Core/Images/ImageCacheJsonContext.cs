@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace Kiji.Assets;
+namespace Kiji.Images;
 
 [JsonSerializable(typeof(CachedImageResult))]
 [JsonSerializable(typeof(ImageCacheEnvelope))]

@@ -34,7 +34,8 @@
 
   <ItemGroup>
     <CompilerVisibleProperty Include="KijiPublicApi" />
-    <CompilerVisibleProperty Include="KijiNamespaceOwners" />
+    <CompilerVisibleProperty Include="KijiPackedProjects" />
+    <CompilerVisibleProperty Include="KijiPackageProject" />
     <CompilerVisibleProperty Include="MSBuildProjectName" />
   </ItemGroup>
 

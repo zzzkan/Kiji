@@ -1,4 +1,4 @@
-namespace Kiji.Assets;
+namespace Kiji.Images;
 
 internal interface IContentAddressedImageProcessor : IImageProcessor
 {

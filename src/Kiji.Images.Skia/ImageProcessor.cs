@@ -1,12 +1,11 @@
 using System.Runtime.InteropServices;
-using Kiji.Assets;
 using Kiji.Diagnostics;
 using Kiji.Incremental;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging;
 using SkiaSharp;
 
-namespace Kiji.Imaging;
+namespace Kiji.Images.Skia;
 
 internal sealed class ImageProcessor : IContentAddressedImageProcessor
 {

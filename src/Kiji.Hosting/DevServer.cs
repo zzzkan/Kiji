@@ -1,5 +1,7 @@
+using Kiji.Images;
 using Kiji.Paths;
 using Kiji.Rendering;
+using Kiji.StaticAssets;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 using Microsoft.AspNetCore.Hosting;
@@ -70,7 +72,7 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
             }
             CollectRetiredImages();
         }
-        Assets.ImageArtifactProcessor.ClearWork(app.Paths.ResolveImageWorkPath(options));
+        ImageArtifactProcessor.ClearWork(app.Paths.ResolveImageWorkPath(options));
         var builder = _builder;
         builder.Configuration.Sources.Insert(0, new MemoryConfigurationSource
         {
@@ -127,7 +129,7 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
         });
 
         var assets = options.AssetManifestPath is null ? null
-            : Assets.StaticAssetManifest.Load(options.AssetManifestPath, options.AssetEndpointsPath, app.SiteInfo.BaseUrl, includeIntegrity: false);
+            : StaticAssetManifest.Load(options.AssetManifestPath, options.AssetEndpointsPath, app.SiteInfo.BaseUrl, includeIntegrity: false);
         app.UseAssetResources(assets?.Resources ?? AssetResources.Empty);
         if (assets?.ContentRoots.Length > 0)
         {

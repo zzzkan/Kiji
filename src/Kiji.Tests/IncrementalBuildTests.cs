@@ -470,6 +470,30 @@ public sealed class IncrementalBuildTests : IDisposable
     }
 
     [Fact]
+    public async Task IncrementalBuild_DependencyOfUnknownKindRendersItsPage()
+    {
+        var renders = 0;
+        void RecordRender() { Interlocked.Increment(ref renders); }
+        var root = CreateSiteRoot("unknown-kind");
+        await BuildAsync(root, RecordRender);
+        renders = 0;
+        await BuildAsync(root, RecordRender);
+        var unchanged = renders;
+
+        var manifestPath = Path.Combine(root, ".kiji", "cache", "manifest.json");
+        var json = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(manifestPath, TestContext.Current.CancellationToken))!;
+        foreach (var page in json["Pages"]!.AsArray().Where(page => page!["Dependencies"]!.AsArray().Count > 0))
+        {
+            page!["Dependencies"]![0]!["Kind"] = "from-a-newer-kiji";
+        }
+        await File.WriteAllTextAsync(manifestPath, json.ToJsonString(), TestContext.Current.CancellationToken);
+        renders = 0;
+        await BuildAsync(root, RecordRender);
+
+        Assert.True(renders > unchanged, $"{renders} renders after the change, {unchanged} without it.");
+    }
+
+    [Fact]
     public async Task IncrementalBuild_MalformedManifestFallsBackToFullBuild()
     {
         var renders = 0;

@@ -564,6 +564,41 @@ public sealed class DevServerTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Serve_ExceptionPageForNonHtmlRequestStaysPlainText()
+    {
+        await File.WriteAllTextAsync(Path.Combine(_contentsDir, "broken.md"), "---\ntitle: [unclosed\n---\n");
+        var (baseAddress, devServer) = await StartServerAsync();
+        await using (devServer)
+        {
+            using var client = CreateClient();
+            using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(baseAddress, "/"));
+            request.Headers.Accept.ParseAdd("application/json");
+            using var response = await client.SendAsync(request);
+
+            Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+            Assert.Equal("text/plain", response.Content.Headers.ContentType?.MediaType);
+            var text = await response.Content.ReadAsStringAsync();
+            Assert.Contains("broken.md", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("<script", text, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task Serve_PageRoutesAreCaseSensitiveLikeStaticHosts()
+    {
+        var (baseAddress, devServer) = await StartServerAsync();
+        await using (devServer)
+        {
+            using var client = CreateClient();
+            using var page = await client.GetAsync(new Uri(baseAddress, "/blog/hello-world/"));
+            using var otherCase = await client.GetAsync(new Uri(baseAddress, "/Blog/Hello-World/"));
+
+            Assert.Equal(HttpStatusCode.OK, page.StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, otherCase.StatusCode);
+        }
+    }
+
+    [Fact]
     public async Task Serve_ExceptionPageKeepsLiveReloadUnderTheBasePath()
     {
         await File.WriteAllTextAsync(Path.Combine(_contentsDir, "broken.md"), "---\ntitle: [unclosed\n---\n");

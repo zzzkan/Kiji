@@ -26,6 +26,10 @@ public sealed class PackageScenarios(PackageFixture fixture) : IClassFixture<Pac
         Assert.True(File.Exists(Path.Combine(buildDirectory, "publish", "index.html")));
         Assert.False(File.Exists(Path.Combine(buildDirectory, "dist", "previous.json")));
         Assert.False(File.Exists(Path.Combine(fixture.Site, "dist", "index.html")));
+        Assert.False(File.Exists(Path.Combine(buildDirectory, "PackageSite.pdb")));
+        var runtimeConfig = Assert.Single(Directory.GetFiles(Path.Combine(fixture.Site, "obj"), "publish.runtimeconfig.json", SearchOption.AllDirectories));
+        var configProperties = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(runtimeConfig))!["runtimeOptions"]!["configProperties"]!;
+        Assert.False(configProperties["System.Runtime.TieredPGO"]!.GetValue<bool>());
 
         if (images is not null)
         {

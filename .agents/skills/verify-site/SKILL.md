@@ -43,8 +43,8 @@ the log does not explain it, stop and restart the server instead of driving a we
   error, a page script error or a failed same-origin request. Failed third-party requests
   (the docs site loads Prism from a CDN) are reported but do not fail it.
 - Content edits: copy the file to the run directory first, append a unique marker, and poll
-  the page until the marker appears; restore the copy and poll until it is gone. Poll with
-  `timeout 1 tail -f /dev/null` between tries, never a fixed long sleep.
+  the page until the marker appears; restore the copy and poll until it is gone. Poll once a
+  second (`sleep 1`), never with a fixed long sleep.
 - Publish output: read the generated files directly (`index.html` per route, `404.html`,
   `sitemap.xml`, `_images/`), and the `Kiji.Build` log lines for counts.
 
@@ -75,8 +75,10 @@ browser. Not test-only endpoints, not a hand-built host.
 
 ## Helpers
 
-- `scripts/dev-server.sh start|doctor|stop [project] [url]`: Linux and macOS (bash, `setsid`,
-  `ps`, `curl`). State goes in `artifacts/verify/dev-server-<port>/` (`pgid`, `watch.log`).
+- `scripts/dev-server.sh start|doctor|stop [project] [url]`: Linux and stock macOS; it needs only
+  bash, `ps`, `curl`, `awk` and `grep`, and checks for them first. State goes in
+  `artifacts/verify/dev-server-<port>/` (`pgid`, `started`, `watch.log`); `stop` signals the
+  process group only while its leader's start time still matches `started`.
 - `scripts/screenshot.mjs <url> <out.png> [width] [height]`: the preinstalled Playwright and
   Chromium. Take screenshots a reviewer will see at the default size.
 

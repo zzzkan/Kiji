@@ -1,6 +1,6 @@
 <Project>
 
-  <ItemGroup Condition="'$(MSBuildProjectName)' != 'Kiji.Analyzers' and '$(MSBuildProjectName)' != 'Kiji.Runtime'">
+  <ItemGroup Condition="'$(KijiExample)' != 'true' and '$(MSBuildProjectName)' != 'Kiji.Analyzers' and '$(MSBuildProjectName)' != 'Kiji.Runtime'">
     <AdditionalFiles Include="$(MSBuildProjectFullPath);**/*.props;**/*.targets;**/*.css;**/*.js;**/*.mjs;**/*.cs"
                      Exclude="@(Compile);@(AdditionalFiles);bin/**;obj/**;dist/**;.kiji/**" />
     <AdditionalFiles Include="**/*.razor;**/*.csproj" Exclude="@(AdditionalFiles);bin/**;obj/**;dist/**;.kiji/**"
@@ -8,7 +8,7 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(MSBuildProjectName)' == 'Kiji'">
-    <AdditionalFiles Include="$(MSBuildThisFileDirectory)Directory.Build.props;$(MSBuildThisFileDirectory)Directory.Build.targets;$(MSBuildThisFileDirectory)Directory.Packages.props;$(MSBuildThisFileDirectory)*/Directory.Build.props" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)Directory.Build.props;$(MSBuildThisFileDirectory)Directory.Build.targets;$(MSBuildThisFileDirectory)Directory.Packages.props;$(MSBuildThisFileDirectory)src/Directory.Build.props;$(MSBuildThisFileDirectory)tests/Directory.Build.props" />
     <AdditionalFiles Include="$(MSBuildThisFileDirectory).editorconfig;$(MSBuildThisFileDirectory).gitignore" />
     <AdditionalFiles Include="$(MSBuildThisFileDirectory).github/**/*.yml" />
     <AdditionalFiles Include="$(MSBuildThisFileDirectory).agents/**/*.ps1;$(MSBuildThisFileDirectory).agents/**/*.sh;$(MSBuildThisFileDirectory).agents/**/*.py;$(MSBuildThisFileDirectory).agents/**/*.mjs;$(MSBuildThisFileDirectory).agents/**/*.cs" />
@@ -33,6 +33,7 @@
                  Packages="Microsoft.Testing.Platform;xunit.v3;SkiaSharp.NativeAssets.Linux.NoDependencies" />
     <KijiProject Include="Kiji.Feeds.Tests" Path="tests/Kiji.Feeds.Tests" References="Kiji.Core;Kiji.Feeds" Packages="Microsoft.Testing.Platform;xunit.v3" />
     <KijiProject Include="Kiji.Sitemaps.Tests" Path="tests/Kiji.Sitemaps.Tests" References="Kiji.Core;Kiji.Sitemaps" Packages="Microsoft.Testing.Platform;xunit.v3" />
+    <KijiProject Include="Kiji.Analyzers.Tests" Path="tests/Kiji.Analyzers.Tests" References="Kiji.Analyzers" Packages="Microsoft.Testing.Platform;xunit.v3" />
     <KijiProject Include="Kiji.Tests" Path="tests/Kiji.Tests" References="Kiji;Kiji.Testing" SeesInternals="true"
                  Packages="Microsoft.Testing.Platform;xunit.v3;SkiaSharp.NativeAssets.Linux.NoDependencies" />
     <KijiProject Include="Kiji.PackageTests" Path="tests/Kiji.PackageTests" References="Kiji"
@@ -44,7 +45,6 @@
     <KijiProject Include="Kiji.Benchmarks" Path="benchmarks/Kiji.Benchmarks" References="Kiji;Kiji.SyntheticSite" SeesInternals="true"
                  Packages="BenchmarkDotNet" />
     <KijiProject Include="Kiji.Analyzers" Path="tools/Kiji.Analyzers" Packages="Microsoft.CodeAnalysis.CSharp" />
-    <KijiProject Include="Kiji.Docs" Path="docs" References="Kiji" Packages="SkiaSharp.NativeAssets.Linux.NoDependencies" />
     <KijiInfrastructurePackage Include="MinVer;Microsoft.CodeAnalysis.BannedApiAnalyzers;ReferenceTrimmer" />
   </ItemGroup>
 
@@ -74,16 +74,16 @@
     </PropertyGroup>
   </Target>
 
-  <Target Name="KijiCheckProjectPlacement" BeforeTargets="CollectPackageReferences;ResolveProjectReferences" DependsOnTargets="KijiResolveProjectGraph">
+  <Target Name="KijiCheckProjectPlacement" Condition="'$(KijiExample)' != 'true'" BeforeTargets="CollectPackageReferences;ResolveProjectReferences" DependsOnTargets="KijiResolveProjectGraph">
     <Error Condition="'$(KijiProjectDirectory)' == ''" Code="KR0003"
-           Text="$(MSBuildProjectName) is not in the project graph. Add a KijiProject item for it in Directory.Build.targets, under src/ (library code packed into Kiji), tests/, benchmarks/ or tools/, as a reviewed design change." />
+           Text="$(MSBuildProjectName) is not in the project graph. Add a KijiProject item for it in Directory.Build.targets, under src/ (library code packed into Kiji), tests/, benchmarks/ or tools/, as a reviewed design change. A usage example goes under docs/, which sets KijiExample and is outside these checks." />
     <Error Condition="'$(KijiProjectDirectory)' != '' and '$([MSBuild]::NormalizeDirectory($(MSBuildProjectDirectory)))' != '$([MSBuild]::NormalizeDirectory($(MSBuildThisFileDirectory), $(KijiProjectDirectory)))'" Code="KR0003"
            Text="$(MSBuildProjectName) must live in $(KijiProjectDirectory)/, as its KijiProject item in Directory.Build.targets says." />
     <Error Condition="$(KijiProjectDirectory.StartsWith('src/')) and '$(MSBuildProjectName)' != 'Kiji' and '$(MSBuildProjectName)' != 'Kiji.Runtime' and '$(KijiPacked)' != 'true'" Code="KR0003"
            Text="$(MSBuildProjectName) is under src/, which holds only what Kiji's package ships. Mark its KijiProject item Packed=&quot;true&quot;, or move it to tests/, benchmarks/ or tools/." />
   </Target>
 
-  <Target Name="KijiCheckProjectReferences" BeforeTargets="ResolveProjectReferences" DependsOnTargets="KijiCheckProjectPlacement">
+  <Target Name="KijiCheckProjectReferences" Condition="'$(KijiExample)' != 'true'" BeforeTargets="ResolveProjectReferences" DependsOnTargets="KijiCheckProjectPlacement">
     <ItemGroup>
       <_KijiProjectReference Include="@(ProjectReference->'%(Filename)')" Condition="'%(ProjectReference.OutputItemType)' != 'Analyzer' and '%(ProjectReference.KijiPackedInKiji)' != 'true'" />
       <_KijiAllowedProjectReference Include="$(KijiAllowedProjectReferences)" />
@@ -99,7 +99,7 @@
            Text="Kiji.PackageTests tests the packed package as a black box. Keep ReferenceOutputAssembly=&quot;false&quot; on its reference to @(_KijiPackageTestsCompileReference->'%(Filename)'); it only orders the build." />
   </Target>
 
-  <Target Name="KijiCheckPackageReferences" BeforeTargets="CollectPackageReferences" DependsOnTargets="KijiCheckProjectPlacement">
+  <Target Name="KijiCheckPackageReferences" Condition="'$(KijiExample)' != 'true'" BeforeTargets="CollectPackageReferences" DependsOnTargets="KijiCheckProjectPlacement">
     <ItemGroup>
       <_KijiAllowedPackage Include="$(KijiAllowedPackages);@(KijiInfrastructurePackage)" />
       <_KijiForbiddenPackage Include="@(PackageReference)" Exclude="@(_KijiAllowedPackage)"

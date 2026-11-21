@@ -60,14 +60,15 @@ below once a check covers them.
 | Kiji's redirects stay inside the site | `src/BannedSymbols.txt` (RS0030) |
 | `Kiji.targets` packs under `build/`, never `buildTransitive/` | KR0005 in `src/Kiji/Kiji.csproj` |
 | Library tests never mutate process-wide state | `tests/BannedSymbols.txt` (RS0030) in every `*.Tests` project and `Kiji.Testing` |
-| Every project is in the graph and lives at its path under `src`, `tests`, `benchmarks`, `tools` or `docs` | `KijiProject` items in `Directory.Build.targets`, KR0003 |
+| Every project is in the graph and lives at its path under `src`, `tests`, `benchmarks` or `tools` | `KijiProject` items in `Directory.Build.targets`, KR0003 |
+| `docs` is a usage example, built like an author's site: none of the rules above apply to it | `KijiExample` in `docs/Directory.Build.props` |
 | Projects reference only the projects the graph allows (library layers point toward `Kiji.Core`; each library's tests reference that library, its dependencies and `Kiji.Testing`); `Kiji.PackageTests` stays black-box | `Directory.Build.targets` KR0003 |
 | Packages are referenced only by the projects the graph allows (Markdig and YamlDotNet in `Kiji.Markdown`, SkiaSharp in `Kiji.Images.Skia`) | `Directory.Build.targets` KR0006 |
 | No unused project or package references | ReferenceTrimmer (RT0001-RT0003) in every project, from `Directory.Build.props` |
 | `src` holds only what ships: library projects all pack into the one Kiji package, whose dependencies follow from theirs | `Packed` projects in `Directory.Build.targets` (KR0003), pack targets in `src/Kiji/Kiji.csproj` |
 | Public types that move out of `Kiji.dll` stay reachable through it | Package validation (`src/Kiji/TypeForwards.cs`) |
 | `src` library and library test components are hand-written `ComponentBase` classes | `Directory.Build.targets` KR0002 (no Razor SDK, no `.razor`) |
-| `benchmarks/Kiji.SyntheticSite` workload stays frozen | `SyntheticWorkloadTests` against `tests/Kiji.RepositoryTests/synthetic-workload.sha256` |
+| `benchmarks/Kiji.SyntheticSite` workload stays frozen, including its site definition (`SyntheticSiteDefinition`), which every harness uses | `SyntheticWorkloadTests` against `tests/Kiji.RepositoryTests/synthetic-workload.sha256` |
 | `docs/content/api-*` pages follow author-facing API changes | judgment |
 | Design and constraint decisions below | judgment |
 
@@ -76,8 +77,9 @@ below once a check covers them.
 - `dotnet build -c Release` and `dotnet test -c Release` cover the whole solution.
   Pass no extra flags to test: unsupported flags reach Microsoft.Testing.Platform.
 - `dotnet publish docs -c Release -o docs/dist` generates docs;
-  `dotnet watch --project docs` serves it. Docs references the local Kiji project
-  and imports its publish targets. Use an isolated consumer of the packed local
+  `dotnet watch --project docs` serves it. Docs is a usage example, not Kiji's code: it
+  references the local Kiji project, imports its publish targets, and is outside the
+  repository's analyzers and checks. Use an isolated consumer of the packed local
   package to verify package integration.
 - `src` holds only what ships: the library projects packed into the single Kiji package,
   and `src/Kiji.Runtime`, which only packs per-runtime images (`Kiji.Runtime.<rid>`) during

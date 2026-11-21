@@ -41,3 +41,5 @@ static async Task RunSiteAsync(string[] args)
     SyntheticSiteDefinition.Configure(builder);
     await builder.Build().RunAsync();
 }
+
+internal sealed record PhaseTiming(string Phase, double ElapsedMs);

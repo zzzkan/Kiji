@@ -4,6 +4,7 @@ using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
 using Kiji.Generation;
 using Kiji.SyntheticSite;
+using Kiji.SyntheticSite.Harness;
 
 namespace Kiji.Benchmarks;
 

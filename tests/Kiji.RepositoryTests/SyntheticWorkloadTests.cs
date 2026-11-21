@@ -11,11 +11,6 @@ public sealed class SyntheticWorkloadTests
 
     private static readonly CSharpParseOptions s_options = new(LanguageVersion.Preview);
 
-    private static readonly string[] s_harnessFiles =
-    [
-        "BenchReport.cs", "BuildRunner.cs", "HarnessOptions.cs", "PhaseTiming.cs", "Program.cs", "RunResult.cs",
-    ];
-
     [Fact]
     public void WorkloadIsUnchanged()
     {
@@ -24,7 +19,7 @@ public sealed class SyntheticWorkloadTests
             .Select(line => line.Split("  ", 2))
             .ToDictionary(parts => parts[1], parts => parts[0], StringComparer.Ordinal);
         var current = RepositoryFiles.List("benchmarks/Kiji.SyntheticSite/*.cs")
-            .Where(path => !s_harnessFiles.Contains(Path.GetFileName(path)))
+            .Where(path => !path.StartsWith("benchmarks/Kiji.SyntheticSite/Harness/", StringComparison.Ordinal))
             .ToDictionary(path => path, Hash, StringComparer.Ordinal);
 
         var failures = new List<string>();

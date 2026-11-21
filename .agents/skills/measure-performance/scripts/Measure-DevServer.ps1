@@ -32,8 +32,7 @@ foreach ($pageCount in $Pages) {
         New-Item -ItemType Directory $site | Out-Null
         foreach ($directory in @('contents', 'wwwroot')) { Copy-Item -LiteralPath (Join-Path $corpus $directory) -Destination $site -Recurse }
         $sourceRoot = Join-Path $repository 'benchmarks/Kiji.SyntheticSite'
-        $harness = @('BenchReport.cs', 'BuildRunner.cs', 'HarnessOptions.cs', 'PhaseTiming.cs', 'Program.cs', 'RunResult.cs')
-        foreach ($source in Get-ChildItem $sourceRoot -Recurse -Filter '*.cs' -File | Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' -and $harness -notcontains $_.Name }) {
+        foreach ($source in Get-ChildItem $sourceRoot -Recurse -Filter '*.cs' -File | Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' -and $_.FullName -notmatch '[\\/]Harness[\\/]' }) {
             $path = Join-Path $site ([IO.Path]::GetRelativePath($sourceRoot, $source.FullName))
             Write-File $path ([IO.File]::ReadAllText($source.FullName))
         }

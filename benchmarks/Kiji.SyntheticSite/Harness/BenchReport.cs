@@ -1,4 +1,4 @@
-namespace Kiji.SyntheticSite;
+namespace Kiji.SyntheticSite.Harness;
 
 public sealed record BenchReport(
     DateTimeOffset Timestamp,

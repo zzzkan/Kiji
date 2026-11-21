@@ -175,8 +175,7 @@ foreach ($variant in $variants) {
     New-Item -ItemType Directory -Path $site | Out-Null
     foreach ($directory in @('contents', 'wwwroot')) { Copy-Item -LiteralPath (Join-Path $corpus $directory) -Destination (Join-Path $site $directory) -Recurse }
     $sourceRoot = Join-Path $Repository 'benchmarks/Kiji.SyntheticSite'
-    $harness = @('BenchReport.cs', 'BuildRunner.cs', 'HarnessOptions.cs', 'Program.cs', 'RunResult.cs')
-    foreach ($source in Get-ChildItem -LiteralPath $sourceRoot -Filter '*.cs' -File -Recurse | Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' -and $harness -notcontains $_.Name }) {
+    foreach ($source in Get-ChildItem -LiteralPath $sourceRoot -Filter '*.cs' -File -Recurse | Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' -and $_.FullName -notmatch '[\\/]Harness[\\/]' }) {
         $target = Join-Path $site ([IO.Path]::GetRelativePath($sourceRoot, $source.FullName))
         New-Item -ItemType Directory -Force -Path ([IO.Path]::GetDirectoryName($target)) | Out-Null
         Copy-Item -LiteralPath $source.FullName -Destination $target

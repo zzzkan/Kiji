@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Kiji.SyntheticSite;
+using Kiji.SyntheticSite.Harness;
 
 var options = HarnessOptions.Parse(args);
 

@@ -5,7 +5,7 @@ using Kiji.Paths;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
-namespace Kiji.SyntheticSite;
+namespace Kiji.SyntheticSite.Harness;
 
 public static class BuildRunner
 {

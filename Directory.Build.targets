@@ -11,7 +11,7 @@
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)Directory.Build.props;$(MSBuildThisFileDirectory)Directory.Build.targets;$(MSBuildThisFileDirectory)Directory.Packages.props;$(MSBuildThisFileDirectory)src/Directory.Build.props;$(MSBuildThisFileDirectory)tests/Directory.Build.props" />
     <AdditionalFiles Include="$(MSBuildThisFileDirectory).editorconfig;$(MSBuildThisFileDirectory).gitignore" />
     <AdditionalFiles Include="$(MSBuildThisFileDirectory).github/**/*.yml" />
-    <AdditionalFiles Include="$(MSBuildThisFileDirectory).agents/**/*.ps1;$(MSBuildThisFileDirectory).agents/**/*.sh;$(MSBuildThisFileDirectory).agents/**/*.py;$(MSBuildThisFileDirectory).agents/**/*.mjs;$(MSBuildThisFileDirectory).agents/**/*.cs" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory).agents/**/*.ps1;$(MSBuildThisFileDirectory).agents/**/*.mjs;$(MSBuildThisFileDirectory).agents/**/*.cs" />
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)tools/Kiji.Analyzers/**/*.cs;$(MSBuildThisFileDirectory)tools/Kiji.Analyzers/*.csproj;$(MSBuildThisFileDirectory)src/Kiji.Runtime/*.csproj"
                      Exclude="$(MSBuildThisFileDirectory)tools/Kiji.Analyzers/obj/**;$(MSBuildThisFileDirectory)tools/Kiji.Analyzers/bin/**" />
   </ItemGroup>
@@ -26,25 +26,19 @@
     <KijiProject Include="Kiji" Path="src/Kiji" SeesInternals="true" Packages="SkiaSharp.NativeAssets.Linux.NoDependencies" />
     <KijiProject Include="Kiji.Runtime" Path="src/Kiji.Runtime" />
     <KijiProject Include="Kiji.Testing" Path="tests/Kiji.Testing" References="Kiji.Core" />
-    <KijiProject Include="Kiji.Core.Tests" Path="tests/Kiji.Core.Tests" References="Kiji.Core;Kiji.Testing" Packages="Microsoft.Testing.Platform;xunit.v3" />
-    <KijiProject Include="Kiji.Hosting.Tests" Path="tests/Kiji.Hosting.Tests" References="Kiji.Core;Kiji.Hosting;Kiji.Testing" Packages="Microsoft.Testing.Platform;xunit.v3" />
-    <KijiProject Include="Kiji.Markdown.Tests" Path="tests/Kiji.Markdown.Tests" References="Kiji.Core;Kiji.Markdown;Kiji.Testing" Packages="Microsoft.Testing.Platform;xunit.v3" />
-    <KijiProject Include="Kiji.Images.Skia.Tests" Path="tests/Kiji.Images.Skia.Tests" References="Kiji.Core;Kiji.Images.Skia;Kiji.Testing"
-                 Packages="Microsoft.Testing.Platform;xunit.v3;SkiaSharp.NativeAssets.Linux.NoDependencies" />
-    <KijiProject Include="Kiji.Feeds.Tests" Path="tests/Kiji.Feeds.Tests" References="Kiji.Core;Kiji.Feeds" Packages="Microsoft.Testing.Platform;xunit.v3" />
-    <KijiProject Include="Kiji.Sitemaps.Tests" Path="tests/Kiji.Sitemaps.Tests" References="Kiji.Core;Kiji.Sitemaps" Packages="Microsoft.Testing.Platform;xunit.v3" />
-    <KijiProject Include="Kiji.Analyzers.Tests" Path="tests/Kiji.Analyzers.Tests" References="Kiji.Analyzers" Packages="Microsoft.Testing.Platform;xunit.v3" />
-    <KijiProject Include="Kiji.Tests" Path="tests/Kiji.Tests" References="Kiji;Kiji.Testing" SeesInternals="true"
-                 Packages="Microsoft.Testing.Platform;xunit.v3;SkiaSharp.NativeAssets.Linux.NoDependencies" />
-    <KijiProject Include="Kiji.PackageTests" Path="tests/Kiji.PackageTests" References="Kiji"
-                 Packages="Microsoft.Extensions.Configuration.EnvironmentVariables;Microsoft.Testing.Platform;xunit.v3" />
-    <KijiProject Include="Kiji.RepositoryTests" Path="tests/Kiji.RepositoryTests"
-                 Packages="Microsoft.CodeAnalysis.CSharp;Microsoft.Testing.Platform;xunit.v3" />
-    <KijiProject Include="Kiji.SyntheticSite" Path="benchmarks/Kiji.SyntheticSite" References="Kiji" SeesInternals="true"
-                 Packages="SkiaSharp.NativeAssets.Linux.NoDependencies" />
-    <KijiProject Include="Kiji.Benchmarks" Path="benchmarks/Kiji.Benchmarks" References="Kiji;Kiji.SyntheticSite" SeesInternals="true"
-                 Packages="BenchmarkDotNet" />
-    <KijiProject Include="Kiji.Analyzers" Path="tools/Kiji.Analyzers" Packages="Microsoft.CodeAnalysis.CSharp" />
+    <KijiProject Include="Kiji.Core.Tests" Path="tests/Kiji.Core.Tests" References="Kiji.Core;Kiji.Testing" />
+    <KijiProject Include="Kiji.Hosting.Tests" Path="tests/Kiji.Hosting.Tests" References="Kiji.Core;Kiji.Hosting;Kiji.Testing" />
+    <KijiProject Include="Kiji.Markdown.Tests" Path="tests/Kiji.Markdown.Tests" References="Kiji.Core;Kiji.Markdown;Kiji.Testing" />
+    <KijiProject Include="Kiji.Images.Skia.Tests" Path="tests/Kiji.Images.Skia.Tests" References="Kiji.Core;Kiji.Images.Skia;Kiji.Testing" />
+    <KijiProject Include="Kiji.Feeds.Tests" Path="tests/Kiji.Feeds.Tests" References="Kiji.Core;Kiji.Feeds" />
+    <KijiProject Include="Kiji.Sitemaps.Tests" Path="tests/Kiji.Sitemaps.Tests" References="Kiji.Core;Kiji.Sitemaps" />
+    <KijiProject Include="Kiji.Analyzers.Tests" Path="tests/Kiji.Analyzers.Tests" References="Kiji.Analyzers" />
+    <KijiProject Include="Kiji.Tests" Path="tests/Kiji.Tests" References="Kiji;Kiji.Testing" SeesInternals="true" />
+    <KijiProject Include="Kiji.PackageTests" Path="tests/Kiji.PackageTests" References="Kiji" />
+    <KijiProject Include="Kiji.RepositoryTests" Path="tests/Kiji.RepositoryTests" />
+    <KijiProject Include="Kiji.SyntheticSite" Path="benchmarks/Kiji.SyntheticSite" References="Kiji" SeesInternals="true" />
+    <KijiProject Include="Kiji.Benchmarks" Path="benchmarks/Kiji.Benchmarks" References="Kiji;Kiji.SyntheticSite" SeesInternals="true" />
+    <KijiProject Include="Kiji.Analyzers" Path="tools/Kiji.Analyzers" />
     <KijiInfrastructurePackage Include="MinVer;Microsoft.CodeAnalysis.BannedApiAnalyzers;ReferenceTrimmer" />
   </ItemGroup>
 
@@ -115,7 +109,7 @@
            Text="Kiji.PackageTests tests the packed package as a black box. Keep ReferenceOutputAssembly=&quot;false&quot; on its reference to @(_KijiPackageTestsCompileReference->'%(Filename)'); it only orders the build." />
   </Target>
 
-  <Target Name="KijiCheckPackageReferences" Condition="'$(KijiExample)' != 'true'" BeforeTargets="CollectPackageReferences" DependsOnTargets="KijiCheckProjectPlacement">
+  <Target Name="KijiCheckPackageReferences" Condition="'$(KijiPublicApi)' == 'true'" BeforeTargets="CollectPackageReferences" DependsOnTargets="KijiCheckProjectPlacement">
     <ItemGroup>
       <_KijiAllowedPackage Include="$(KijiAllowedPackages);@(KijiInfrastructurePackage)" />
       <_KijiForbiddenPackage Include="@(PackageReference)" Exclude="@(_KijiAllowedPackage)"

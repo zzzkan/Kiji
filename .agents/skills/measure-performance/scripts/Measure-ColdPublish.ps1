@@ -80,8 +80,6 @@ $hookProject = @'
 
 '@
 
-$siteSources = @('MainLayout.cs', 'PageHead.cs', 'PostFrontMatter.cs', 'PostSlug.cs', 'SyntheticSiteDefinition.cs')
-
 function Invoke-Checked([string] $directory, [string[]] $arguments) {
     $output = & $arguments[0] @($arguments | Select-Object -Skip 1) 2>&1 | Out-String
     if ($LASTEXITCODE -ne 0) {
@@ -104,8 +102,11 @@ function New-Site([string] $site, [string] $repository, [string] $corpus, [strin
     Copy-Item (Join-Path $corpus 'contents') (Join-Path $site 'contents') -Recurse
     Copy-Item (Join-Path $corpus 'wwwroot') (Join-Path $site 'wwwroot') -Recurse
     $source = Join-Path $repository 'benchmarks/Kiji.SyntheticSite'
-    Copy-Item (Join-Path $source 'Pages') (Join-Path $site 'Pages') -Recurse
-    foreach ($name in $siteSources) { Copy-Item (Join-Path $source $name) (Join-Path $site $name) }
+    foreach ($file in Get-ChildItem $source -Filter '*.cs' -File -Recurse | Where-Object { $_.FullName -notmatch '[\\/](bin|obj|Harness)[\\/]' }) {
+        $target = Join-Path $site ([IO.Path]::GetRelativePath($source, $file.FullName))
+        New-Item -ItemType Directory -Force (Split-Path $target) | Out-Null
+        Copy-Item -LiteralPath $file.FullName -Destination $target
+    }
     Set-Content -LiteralPath (Join-Path $site 'Program.cs') -Value $program -NoNewline
     Set-Content -LiteralPath (Join-Path $site 'Site.csproj') -NoNewline -Value $project.Replace('__PACKAGES__', $packages).Replace('__FEED__', $feed).Replace('__VERSION__', $version)
     Invoke-In $site @('dotnet', 'publish', '-c', 'Release', '-o', 'dist')

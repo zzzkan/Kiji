@@ -82,7 +82,10 @@ switch ($Command) {
             return
         }
         $process.Kill($true)
-        $process.WaitForExit()
+        if (-not $process.WaitForExit(5000)) {
+            $isZombie = $IsLinux -and ((Get-Content -Raw -LiteralPath "/proc/$($process.Id)/stat" -ErrorAction SilentlyContinue) -match '\) Z ')
+            if (-not $isZombie -and -not $process.HasExited) { throw "Process $($process.Id) did not stop." }
+        }
         Remove-Item -LiteralPath $record
         Write-Output "stopped process $($process.Id)"
     }

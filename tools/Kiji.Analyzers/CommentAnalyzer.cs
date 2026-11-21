@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -18,7 +17,6 @@ public sealed class CommentAnalyzer : DiagnosticAnalyzer
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
-    private static readonly Regex s_trailingYamlComment = new(@"\s#\s(?!v\d+\.\d+\.\d+\s*$)", RegexOptions.CultureInvariant);
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [Rule];
 
@@ -81,36 +79,11 @@ public sealed class CommentAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        foreach (var line in text.Lines)
+        var lines = text.Lines.Select(static line => line.ToString()).ToArray();
+        foreach (var number in CommentScanner.CommentLines(Path.GetFileName(path), lines).OrderBy(static number => number))
         {
-            var content = line.ToString();
-            if (IsComment(path, content, line.LineNumber))
-            {
-                context.ReportDiagnostic(Diagnostic.Create(Rule, Location.Create(path, line.Span, text.Lines.GetLinePositionSpan(line.Span)), $"Comment \"{content.Trim()}\""));
-            }
-        }
-    }
-
-    private static bool IsComment(string path, string line, int lineNumber)
-    {
-        var text = line.TrimStart();
-        var name = Path.GetFileName(path);
-        switch (Path.GetExtension(path).ToLowerInvariant())
-        {
-            case ".csproj" or ".props" or ".targets":
-                return line.Contains("<!--");
-            case ".razor":
-                return line.Contains("<!--") || line.Contains("@*");
-            case ".css":
-                return line.Contains("/*");
-            case ".js" or ".mjs":
-                return text.StartsWith("//", StringComparison.Ordinal) || text.StartsWith("/*", StringComparison.Ordinal);
-            case ".yml" or ".yaml":
-                return text.StartsWith("#", StringComparison.Ordinal) || text.StartsWith("//", StringComparison.Ordinal) || s_trailingYamlComment.IsMatch(line);
-            case ".ps1" or ".sh" or ".py":
-                return text.StartsWith("#", StringComparison.Ordinal) && !(lineNumber == 0 && text.StartsWith("#!", StringComparison.Ordinal));
-            default:
-                return (name is ".editorconfig" or ".gitignore") && text.StartsWith("#", StringComparison.Ordinal);
+            var line = text.Lines[number];
+            context.ReportDiagnostic(Diagnostic.Create(Rule, Location.Create(path, line.Span, text.Lines.GetLinePositionSpan(line.Span)), $"Comment \"{lines[number].Trim()}\""));
         }
     }
 

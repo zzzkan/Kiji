@@ -1,4 +1,4 @@
-namespace Kiji;
+namespace Kiji.Definition;
 
 internal sealed record PageParameterRegistration(
     Type ComponentType,

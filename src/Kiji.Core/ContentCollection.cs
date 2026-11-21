@@ -1,8 +1,7 @@
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
-using Kiji.Hosting;
-using Kiji.Generation;
 using System.Text;
+using Kiji.Incremental;
 using Kiji.Rendering;
 
 namespace Kiji;

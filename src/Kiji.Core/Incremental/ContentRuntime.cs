@@ -2,13 +2,13 @@ using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Kiji.Hosting;
+namespace Kiji.Incremental;
 
 internal sealed class ContentRuntime
 {
-    internal Generation.DependencyCatalog Dependencies { get; } = new();
+    internal DependencyCatalog Dependencies { get; } = new();
 
-    internal Generation.ContentFileRegistry Files { get; } = new();
+    internal ContentFileRegistry Files { get; } = new();
 
     private readonly HashSet<(Type Type, string? ServiceKey)> _registrations = [];
     private readonly ConcurrentDictionary<object, object> _materialized = new();

@@ -1,7 +1,9 @@
+using Kiji.Incremental;
+using Kiji.Paths;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
-namespace Kiji.Hosting;
+namespace Kiji.Definition;
 
 internal sealed class SiteBuilderContext(IHostApplicationBuilder builder, StaticSiteOptions options,
     ContentRuntime runtime, SiteExecutionPaths paths, IEnumerable<ServiceDescriptor> managedServices, ServiceDescriptor hostedService)

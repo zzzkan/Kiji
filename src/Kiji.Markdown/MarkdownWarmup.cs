@@ -1,6 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Kiji.Assets;
-using Kiji.Generation;
+using Kiji.Incremental;
 
 namespace Kiji.Markdown;
 

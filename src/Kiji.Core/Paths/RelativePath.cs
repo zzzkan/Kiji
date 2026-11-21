@@ -1,4 +1,4 @@
-namespace Kiji;
+namespace Kiji.Paths;
 
 internal static class RelativePath
 {

@@ -1,7 +1,7 @@
 using System.Buffers;
 using System.Text.Json;
 
-namespace Kiji.Generation;
+namespace Kiji.Incremental;
 
 internal static class BuildManifestSerializer
 {

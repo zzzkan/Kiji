@@ -1,5 +1,5 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -14,7 +14,7 @@ internal sealed class StaticComponentActivator(IServiceProvider services) : ICom
     {
         if (componentType == typeof(ImportMap))
         {
-            return new ImportMap { ImportMapDefinition = (PageRenderContext.Current?.Assets ?? Assets.AssetResources.Empty).ReadImportMap() };
+            return new ImportMap { ImportMapDefinition = (PageRenderContext.Current?.Assets ?? AssetResources.Empty).ReadImportMap() };
         }
 
         var (create, alwaysRender) = Factories.GetOrAdd(componentType,

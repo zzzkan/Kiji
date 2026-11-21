@@ -1,7 +1,8 @@
+using Kiji.Paths;
 using Kiji.Rendering;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.StaticWebAssets;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration.Memory;
 using Microsoft.Extensions.DependencyInjection;
@@ -127,7 +128,7 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
 
         var assets = options.AssetManifestPath is null ? null
             : Assets.StaticAssetManifest.Load(options.AssetManifestPath, options.AssetEndpointsPath, app.SiteInfo.BaseUrl, includeIntegrity: false);
-        app.UseAssetResources(assets?.Resources ?? Assets.AssetResources.Empty);
+        app.UseAssetResources(assets?.Resources ?? AssetResources.Empty);
         if (assets?.ContentRoots.Length > 0)
         {
             builder.Environment.WebRootFileProvider = new NullFileProvider();

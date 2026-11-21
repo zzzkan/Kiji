@@ -1,5 +1,6 @@
 using System.Runtime;
-using Kiji.Generation;
+using Kiji.Incremental;
+using Kiji.Paths;
 
 namespace Kiji.Hosting;
 

@@ -1,3 +1,5 @@
+using Kiji.Paths;
+using Kiji.Rendering;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -13,7 +15,7 @@ internal sealed class TestSiteHost(IHost host) : IAsyncDisposable
     internal SiteInfo SiteInfo => Engine.SiteInfo;
     internal SiteSnapshot CreateSnapshot() => Engine.CreateSnapshot();
     internal void InvalidateContent() => Engine.InvalidateContent();
-    internal void UseAssetResources(Kiji.Assets.AssetResources resources) => Engine.UseAssetResources(resources);
+    internal void UseAssetResources(AssetResources resources) => Engine.UseAssetResources(resources);
     internal Task<string> RenderPageAsync(Kiji.Rendering.PageRenderRequest request, CancellationToken token,
         Kiji.Rendering.SharedRenderLifetime? sharedRenders = null) => Engine.RenderPageAsync(request, token, sharedRenders);
 

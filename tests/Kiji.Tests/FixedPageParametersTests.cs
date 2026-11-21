@@ -1,3 +1,4 @@
+using Kiji.Paths;
 using Kiji.Tests.TestSite.TypedParameters;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;

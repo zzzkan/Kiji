@@ -1,8 +1,8 @@
 using System.Security.Cryptography;
-using Kiji.Generation;
+using Kiji.Incremental;
 using Microsoft.AspNetCore.WebUtilities;
 
-namespace Kiji;
+namespace Kiji.Definition;
 
 internal sealed record SiteArtifactRegistration(
     string OutputRelativePath,

@@ -1,4 +1,4 @@
-namespace Kiji.Generation;
+namespace Kiji.Incremental;
 
 internal readonly record struct OutputStamp(long Length, DateTime LastWriteTimeUtc)
 {

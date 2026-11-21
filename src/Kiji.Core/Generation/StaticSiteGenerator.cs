@@ -1,7 +1,10 @@
 using System.Collections.Concurrent;
+using Kiji.Diagnostics;
+using Kiji.Incremental;
+using Kiji.Paths;
 using Kiji.Rendering;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
 
 namespace Kiji.Generation;
 
@@ -21,7 +24,7 @@ internal static class StaticSiteGenerator
         var resolvedPages = new (PageRenderRequest Request, string FullPath)[pageRequests.Count];
         for (var i = 0; i < pageRequests.Count; i++)
         {
-            var fullPath = OutputPathValidator.ResolveUnderRoot(
+            var fullPath = PathContainment.ResolveUnderRoot(
                 options.OutputDirectory,
                 pageRequests[i].OutputRelativePath,
                 "Page output path");

@@ -1,4 +1,5 @@
 using Kiji.Feeds;
+using Kiji.Paths;
 using Kiji.Tests.TestSite;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;

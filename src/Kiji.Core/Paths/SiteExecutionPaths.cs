@@ -1,7 +1,6 @@
 using System.Reflection;
-using Kiji.Hosting;
 
-namespace Kiji;
+namespace Kiji.Paths;
 
 internal sealed class SiteExecutionPaths
 {

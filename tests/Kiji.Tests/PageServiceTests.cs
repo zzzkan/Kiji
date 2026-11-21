@@ -1,10 +1,11 @@
-using System.Reflection;
 using System.Reflection.Emit;
+using System.Reflection;
 using Kiji.Feeds;
 using Kiji.Markdown;
+using Kiji.Paths;
 using Kiji.Tests.TestSite.PageServices;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Kiji.Tests;

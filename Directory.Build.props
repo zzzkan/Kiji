@@ -34,6 +34,8 @@
 
   <ItemGroup>
     <CompilerVisibleProperty Include="KijiPublicApi" />
+    <CompilerVisibleProperty Include="KijiNamespaceOwners" />
+    <CompilerVisibleProperty Include="MSBuildProjectName" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(MSBuildProjectName)' != 'Kiji.Analyzers' and '$(MSBuildProjectName)' != 'Kiji.Runtime' and '$(NoBuild)' != 'true'">

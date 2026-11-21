@@ -1,6 +1,6 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using Kiji.Generation;
+using Kiji.Incremental;
 
 namespace Kiji.Assets;
 
@@ -13,7 +13,7 @@ internal static class ImageProcessorIdentity
         if (processor.CacheIdentity is not { } settings || processor.GetType().Assembly.IsDynamic) { return null; }
         var code = Code.GetValue(processor.GetType().Assembly, static assembly =>
         {
-            var dependencies = IncrementalBuildPlanner.CollectCodeDependencies([assembly]);
+            var dependencies = CodeIdentity.Collect([assembly]);
             return dependencies.Any(static input => input.EndsWith(":unavailable", StringComparison.Ordinal))
                 ? string.Empty
                 : BuildFingerprint.HashText(string.Join("\n", dependencies));

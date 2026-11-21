@@ -1,6 +1,6 @@
 using System.IO.Enumeration;
 using System.Runtime.ExceptionServices;
-using Kiji.Generation;
+using Kiji.Incremental;
 using YamlDotNet.Serialization;
 
 namespace Kiji.Markdown;

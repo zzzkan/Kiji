@@ -1,3 +1,5 @@
+using Kiji.Definition;
+using Kiji.Paths;
 
 namespace Kiji.Tests;
 

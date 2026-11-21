@@ -1,6 +1,6 @@
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
-using Kiji.Assets;
+using Kiji.Imaging;
 
 namespace Kiji.Benchmarks;
 

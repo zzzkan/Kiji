@@ -1,7 +1,8 @@
 using Kiji.Assets;
 using Kiji.Markdown;
-using Microsoft.Extensions.DependencyInjection;
+using Kiji.Paths;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Xunit;
 

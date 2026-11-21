@@ -1,7 +1,8 @@
-using Kiji.Tests.TestSite;
-using Kiji.Sitemaps;
-using Microsoft.Extensions.DependencyInjection;
 using System.Text;
+using Kiji.Paths;
+using Kiji.Sitemaps;
+using Kiji.Tests.TestSite;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Kiji.Tests;

@@ -1,5 +1,5 @@
-using Kiji.Generation;
 using System.Text;
+using Kiji.Incremental;
 using YamlDotNet.Serialization;
 
 namespace Kiji.Markdown;

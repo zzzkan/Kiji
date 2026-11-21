@@ -1,4 +1,4 @@
-namespace Kiji.Generation;
+namespace Kiji.Incremental;
 
 internal sealed record BuildManifestOutput(string RelativePath, string Hash)
 {

@@ -1,10 +1,13 @@
-using Kiji.Generation;
-using Kiji.Markdown;
+using System.Text.RegularExpressions;
 using Kiji.Assets;
+using Kiji.Generation;
+using Kiji.Imaging;
+using Kiji.Incremental;
+using Kiji.Markdown;
+using Kiji.Paths;
 using Kiji.Rendering;
 using SkiaSharp;
 using Xunit;
-using System.Text.RegularExpressions;
 
 namespace Kiji.Tests;
 
@@ -374,7 +377,7 @@ public sealed class MarkdownProcessorTests : IDisposable
         PageRenderContext.SetCurrent(new PageRenderContext
         {
             RoutePath = routePath,
-            Dependencies = tracked ? new Kiji.Generation.BuildDependencyRecorder() : null,
+            Dependencies = tracked ? new BuildDependencyRecorder() : null,
         });
 
         try

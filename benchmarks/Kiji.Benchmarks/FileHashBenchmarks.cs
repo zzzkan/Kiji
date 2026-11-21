@@ -1,5 +1,5 @@
 using BenchmarkDotNet.Attributes;
-using Kiji.Generation;
+using Kiji.Incremental;
 
 namespace Kiji.Benchmarks;
 

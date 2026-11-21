@@ -1,6 +1,7 @@
 using Kiji.Generation;
-using Kiji.Assets;
+using Kiji.Imaging;
 using Kiji.Markdown;
+using Kiji.Paths;
 using Markdig;
 using Xunit;
 

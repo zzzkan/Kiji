@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Kiji.Incremental;
 using YamlDotNet.Serialization;
 
 namespace Kiji.Markdown;
@@ -11,7 +12,7 @@ internal sealed class MarkdownSourceCache<TFrontMatter>
         FileInfo file,
         IDeserializer deserializer)
     {
-        if (_entries.TryGetValue(file.FullName, out var entry) && entry.ContentHash == Generation.BuildFingerprint.HashFile(file.FullName))
+        if (_entries.TryGetValue(file.FullName, out var entry) && entry.ContentHash == BuildFingerprint.HashFile(file.FullName))
         {
             return entry;
         }

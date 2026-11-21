@@ -1,9 +1,14 @@
 using System.Diagnostics.CodeAnalysis;
-using Kiji.Generation;
 using System.Reflection;
 using Kiji.Assets;
+using Kiji.Definition;
+using Kiji.Diagnostics;
+using Kiji.Generation;
 using Kiji.Hosting;
+using Kiji.Imaging;
+using Kiji.Incremental;
 using Kiji.Markdown;
+using Kiji.Paths;
 using Kiji.Rendering;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

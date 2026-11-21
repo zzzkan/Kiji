@@ -1,9 +1,8 @@
 using System.Text;
-using Kiji.Generation;
-using Kiji.Rendering;
+using Kiji.Incremental;
 using Microsoft.AspNetCore.Components;
 
-namespace Kiji.Assets;
+namespace Kiji.Rendering;
 
 internal sealed class AssetResources
 {

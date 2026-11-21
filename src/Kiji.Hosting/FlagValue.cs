@@ -1,4 +1,4 @@
-namespace Kiji;
+namespace Kiji.Hosting;
 
 internal static class FlagValue
 {

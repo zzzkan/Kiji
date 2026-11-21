@@ -1,4 +1,4 @@
-using Kiji.Hosting;
+using Kiji.Definition;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;

@@ -1,6 +1,7 @@
-using Microsoft.Extensions.DependencyInjection;
-using Kiji.Generation;
+using Kiji.Incremental;
+using Kiji.Paths;
 using Kiji.Rendering;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Kiji.Tests;

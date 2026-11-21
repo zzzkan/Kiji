@@ -1,8 +1,9 @@
 using Kiji.Components;
+using Kiji.Paths;
 using Kiji.Rendering;
 using Kiji.Tests.TestSite;
-using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Rendering;
+using Microsoft.AspNetCore.Components;
 using Xunit;
 
 namespace Kiji.Tests;

@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
 
-namespace Kiji;
+namespace Kiji.Diagnostics;
 
 internal static partial class BuildLoggerExtensions
 {

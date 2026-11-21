@@ -1,5 +1,6 @@
-using Kiji.Testing;
 using Kiji.Assets;
+using Kiji.Incremental;
+using Kiji.Testing;
 using SkiaSharp;
 using Xunit;
 
@@ -99,15 +100,15 @@ public sealed class ImageConcurrencyTests : IDisposable
         var cacheRoot = Path.Combine(_root, "cache");
         var legacy = Path.Combine(_root, "custom.svg");
         await File.WriteAllTextAsync(legacy, "<svg/>");
-        var hash = new Kiji.Generation.ArtifactCache(cacheRoot).Store(legacy);
+        var hash = new ArtifactCache(cacheRoot).Store(legacy);
         var info = new ProcessedImageInfo { OriginalWidth = 2, OriginalHeight = 2, Variants = [new("custom.svg", 2)] };
         var record = new CachedImageResult(info, [new("custom.svg", hash)]);
         var payload = System.Text.Json.JsonSerializer.Serialize(record, ImageCacheJsonContext.Default.CachedImageResult);
-        var sourceHash = Kiji.Generation.BuildFingerprint.HashFile(source);
-        var oldKey = Kiji.Generation.BuildFingerprint.HashText(processor.CacheIdentity + ":" + Path.GetFileName(source) + ":" + sourceHash);
+        var sourceHash = BuildFingerprint.HashFile(source);
+        var oldKey = BuildFingerprint.HashText(processor.CacheIdentity + ":" + Path.GetFileName(source) + ":" + sourceHash);
         Directory.CreateDirectory(Path.Combine(cacheRoot, "image-records"));
         await File.WriteAllTextAsync(Path.Combine(cacheRoot, "image-records", oldKey + ".json"),
-            System.Text.Json.JsonSerializer.Serialize(new ImageCacheEnvelope(Kiji.Generation.BuildFingerprint.HashText(payload), payload),
+            System.Text.Json.JsonSerializer.Serialize(new ImageCacheEnvelope(BuildFingerprint.HashText(payload), payload),
                 ImageCacheJsonContext.Default.ImageCacheEnvelope));
 
         var result = await ImageArtifactProcessor.ProcessAsync(processor, source, Path.Combine(_root, "shared"),

@@ -1,7 +1,7 @@
 using System.Text.Encodings.Web;
 using System.Text.Unicode;
-using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
@@ -43,7 +43,7 @@ internal sealed class ComponentRenderer(IServiceProvider services)
         await using var scope = services.CreateAsyncScope();
         await using var renderer = new AssetHtmlRenderer(
             scope.ServiceProvider, scope.ServiceProvider.GetRequiredService<ILoggerFactory>(),
-            PageRenderContext.Current?.Assets ?? Assets.AssetResources.Empty);
+            PageRenderContext.Current?.Assets ?? AssetResources.Empty);
         await renderer.Dispatcher.InvokeAsync(async () =>
         {
             var document = renderer.BeginRenderingComponent(typeof(TComponent), CreateParameterView(parameters));

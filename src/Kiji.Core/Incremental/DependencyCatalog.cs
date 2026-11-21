@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace Kiji.Generation;
+namespace Kiji.Incremental;
 
 internal sealed class DependencyCatalog
 {

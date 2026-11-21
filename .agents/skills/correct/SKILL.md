@@ -23,6 +23,8 @@ Try each level in order and record why a higher one did not work.
    not compile, one source of truth instead of lists kept in sync by hand. Code that must not
    depend on something belongs in a project that cannot reference it: the `KijiProject` graph
    in `Directory.Build.targets` fixes which projects and packages each project may use.
+   Inside a project, internal namespaces may not form cycles (KR0007), so code that must not
+   reach something goes in a namespace below it.
    Delete the old way and its dead code in the same change.
 2. **Types.** Make the bad state unrepresentable: nullable annotations, `required` and
    `init`, sealed hierarchies, a dedicated type instead of a string or a bool.

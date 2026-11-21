@@ -1,5 +1,5 @@
 using System.Reflection;
-using Kiji.Hosting;
+using Kiji.Definition;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;

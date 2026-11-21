@@ -1,5 +1,8 @@
 using System.Reflection;
 using Kiji.Assets;
+using Kiji.Definition;
+using Kiji.Incremental;
+using Kiji.Paths;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

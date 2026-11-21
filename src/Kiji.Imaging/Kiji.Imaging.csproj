@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <RootNamespace>Kiji.Assets</RootNamespace>
+    <RootNamespace>Kiji.Imaging</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>

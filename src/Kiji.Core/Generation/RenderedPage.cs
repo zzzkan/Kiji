@@ -1,3 +1,4 @@
+using Kiji.Incremental;
 using Kiji.Rendering;
 
 namespace Kiji.Generation;

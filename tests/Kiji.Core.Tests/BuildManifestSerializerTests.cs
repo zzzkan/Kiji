@@ -1,8 +1,8 @@
-using Kiji.Testing;
 using System.Buffers;
-using System.Text;
 using System.Text.Json;
-using Kiji.Generation;
+using System.Text;
+using Kiji.Incremental;
+using Kiji.Testing;
 using Xunit;
 
 namespace Kiji.Core.Tests;

@@ -1,6 +1,7 @@
 using System.Buffers;
-using System.Text;
 using System.Text.Unicode;
+using System.Text;
+using Kiji.Incremental;
 
 namespace Kiji.Rendering;
 
@@ -49,7 +50,7 @@ internal sealed class PooledUtf8TextWriter(int initialCapacity = 64 * 1024) : Te
     public string GetContentHash()
     {
         FlushPendingSurrogate();
-        return Generation.BuildFingerprint.HashBytes(_buffer.AsSpan(0, _written));
+        return BuildFingerprint.HashBytes(_buffer.AsSpan(0, _written));
     }
 
     internal byte[] ToArray()
@@ -61,7 +62,7 @@ internal sealed class PooledUtf8TextWriter(int initialCapacity = 64 * 1024) : Te
     internal bool MatchesFile(string path)
     {
         FlushPendingSurrogate();
-        return Generation.BuildFingerprint.FileEquals(path, _buffer.AsSpan(0, _written));
+        return BuildFingerprint.FileEquals(path, _buffer.AsSpan(0, _written));
     }
 
     public void WriteToFile(string path)

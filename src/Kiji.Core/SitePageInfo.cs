@@ -8,7 +8,7 @@ public sealed record SitePageInfo
     /// <param name="OutputRelativePath">The file path in the output directory.</param>
     public SitePageInfo(string RelativePath, string OutputRelativePath)
     {
-        global::Kiji.RelativePath.Validate(RelativePath, nameof(RelativePath));
+        Paths.RelativePath.Validate(RelativePath, nameof(RelativePath));
         ArgumentException.ThrowIfNullOrWhiteSpace(OutputRelativePath);
 
         this.RelativePath = RelativePath;

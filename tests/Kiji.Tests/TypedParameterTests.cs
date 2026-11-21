@@ -1,9 +1,10 @@
-using Microsoft.Extensions.DependencyInjection;
 using System.Collections.Frozen;
 using System.Collections.ObjectModel;
 using System.Text.Json.Nodes;
+using Kiji.Paths;
 using Kiji.Routing;
 using Kiji.Tests.TestSite.TypedParameters;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Kiji.Tests;

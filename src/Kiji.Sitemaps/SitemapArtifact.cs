@@ -1,4 +1,5 @@
 using Kiji.Generation;
+using Kiji.Paths;
 
 namespace Kiji.Sitemaps;
 

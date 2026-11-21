@@ -40,6 +40,9 @@ below once a check covers them.
 | --- | --- |
 | Warnings and recommended .NET analyzers fail the build | `Directory.Build.props` (`TreatWarningsAsErrors`, `AnalysisLevel`, `EnforceCodeStyleInBuild`) |
 | File-scoped namespaces | `.editorconfig` IDE0160 at `error` |
+| A namespace matches its folder | `.editorconfig` IDE0130 at `error` |
+| Each namespace belongs to one `src` project (the one whose `Namespace` is its longest prefix) | `Kiji.Analyzers` KR0008, `Namespace` on `KijiProject` items |
+| Internal namespaces depend in one direction; public types are exempt | `Kiji.Analyzers` KR0007 |
 | Public API stays compatible, except listed breaks | Package validation against 0.1.0, `src/Kiji/CompatibilitySuppressions.xml` |
 | ReadyToRun images have third-party notices | Pack error in `src/Kiji/Kiji.csproj` |
 | Incremental output equals a clean build | `IncrementalBuildTests` |
@@ -85,6 +88,14 @@ below once a check covers them.
   the packed projects, as the package does. `src/Kiji/MSBuild/Kiji.targets` integrates
   publish, watch and clean. Tests go in `tests`, measurements in `benchmarks`, build tooling
   in `tools`.
+- Public namespaces are what an author imports: `Kiji` (site, pages, content, builder),
+  `Kiji.Markdown`, `Kiji.Assets` (images), `Kiji.Feeds`, `Kiji.Sitemaps`; package validation keeps
+  them stable. Internal namespaces in `Kiji.Core`, from the bottom: `Kiji.Paths`,
+  `Kiji.Diagnostics`, `Kiji.Incremental` (fingerprints, dependency recording, manifest, caches,
+  code identity), `Kiji.Definition` (what the builder records), `Kiji.Rendering`,
+  `Kiji.Routing`, `Kiji.Components`, then the image and static-asset pipeline in `Kiji.Assets` and
+  `Kiji.Generation` on top. Other projects' internals use their own namespace (`Kiji.Hosting`,
+  `Kiji.Imaging`, ...).
 - Each `src` library project has `tests/<Project>.Tests`, which references only that project,
   its dependencies and `tests/Kiji.Testing` (shared helpers over `Kiji.Core`). A test belongs to
   the lowest project it can reference; `tests/Kiji.Tests` holds the tests that run a whole

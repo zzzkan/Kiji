@@ -1,6 +1,7 @@
 using Kiji.Markdown;
-using Markdig;
+using Kiji.Paths;
 using Markdig.Renderers;
+using Markdig;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 

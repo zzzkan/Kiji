@@ -1,5 +1,7 @@
 using System.Text.Json;
-using Kiji.Generation;
+using Kiji.Incremental;
+using Kiji.Paths;
+using Kiji.Rendering;
 using Microsoft.AspNetCore.Components;
 
 namespace Kiji.Assets;
@@ -99,7 +101,7 @@ internal sealed class StaticAssetManifest
                 {
                     throw new InvalidOperationException($"Invalid or duplicate static asset path '{target}'.");
                 }
-                var source = OutputPathValidator.ResolveUnderRoot(roots[asset.GetProperty("ContentRootIndex").GetInt32()],
+                var source = PathContainment.ResolveUnderRoot(roots[asset.GetProperty("ContentRootIndex").GetInt32()],
                     asset.GetProperty("SubPath").GetString()!, "Static asset source");
                 assets.Add(new StaticAsset(source, target));
             }

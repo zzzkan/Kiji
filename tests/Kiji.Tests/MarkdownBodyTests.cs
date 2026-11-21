@@ -1,4 +1,5 @@
 using Kiji.Markdown;
+using Kiji.Paths;
 using Kiji.Rendering;
 using Xunit;
 

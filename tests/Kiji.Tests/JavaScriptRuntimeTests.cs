@@ -1,3 +1,4 @@
+using Kiji.Paths;
 using Kiji.Rendering;
 using Kiji.Tests.TestSite;
 using Microsoft.Extensions.DependencyInjection;

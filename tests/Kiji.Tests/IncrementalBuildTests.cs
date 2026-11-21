@@ -1,9 +1,12 @@
 using Kiji.Assets;
+using Kiji.Imaging;
+using Kiji.Incremental;
 using Kiji.Markdown;
+using Kiji.Paths;
 using Kiji.Sitemaps;
+using Kiji.Tests.TestSite.ErrorHandling;
 using Kiji.Tests.TestSite.Pages;
 using Kiji.Tests.TestSite;
-using Kiji.Tests.TestSite.ErrorHandling;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -360,7 +363,7 @@ public sealed class IncrementalBuildTests : IDisposable
         async Task Sync()
         {
             var files = await planner.SyncStaticFilesAsync(Assets.StaticAssetManifest.Load(catalogPath).Assets);
-            planner.ReconcileOutputs(new Generation.BuildManifest { StaticFiles = files });
+            planner.ReconcileOutputs(new BuildManifest { StaticFiles = files });
         }
         await Sync();
         var first = Path.Combine(options.OutputDirectory, "_content", "library", "first.css");
@@ -528,7 +531,7 @@ public sealed class IncrementalBuildTests : IDisposable
             await BuildAsync(root, RecordRender);
             Assert.True(renders > previousRenders, damage);
             var rebuilt = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(manifestPath))!;
-            Assert.Equal(Kiji.Generation.BuildManifest.CurrentSchemaVersion, rebuilt["SchemaVersion"]!.GetValue<int>());
+            Assert.Equal(BuildManifest.CurrentSchemaVersion, rebuilt["SchemaVersion"]!.GetValue<int>());
             var actual = SnapshotDirectory(Path.Combine(root, "dist"));
             Assert.Equal(expected.Keys.Order(StringComparer.Ordinal), actual.Keys.Order(StringComparer.Ordinal));
             foreach (var (path, entry) in expected)
@@ -947,7 +950,7 @@ public sealed class IncrementalBuildTests : IDisposable
         await BuildAsync(root, Record);
         Assert.Equal(count + 1, renders);
         var repaired = (await ReadCacheManifest(root)).Pages.Single(page => page.RoutePath == stable.RoutePath);
-        Assert.Equal(stable.OutputHash, Generation.BuildFingerprint.HashBytes(repaired.Html!.Value.Span));
+        Assert.Equal(stable.OutputHash, BuildFingerprint.HashBytes(repaired.Html!.Value.Span));
     }
 
     [Fact]
@@ -1022,7 +1025,7 @@ public sealed class IncrementalBuildTests : IDisposable
             Assert.False(File.Exists(retiredManifest));
             foreach (var page in manifest.Pages)
             {
-                Assert.Equal(page.OutputHash, Generation.BuildFingerprint.HashBytes(page.Html!.Value.Span));
+                Assert.Equal(page.OutputHash, BuildFingerprint.HashBytes(page.Html!.Value.Span));
                 Assert.Equal(page.Html.Value.ToArray(), await File.ReadAllBytesAsync(Path.Combine(root, "dist", page.OutputRelativePath)));
             }
             Assert.Single(Directory.GetFiles(cache, "html-*.bin"));
@@ -1174,7 +1177,7 @@ public sealed class IncrementalBuildTests : IDisposable
             var html = await File.ReadAllTextAsync(Path.Combine(root, "dist", page.OutputRelativePath));
             foreach (var output in page.AdditionalOutputs)
             {
-                Assert.Equal(output.Hash, Generation.BuildFingerprint.HashFile(Path.Combine(root, "dist", output.RelativePath)));
+                Assert.Equal(output.Hash, BuildFingerprint.HashFile(Path.Combine(root, "dist", output.RelativePath)));
                 Assert.Contains(output.RelativePath.Replace('\\', '/'), html, StringComparison.Ordinal);
             }
         }
@@ -1280,7 +1283,7 @@ public sealed class IncrementalBuildTests : IDisposable
         using (var bitmap = new SkiaSharp.SKBitmap(700, 400))
         using (var encoded = bitmap.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100)) { File.WriteAllBytes(source, encoded.ToArray()); }
         var count = 0;
-        var processor = new Kiji.Assets.ImageProcessor { BeforeEncodeAsync = (_, _) => { Interlocked.Increment(ref count); return Task.CompletedTask; } };
+        var processor = new ImageProcessor { BeforeEncodeAsync = (_, _) => { Interlocked.Increment(ref count); return Task.CompletedTask; } };
         for (var start = 0; start < 2; start++)
         {
             var builder = CreateBuilder(root, serve: true);
@@ -1524,7 +1527,7 @@ public sealed class IncrementalBuildTests : IDisposable
         await Build();
         Assert.Equal(count, renders);
         Assert.Equal(2, processor.Calls);
-        Assert.Equal(output.Hash, Generation.BuildFingerprint.HashFile(Path.Combine(root, "dist", output.RelativePath)));
+        Assert.Equal(output.Hash, BuildFingerprint.HashFile(Path.Combine(root, "dist", output.RelativePath)));
     }
 
     [Theory]
@@ -1582,10 +1585,10 @@ public sealed class IncrementalBuildTests : IDisposable
         Assert.NotEmpty(manifest.Pages);
         foreach (var page in manifest.Pages)
         {
-            Assert.Equal(Generation.OutputStamp.Read(Path.Combine(output, page.OutputRelativePath)), page.Stamp);
+            Assert.Equal(OutputStamp.Read(Path.Combine(output, page.OutputRelativePath)), page.Stamp);
             foreach (var additional in page.AdditionalOutputs)
             {
-                Assert.Equal(Generation.OutputStamp.Read(Path.Combine(output, additional.RelativePath)), additional.Stamp);
+                Assert.Equal(OutputStamp.Read(Path.Combine(output, additional.RelativePath)), additional.Stamp);
             }
         }
         var scratch = CreateSiteRoot("new-output-listed");
@@ -1594,7 +1597,7 @@ public sealed class IncrementalBuildTests : IDisposable
         AssertDirectoriesIdentical(Path.Combine(scratch, "dist"), output);
     }
 
-    private static async Task<Generation.BuildManifest> ReadCacheManifest(string root)
+    private static async Task<BuildManifest> ReadCacheManifest(string root)
     {
         var cache = Path.Combine(root, ".kiji", "cache");
         var manifest = System.Text.Json.JsonSerializer.Deserialize(await File.ReadAllBytesAsync(Path.Combine(cache, "manifest.json")),

@@ -3,7 +3,11 @@ using System.Diagnostics;
 using System.Reflection;
 using Kiji.Assets;
 using Kiji.Components;
+using Kiji.Definition;
+using Kiji.Diagnostics;
 using Kiji.Generation;
+using Kiji.Incremental;
+using Kiji.Paths;
 using Kiji.Rendering;
 using Kiji.Routing;
 using Microsoft.AspNetCore.Builder;
@@ -67,7 +71,7 @@ internal sealed class SiteEngine
         ImageArtifactProcessor.ClearWork(Paths.ResolveImageWorkPath(options));
         cancellationToken.ThrowIfCancellationRequested();
         Assembly[] codeAssemblies = [.. _pageAssemblies, .. _serviceAssemblies, .. _codeAssemblies];
-        var codeIdentity = Task.Run(() => IncrementalBuildPlanner.CollectCodeDependencies(codeAssemblies), CancellationToken.None);
+        var codeIdentity = Task.Run(() => CodeIdentity.Collect(codeAssemblies), CancellationToken.None);
         var cachePath = Paths.ResolveCachePath();
         var previousManifest = Task.Run(() => IncrementalBuildPlanner.LoadManifest(cachePath, cancellationToken), CancellationToken.None);
         var baseUrl = options.AssetManifestPath is null ? null : SiteInfo.BaseUrl;
@@ -484,7 +488,7 @@ internal sealed class SiteEngine
         for (var i = 0; i < _artifacts.Length; i++)
         {
             var artifact = _artifacts[i];
-            var fullPath = OutputPathValidator.ResolveUnderRoot(
+            var fullPath = PathContainment.ResolveUnderRoot(
                 options.OutputDirectory,
                 artifact.OutputRelativePath,
                 "Artifact output path");
@@ -526,7 +530,7 @@ internal sealed class SiteEngine
     private static Dictionary<string, string> CreateReservedArtifactPaths(ResolvedSitePaths options, SiteSnapshot snapshot, IReadOnlyList<StaticAsset> assets)
     {
         var reservedPaths = snapshot.Pages.ToDictionary(
-            page => OutputPathValidator.ResolveUnderRoot(
+            page => PathContainment.ResolveUnderRoot(
                 options.OutputDirectory,
                 page.OutputRelativePath,
                 "Page output path"),
@@ -536,7 +540,7 @@ internal sealed class SiteEngine
         foreach (var file in assets)
         {
             var relativePath = file.Target;
-            var outputPath = OutputPathValidator.ResolveUnderRoot(
+            var outputPath = PathContainment.ResolveUnderRoot(
                 options.OutputDirectory,
                 relativePath,
                 "Static file output path");

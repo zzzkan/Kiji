@@ -3,6 +3,7 @@ using Kiji.Feeds;
 using Kiji.Generation;
 using Kiji.Hosting;
 using Kiji.Markdown;
+using Kiji.Paths;
 using Kiji.Sitemaps;
 using Kiji.SyntheticSite.Pages;
 using Microsoft.Extensions.DependencyInjection;

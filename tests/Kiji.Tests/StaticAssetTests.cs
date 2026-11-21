@@ -1,6 +1,7 @@
-using Microsoft.Extensions.DependencyInjection;
 using System.Text.Json;
+using Kiji.Paths;
 using Kiji.Tests.TestSite;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Kiji.Tests;

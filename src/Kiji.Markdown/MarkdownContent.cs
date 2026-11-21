@@ -1,3 +1,4 @@
+using Kiji.Incremental;
 using Kiji.Rendering;
 
 namespace Kiji.Markdown;
@@ -27,7 +28,7 @@ public sealed class MarkdownContent<TFrontMatter>
 
         SourcePath = fileInfo.FullName;
         Path = path ?? fileInfo.Name;
-        ContentHash = contentHash ?? Generation.BuildFingerprint.HashFile(fileInfo.FullName);
+        ContentHash = contentHash ?? BuildFingerprint.HashFile(fileInfo.FullName);
         FrontMatterDigest = frontMatterDigest ?? ContentHash;
         FrontMatter = frontMatter;
         Body = body;

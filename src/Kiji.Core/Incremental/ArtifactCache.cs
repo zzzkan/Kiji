@@ -1,4 +1,4 @@
-namespace Kiji.Generation;
+namespace Kiji.Incremental;
 
 internal sealed class ArtifactCache(string root)
 {

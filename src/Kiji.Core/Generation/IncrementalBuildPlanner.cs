@@ -1,13 +1,15 @@
 using System.Collections.Concurrent;
 using System.Reflection;
-using System.Text;
 using System.Text.Json;
-using Kiji.Rendering;
-using Kiji.Hosting;
+using System.Text;
 using Kiji.Assets;
+using Kiji.Diagnostics;
+using Kiji.Incremental;
+using Kiji.Paths;
+using Kiji.Rendering;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
 
 namespace Kiji.Generation;
 
@@ -27,7 +29,6 @@ internal sealed class IncrementalBuildPlanner(
     ContentPath? contentPaths = null)
 {
     private readonly ILogger _logger = logger ?? NullLogger.Instance;
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Assembly, Lazy<List<string>>> CodeDependencies = [];
     private readonly ArtifactCache _cache = new(cacheDirectory);
     private readonly string _rootPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
     private readonly string _manifestPath = Path.Combine(cacheDirectory, "manifest.json");
@@ -49,7 +50,7 @@ internal sealed class IncrementalBuildPlanner(
     {
         OutputDirectoryCreated = !Directory.Exists(options.OutputDirectory);
         var optionsHash = ComputeOptionsHash();
-        var codeDependencies = CollectCodeDependencies(assemblies);
+        var codeDependencies = CodeIdentity.Collect(assemblies);
 
         var oldManifest = previousManifest is null ? LoadManifest(cacheDirectory, cancellationToken) : await previousManifest;
         OutputStampsValid = oldManifest?.OutputDirectoryHash == _outputDirectoryHash;
@@ -254,7 +255,7 @@ internal sealed class IncrementalBuildPlanner(
             {
                 var source = files[index];
                 var relativePath = source.Target.Replace('/', Path.DirectorySeparatorChar);
-                var destinationPath = OutputPathValidator.ResolveUnderRoot(options.OutputDirectory, relativePath, "Static asset path");
+                var destinationPath = PathContainment.ResolveUnderRoot(options.OutputDirectory, relativePath, "Static asset path");
                 entries[index] = relativePath;
 
                 if (!File.Exists(source.Source))
@@ -582,58 +583,6 @@ internal sealed class IncrementalBuildPlanner(
     private static bool IsSection(string key, string section) =>
         key.StartsWith(section, StringComparison.OrdinalIgnoreCase)
         && (key.Length == section.Length || key[section.Length] == ConfigurationPath.KeyDelimiter[0]);
-
-    internal static IReadOnlyList<string> CollectCodeDependencies(IEnumerable<Assembly> roots)
-    {
-        return [.. roots.Distinct().SelectMany(root => CodeDependencies.GetValue(root,
-                static root => new Lazy<List<string>>(() => CollectAssemblyDependencies(root))).Value)
-            .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
-    }
-
-    private static List<string> CollectAssemblyDependencies(Assembly root)
-    {
-        var visited = new HashSet<string>(StringComparer.Ordinal);
-        var fingerprints = new List<string>();
-        var queue = new Queue<Assembly>([root]);
-
-        while (queue.TryDequeue(out var assembly))
-        {
-            var name = assembly.GetName().Name ?? string.Empty;
-            if (!visited.Add(name))
-            {
-                continue;
-            }
-
-            if (assembly.IsDynamic || string.IsNullOrEmpty(assembly.Location))
-            {
-                fingerprints.Add($"{name}:unavailable");
-                continue;
-            }
-            var mvid = assembly.ManifestModule.ModuleVersionId;
-            fingerprints.Add(mvid == Guid.Empty ? $"{name}:unavailable" : $"{name}:mvid:{mvid:N}");
-
-            foreach (var reference in assembly.GetReferencedAssemblies())
-            {
-                if (visited.Contains(reference.Name ?? string.Empty))
-                {
-                    continue;
-                }
-
-                try
-                {
-                    queue.Enqueue(Assembly.Load(reference));
-                }
-                catch (Exception exception) when (exception is FileNotFoundException or FileLoadException or BadImageFormatException)
-                {
-                    visited.Add(reference.Name ?? string.Empty);
-                    fingerprints.Add($"{reference.Name}:unavailable");
-                }
-            }
-        }
-
-        fingerprints.Sort(StringComparer.Ordinal);
-        return fingerprints;
-    }
 
     private string HashFileCached(string path)
     {

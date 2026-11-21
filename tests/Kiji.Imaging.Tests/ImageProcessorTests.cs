@@ -1,7 +1,8 @@
-using Kiji.Assets;
-using Xunit;
-using SkiaSharp;
 using System.Buffers.Binary;
+using Kiji.Assets;
+using Kiji.Incremental;
+using SkiaSharp;
+using Xunit;
 
 namespace Kiji.Imaging.Tests;
 
@@ -227,7 +228,7 @@ public sealed class ImageProcessorTests : IDisposable
         foreach (var variant in info.Variants)
         {
             Assert.True(File.Exists(Path.Combine(_outputDir, variant.FileName)));
-            var hash = Generation.BuildFingerprint.HashFile(Path.Combine(_outputDir, variant.FileName));
+            var hash = BuildFingerprint.HashFile(Path.Combine(_outputDir, variant.FileName));
             Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(_cacheDir)!, "images", hash)));
         }
 

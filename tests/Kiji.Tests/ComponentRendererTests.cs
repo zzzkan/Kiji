@@ -1,7 +1,8 @@
+using Kiji.Paths;
 using Kiji.Rendering;
-using Kiji.Tests.TestSite;
 using Kiji.Tests.TestSite.ErrorHandling;
 using Kiji.Tests.TestSite.Head;
+using Kiji.Tests.TestSite;
 using Microsoft.Extensions.Logging;
 using Xunit;
 

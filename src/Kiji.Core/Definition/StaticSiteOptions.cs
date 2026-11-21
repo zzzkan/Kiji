@@ -1,6 +1,6 @@
 using System.Reflection;
 
-namespace Kiji.Hosting;
+namespace Kiji.Definition;
 
 internal sealed class StaticSiteOptions
 {

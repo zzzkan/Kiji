@@ -1,4 +1,4 @@
-using Kiji.Hosting;
+using Kiji.Paths;
 using Xunit;
 
 namespace Kiji.Core.Tests;

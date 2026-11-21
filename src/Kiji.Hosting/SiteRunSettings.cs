@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Kiji.Paths;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 

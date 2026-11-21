@@ -1,6 +1,6 @@
 using Xunit;
 
-namespace Kiji.Core.Tests;
+namespace Kiji.Hosting.Tests;
 
 public sealed class FlagValueTests
 {

@@ -1,6 +1,7 @@
-using System.Net;
 using System.Net.Sockets;
+using System.Net;
 using Kiji.Markdown;
+using Kiji.Paths;
 using Kiji.Tests.TestSite;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

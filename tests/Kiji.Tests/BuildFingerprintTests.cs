@@ -1,4 +1,4 @@
-using Kiji.Generation;
+using Kiji.Incremental;
 using Xunit;
 
 namespace Kiji.Tests;
@@ -9,7 +9,7 @@ public sealed class BuildFingerprintTests
     public void CodeDependencies_IncludeRootAndTransitiveModuleIdentities()
     {
         var root = typeof(BuildFingerprintTests).Assembly;
-        var dependencies = IncrementalBuildPlanner.CollectCodeDependencies([root, root]);
+        var dependencies = CodeIdentity.Collect([root, root]);
         foreach (var assembly in new[] { root, typeof(StaticSite).Assembly, typeof(object).Assembly })
         {
             Assert.Contains($"{assembly.GetName().Name}:mvid:{assembly.ManifestModule.ModuleVersionId:N}", dependencies);
@@ -24,7 +24,7 @@ public sealed class BuildFingerprintTests
         var assembly = System.Reflection.Emit.AssemblyBuilder.DefineDynamicAssembly(
             new System.Reflection.AssemblyName("DynamicSite_" + Guid.NewGuid().ToString("N")),
             System.Reflection.Emit.AssemblyBuilderAccess.RunAndCollect);
-        Assert.Contains($"{assembly.GetName().Name}:unavailable", IncrementalBuildPlanner.CollectCodeDependencies([assembly]));
+        Assert.Contains($"{assembly.GetName().Name}:unavailable", CodeIdentity.Collect([assembly]));
     }
 
     [Fact]

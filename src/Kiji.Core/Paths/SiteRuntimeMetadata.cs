@@ -1,4 +1,4 @@
-namespace Kiji.Hosting;
+namespace Kiji.Paths;
 
 internal sealed record SiteRuntimeMetadata(
     string? ProjectDirectory = null, string? OutputPath = null, string? JitProfileDirectory = null)

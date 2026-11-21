@@ -1,4 +1,4 @@
-using Kiji.Generation;
+using Kiji.Incremental;
 
 namespace Kiji.Assets;
 

@@ -1,7 +1,8 @@
-using System.Net;
 using System.Net.WebSockets;
+using System.Net;
 using System.Text;
 using Kiji.Markdown;
+using Kiji.Paths;
 using Kiji.Tests.TestSite;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;

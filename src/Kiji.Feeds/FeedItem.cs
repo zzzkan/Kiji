@@ -15,7 +15,7 @@ public sealed record FeedItem
     {
         ArgumentNullException.ThrowIfNull(Title);
         ArgumentNullException.ThrowIfNull(Description);
-        global::Kiji.RelativePath.Validate(RelativePath, nameof(RelativePath));
+        Paths.RelativePath.Validate(RelativePath, nameof(RelativePath));
         SiteInfo.ParseRelativePath(RelativePath, nameof(RelativePath));
         ValidateXmlText(Title, nameof(Title), RelativePath);
         ValidateXmlText(Description, nameof(Description), RelativePath);

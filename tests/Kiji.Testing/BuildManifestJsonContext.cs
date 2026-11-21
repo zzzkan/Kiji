@@ -1,5 +1,5 @@
 using System.Text.Json.Serialization;
-using Kiji.Generation;
+using Kiji.Incremental;
 
 namespace Kiji.Testing;
 

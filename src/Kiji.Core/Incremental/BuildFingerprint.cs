@@ -1,9 +1,8 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
-using Kiji.Hosting;
 
-namespace Kiji.Generation;
+namespace Kiji.Incremental;
 
 internal static class BuildFingerprint
 {

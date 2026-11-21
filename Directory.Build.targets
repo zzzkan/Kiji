@@ -17,13 +17,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <KijiProject Include="Kiji.Core" Path="src/Kiji.Core" Packed="true" />
-    <KijiProject Include="Kiji.Hosting" Path="src/Kiji.Hosting" Packed="true" References="Kiji.Core" />
-    <KijiProject Include="Kiji.Markdown" Path="src/Kiji.Markdown" Packed="true" References="Kiji.Core" Packages="Markdig;YamlDotNet" />
-    <KijiProject Include="Kiji.Imaging" Path="src/Kiji.Imaging" Packed="true" References="Kiji.Core" Packages="SkiaSharp" />
-    <KijiProject Include="Kiji.Feeds" Path="src/Kiji.Feeds" Packed="true" References="Kiji.Core" />
-    <KijiProject Include="Kiji.Sitemaps" Path="src/Kiji.Sitemaps" Packed="true" References="Kiji.Core" />
-    <KijiProject Include="Kiji" Path="src/Kiji" SeesInternals="true" Packages="SkiaSharp.NativeAssets.Linux.NoDependencies" />
+    <KijiProject Include="Kiji.Core" Path="src/Kiji.Core" Namespace="Kiji" Packed="true" />
+    <KijiProject Include="Kiji.Hosting" Path="src/Kiji.Hosting" Namespace="Kiji.Hosting" Packed="true" References="Kiji.Core" />
+    <KijiProject Include="Kiji.Markdown" Path="src/Kiji.Markdown" Namespace="Kiji.Markdown" Packed="true" References="Kiji.Core" Packages="Markdig;YamlDotNet" />
+    <KijiProject Include="Kiji.Imaging" Path="src/Kiji.Imaging" Namespace="Kiji.Imaging" Packed="true" References="Kiji.Core" Packages="SkiaSharp" />
+    <KijiProject Include="Kiji.Feeds" Path="src/Kiji.Feeds" Namespace="Kiji.Feeds" Packed="true" References="Kiji.Core" />
+    <KijiProject Include="Kiji.Sitemaps" Path="src/Kiji.Sitemaps" Namespace="Kiji.Sitemaps" Packed="true" References="Kiji.Core" />
+    <KijiProject Include="Kiji" Path="src/Kiji" Namespace="Kiji" SeesInternals="true" Packages="SkiaSharp.NativeAssets.Linux.NoDependencies" />
     <KijiProject Include="Kiji.Runtime" Path="src/Kiji.Runtime" />
     <KijiProject Include="Kiji.Testing" Path="tests/Kiji.Testing" References="Kiji.Core" />
     <KijiProject Include="Kiji.Core.Tests" Path="tests/Kiji.Core.Tests" References="Kiji.Core;Kiji.Testing" Packages="Microsoft.Testing.Platform;xunit.v3" />
@@ -59,7 +59,7 @@
                       Condition="'@(_KijiReferenceToKiji)' != ''" KijiPackedInKiji="true" TreatAsUsed="true" />
   </ItemGroup>
 
-  <Target Name="KijiResolveProjectGraph">
+  <Target Name="KijiResolveProjectGraph" BeforeTargets="GenerateMSBuildEditorConfigFileShouldRun">
     <ItemGroup>
       <_KijiThisProject Include="@(KijiProject->WithMetadataValue('Identity', '$(MSBuildProjectName)'))" />
     </ItemGroup>
@@ -69,6 +69,7 @@
       <KijiAllowedProjectReferences Condition="'$(MSBuildProjectName)' == 'Kiji'">@(KijiProject->WithMetadataValue('Packed', 'true'))</KijiAllowedProjectReferences>
       <KijiAllowedPackages>@(_KijiThisProject->'%(Packages)')</KijiAllowedPackages>
       <KijiPacked>@(_KijiThisProject->'%(Packed)')</KijiPacked>
+      <KijiNamespaceOwners>@(KijiProject->HasMetadata('Namespace')->'%(Namespace)=%(Identity)', ',')</KijiNamespaceOwners>
     </PropertyGroup>
   </Target>
 

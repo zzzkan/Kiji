@@ -1,5 +1,7 @@
 using Kiji.Feeds;
+using Kiji.Incremental;
 using Kiji.Markdown;
+using Kiji.Paths;
 using Kiji.Sitemaps;
 using Kiji.Tests.TestSite;
 using Microsoft.AspNetCore.Components;
@@ -249,7 +251,7 @@ public sealed class StaticSiteGenerationRuntimeTests : IDisposable
             .Select(static file => Path.GetFileNameWithoutExtension(file).Split('.')[^1]).Order(StringComparer.Ordinal));
     }
 
-    private async Task<Kiji.Generation.BuildManifest> ReadManifestAsync()
+    private async Task<BuildManifest> ReadManifestAsync()
     {
         return System.Text.Json.JsonSerializer.Deserialize(
             await File.ReadAllTextAsync(Path.Combine(_testDir, ".kiji", "cache", "manifest.json")),

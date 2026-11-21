@@ -108,7 +108,7 @@ public sealed class PageServiceContentTests : IDisposable
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")), outputPath: output);
         builder.UseSiteInfo(new SiteInfo { Name = "Related", BaseUrl = new Uri("https://example.test/") });
-        TestSite.TestSiteAssets.Bind(builder.GetSitePaths(), Path.Combine(_root, "wwwroot"));
+        TestSiteAssets.Bind(builder.GetSitePaths(), Path.Combine(_root, "wwwroot"));
         builder.AddMarkdownContent<FrontMatter>();
         builder.Services.AddScoped<IReadOnlyList<RelatedTag>>(provider => includeTags?.Invoke() == false ? []
             : RelatedTag.Collect(provider.GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>(), probe));

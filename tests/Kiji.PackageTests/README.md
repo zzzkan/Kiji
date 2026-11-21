@@ -1,7 +1,7 @@
 # Package tests
 
 Run `dotnet test -c Release` here for package tests, or at the repository root
-for both test projects. `Kiji.Tests` checks library behavior without building
+for every test project. The `*.Tests` projects check library behavior without building
 consumer projects. `Kiji.PackageTests` checks the NuGet package through `dotnet`
 and HTTP on Windows, Linux and macOS. The watch scenario is skipped on macOS:
 on GitHub's runners it stopped the whole runner after `dotnet watch` reported
@@ -39,5 +39,5 @@ ordinary copies are allowed and are removed with the workspace. CI puts the
 shared cache on the checkout volume to allow hard links. Cleanup never clears
 the shared cache.
 
-Add detailed behavior tests to `Kiji.Tests`; extend these scenarios only for
+Add detailed behavior tests to the library test projects; extend these scenarios only for
 regressions that require the package or SDK boundary.

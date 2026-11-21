@@ -56,14 +56,14 @@ below once a check covers them.
 | Kiji serializes JSON without reflection | `src/BannedSymbols.txt` (RS0030) |
 | Kiji's redirects stay inside the site | `src/BannedSymbols.txt` (RS0030) |
 | `Kiji.targets` packs under `build/`, never `buildTransitive/` | KR0005 in `src/Kiji/Kiji.csproj` |
-| `Kiji.Tests` never mutates process-wide state | `tests/Kiji.Tests/BannedSymbols.txt` (RS0030) |
+| Library tests never mutate process-wide state | `tests/BannedSymbols.txt` (RS0030) in every `*.Tests` project and `Kiji.Testing` |
 | Every project is in the graph and lives at its path under `src`, `tests`, `benchmarks`, `tools` or `docs` | `KijiProject` items in `Directory.Build.targets`, KR0003 |
-| Projects reference only the projects the graph allows (library layers point toward `Kiji.Core`); `Kiji.PackageTests` stays black-box | `Directory.Build.targets` KR0003 |
+| Projects reference only the projects the graph allows (library layers point toward `Kiji.Core`; each library's tests reference that library, its dependencies and `Kiji.Testing`); `Kiji.PackageTests` stays black-box | `Directory.Build.targets` KR0003 |
 | Packages are referenced only by the projects the graph allows (Markdig and YamlDotNet in `Kiji.Markdown`, SkiaSharp in `Kiji.Imaging`) | `Directory.Build.targets` KR0006 |
 | No unused project or package references | ReferenceTrimmer (RT0001-RT0003) in every project, from `Directory.Build.props` |
 | `src` holds only what ships: library projects all pack into the one Kiji package, whose dependencies follow from theirs | `Packed` projects in `Directory.Build.targets` (KR0003), pack targets in `src/Kiji/Kiji.csproj` |
 | Public types that move out of `Kiji.dll` stay reachable through it | Package validation (`src/Kiji/TypeForwards.cs`) |
-| `src` library and `Kiji.Tests` components are hand-written `ComponentBase` classes | `Directory.Build.targets` KR0002 (no Razor SDK, no `.razor`) |
+| `src` library and library test components are hand-written `ComponentBase` classes | `Directory.Build.targets` KR0002 (no Razor SDK, no `.razor`) |
 | `benchmarks/Kiji.SyntheticSite` workload stays frozen | `SyntheticWorkloadTests` against `tests/Kiji.RepositoryTests/synthetic-workload.sha256` |
 | `docs/content/api-*` pages follow author-facing API changes | judgment |
 | Design and constraint decisions below | judgment |
@@ -85,8 +85,11 @@ below once a check covers them.
   the packed projects, as the package does. `src/Kiji/MSBuild/Kiji.targets` integrates
   publish, watch and clean. Tests go in `tests`, measurements in `benchmarks`, build tooling
   in `tools`.
-- `tests/Kiji.Tests` contains library unit/component tests and TestSite fixtures.
-  Classes run in parallel. It does not pack or build consumers.
+- Each `src` library project has `tests/<Project>.Tests`, which references only that project,
+  its dependencies and `tests/Kiji.Testing` (shared helpers over `Kiji.Core`). A test belongs to
+  the lowest project it can reference; `tests/Kiji.Tests` holds the tests that run a whole
+  site through `StaticSite`, with the TestSite fixtures. Classes run in parallel; library tests
+  do not pack or build consumers.
 - `tools/Kiji.Analyzers` holds the repository's own analyzers (KR*), referenced by every project
   through `Directory.Build.props`; `Directory.Build.targets` holds MSBuild rule checks.
   `tests/Kiji.RepositoryTests` checks the frozen workload.

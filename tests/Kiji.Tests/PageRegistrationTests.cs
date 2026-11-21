@@ -205,7 +205,7 @@ public sealed class PageRegistrationTests
             Directory.CreateDirectory(Path.Combine(root, "wwwroot"));
             await File.WriteAllTextAsync(Path.Combine(root, "wwwroot", "404.html"), "existing");
             var builder = CreateBuilder(new SiteExecutionPaths(root, Path.Combine(root, "obj", "site")));
-            TestSite.TestSiteAssets.Bind(builder.GetSitePaths(), Path.Combine(root, "wwwroot"));
+            TestSiteAssets.Bind(builder.GetSitePaths(), Path.Combine(root, "wwwroot"));
             builder.UseNotFoundPage<Fixed>();
             await using var site = builder.BuildSite();
             await Assert.ThrowsAsync<InvalidOperationException>(() => site.PublishAsync("dist"));

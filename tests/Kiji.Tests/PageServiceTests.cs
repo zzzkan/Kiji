@@ -90,7 +90,7 @@ public sealed class PageServiceTests : IDisposable
     public void Build_ValidatesTheFinalManagedRegistrations(string operation)
     {
         var builder = CreateBuilder(new ServiceProbe());
-        builder.AddKeyedMarkdownContent<Kiji.Tests.FrontMatter>("posts");
+        builder.AddKeyedMarkdownContent<FrontMatter>("posts");
         var services = builder.Services;
         switch (operation)
         {

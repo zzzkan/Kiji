@@ -1202,7 +1202,7 @@ public sealed class IncrementalBuildTests : IDisposable
             Directory.CreateSymbolicLink(directory, Path.Combine(external, "content"));
         }
         var builder = CreateBuilder(root, directory: directory);
-        builder.Services.AddSingleton<IImageProcessor, TestSite.PageServices.TrackingImageProcessor>();
+        builder.Services.AddSingleton<IImageProcessor, TrackingImageProcessor>();
         await using var site = builder.BuildSite();
         await site.PublishAsync("dist");
         var page = (await ReadCacheManifest(root)).Pages.Single(page => page.RoutePath == "/md/stable/");
@@ -1231,7 +1231,7 @@ public sealed class IncrementalBuildTests : IDisposable
         File.Copy(source, target);
         await WritePostAsync(root, "stable", "Image", "![image](source.png)");
         var builder = CreateBuilder(root);
-        builder.Services.AddSingleton<IImageProcessor, TestSite.PageServices.TrackingImageProcessor>();
+        builder.Services.AddSingleton<IImageProcessor, TrackingImageProcessor>();
         await using var site = builder.BuildSite();
         await site.PublishAsync("dist");
         File.Delete(source);
@@ -1257,7 +1257,7 @@ public sealed class IncrementalBuildTests : IDisposable
         await File.WriteAllTextAsync(Path.Combine(directory, "index.md"), "---\ntitle: Notes\n---\n![Image](source.png)");
         await File.WriteAllBytesAsync(Path.Combine(directory, "source.png"), [1, 2, 3]);
         var builder = CreateBuilder(root);
-        builder.Services.AddSingleton<IImageProcessor, TestSite.PageServices.TrackingImageProcessor>();
+        builder.Services.AddSingleton<IImageProcessor, TrackingImageProcessor>();
         await using var site = builder.BuildSite();
         await site.PublishAsync("dist");
         var expected = SnapshotDirectory(Path.Combine(root, "dist"));
@@ -1505,7 +1505,7 @@ public sealed class IncrementalBuildTests : IDisposable
         var root = CreateSiteRoot("images");
         await WritePostAsync(root, "stable", "Image", "![image](source.png)");
         await File.WriteAllBytesAsync(Path.Combine(root, "content", "source.png"), [1, 2, 3]);
-        await using var processor = new TestSite.PageServices.TrackingImageProcessor();
+        await using var processor = new TrackingImageProcessor();
         var renders = 0;
         void Record() { Interlocked.Increment(ref renders); }
         async Task Build()
@@ -1535,7 +1535,7 @@ public sealed class IncrementalBuildTests : IDisposable
         var root = CreateSiteRoot("image-stamps");
         await WritePostAsync(root, "stable", "Image", "![image](source.png)");
         await File.WriteAllBytesAsync(Path.Combine(root, "content", "source.png"), [1, 2, 3]);
-        await using var processor = new TestSite.PageServices.TrackingImageProcessor();
+        await using var processor = new TrackingImageProcessor();
         async Task Build()
         {
             var builder = CreateBuilder(root);

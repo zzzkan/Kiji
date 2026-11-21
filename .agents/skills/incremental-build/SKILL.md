@@ -97,7 +97,7 @@ For cache identity, MSBuild or package changes, run:
 ./.agents/skills/incremental-build/scripts/Verify-PortableCache.ps1
 ```
 
-`dotnet test -c Release` runs library tests in `Kiji.Tests` and serial package
+`dotnet test -c Release` runs the library tests in `tests/*.Tests` and serial package
 scenarios in `Kiji.PackageTests`: publish/edit/clean and watch/reload with the
 Razor and Web SDKs. See `tests/Kiji.PackageTests/README.md` for running them and
 workspace cleanup. Keep dependencies in the shared NuGet cache and reuse one

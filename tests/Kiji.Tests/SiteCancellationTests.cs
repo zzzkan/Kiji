@@ -1,6 +1,5 @@
 using Kiji.Assets;
 using Kiji.Markdown;
-using Kiji.Tests.TestSite.PageServices;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -156,7 +155,7 @@ public sealed class SiteCancellationTests : IDisposable
     {
         var builder = TestSiteFactory.CreateBuilder(new SiteExecutionPaths(_root, Path.Combine(_root, "obj", "site")), runtimeMetadata ?? new SiteRuntimeMetadata(OutputPath: serve ? null : "dist"));
         builder.UseSiteInfo(new SiteInfo { Name = "Cancellation", BaseUrl = new Uri("https://example.test/") });
-        TestSite.TestSiteAssets.Bind(builder.GetSitePaths(), Path.Combine(_root, "wwwroot"));
+        TestSiteAssets.Bind(builder.GetSitePaths(), Path.Combine(_root, "wwwroot"));
         builder.Services.AddSingleton<IImageProcessor>(_ => processor);
         builder.AddMarkdownContent<FrontMatter>();
         builder.AddPageParameters<MarkdownPostTestPage>(provider => provider.GetRequiredService<ContentCollection<MarkdownContent<FrontMatter>>>()

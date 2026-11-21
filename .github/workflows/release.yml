@@ -32,8 +32,11 @@ jobs:
         run: dotnet build -c Release
 
       - name: Library tests
-        working-directory: tests/Kiji.Tests
-        run: dotnet test -c Release
+        shell: bash
+        run: |
+          for project in tests/*.Tests; do
+            (cd "$project" && dotnet test -c Release) || exit 1
+          done
 
       - name: Pack
         shell: pwsh

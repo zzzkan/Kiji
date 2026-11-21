@@ -1,6 +1,5 @@
 using Kiji.Assets;
 using Kiji.Markdown;
-using Kiji.Tests.TestSite.PageServices;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;

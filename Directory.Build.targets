@@ -25,7 +25,15 @@
     <KijiProject Include="Kiji.Sitemaps" Path="src/Kiji.Sitemaps" Packed="true" References="Kiji.Core" />
     <KijiProject Include="Kiji" Path="src/Kiji" SeesInternals="true" Packages="SkiaSharp.NativeAssets.Linux.NoDependencies" />
     <KijiProject Include="Kiji.Runtime" Path="src/Kiji.Runtime" />
-    <KijiProject Include="Kiji.Tests" Path="tests/Kiji.Tests" References="Kiji" SeesInternals="true"
+    <KijiProject Include="Kiji.Testing" Path="tests/Kiji.Testing" References="Kiji.Core" />
+    <KijiProject Include="Kiji.Core.Tests" Path="tests/Kiji.Core.Tests" References="Kiji.Core;Kiji.Testing" Packages="Microsoft.Testing.Platform;xunit.v3" />
+    <KijiProject Include="Kiji.Hosting.Tests" Path="tests/Kiji.Hosting.Tests" References="Kiji.Core;Kiji.Hosting;Kiji.Testing" Packages="Microsoft.Testing.Platform;xunit.v3" />
+    <KijiProject Include="Kiji.Markdown.Tests" Path="tests/Kiji.Markdown.Tests" References="Kiji.Core;Kiji.Markdown;Kiji.Testing" Packages="Microsoft.Testing.Platform;xunit.v3" />
+    <KijiProject Include="Kiji.Imaging.Tests" Path="tests/Kiji.Imaging.Tests" References="Kiji.Core;Kiji.Imaging;Kiji.Testing"
+                 Packages="Microsoft.Testing.Platform;xunit.v3;SkiaSharp.NativeAssets.Linux.NoDependencies" />
+    <KijiProject Include="Kiji.Feeds.Tests" Path="tests/Kiji.Feeds.Tests" References="Kiji.Core;Kiji.Feeds" Packages="Microsoft.Testing.Platform;xunit.v3" />
+    <KijiProject Include="Kiji.Sitemaps.Tests" Path="tests/Kiji.Sitemaps.Tests" References="Kiji.Core;Kiji.Sitemaps" Packages="Microsoft.Testing.Platform;xunit.v3" />
+    <KijiProject Include="Kiji.Tests" Path="tests/Kiji.Tests" References="Kiji;Kiji.Testing" SeesInternals="true"
                  Packages="Microsoft.Testing.Platform;xunit.v3;SkiaSharp.NativeAssets.Linux.NoDependencies" />
     <KijiProject Include="Kiji.PackageTests" Path="tests/Kiji.PackageTests" References="Kiji"
                  Packages="Microsoft.Extensions.Configuration.EnvironmentVariables;Microsoft.Testing.Platform;xunit.v3" />
@@ -99,24 +107,24 @@
            Text="$(MSBuildProjectName) may not reference the package @(_KijiForbiddenPackage). Allowed: '$(KijiAllowedPackages)'. Remove the reference, or add the package to the project's KijiProject item in Directory.Build.targets as a reviewed design change. Library dependencies belong to the one src project that uses them; Kiji's package dependencies follow from them." />
   </Target>
 
-  <Target Name="KijiAddInternalsVisibleTo" BeforeTargets="GetAssemblyAttributes" Condition="'$(KijiPublicApi)' == 'true'">
+  <Target Name="KijiAddInternalsVisibleTo" BeforeTargets="GetAssemblyAttributes">
     <ItemGroup>
       <_KijiFriend Include="@(KijiProject)"
-                   Condition="'%(KijiProject.SeesInternals)' == 'true' or $([System.String]::Copy(';%(KijiProject.References);').Contains(';$(MSBuildProjectName);'))" />
+                   Condition="('%(KijiProject.SeesInternals)' == 'true' and '$(KijiPublicApi)' == 'true') or $([System.String]::Copy(';%(KijiProject.References);').Contains(';$(MSBuildProjectName);'))" />
     </ItemGroup>
     <PropertyGroup>
       <_KijiFriends>@(_KijiFriend)</_KijiFriends>
     </PropertyGroup>
     <ItemGroup>
       <_KijiFriendName Include="$(_KijiFriends)" />
-      <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute" Condition="'@(_KijiFriendName)' != ''">
         <_Parameter1>%(_KijiFriendName.Identity)</_Parameter1>
       </AssemblyAttribute>
     </ItemGroup>
   </Target>
 
   <Target Name="KijiRequireHandWrittenComponents" BeforeTargets="CoreCompile"
-          Condition="'$(KijiPublicApi)' == 'true' or '$(MSBuildProjectName)' == 'Kiji.Tests'">
+          Condition="'$(KijiPublicApi)' == 'true' or $(MSBuildProjectName.EndsWith('.Tests')) or '$(MSBuildProjectName)' == 'Kiji.Testing'">
     <ItemGroup>
       <_KijiRazorFile Include="$(MSBuildProjectDirectory)/**/*.razor;$(MSBuildProjectDirectory)/**/*.cshtml"
                       Exclude="$(MSBuildProjectDirectory)/bin/**;$(MSBuildProjectDirectory)/obj/**" />

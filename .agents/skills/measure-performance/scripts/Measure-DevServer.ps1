@@ -32,21 +32,12 @@ foreach ($pageCount in $Pages) {
         New-Item -ItemType Directory $site | Out-Null
         foreach ($directory in @('contents', 'wwwroot')) { Copy-Item -LiteralPath (Join-Path $corpus $directory) -Destination $site -Recurse }
         $sourceRoot = Join-Path $repository 'benchmarks/Kiji.SyntheticSite'
-        foreach ($source in Get-ChildItem $sourceRoot -Recurse -Filter '*.cs' -File | Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' -and $_.Name -ne 'Program.cs' }) {
+        $harness = @('BenchReport.cs', 'BuildRunner.cs', 'HarnessOptions.cs', 'PhaseTiming.cs', 'Program.cs', 'RunResult.cs')
+        foreach ($source in Get-ChildItem $sourceRoot -Recurse -Filter '*.cs' -File | Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' -and $harness -notcontains $_.Name }) {
             $path = Join-Path $site ([IO.Path]::GetRelativePath($sourceRoot, $source.FullName))
             Write-File $path ([IO.File]::ReadAllText($source.FullName))
         }
-        $runner = Join-Path $site 'BuildRunner.cs'
-        $code = [IO.File]::ReadAllText($runner)
-        $createLine = 'StaticSite.CreateBuilder([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "synthetic")), typeof(BuildRunner).Assembly, runtimeData: name => name == "Kiji.OutputPath" ? Path.Combine(root, "dist") : null)'
-        $publishLine = 'await host.Services.GetRequiredService<SiteEngine>().PublishAsync();'
-        if (!$code.Contains($createLine) -or !$code.Contains($publishLine)) { throw 'Frozen site adapter requires review.' }
-        $code = $code.Replace($createLine, 'StaticSite.CreateBuilder([])').Replace($publishLine, 'await app.RunAsync();')
-        $code = $code.Replace('using var host = builder.Build();', 'var app = builder.Build();')
-        $code = $code.Replace('using Kiji.Hosting;', 'using Microsoft.Extensions.Hosting;')
-        $code = $code.Replace('        host.Services.GetService<IStartupValidator>()?.Validate();', '')
-        Write-File $runner $code
-        Write-File (Join-Path $site 'Program.cs') 'Console.WriteLine($"Kiji probe PID: {Environment.ProcessId}"); await Kiji.SyntheticSite.BuildRunner.BuildSiteAsync(Directory.GetCurrentDirectory());'
+        Write-File (Join-Path $site 'Program.cs') 'Console.WriteLine($"Kiji probe PID: {Environment.ProcessId}"); var builder = Kiji.StaticSite.CreateBuilder(args); Kiji.SyntheticSite.SyntheticSiteDefinition.Configure(builder); await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.RunAsync(builder.Build());'
         $package = [IO.Path]::GetFullPath($(if ($variant -eq 'baseline') { $BaselinePackage } else { $CandidatePackage }))
         $archive = [IO.Compression.ZipFile]::OpenRead($package)
         try {

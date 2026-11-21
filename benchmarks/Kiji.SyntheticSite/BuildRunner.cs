@@ -1,11 +1,7 @@
 using System.Diagnostics;
-using Kiji.Feeds;
 using Kiji.Generation;
 using Kiji.Hosting;
-using Kiji.Markdown;
 using Kiji.Paths;
-using Kiji.Sitemaps;
-using Kiji.SyntheticSite.Pages;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -59,31 +55,7 @@ public static class BuildRunner
     public static async Task BuildSiteAsync(string root)
     {
         var builder = StaticSite.CreateBuilder([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "synthetic")), typeof(BuildRunner).Assembly, runtimeMetadata: new SiteRuntimeMetadata(OutputPath: Path.Combine(root, "dist")));
-        builder.UseSiteInfo(new SiteInfo
-        {
-            BaseUrl = new Uri("https://bench.example.com/"),
-            Name = "Kiji Bench",
-            Description = "Synthetic benchmark site.",
-            Language = "en",
-            Author = "bench",
-        });
-
-        builder.AddMarkdownContent<PostFrontMatter>(static options => options.Directory = "contents");
-        builder.UseDefaultLayout<MainLayout>();
-        builder.UseNotFoundPage<NotFoundPage>();
-
-        builder.AddPageParameters<PostPage>(static services => services
-            .GetRequiredService<ContentCollection<MarkdownContent<PostFrontMatter>>>()
-            .Select(static post => new { Slug = PostSlug.From(post.Path), ContentKey = post.Path }));
-        builder.AddRssFeed(static services => services
-            .GetRequiredService<ContentCollection<MarkdownContent<PostFrontMatter>>>()
-            .OrderByDescending(static post => post.FrontMatter.CreatedAt)
-            .Select(static post => new FeedItem(
-                post.FrontMatter.Title ?? string.Empty,
-                post.FrontMatter.Description ?? string.Empty,
-                post.FrontMatter.CreatedAt ?? DateTimeOffset.UnixEpoch,
-                RelativePath: $"blog/{PostSlug.From(post.Path)}/")));
-        builder.AddSitemap();
+        SyntheticSiteDefinition.Configure(builder);
 
         using var host = builder.Build();
         host.Services.GetService<IStartupValidator>()?.Validate();

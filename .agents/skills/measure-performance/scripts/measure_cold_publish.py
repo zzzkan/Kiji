@@ -21,38 +21,11 @@ import time
 
 PROGRAM = """\
 using Kiji;
-using Kiji.Feeds;
-using Kiji.Markdown;
-using Kiji.Sitemaps;
 using Kiji.SyntheticSite;
-using Kiji.SyntheticSite.Pages;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 var builder = StaticSite.CreateBuilder(args);
-builder.UseSiteInfo(new SiteInfo
-{
-    BaseUrl = new Uri("https://bench.example.com/"),
-    Name = "Kiji Bench",
-    Description = "Synthetic benchmark site.",
-    Language = "en",
-    Author = "bench",
-});
-builder.AddMarkdownContent<PostFrontMatter>(static options => options.Directory = "contents");
-builder.UseDefaultLayout<MainLayout>();
-builder.UseNotFoundPage<NotFoundPage>();
-builder.AddPageParameters<PostPage>(static services => services
-    .GetRequiredService<ContentCollection<MarkdownContent<PostFrontMatter>>>()
-    .Select(static post => new { Slug = PostSlug.From(post.Path), ContentKey = post.Path }));
-builder.AddRssFeed(static services => services
-    .GetRequiredService<ContentCollection<MarkdownContent<PostFrontMatter>>>()
-    .OrderByDescending(static post => post.FrontMatter.CreatedAt)
-    .Select(static post => new FeedItem(
-        post.FrontMatter.Title ?? string.Empty,
-        post.FrontMatter.Description ?? string.Empty,
-        post.FrontMatter.CreatedAt ?? DateTimeOffset.UnixEpoch,
-        RelativePath: $"blog/{PostSlug.From(post.Path)}/")));
-builder.AddSitemap();
+SyntheticSiteDefinition.Configure(builder);
 await builder.Build().RunAsync();
 """
 
@@ -76,7 +49,7 @@ PROJECT = """\
 </Project>
 """
 
-SITE_SOURCES = ["MainLayout.cs", "PageHead.cs", "PostFrontMatter.cs", "PostSlug.cs"]
+SITE_SOURCES = ["MainLayout.cs", "PageHead.cs", "PostFrontMatter.cs", "PostSlug.cs", "SyntheticSiteDefinition.cs"]
 
 PHASE_HOOK = """\
 using System;
@@ -92,7 +65,7 @@ internal static class StartupHook
         Console.Error.WriteLine($"KIJI_PHASE hook 0 {Now():F1}");
         AppDomain.CurrentDomain.AssemblyLoad += (_, e) =>
         {
-            if (e.LoadedAssembly.GetName().Name != "Kiji") { return; }
+            if (e.LoadedAssembly.GetName().Name is not ("Kiji" or "Kiji.Core")) { return; }
             var observer = e.LoadedAssembly.GetType("Kiji.Generation.BuildPhaseTimer")?
                 .GetProperty("Observer", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
             observer?.SetValue(null, new Action<string, TimeSpan>((name, elapsed) =>
@@ -160,7 +133,11 @@ def generate(site, hook=None):
     elapsed = (time.perf_counter() - start) * 1000
     if result.returncode != 0:
         sys.exit(f"Generation failed in {site}:\n{result.stderr[-4000:]}")
-    return elapsed, parse_phases(result.stderr)
+    phases = parse_phases(result.stderr)
+    if hook is not None and not any(name not in ("start", "exit") and not name.startswith(("jit-",)) for name in phases):
+        sys.exit(f"The phase hook reported no build phases in {site}. Point it at the assembly that now holds "
+                 "Kiji.Generation.BuildPhaseTimer.")
+    return elapsed, phases
 
 
 def parse_phases(stderr):

@@ -174,21 +174,14 @@ foreach ($variant in $variants) {
     New-Item -ItemType Directory -Path $site | Out-Null
     foreach ($directory in @('contents', 'wwwroot')) { Copy-Item -LiteralPath (Join-Path $corpus $directory) -Destination (Join-Path $site $directory) -Recurse }
     $sourceRoot = Join-Path $Repository 'benchmarks/Kiji.SyntheticSite'
-    foreach ($source in Get-ChildItem -LiteralPath $sourceRoot -Filter '*.cs' -File -Recurse | Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' -and $_.Name -ne 'Program.cs' }) {
+    $harness = @('BenchReport.cs', 'BuildRunner.cs', 'HarnessOptions.cs', 'Program.cs', 'RunResult.cs')
+    foreach ($source in Get-ChildItem -LiteralPath $sourceRoot -Filter '*.cs' -File -Recurse | Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' -and $harness -notcontains $_.Name }) {
         $target = Join-Path $site ([IO.Path]::GetRelativePath($sourceRoot, $source.FullName))
         New-Item -ItemType Directory -Force -Path ([IO.Path]::GetDirectoryName($target)) | Out-Null
         Copy-Item -LiteralPath $source.FullName -Destination $target
     }
-    $runner = Join-Path $site 'BuildRunner.cs'
-    $code = [IO.File]::ReadAllText($runner)
-    $createLine = 'StaticSite.CreateBuilder([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "synthetic")), typeof(BuildRunner).Assembly, runtimeData: name => name == "Kiji.OutputPath" ? Path.Combine(root, "dist") : null)'
-    $publishLine = 'await host.Services.GetRequiredService<SiteEngine>().PublishAsync();'
-    if (!$code.Contains($createLine) -or !$code.Contains($publishLine)) { throw 'Frozen harness adapter no longer matches. Review it before measuring.' }
-    $code = $code.Replace($createLine, 'StaticSite.CreateBuilder([])').Replace($publishLine, 'await app.RunAsync();')
-    $code = $code.Replace('using var host = builder.Build();', 'var app = builder.Build();')
-    $code = $code.Replace('using Kiji.Hosting;', 'using Microsoft.Extensions.Hosting;')
-    $code = $code.Replace('        host.Services.GetService<IStartupValidator>()?.Validate();', '')
-    [IO.File]::WriteAllText($runner, $code)
+    $definition = Join-Path $site 'SyntheticSiteDefinition.cs'
+    if (!(Test-Path -LiteralPath $definition)) { throw 'benchmarks/Kiji.SyntheticSite/SyntheticSiteDefinition.cs is missing; the consumer needs the frozen site definition.' }
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PublishEntry.cs') -Destination (Join-Path $site 'Program.cs')
     '<Project><PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup></Project>' | Set-Content -LiteralPath (Join-Path $site 'Directory.Build.props')
     '<Project />' | Set-Content -LiteralPath (Join-Path $site 'Directory.Build.targets')
@@ -209,7 +202,7 @@ foreach ($variant in $variants) {
     "<configuration><packageSources><clear /><add key='local' value='$feedXml' /><add key='nuget' value='https://api.nuget.org/v3/index.json' /></packageSources></configuration>" | Set-Content -LiteralPath (Join-Path $site 'NuGet.Config')
     "<Project Sdk='Microsoft.NET.Sdk.Razor'><PropertyGroup><OutputType>Exe</OutputType><AssemblyName>Kiji.SyntheticSite</AssemblyName><RootNamespace>Kiji.SyntheticSite</RootNamespace><RestorePackagesPath>$cacheXml</RestorePackagesPath></PropertyGroup><ItemGroup><PackageReference Include='Kiji' Version='$version' /></ItemGroup></Project>" | Set-Content -LiteralPath (Join-Path $site 'Site.csproj')
     $null = Invoke-Dotnet (@('restore', $site) + @(Get-Properties $variant)) (Join-Path $root "$variant-restore.log")
-    $provenance[$variant] = @{ Package=$package; SHA256=(Get-FileSha256 $package); Properties=@(Get-Properties $variant); EntrySHA256=(Get-FileSha256 (Join-Path $site 'Program.cs')); SiteDefinitionSHA256=(Get-FileSha256 $runner) }
+    $provenance[$variant] = @{ Package=$package; SHA256=(Get-FileSha256 $package); Properties=@(Get-Properties $variant); EntrySHA256=(Get-FileSha256 (Join-Path $site 'Program.cs')); SiteDefinitionSHA256=(Get-FileSha256 $definition) }
 }
 if ($provenance.baseline.EntrySHA256 -ne $provenance.candidate.EntrySHA256 -or $provenance.baseline.SiteDefinitionSHA256 -ne $provenance.candidate.SiteDefinitionSHA256) { throw 'The two variants do not use the same workload.' }
 $originalPost = [IO.File]::ReadAllText((Join-Path $corpus 'contents/post-00000/index.md'))

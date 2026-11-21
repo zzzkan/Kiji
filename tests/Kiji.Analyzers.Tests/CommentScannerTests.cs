@@ -6,6 +6,8 @@ public sealed class CommentScannerTests
 {
     [Theory]
     [InlineData("a.js", "const a = 1; // trailing")]
+    [InlineData("a.js", @"function isUrl(s) { return /^https?:\/\//.test(s); } // trailing")]
+    [InlineData("a.js", "const ratio = obj.return / 2; // trailing")]
     [InlineData("a.js", "call(); /* trailing */")]
     [InlineData("a.mjs", "export const b = 2; // trailing")]
     [InlineData("a.sh", "echo done # trailing")]
@@ -25,6 +27,7 @@ public sealed class CommentScannerTests
     [InlineData("a.js", "const url = \"https://example.com/\";")]
     [InlineData("a.js", "const url = `https://${host}/path`;")]
     [InlineData("a.js", "const slashes = /\\/\\//g;")]
+    [InlineData("a.js", @"function isUrl(s) { return /^https?:\/\//.test(s); }")]
     [InlineData("a.js", "const ratio = width / height / 2;")]
     [InlineData("a.sh", "echo \"#not a comment\"")]
     [InlineData("a.sh", "echo '# not a comment'")]

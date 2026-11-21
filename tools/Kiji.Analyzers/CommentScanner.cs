@@ -42,6 +42,7 @@ internal static class CommentScanner
         for (var number = 0; number < lines.Length; number++)
         {
             var line = lines[number];
+            var regexAfterKeyword = false;
             var previous = '\0';
             if (quote is '\'' or '"') { quote = null; }
             for (var index = 0; index < line.Length; index++)
@@ -60,11 +61,22 @@ internal static class CommentScanner
                     else if (current == open) { quote = null; previous = current; }
                     continue;
                 }
-                if (current is '\'' or '"' or '`') { quote = current; continue; }
+                if (char.IsWhiteSpace(current)) { continue; }
+                if (char.IsLetterOrDigit(current) || current is '_' or '$')
+                {
+                    var start = index;
+                    while (index + 1 < line.Length && (char.IsLetterOrDigit(line[index + 1]) || line[index + 1] is '_' or '$')) { index++; }
+                    regexAfterKeyword = previous != '.' && index - start + 1 == "return".Length
+                        && string.CompareOrdinal(line, start, "return", 0, "return".Length) == 0;
+                    previous = line[index];
+                    continue;
+                }
+                if (current is '\'' or '"' or '`') { regexAfterKeyword = false; quote = current; continue; }
                 if (current == '/' && next == '/') { found.Add(number); break; }
                 if (current == '/' && next == '*') { found.Add(number); block = true; index++; continue; }
-                if (current == '/' && StartsRegex(previous)) { index = SkipRegex(line, index); previous = '/'; continue; }
-                if (!char.IsWhiteSpace(current)) { previous = current; }
+                if (current == '/' && (regexAfterKeyword || StartsRegex(previous))) { index = SkipRegex(line, index); }
+                regexAfterKeyword = false;
+                previous = current;
             }
         }
         return found;

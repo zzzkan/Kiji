@@ -44,14 +44,14 @@ public sealed class CommentAnalyzer : DiagnosticAnalyzer
 
     private static void AnalyzeDocumentation(SemanticModelAnalysisContext context)
     {
-        var packed = context.Options.AnalyzerConfigOptionsProvider.GlobalOptions.TryGetValue("build_property.IsPackable", out var packable)
-            && string.Equals(packable, "true", StringComparison.OrdinalIgnoreCase);
+        var publicApi = context.Options.AnalyzerConfigOptionsProvider.GlobalOptions.TryGetValue("build_property.KijiPublicApi", out var value)
+            && string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
         foreach (var trivia in DocumentationComments(context.SemanticModel.SyntaxTree.GetRoot(context.CancellationToken)))
         {
             var owner = trivia.Token.Parent?.AncestorsAndSelf().OfType<MemberDeclarationSyntax>().FirstOrDefault();
-            if (!packed || owner is null || !IsExternallyVisible(DeclaredSymbol(context.SemanticModel, owner, context.CancellationToken)))
+            if (!publicApi || owner is null || !IsExternallyVisible(DeclaredSymbol(context.SemanticModel, owner, context.CancellationToken)))
             {
-                context.ReportDiagnostic(Diagnostic.Create(Rule, trivia.GetLocation(), "XML documentation belongs only to the public API of a packed project"));
+                context.ReportDiagnostic(Diagnostic.Create(Rule, trivia.GetLocation(), "XML documentation belongs only to the public API of a library project in src"));
             }
         }
     }
@@ -71,7 +71,7 @@ public sealed class CommentAnalyzer : DiagnosticAnalyzer
             var outside = new List<Diagnostic>();
             ReportComments(tree, outside.Add, context.CancellationToken);
             outside.AddRange(DocumentationComments(tree.GetRoot(context.CancellationToken)).Select(trivia =>
-                Diagnostic.Create(Rule, trivia.GetLocation(), "XML documentation belongs only to the public API of a packed project")));
+                Diagnostic.Create(Rule, trivia.GetLocation(), "XML documentation belongs only to the public API of a library project in src")));
             foreach (var diagnostic in outside)
             {
                 var span = diagnostic.Location.SourceSpan;

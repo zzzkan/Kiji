@@ -20,20 +20,22 @@ Try each level in order and record why a higher one did not work.
 
 1. **Codebase (make the wrong thing impossible).** One owner for each piece of state, one
    supported way to do each task, internals `internal` or `private` so the wrong call does
-   not compile, one source of truth instead of lists kept in sync by hand. Delete the old
-   way and its dead code in the same change.
+   not compile, one source of truth instead of lists kept in sync by hand. Code that must not
+   depend on something belongs in a project that cannot reference it: the `KijiProject` graph
+   in `Directory.Build.targets` fixes which projects and packages each project may use.
+   Delete the old way and its dead code in the same change.
 2. **Types.** Make the bad state unrepresentable: nullable annotations, `required` and
    `init`, sealed hierarchies, a dedicated type instead of a string or a bool.
 3. **Static checks.** When the bad code still compiles, make the build fail:
    - Raise an existing analyzer or IDE rule to `error` in `.editorconfig`.
      `TreatWarningsAsErrors` and `EnforceCodeStyleInBuild` are already on.
    - Ban an API in a project's `BannedSymbols.txt` (`Microsoft.CodeAnalysis.BannedApiAnalyzers`,
-     RS0030) with a message that names what to use instead; see `src/Kiji/BannedSymbols.txt`.
-   - Write a syntax or semantic rule in `src/Kiji.Analyzers` (IDs `KR0001`...; record each in
+     RS0030) with a message that names what to use instead; see `src/BannedSymbols.txt`.
+   - Write a syntax or semantic rule in `tools/Kiji.Analyzers` (IDs `KR0001`...; record each in
      `AnalyzerReleases.Unshipped.md`). Every project already references it.
    - Check project structure (files, SDKs, references, packaging) in `Directory.Build.targets`
      with an `<Error Code="KR...">` whose text names the file or type to use.
-   - Check repository-wide state (frozen files, baselines) in `src/Kiji.RepositoryTests`,
+   - Check repository-wide state (frozen files, baselines) in `tests/Kiji.RepositoryTests`,
      which CI runs and `dotnet test -c Release` at the root includes.
    The error text must say how to fix the root cause, not only what is wrong: an agent does
    what the error tells it.

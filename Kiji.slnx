@@ -1,14 +1,26 @@
 <Solution>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/Kiji.Benchmarks/Kiji.Benchmarks.csproj" />
+    <Project Path="benchmarks/Kiji.SyntheticSite/Kiji.SyntheticSite.csproj" />
+  </Folder>
   <Folder Name="/docs/">
     <Project Path="docs/Kiji.Docs.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Kiji/Kiji.csproj" />
-    <Project Path="src/Kiji.Analyzers/Kiji.Analyzers.csproj" />
-    <Project Path="src/Kiji.Tests/Kiji.Tests.csproj" />
-    <Project Path="src/Kiji.PackageTests/Kiji.PackageTests.csproj" />
-    <Project Path="src/Kiji.RepositoryTests/Kiji.RepositoryTests.csproj" />
-    <Project Path="src/Kiji.Benchmarks/Kiji.Benchmarks.csproj" />
-    <Project Path="src/Kiji.SyntheticSite/Kiji.SyntheticSite.csproj" />
+    <Project Path="src/Kiji.Core/Kiji.Core.csproj" />
+    <Project Path="src/Kiji.Feeds/Kiji.Feeds.csproj" />
+    <Project Path="src/Kiji.Hosting/Kiji.Hosting.csproj" />
+    <Project Path="src/Kiji.Imaging/Kiji.Imaging.csproj" />
+    <Project Path="src/Kiji.Markdown/Kiji.Markdown.csproj" />
+    <Project Path="src/Kiji.Sitemaps/Kiji.Sitemaps.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Kiji.PackageTests/Kiji.PackageTests.csproj" />
+    <Project Path="tests/Kiji.RepositoryTests/Kiji.RepositoryTests.csproj" />
+    <Project Path="tests/Kiji.Tests/Kiji.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Kiji.Analyzers/Kiji.Analyzers.csproj" />
   </Folder>
 </Solution>

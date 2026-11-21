@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 
 namespace Kiji.Assets;
 
-internal sealed class ImageProcessor : IImageProcessor
+internal sealed class ImageProcessor : IContentAddressedImageProcessor
 {
     private static readonly SemaphoreSlim ConcurrencyGate = new(Environment.ProcessorCount);
 
@@ -52,7 +52,7 @@ internal sealed class ImageProcessor : IImageProcessor
             outputDirectory, cancellationToken);
     }
 
-    internal async Task<ProcessedImageInfo> ProcessBytesAsync(byte[] bytes, string fileNameBase, string sourceHash,
+    public async Task<ProcessedImageInfo> ProcessBytesAsync(byte[] bytes, string fileNameBase, string sourceHash,
         string outputDirectory, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();

@@ -9,7 +9,7 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
     <PackageReference Include="Microsoft.Testing.Platform" />
     <PackageReference Include="xunit.v3" />
-    <ProjectReference Include="../Kiji/Kiji.csproj" ReferenceOutputAssembly="false" ExcludeAssets="all" PrivateAssets="all" />
+    <ProjectReference Include="../../src/Kiji/Kiji.csproj" ReferenceOutputAssembly="false" ExcludeAssets="all" PrivateAssets="all" />
     <Compile Remove="Fixture/**/*.cs" />
     <EmbeddedResource Remove="Fixture/**/*" />
   </ItemGroup>

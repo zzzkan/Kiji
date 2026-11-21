@@ -11,7 +11,7 @@ internal static class ImageArtifactProcessor
     {
         var sourceBytes = await File.ReadAllBytesAsync(source, cancellationToken);
         var sourceHash = BuildFingerprint.HashBytes(sourceBytes);
-        var sourceName = processor is ImageProcessor ? NormalizeCasing(Path.GetFileName(source)) : Path.GetFileName(source);
+        var sourceName = processor is IContentAddressedImageProcessor ? NormalizeCasing(Path.GetFileName(source)) : Path.GetFileName(source);
         var dependencies = PageRenderContext.Current?.Dependencies;
         dependencies?.AddFile(source, sourceHash);
         var identity = cacheDirectory is null && dependencies is null ? null : ImageProcessorIdentity.Get(processor);
@@ -20,7 +20,7 @@ internal static class ImageArtifactProcessor
         if (cacheDirectory is null || identity is null)
         {
             dependencies?.DisableCache();
-            if (processor is ImageProcessor builtIn)
+            if (processor is IContentAddressedImageProcessor builtIn)
             {
                 return await builtIn.ProcessBytesAsync(sourceBytes, sourceName, sourceHash, output, cancellationToken);
             }
@@ -72,7 +72,7 @@ internal static class ImageArtifactProcessor
             var generated = Path.Combine(work, "output");
             Directory.CreateDirectory(generated);
             ProcessedImageInfo info;
-            if (processor is ImageProcessor builtIn)
+            if (processor is IContentAddressedImageProcessor builtIn)
             {
                 info = await builtIn.ProcessBytesAsync(sourceBytes, sourceName, sourceHash, generated, cancellationToken);
             }
@@ -123,7 +123,7 @@ internal static class ImageArtifactProcessor
                 {
                     throw new IOException("Cannot materialize a generated image.");
                 }
-                if (processor is not ImageProcessor) { PageRenderContext.Current?.SharedRenders?.AddOutput(destination); }
+                if (processor is not IContentAddressedImageProcessor) { PageRenderContext.Current?.SharedRenders?.AddOutput(destination); }
             }
             cancellationToken.ThrowIfCancellationRequested();
             if (recordPath is not null)

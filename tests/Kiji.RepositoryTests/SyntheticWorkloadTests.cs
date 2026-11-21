@@ -7,7 +7,7 @@ namespace Kiji.RepositoryTests;
 
 public sealed class SyntheticWorkloadTests
 {
-    private const string HashFile = "src/Kiji.RepositoryTests/synthetic-workload.sha256";
+    private const string HashFile = "tests/Kiji.RepositoryTests/synthetic-workload.sha256";
 
     private static readonly CSharpParseOptions s_options = new(LanguageVersion.Preview);
 
@@ -23,7 +23,7 @@ public sealed class SyntheticWorkloadTests
             .Where(line => line.Length > 0)
             .Select(line => line.Split("  ", 2))
             .ToDictionary(parts => parts[1], parts => parts[0], StringComparer.Ordinal);
-        var current = RepositoryFiles.List("src/Kiji.SyntheticSite/*.cs")
+        var current = RepositoryFiles.List("benchmarks/Kiji.SyntheticSite/*.cs")
             .Where(path => !s_harnessFiles.Contains(Path.GetFileName(path)))
             .ToDictionary(path => path, Hash, StringComparer.Ordinal);
 

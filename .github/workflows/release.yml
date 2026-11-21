@@ -32,7 +32,7 @@ jobs:
         run: dotnet build -c Release
 
       - name: Library tests
-        working-directory: src/Kiji.Tests
+        working-directory: tests/Kiji.Tests
         run: dotnet test -c Release
 
       - name: Pack
@@ -47,7 +47,7 @@ jobs:
           "KIJI_TEST_PACKAGE=$($packages[0].FullName)" >> $env:GITHUB_ENV
 
       - name: Package scenarios
-        working-directory: src/Kiji.PackageTests
+        working-directory: tests/Kiji.PackageTests
         run: dotnet test -c Release
 
       - name: Build docs

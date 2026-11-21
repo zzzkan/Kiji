@@ -46,20 +46,25 @@ below once a check covers them.
 | The package works through the SDK in a real consumer | `Kiji.PackageTests` in CI |
 | Docs site builds | CI `Build docs` step |
 | User-visible changes are driven before they are called done | `verify-site` skill (judgment) |
-| No comments; XML docs only on a packed project's public API | `Kiji.Analyzers` KR0004 (compiled C#, plus other files as `AdditionalFiles` in `Directory.Build.targets`) |
-| Kiji's public API is documented | CS1591 at `error` in `src/Kiji/.editorconfig` |
+| No comments; XML docs only on the public API of `src` library projects | `Kiji.Analyzers` KR0004 (compiled C#, plus other files as `AdditionalFiles` in `Directory.Build.targets`) |
+| Kiji's public API is documented | CS1591 at `error` in `src/.editorconfig` |
 | One type per file | `Kiji.Analyzers` KR0001 in every project |
-| Kiji reads environment variables through IConfiguration | `src/Kiji/BannedSymbols.txt` (RS0030) |
-| Kiji never sets `Environment.ExitCode` | `src/Kiji/BannedSymbols.txt` (RS0030) |
-| Kiji uses no frozen collections (measured slower for a publish) | `src/Kiji/BannedSymbols.txt` (RS0030) |
-| Kiji configuration stays project-local: no environment variable, command-line or user-secrets sources | `src/Kiji/BannedSymbols.txt` (RS0030) |
-| Kiji serializes JSON without reflection | `src/Kiji/BannedSymbols.txt` (RS0030) |
-| Kiji's redirects stay inside the site | `src/Kiji/BannedSymbols.txt` (RS0030) |
+| Kiji reads environment variables through IConfiguration | `src/BannedSymbols.txt` (RS0030) |
+| Kiji never sets `Environment.ExitCode` | `src/BannedSymbols.txt` (RS0030) |
+| Kiji uses no frozen collections (measured slower for a publish) | `src/BannedSymbols.txt` (RS0030) |
+| Kiji configuration stays project-local: no environment variable, command-line or user-secrets sources | `src/BannedSymbols.txt` (RS0030) |
+| Kiji serializes JSON without reflection | `src/BannedSymbols.txt` (RS0030) |
+| Kiji's redirects stay inside the site | `src/BannedSymbols.txt` (RS0030) |
 | `Kiji.targets` packs under `build/`, never `buildTransitive/` | KR0005 in `src/Kiji/Kiji.csproj` |
-| `Kiji.Tests` never mutates process-wide state | `src/Kiji.Tests/BannedSymbols.txt` (RS0030) |
-| Each project references only its allowed projects; `Kiji.PackageTests` stays black-box | `Directory.Build.targets` KR0003 |
-| `src/Kiji` and `Kiji.Tests` components are hand-written `ComponentBase` classes | `Directory.Build.targets` KR0002 (no Razor SDK, no `.razor`) |
-| `src/Kiji.SyntheticSite` workload stays frozen | `SyntheticWorkloadTests` against `src/Kiji.RepositoryTests/synthetic-workload.sha256` |
+| `Kiji.Tests` never mutates process-wide state | `tests/Kiji.Tests/BannedSymbols.txt` (RS0030) |
+| Every project is in the graph and lives at its path under `src`, `tests`, `benchmarks`, `tools` or `docs` | `KijiProject` items in `Directory.Build.targets`, KR0003 |
+| Projects reference only the projects the graph allows (library layers point toward `Kiji.Core`); `Kiji.PackageTests` stays black-box | `Directory.Build.targets` KR0003 |
+| Packages are referenced only by the projects the graph allows (Markdig and YamlDotNet in `Kiji.Markdown`, SkiaSharp in `Kiji.Imaging`) | `Directory.Build.targets` KR0006 |
+| No unused project or package references | ReferenceTrimmer (RT0001-RT0003) in every project, from `Directory.Build.props` |
+| `src` holds only what ships: library projects all pack into the one Kiji package, whose dependencies follow from theirs | `Packed` projects in `Directory.Build.targets` (KR0003), pack targets in `src/Kiji/Kiji.csproj` |
+| Public types that move out of `Kiji.dll` stay reachable through it | Package validation (`src/Kiji/TypeForwards.cs`) |
+| `src` library and `Kiji.Tests` components are hand-written `ComponentBase` classes | `Directory.Build.targets` KR0002 (no Razor SDK, no `.razor`) |
+| `benchmarks/Kiji.SyntheticSite` workload stays frozen | `SyntheticWorkloadTests` against `tests/Kiji.RepositoryTests/synthetic-workload.sha256` |
 | `docs/content/api-*` pages follow author-facing API changes | judgment |
 | Design and constraint decisions below | judgment |
 
@@ -71,19 +76,25 @@ below once a check covers them.
   `dotnet watch --project docs` serves it. Docs references the local Kiji project
   and imports its publish targets. Use an isolated consumer of the packed local
   package to verify package integration.
-- `src/Kiji` is the single library package, including Markdown, images, feeds and hosting.
-  `src/Kiji.Runtime` only packs its per-runtime images (`Kiji.Runtime.<rid>`) during Kiji's pack.
-  `MSBuild/Kiji.targets` integrates publish, watch and clean.
-- `src/Kiji.Tests` contains library unit/component tests and TestSite fixtures.
+- `src` holds only what ships: the library projects packed into the single Kiji package,
+  and `src/Kiji.Runtime`, which only packs per-runtime images (`Kiji.Runtime.<rid>`) during
+  Kiji's pack. `Kiji.Core` holds the model, generation, rendering, routing, assets and builder
+  state; `Kiji.Hosting` (publish, dev server), `Kiji.Markdown`, `Kiji.Imaging` (SkiaSharp),
+  `Kiji.Feeds` and `Kiji.Sitemaps` build on it; `src/Kiji` holds `StaticSite`, wires the
+  defaults, forwards moved public types and packs them all. A project reference to Kiji brings
+  the packed projects, as the package does. `src/Kiji/MSBuild/Kiji.targets` integrates
+  publish, watch and clean. Tests go in `tests`, measurements in `benchmarks`, build tooling
+  in `tools`.
+- `tests/Kiji.Tests` contains library unit/component tests and TestSite fixtures.
   Classes run in parallel. It does not pack or build consumers.
-- `src/Kiji.Analyzers` holds the repository's own analyzers (KR*), referenced by every project
+- `tools/Kiji.Analyzers` holds the repository's own analyzers (KR*), referenced by every project
   through `Directory.Build.props`; `Directory.Build.targets` holds MSBuild rule checks.
-  `src/Kiji.RepositoryTests` checks the frozen workload.
-- `src/Kiji.PackageTests` contains serial, black-box package scenarios with one fixed
+  `tests/Kiji.RepositoryTests` checks the frozen workload.
+- `tests/Kiji.PackageTests` contains serial, black-box package scenarios with one fixed
   consumer workspace. External dependencies use NuGet's global cache; only Kiji
   is isolated. See its README for execution and cleanup.
   Run `dotnet test -c Release` from a test project to select that level.
-- `src/Kiji.SyntheticSite` is the frozen end-to-end workload; `src/Kiji.Benchmarks`
+- `benchmarks/Kiji.SyntheticSite` is the frozen end-to-end workload; `benchmarks/Kiji.Benchmarks`
   contains BenchmarkDotNet measurements.
 - Stop any verification server/watch process before completion. Stop only processes
   started by the current task (`verify-site`'s `dev-server.sh stop` does this).
@@ -154,12 +165,14 @@ one, the `correct` skill decides whether it can become a check.
   Kiji's package holds IL and a `runtime.json` that makes NuGet restore, for that runtime,
   `Kiji.Runtime.<rid>` and SkiaSharp's Linux native assets (SkiaSharp itself brings Windows
   and macOS). Projects here that run Kiji through a project reference reference the Linux
-  assets themselves. `Kiji.Runtime.<rid>` carries ReadyToRun images of Kiji and the exact
+  assets themselves. `Kiji.Runtime.<rid>` carries ReadyToRun images of Kiji's assemblies and the exact
   Markdig and YamlDotNet versions Kiji references, as native assets under
   `runtimes/<rid>/native/kiji-r2r/<id>/<version>`; `Kiji.targets` removes them from the
   native assets and copies each in place of the IL only when package id and version match
   (`KijiReadyToRunDependencies=false` keeps the IL). Runtimes fall back through the graph
-  (linux-musl-x64 to linux-x64, whose images are identical). Images keep the IL's metadata
+  (linux-musl-x64 to linux-x64, whose images are identical). Kiji's own assemblies are
+  compiled as one version bubble, since they ship and load together, so calls and generic
+  instantiations across them keep precompiled code. Images keep the IL's metadata
   and MVID, so code identity and caches are unchanged. Pack fails until
   `THIRD-PARTY-NOTICES.txt` names the versions the images are compiled from.
   `KijiReadyToRun=false` or a Debug pack makes Kiji's package alone. The images are compiled

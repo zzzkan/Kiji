@@ -37,11 +37,11 @@ jobs:
         run: dotnet build -c Release
 
       - name: Repository checks
-        working-directory: src/Kiji.RepositoryTests
+        working-directory: tests/Kiji.RepositoryTests
         run: dotnet test -c Release
 
       - name: Library tests
-        working-directory: src/Kiji.Tests
+        working-directory: tests/Kiji.Tests
         run: dotnet test -c Release
 
       - name: Pack
@@ -57,7 +57,7 @@ jobs:
 
       - name: Package scenarios
         timeout-minutes: 10
-        working-directory: src/Kiji.PackageTests
+        working-directory: tests/Kiji.PackageTests
         shell: bash
         env:
           KIJI_TEST_TRACE: ${{ runner.temp }}/package-scenarios.log

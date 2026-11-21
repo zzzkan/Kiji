@@ -15,7 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../Kiji/Kiji.csproj" />
+    <ProjectReference Include="../../src/Kiji/Kiji.csproj" />
     <ProjectReference Include="../Kiji.SyntheticSite/Kiji.SyntheticSite.csproj" />
   </ItemGroup>
 </Project>

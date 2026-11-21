@@ -91,6 +91,7 @@ public static class StaticSite
         var options = new StaticSiteOptions();
         builder.Services.AddSingleton(_ => options.SiteInfo ?? throw new InvalidOperationException("Call UseSiteInfo before running the site."));
         options.PageAssemblies.Add(entryAssembly);
+        options.CodeAssemblies.Add(typeof(StaticSite).Assembly);
         var runtime = new ContentRuntime();
         builder.Services.AddSingleton(options);
         builder.Services.AddSingleton(runtime);
@@ -102,7 +103,10 @@ public static class StaticSite
         builder.Services.AddSingleton(new SiteServerArguments([.. args]));
         if (settings.Publishing) { builder.Services.AddHostedService<SitePublishService>(); }
         else { builder.Services.AddHostedService<SiteServeService>(); }
-        var context = new SiteBuilderContext(builder, options, runtime, paths);
+        var context = new SiteBuilderContext(builder, options, runtime, paths,
+            builder.Services.Where(static descriptor => SiteServiceRegistration.IsManaged(descriptor.ServiceType)),
+            builder.Services.Single(static descriptor => descriptor.ImplementationType == typeof(SitePublishService)
+                || descriptor.ImplementationType == typeof(SiteServeService)));
         ((IHostApplicationBuilder)builder).Properties[SiteBuilderContext.Key] = context;
         builder.ConfigureContainer(new KijiServiceProviderFactory(context));
         return builder;

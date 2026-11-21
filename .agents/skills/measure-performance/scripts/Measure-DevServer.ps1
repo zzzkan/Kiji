@@ -31,7 +31,7 @@ foreach ($pageCount in $Pages) {
         $site = Join-Path $root "$variant-$pageCount"
         New-Item -ItemType Directory $site | Out-Null
         foreach ($directory in @('contents', 'wwwroot')) { Copy-Item -LiteralPath (Join-Path $corpus $directory) -Destination $site -Recurse }
-        $sourceRoot = Join-Path $repository 'src/Kiji.SyntheticSite'
+        $sourceRoot = Join-Path $repository 'benchmarks/Kiji.SyntheticSite'
         foreach ($source in Get-ChildItem $sourceRoot -Recurse -Filter '*.cs' -File | Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' -and $_.Name -ne 'Program.cs' }) {
             $path = Join-Path $site ([IO.Path]::GetRelativePath($sourceRoot, $source.FullName))
             Write-File $path ([IO.File]::ReadAllText($source.FullName))

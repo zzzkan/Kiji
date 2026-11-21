@@ -10,7 +10,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../Kiji/Kiji.csproj" />
+    <ProjectReference Include="../../src/Kiji/Kiji.csproj" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
   </ItemGroup>
 </Project>

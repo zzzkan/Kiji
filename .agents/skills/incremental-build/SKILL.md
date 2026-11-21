@@ -99,7 +99,7 @@ For cache identity, MSBuild or package changes, run:
 
 `dotnet test -c Release` runs library tests in `Kiji.Tests` and serial package
 scenarios in `Kiji.PackageTests`: publish/edit/clean and watch/reload with the
-Razor and Web SDKs. See `src/Kiji.PackageTests/README.md` for running them and
+Razor and Web SDKs. See `tests/Kiji.PackageTests/README.md` for running them and
 workspace cleanup. Keep dependencies in the shared NuGet cache and reuse one
 fixed consumer workspace; do not assert storage optimizations as Kiji behavior.
 

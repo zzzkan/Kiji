@@ -1,0 +1,26 @@
+using System.Runtime.CompilerServices;
+using Kiji;
+using Kiji.Assets;
+using Kiji.Feeds;
+using Kiji.Markdown;
+using Kiji.Sitemaps;
+
+[assembly: TypeForwardedTo(typeof(AlwaysRenderAttribute))]
+[assembly: TypeForwardedTo(typeof(ContentCollection<>))]
+[assembly: TypeForwardedTo(typeof(PageInfo))]
+[assembly: TypeForwardedTo(typeof(SiteInfo))]
+[assembly: TypeForwardedTo(typeof(SiteOutputContext))]
+[assembly: TypeForwardedTo(typeof(SitePageInfo))]
+[assembly: TypeForwardedTo(typeof(StaticSiteHostBuilderExtensions))]
+[assembly: TypeForwardedTo(typeof(IImageProcessor))]
+[assembly: TypeForwardedTo(typeof(ImageProcessorOptions))]
+[assembly: TypeForwardedTo(typeof(ImageVariant))]
+[assembly: TypeForwardedTo(typeof(ProcessedImageInfo))]
+[assembly: TypeForwardedTo(typeof(MarkdownBody<>))]
+[assembly: TypeForwardedTo(typeof(MarkdownContent<>))]
+[assembly: TypeForwardedTo(typeof(MarkdownContentOptions))]
+[assembly: TypeForwardedTo(typeof(MarkdownHostBuilderExtensions))]
+[assembly: TypeForwardedTo(typeof(MarkdownOptions))]
+[assembly: TypeForwardedTo(typeof(FeedItem))]
+[assembly: TypeForwardedTo(typeof(RssFeedHostBuilderExtensions))]
+[assembly: TypeForwardedTo(typeof(SitemapHostBuilderExtensions))]

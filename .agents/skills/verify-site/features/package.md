@@ -14,11 +14,11 @@ The author runs `dotnet add package Kiji` (or uses the `kiji-blog` template) and
 ## Driving it with Kiji.PackageTests
 
 ```sh
-cd src/Kiji.PackageTests && dotnet test -c Release
+cd tests/Kiji.PackageTests && dotnet test -c Release
 ```
 
 This packs Kiji, creates one isolated consumer and drives publish, edit, clean, watch and
-reload through `dotnet` and HTTP. See `src/Kiji.PackageTests/README.md` for its workspace
+reload through `dotnet` and HTTP. See `tests/Kiji.PackageTests/README.md` for its workspace
 and cleanup. For timing through the package, use the measure-performance skill's
 `measure_cold_publish.py`.
 

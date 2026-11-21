@@ -173,7 +173,7 @@ foreach ($variant in $variants) {
     $site = Join-Path $root $variant
     New-Item -ItemType Directory -Path $site | Out-Null
     foreach ($directory in @('contents', 'wwwroot')) { Copy-Item -LiteralPath (Join-Path $corpus $directory) -Destination (Join-Path $site $directory) -Recurse }
-    $sourceRoot = Join-Path $Repository 'src/Kiji.SyntheticSite'
+    $sourceRoot = Join-Path $Repository 'benchmarks/Kiji.SyntheticSite'
     foreach ($source in Get-ChildItem -LiteralPath $sourceRoot -Filter '*.cs' -File -Recurse | Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' -and $_.Name -ne 'Program.cs' }) {
         $target = Join-Path $site ([IO.Path]::GetRelativePath($sourceRoot, $source.FullName))
         New-Item -ItemType Directory -Force -Path ([IO.Path]::GetDirectoryName($target)) | Out-Null

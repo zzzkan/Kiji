@@ -33,12 +33,16 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <CompilerVisibleProperty Include="IsPackable" />
+    <CompilerVisibleProperty Include="KijiPublicApi" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(MSBuildProjectName)' != 'Kiji.Analyzers' and '$(MSBuildProjectName)' != 'Kiji.Runtime' and '$(NoBuild)' != 'true'">
-    <ProjectReference Include="$(MSBuildThisFileDirectory)src/Kiji.Analyzers/Kiji.Analyzers.csproj"
+    <ProjectReference Include="$(MSBuildThisFileDirectory)tools/Kiji.Analyzers/Kiji.Analyzers.csproj"
                       OutputItemType="Analyzer" ReferenceOutputAssembly="false" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ReferenceTrimmer" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(IsPackable)' == 'true'">

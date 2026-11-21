@@ -131,7 +131,7 @@ def pack(source, feed):
 def create_site(site, repository, corpus, feed, version, packages):
     shutil.copytree(corpus / "contents", site / "contents")
     shutil.copytree(corpus / "wwwroot", site / "wwwroot")
-    source = repository / "src" / "Kiji.SyntheticSite"
+    source = repository / "benchmarks" / "Kiji.SyntheticSite"
     shutil.copytree(source / "Pages", site / "Pages")
     for name in SITE_SOURCES:
         shutil.copy(source / name, site / name)
@@ -263,7 +263,7 @@ def main():
         print(f"{name}: Kiji {variants[name][1]}", flush=True)
 
     corpus = work / "corpus"
-    run(["dotnet", "run", "-c", "Release", "--project", "src/Kiji.SyntheticSite", "--",
+    run(["dotnet", "run", "-c", "Release", "--project", "benchmarks/Kiji.SyntheticSite", "--",
          "--pages", str(arguments.pages), "--runs", "1", "--root", str(corpus)], repository)
 
     sites = {}

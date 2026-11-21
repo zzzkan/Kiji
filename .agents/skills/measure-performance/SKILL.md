@@ -13,9 +13,9 @@ description: Measure Kiji build performance and validate an optimization. Use wh
   binaries in interleaved runs. Its absolute times are not comparable with BDN.
 
 ```pwsh
-dotnet run -c Release --project src/Kiji.Benchmarks -- --filter "*SiteBuildBenchmarks*"
-dotnet run -c Release --project src/Kiji.Benchmarks -- --filter "*Markdown*"
-dotnet run -c Release --project src/Kiji.SyntheticSite -- --pages 1000 --runs 5 --full --phases --root <dir> --out <json>
+dotnet run -c Release --project benchmarks/Kiji.Benchmarks -- --filter "*SiteBuildBenchmarks*"
+dotnet run -c Release --project benchmarks/Kiji.Benchmarks -- --filter "*Markdown*"
+dotnet run -c Release --project benchmarks/Kiji.SyntheticSite -- --pages 1000 --runs 5 --full --phases --root <dir> --out <json>
 ```
 
 ImageProcessingBenchmarks covers shared/distinct images, cold/warm output and

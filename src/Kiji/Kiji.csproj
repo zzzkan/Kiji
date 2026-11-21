@@ -11,24 +11,41 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <FrameworkReference Include="Microsoft.AspNetCore.App" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Markdig" />
-    <PackageReference Include="SkiaSharp" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" PrivateAssets="all" />
-    <PackageReference Include="YamlDotNet" />
-    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
-    <AdditionalFiles Include="BannedSymbols.txt" />
+    <ProjectReference Include="../Kiji.Core/Kiji.Core.csproj" PrivateAssets="all" />
+    <ProjectReference Include="../Kiji.Hosting/Kiji.Hosting.csproj" PrivateAssets="all" />
+    <ProjectReference Include="../Kiji.Markdown/Kiji.Markdown.csproj" PrivateAssets="all" />
+    <ProjectReference Include="../Kiji.Imaging/Kiji.Imaging.csproj" PrivateAssets="all" />
+    <ProjectReference Include="../Kiji.Feeds/Kiji.Feeds.csproj" PrivateAssets="all" />
+    <ProjectReference Include="../Kiji.Sitemaps/Kiji.Sitemaps.csproj" PrivateAssets="all" />
   </ItemGroup>
 
-  <ItemGroup>
-    <EmbeddedResource Include="Hosting/livereload.js" />
-  </ItemGroup>
+  <PropertyGroup>
+    <BuildProjectReferences Condition="'$(NoBuild)' == 'true'">false</BuildProjectReferences>
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);KijiPackLibraryAssemblies</TargetsForTfmSpecificBuildOutput>
+    <TargetsForTfmSpecificDebugSymbolsInPackage>$(TargetsForTfmSpecificDebugSymbolsInPackage);KijiPackLibrarySymbols</TargetsForTfmSpecificDebugSymbolsInPackage>
+  </PropertyGroup>
+
+  <Target Name="KijiResolveLibraryAssemblies" DependsOnTargets="ResolveReferences">
+    <ItemGroup>
+      <KijiLibraryAssembly Include="@(ReferencePath->WithMetadataValue('ReferenceSourceTarget', 'ProjectReference')->'%(FullPath)')" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="KijiPackLibraryAssemblies" DependsOnTargets="KijiResolveLibraryAssemblies">
+    <ItemGroup>
+      <BuildOutputInPackage Include="@(KijiLibraryAssembly);@(KijiLibraryAssembly->'%(RootDir)%(Directory)%(Filename).xml')" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="KijiPackLibrarySymbols" DependsOnTargets="KijiResolveLibraryAssemblies">
+    <ItemGroup>
+      <TfmSpecificDebugSymbolsFile Include="@(KijiLibraryAssembly->'%(RootDir)%(Directory)%(Filename).pdb')" TargetFramework="$(TargetFramework)" TargetPath="/lib/$(TargetFramework)/%(Filename).pdb" />
+    </ItemGroup>
+  </Target>
 
   <ItemGroup>
     <None Update="MSBuild/Kiji.StaticWebAssets.targets" Pack="true" PackagePath="build/Kiji.StaticWebAssets.targets" />
@@ -50,13 +67,13 @@
     <PackageDownload Include="@(KijiReadyToRunRuntime->'Microsoft.AspNetCore.App.Runtime.%(Identity)')" Version="[$(BundledNETCoreAppPackageVersion)]" />
   </ItemGroup>
 
-  <Target Name="KijiSelectReadyToRunAssemblies" DependsOnTargets="ResolveReferences">
+  <Target Name="KijiSelectReadyToRunAssemblies" DependsOnTargets="KijiResolveLibraryAssemblies">
     <PropertyGroup>
       <_KijiIntermediateDirectory>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)'))</_KijiIntermediateDirectory>
     </PropertyGroup>
     <ItemGroup>
       <_KijiReadyToRunDependency Include="$(_KijiReadyToRunPackages)" />
-      <KijiReadyToRunAssembly Include="@(IntermediateAssembly->'%(FullPath)')" RelativePath="$(TargetFileName)" />
+      <KijiReadyToRunAssembly Include="@(IntermediateAssembly->'%(FullPath)');@(KijiLibraryAssembly)" RelativePath="%(Filename)%(Extension)" Library="true" />
       <KijiReadyToRunAssembly Include="@(ReferencePath->'%(FullPath)')"
                               Condition="'@(_KijiReadyToRunDependency)' != '' and '%(ReferencePath.NuGetPackageId)' != ''
                                          and $([System.String]::Copy(';$(_KijiReadyToRunPackages);').Contains(';%(ReferencePath.NuGetPackageId);'))"
@@ -69,8 +86,10 @@
     <PropertyGroup>
       <_KijiReadyToRunAssemblyCount>@(KijiReadyToRunAssembly->Count())</_KijiReadyToRunAssemblyCount>
       <_KijiReadyToRunDependencyCount>@(_KijiReadyToRunDependency->Count())</_KijiReadyToRunDependencyCount>
+      <_KijiLibraryAssemblyCount>@(KijiLibraryAssembly->Count())</_KijiLibraryAssemblyCount>
+      <_KijiLibraryAssemblyCount>$([MSBuild]::Add(1, $(_KijiLibraryAssemblyCount)))</_KijiLibraryAssemblyCount>
     </PropertyGroup>
-    <Error Condition="'$(_KijiReadyToRunAssemblyCount)' != '$([MSBuild]::Add(1, $(_KijiReadyToRunDependencyCount)))'"
+    <Error Condition="'$(_KijiReadyToRunAssemblyCount)' != '$([MSBuild]::Add($(_KijiLibraryAssemblyCount), $(_KijiReadyToRunDependencyCount)))'"
            Text="_KijiReadyToRunPackages names a package that does not provide exactly one referenced assembly: $(_KijiReadyToRunPackages)." />
   </Target>
 
@@ -99,6 +118,8 @@
       <_KijiCrossgenOutput Remove="@(_KijiCrossgenOutput)" />
       <_KijiCrossgenOutput Include="@(KijiReadyToRunAssembly->'$(_KijiReadyToRunDirectory)%(RelativePath)')"
                            Input="%(Identity)" Response="$(_KijiReadyToRunDirectory)%(RelativePath).rsp" />
+      <_KijiCrossgenOutput Condition="'%(_KijiCrossgenOutput.Library)' == 'true'"
+                           Bubble="--inputbubble;@(KijiReadyToRunAssembly->WithMetadataValue('Library', 'true')->'--inputbubbleref:%(Identity)')" />
       <_KijiCrossgenReference Remove="@(_KijiCrossgenReference)" />
       <_KijiCrossgenReference Include="--targetos:$(_KijiTargetOS);--targetarch:$(_KijiTargetArchitecture);--optimize" />
       <_KijiCrossgenReference Include="--reference:$(_KijiPackageRoot)microsoft.netcore.app.runtime.$(_KijiRuntime)/$(_KijiPackageVersion)/runtimes/$(_KijiRuntime)/lib/$(TargetFramework)/*.dll" />
@@ -106,7 +127,7 @@
       <_KijiCrossgenReference Include="@(ReferencePath->'--reference:%(FullPath)')" Condition="'%(ReferencePath.FrameworkReferenceName)' == ''" />
     </ItemGroup>
     <MakeDir Directories="@(_KijiCrossgenOutput->'%(RootDir)%(Directory)')" />
-    <WriteLinesToFile File="%(_KijiCrossgenOutput.Response)" Lines="%(_KijiCrossgenOutput.Input);--out:%(_KijiCrossgenOutput.Identity);@(_KijiCrossgenReference)" Overwrite="true" />
+    <WriteLinesToFile File="%(_KijiCrossgenOutput.Response)" Lines="%(_KijiCrossgenOutput.Input);--out:%(_KijiCrossgenOutput.Identity);%(_KijiCrossgenOutput.Bubble);@(_KijiCrossgenReference)" Overwrite="true" />
     <Exec Command="$(_KijiCrossgen) &quot;@%(_KijiCrossgenOutput.Response)&quot;" StandardOutputImportance="low" />
   </Target>
 
@@ -145,9 +166,10 @@
       <_KijiStagedImage Include="@(KijiReadyToRunRuntime)">
         <Source>%(KijiReadyToRunAssembly.RelativePath)</Source>
         <Destination>%(KijiReadyToRunAssembly.PackageId)/%(KijiReadyToRunAssembly.PackageVersion)/%(KijiReadyToRunAssembly.Filename)%(KijiReadyToRunAssembly.Extension)</Destination>
+        <Library>%(KijiReadyToRunAssembly.Library)</Library>
       </_KijiStagedImage>
-      <_KijiStagedImage Condition="'%(Source)' == '$(TargetFileName)'">
-        <Destination>$(PackageId)/$(PackageVersion)/$(TargetFileName)</Destination>
+      <_KijiStagedImage Condition="'%(_KijiStagedImage.Library)' == 'true'">
+        <Destination>$(PackageId)/$(PackageVersion)/%(_KijiStagedImage.Source)</Destination>
       </_KijiStagedImage>
     </ItemGroup>
     <RemoveDir Directories="$(_KijiRuntimeStage)" />
@@ -175,15 +197,4 @@
            Text="@(_KijiTransitiveFile) must pack under build/, not buildTransitive/: Kiji's targets turn a project's publish into a site, which is right only for a project that references Kiji directly, not for its test projects." />
   </Target>
 
-  <ItemGroup>
-    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
-      <_Parameter1>Kiji.Tests</_Parameter1>
-    </AssemblyAttribute>
-    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
-      <_Parameter1>Kiji.Benchmarks</_Parameter1>
-    </AssemblyAttribute>
-    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
-      <_Parameter1>Kiji.SyntheticSite</_Parameter1>
-    </AssemblyAttribute>
-  </ItemGroup>
 </Project>

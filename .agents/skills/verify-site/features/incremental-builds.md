@@ -35,6 +35,6 @@ marker count is 1 after the edit and 0 after the restore. `git status` is clean.
 
 ## Gotchas
 
-- Any change to `src/Kiji` or `docs` code changes the code identity, so every page
+- Any change to `src` or `docs` code changes the code identity, so every page
   renders. Measure reuse with code unchanged between the two publishes.
 - Detailed reuse rules and regression tests are in the incremental-build skill.

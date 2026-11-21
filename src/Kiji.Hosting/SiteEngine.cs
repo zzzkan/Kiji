@@ -24,6 +24,7 @@ internal sealed class SiteEngine
     private readonly SiteArtifactRegistration[] _artifacts;
     private readonly IReadOnlyList<Assembly> _pageAssemblies;
     private readonly IReadOnlyCollection<Assembly> _serviceAssemblies;
+    private readonly IReadOnlyList<Assembly> _codeAssemblies;
     private readonly Type? _defaultLayoutType;
     private readonly Type? _notFoundComponentType;
     private readonly ResolvedSitePaths _options;
@@ -43,6 +44,7 @@ internal sealed class SiteEngine
         _pageParameters = [.. services.GetServices<PageParameterRegistration>()];
         _artifacts = [.. services.GetServices<SiteArtifactRegistration>()];
         _pageAssemblies = [.. siteOptions.PageAssemblies];
+        _codeAssemblies = [.. siteOptions.CodeAssemblies];
         _serviceAssemblies = services.GetService<KijiServiceProviderStamp>()?.Assemblies ?? [];
         _defaultLayoutType = siteOptions.DefaultLayoutType;
         _notFoundComponentType = siteOptions.NotFoundComponentType;
@@ -64,7 +66,7 @@ internal sealed class SiteEngine
         var options = _options;
         ImageArtifactProcessor.ClearWork(Paths.ResolveImageWorkPath(options));
         cancellationToken.ThrowIfCancellationRequested();
-        Assembly[] codeAssemblies = [.. _pageAssemblies, .. _serviceAssemblies, typeof(StaticSite).Assembly];
+        Assembly[] codeAssemblies = [.. _pageAssemblies, .. _serviceAssemblies, .. _codeAssemblies];
         var codeIdentity = Task.Run(() => IncrementalBuildPlanner.CollectCodeDependencies(codeAssemblies), CancellationToken.None);
         var cachePath = Paths.ResolveCachePath();
         var previousManifest = Task.Run(() => IncrementalBuildPlanner.LoadManifest(cachePath, cancellationToken), CancellationToken.None);

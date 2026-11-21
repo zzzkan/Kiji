@@ -4,7 +4,7 @@ using Microsoft.Extensions.Hosting;
 namespace Kiji.Hosting;
 
 internal sealed class SiteBuilderContext(IHostApplicationBuilder builder, StaticSiteOptions options,
-    ContentRuntime runtime, SiteExecutionPaths paths)
+    ContentRuntime runtime, SiteExecutionPaths paths, IEnumerable<ServiceDescriptor> managedServices, ServiceDescriptor hostedService)
 {
     internal static readonly object Key = new();
     internal StaticSiteOptions Options { get; } = options;
@@ -13,9 +13,8 @@ internal sealed class SiteBuilderContext(IHostApplicationBuilder builder, Static
     internal IHostEnvironment Environment { get; } = builder.Environment;
     internal string EnvironmentName { get; } = builder.Environment.EnvironmentName;
     internal string ContentRootPath { get; } = builder.Environment.ContentRootPath;
-    internal List<ServiceDescriptor> ManagedServices { get; } = [.. builder.Services.Where(static descriptor => SiteServiceRegistration.IsManaged(descriptor.ServiceType))];
-    internal ServiceDescriptor HostedService { get; } = builder.Services.Single(static descriptor => descriptor.ImplementationType == typeof(SitePublishService)
-        || descriptor.ImplementationType == typeof(SiteServeService));
+    internal List<ServiceDescriptor> ManagedServices { get; } = [.. managedServices];
+    internal ServiceDescriptor HostedService { get; } = hostedService;
 
     internal static SiteBuilderContext Get(IHostApplicationBuilder builder)
     {

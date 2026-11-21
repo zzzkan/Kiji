@@ -21,7 +21,7 @@ public sealed class PackageFixture : IAsyncLifetime
     internal string Site => Path.Combine(Work, "Site");
     private string Packages => Path.Combine(_root, "packages");
     private readonly Dictionary<string, string?> _runtimePackages = new(StringComparer.Ordinal);
-    private string Template => Path.Combine(_repository, "src", "Kiji.PackageTests", "Fixture");
+    private string Template => Path.Combine(_repository, "tests", "Kiji.PackageTests", "Fixture");
 
     public async ValueTask InitializeAsync()
     {

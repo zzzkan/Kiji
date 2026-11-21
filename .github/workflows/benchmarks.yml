@@ -30,7 +30,7 @@ jobs:
 
       - name: Run Kiji.Benchmarks
         run: >
-          dotnet run -c Release --project src/Kiji.Benchmarks --
+          dotnet run -c Release --project benchmarks/Kiji.Benchmarks --
           --filter "${{ github.event.inputs.filter || '*' }}"
           --exporters json
 

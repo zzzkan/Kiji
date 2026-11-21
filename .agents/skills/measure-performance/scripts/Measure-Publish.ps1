@@ -15,6 +15,7 @@ param(
     [string[]] $Scenarios = @('NoChange', 'ManifestRemoved', 'OneEdited', 'PublishOutputRemoved', 'Fresh')
 )
 $ErrorActionPreference = 'Stop'
+$rid = [System.Runtime.InteropServices.RuntimeInformation]::RuntimeIdentifier
 $Repository = [IO.Path]::GetFullPath($Repository)
 if (!$OutputDirectory) { $OutputDirectory = Join-Path $Repository ('artifacts/publish-profile/' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N')) }
 $root = [IO.Path]::GetFullPath($OutputDirectory)
@@ -104,7 +105,7 @@ function Assert-Outputs([string] $scenario, [int] $round) {
     $aliases = [Collections.Generic.List[string]]::new()
     $aliasSources = @{}
     if ($AllowNewFingerprintAliases) {
-        $manifest = Get-Content -Raw -LiteralPath (Join-Path $root 'candidate/obj/Release/net10.0/staticwebassets.publish.json') | ConvertFrom-Json
+        $manifest = Get-Content -Raw -LiteralPath (Join-Path $root "candidate/obj/Release/net10.0/$rid/staticwebassets.publish.json") | ConvertFrom-Json
         foreach ($endpoint in $manifest.Endpoints) {
             if (@($endpoint.Selectors).Count) { continue }
             $label = @($endpoint.EndpointProperties | Where-Object Name -EQ 'label')
@@ -197,10 +198,11 @@ foreach ($variant in $variants) {
         $version = $nuspec.package.metadata.version
     } finally { $zip.Dispose() }
     Copy-Item -LiteralPath $package -Destination (Join-Path $feed "Kiji.$version.nupkg")
+    Get-ChildItem -LiteralPath (Split-Path $package) -Filter "Kiji.Runtime.*.$version.nupkg" | Copy-Item -Destination $feed
     $feedXml = [Security.SecurityElement]::Escape($feed)
     $cacheXml = [Security.SecurityElement]::Escape((Join-Path $root "packages/$variant"))
     "<configuration><packageSources><clear /><add key='local' value='$feedXml' /><add key='nuget' value='https://api.nuget.org/v3/index.json' /></packageSources></configuration>" | Set-Content -LiteralPath (Join-Path $site 'NuGet.Config')
-    "<Project Sdk='Microsoft.NET.Sdk.Razor'><PropertyGroup><OutputType>Exe</OutputType><AssemblyName>Kiji.SyntheticSite</AssemblyName><RootNamespace>Kiji.SyntheticSite</RootNamespace><RestorePackagesPath>$cacheXml</RestorePackagesPath></PropertyGroup><ItemGroup><PackageReference Include='Kiji' Version='$version' /></ItemGroup></Project>" | Set-Content -LiteralPath (Join-Path $site 'Site.csproj')
+    "<Project Sdk='Microsoft.NET.Sdk.Razor'><PropertyGroup><OutputType>Exe</OutputType><UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier><AssemblyName>Kiji.SyntheticSite</AssemblyName><RootNamespace>Kiji.SyntheticSite</RootNamespace><RestorePackagesPath>$cacheXml</RestorePackagesPath></PropertyGroup><ItemGroup><PackageReference Include='Kiji' Version='$version' /></ItemGroup></Project>" | Set-Content -LiteralPath (Join-Path $site 'Site.csproj')
     $null = Invoke-Dotnet (@('restore', $site) + @(Get-Properties $variant)) (Join-Path $root "$variant-restore.log")
     $provenance[$variant] = @{ Package=$package; SHA256=(Get-FileSha256 $package); Properties=@(Get-Properties $variant); EntrySHA256=(Get-FileSha256 (Join-Path $site 'Program.cs')); SiteDefinitionSHA256=(Get-FileSha256 $definition) }
 }
@@ -220,7 +222,7 @@ function Invoke-Publish([string] $variant, [string] $scenario, [int] $round) {
         [IO.File]::WriteAllText((Join-Path $site 'contents/post-00000/index.md'), $originalPost + "`n`nEdit $letter.`n")
     }
     $dist = Join-Path $site 'dist'
-    $compressionDir = Join-Path $site 'obj/Release/net10.0'
+    $compressionDir = Join-Path $site "obj/Release/net10.0/$rid"
     $before = Get-FileStates $dist
     $compressionBefore = Get-CompressedStates $compressionDir
     $prefix = Join-Path $root "$variant-$scenario-$round"
@@ -242,7 +244,7 @@ function Invoke-Publish([string] $variant, [string] $scenario, [int] $round) {
         foreach ($file in $files) { $bytes += $after[$file].Length }
         [pscustomobject]@{ Kind=$kind; Count=$files.Count; Bytes=$bytes }
     }
-    $manifest = Get-Content -Raw -LiteralPath (Join-Path $site 'obj/Release/net10.0/staticwebassets.publish.json') | ConvertFrom-Json
+    $manifest = Get-Content -Raw -LiteralPath (Join-Path $site "obj/Release/net10.0/$rid/staticwebassets.publish.json") | ConvertFrom-Json
     $record = [pscustomobject]@{
         Variant=$variant; Scenario=$scenario; Round=$round; Measured=($round -gt 0); ElapsedMs=$elapsed
         Categories=$categories; Kiji=$kiji

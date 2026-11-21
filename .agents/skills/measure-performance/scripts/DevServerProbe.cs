@@ -38,7 +38,7 @@ foreach (var variant in round % 2 == 0 ? new[] { "candidate", "baseline" } : new
     }
     var label = $"{pages}-{mode}-{round}-{variant}";
     var command = mode == "Direct"
-        ? new[] { "exec", "bin/Debug/net10.0/Kiji.SyntheticSite.dll" }
+        ? new[] { "exec", Directory.GetFiles(Path.Combine(site, "bin/Debug/net10.0"), "Kiji.SyntheticSite.dll", SearchOption.AllDirectories).Single() }
         : new[] { "watch", "--project", "Site.csproj", "--non-interactive" };
     var start = StartInfo(site, command);
     var logs = new ConcurrentQueue<string>();

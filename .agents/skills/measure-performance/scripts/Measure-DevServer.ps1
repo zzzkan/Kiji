@@ -49,11 +49,12 @@ foreach ($pageCount in $Pages) {
         $feed = Join-Path $site 'feed'
         New-Item -ItemType Directory $feed | Out-Null
         Copy-Item -LiteralPath $package -Destination (Join-Path $feed "Kiji.$version.nupkg")
+        Get-ChildItem -LiteralPath (Split-Path $package) -Filter "Kiji.Runtime.*.$version.nupkg" | Copy-Item -Destination $feed
         Write-File (Join-Path $site 'NuGet.Config') "<configuration><packageSources><clear/><add key=`"local`" value=`"$([Security.SecurityElement]::Escape($feed))`"/><add key=`"nuget`" value=`"https://api.nuget.org/v3/index.json`"/></packageSources></configuration>"
         $cache = [Security.SecurityElement]::Escape((Join-Path $root "packages/$variant"))
-        Write-File (Join-Path $site 'Site.csproj') "<Project Sdk=`"Microsoft.NET.Sdk.Razor`"><PropertyGroup><OutputType>Exe</OutputType><AssemblyName>Kiji.SyntheticSite</AssemblyName><RestorePackagesPath>$cache</RestorePackagesPath></PropertyGroup><ItemGroup><PackageReference Include=`"Kiji`" Version=`"$version`" /></ItemGroup></Project>"
+        Write-File (Join-Path $site 'Site.csproj') "<Project Sdk=`"Microsoft.NET.Sdk.Razor`"><PropertyGroup><OutputType>Exe</OutputType><UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier><AssemblyName>Kiji.SyntheticSite</AssemblyName><RestorePackagesPath>$cache</RestorePackagesPath></PropertyGroup><ItemGroup><PackageReference Include=`"Kiji`" Version=`"$version`" /></ItemGroup></Project>"
         Run-Dotnet @('build', $site, '-c', 'Debug') (Join-Path $root "$variant-$pageCount-build.log")
-        $sites += [ordered]@{ Path=$site; Pages=$pageCount; Variant=$variant; Package=$package; SHA256=(Get-FileHash $package).Hash; DefinitionSHA256=(Get-FileHash $runner).Hash }
+        $sites += [ordered]@{ Path=$site; Pages=$pageCount; Variant=$variant; Package=$package; SHA256=(Get-FileHash $package).Hash; DefinitionSHA256=(Get-FileHash (Join-Path $site 'SyntheticSiteDefinition.cs')).Hash }
     }
 }
 if (@($sites.DefinitionSHA256 | Select-Object -Unique).Count -ne 1) { throw 'Site definitions differ.' }

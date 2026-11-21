@@ -1,21 +1,5 @@
 <Project>
 
-  <ItemGroup Condition="'$(KijiExample)' != 'true' and '$(MSBuildProjectName)' != 'Kiji.Analyzers' and '$(MSBuildProjectName)' != 'Kiji.Runtime'">
-    <AdditionalFiles Include="$(MSBuildProjectFullPath);**/*.props;**/*.targets;**/*.css;**/*.js;**/*.mjs;**/*.cs"
-                     Exclude="@(Compile);@(AdditionalFiles);bin/**;obj/**;dist/**;.kiji/**" />
-    <AdditionalFiles Include="**/*.razor;**/*.csproj" Exclude="@(AdditionalFiles);bin/**;obj/**;dist/**;.kiji/**"
-                     Condition="'$(UsingMicrosoftNETSdkRazor)' != 'true'" />
-  </ItemGroup>
-
-  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Kiji'">
-    <AdditionalFiles Include="$(MSBuildThisFileDirectory)Directory.Build.props;$(MSBuildThisFileDirectory)Directory.Build.targets;$(MSBuildThisFileDirectory)Directory.Packages.props;$(MSBuildThisFileDirectory)src/Directory.Build.props;$(MSBuildThisFileDirectory)tests/Directory.Build.props" />
-    <AdditionalFiles Include="$(MSBuildThisFileDirectory).editorconfig;$(MSBuildThisFileDirectory).gitignore" />
-    <AdditionalFiles Include="$(MSBuildThisFileDirectory).github/**/*.yml" />
-    <AdditionalFiles Include="$(MSBuildThisFileDirectory).agents/**/*.ps1;$(MSBuildThisFileDirectory).agents/**/*.mjs;$(MSBuildThisFileDirectory).agents/**/*.cs" />
-    <AdditionalFiles Include="$(MSBuildThisFileDirectory)tools/Kiji.Analyzers/**/*.cs;$(MSBuildThisFileDirectory)tools/Kiji.Analyzers/*.csproj;$(MSBuildThisFileDirectory)src/Kiji.Runtime/*.csproj"
-                     Exclude="$(MSBuildThisFileDirectory)tools/Kiji.Analyzers/obj/**;$(MSBuildThisFileDirectory)tools/Kiji.Analyzers/bin/**" />
-  </ItemGroup>
-
   <ItemGroup>
     <KijiProject Include="Kiji.Core" Path="src/Kiji.Core" Packed="true" />
     <KijiProject Include="Kiji.Hosting" Path="src/Kiji.Hosting" Packed="true" References="Kiji.Core" />
@@ -32,7 +16,6 @@
     <KijiProject Include="Kiji.Images.Skia.Tests" Path="tests/Kiji.Images.Skia.Tests" References="Kiji.Core;Kiji.Images.Skia;Kiji.Testing" />
     <KijiProject Include="Kiji.Feeds.Tests" Path="tests/Kiji.Feeds.Tests" References="Kiji.Core;Kiji.Feeds" />
     <KijiProject Include="Kiji.Sitemaps.Tests" Path="tests/Kiji.Sitemaps.Tests" References="Kiji.Core;Kiji.Sitemaps" />
-    <KijiProject Include="Kiji.Analyzers.Tests" Path="tests/Kiji.Analyzers.Tests" References="Kiji.Analyzers" />
     <KijiProject Include="Kiji.Tests" Path="tests/Kiji.Tests" References="Kiji;Kiji.Testing" SeesInternals="true" />
     <KijiProject Include="Kiji.PackageTests" Path="tests/Kiji.PackageTests" References="Kiji" />
     <KijiProject Include="Kiji.RepositoryTests" Path="tests/Kiji.RepositoryTests" />
@@ -50,7 +33,10 @@
   <ItemGroup>
     <_KijiReferenceToKiji Include="@(ProjectReference->WithMetadataValue('Filename', 'Kiji')->WithoutMetadataValue('ReferenceOutputAssembly', 'false'))" />
     <ProjectReference Include="@(KijiProject->WithMetadataValue('Packed', 'true')->'$(MSBuildThisFileDirectory)%(Path)/%(Identity).csproj')"
-                      Condition="'@(_KijiReferenceToKiji)' != ''" KijiPackedInKiji="true" TreatAsUsed="true" />
+                      Condition="'$(MSBuildProjectName)' == 'Kiji' or '@(_KijiReferenceToKiji)' != ''"
+                      KijiPackedInKiji="true" TreatAsUsed="true">
+      <PrivateAssets Condition="'$(MSBuildProjectName)' == 'Kiji'">all</PrivateAssets>
+    </ProjectReference>
   </ItemGroup>
 
   <ItemGroup Condition="'$(MSBuildProjectName)' == 'Kiji'">
@@ -79,8 +65,7 @@
       <KijiAllowedProjectReferences Condition="'$(MSBuildProjectName)' == 'Kiji'">@(KijiProject->WithMetadataValue('Packed', 'true'))</KijiAllowedProjectReferences>
       <KijiAllowedPackages>@(_KijiThisProject->'%(Packages)')</KijiAllowedPackages>
       <KijiPacked>@(_KijiThisProject->'%(Packed)')</KijiPacked>
-      <KijiPackedProjects>@(KijiProject->WithMetadataValue('Packed', 'true'), ',')</KijiPackedProjects>
-      <KijiPackageProject>Kiji</KijiPackageProject>
+      <KijiPackedProjects Condition="'$(MSBuildProjectName)' == 'Kiji'">@(KijiProject->WithMetadataValue('Packed', 'true'), ',')</KijiPackedProjects>
     </PropertyGroup>
   </Target>
 

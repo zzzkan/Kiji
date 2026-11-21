@@ -10,11 +10,12 @@ public sealed class NamespaceOwnershipAnalyzer : DiagnosticAnalyzer
     public static readonly DiagnosticDescriptor Rule = new(
         id: "KR0008",
         title: "A namespace is declared in one project",
-        messageFormat: "Namespace {0} is declared in both {1} and {2}. A namespace belongs to one project: rename it in one of them, or move {3} into the other.",
+        messageFormat: "Namespace {0} is declared in both {1} and {2}. Move its types into one project or give the features distinct namespaces.",
         category: "Repository",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "A project may declare several namespaces, but no namespace spans the library projects packed into Kiji; the package project adds only its entry point to the root namespace.");
+        description: "A project may declare several namespaces, but no namespace spans the library projects packed into Kiji; the package project adds only its entry point to the root namespace.",
+        customTags: WellKnownDiagnosticTags.CompilationEnd);
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [Rule];
 
@@ -22,57 +23,43 @@ public sealed class NamespaceOwnershipAnalyzer : DiagnosticAnalyzer
     {
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
-        context.RegisterCompilationStartAction(start =>
-        {
-            var options = start.Options.AnalyzerConfigOptionsProvider.GlobalOptions;
-            if (!options.TryGetValue("build_property.KijiPackedProjects", out var value)
-                || !options.TryGetValue("build_property.MSBuildProjectName", out var project)) { return; }
-            var packed = value.Split([','], System.StringSplitOptions.RemoveEmptyEntries).Select(static name => name.Trim()).ToImmutableHashSet();
-            var libraries = start.Compilation.References
-                .Select(start.Compilation.GetAssemblyOrModuleSymbol).OfType<IAssemblySymbol>()
-                .Where(assembly => packed.Contains(assembly.Name))
-                .Select(static assembly => (assembly.Name, Namespaces: Namespaces(assembly.GlobalNamespace)))
-                .ToList();
-            if (packed.Contains(project))
-            {
-                start.RegisterSymbolAction(symbol => AnalyzeType(symbol, project, libraries, entryNamespace: null), SymbolKind.NamedType);
-            }
-            else if (options.TryGetValue("build_property.KijiPackageProject", out var package) && package == project)
-            {
-                start.RegisterSymbolAction(symbol => AnalyzeType(symbol, project, libraries, entryNamespace: project), SymbolKind.NamedType);
-            }
-        });
+        context.RegisterCompilationAction(AnalyzePackage);
     }
 
-    private static void AnalyzeType(SymbolAnalysisContext context, string project,
-        List<(string Name, ImmutableHashSet<string> Namespaces)> libraries, string? entryNamespace)
+    private static void AnalyzePackage(CompilationAnalysisContext context)
     {
-        var type = (INamedTypeSymbol)context.Symbol;
-        if (type.ContainingType is not null || type.IsImplicitlyDeclared || type.ContainingNamespace.IsGlobalNamespace) { return; }
-        var name = type.ContainingNamespace.ToDisplayString();
-        if (name == entryNamespace && type.MetadataName == "StaticSite") { return; }
-        foreach (var library in libraries.Where(library => library.Namespaces.Contains(name)))
-        {
-            foreach (var location in type.Locations.Where(static location => location.IsInSource))
-            {
-                context.ReportDiagnostic(Diagnostic.Create(Rule, location, name, project, library.Name, "'" + type.Name + "'"));
-            }
-        }
-    }
+        if (!context.Options.AnalyzerConfigOptionsProvider.GlobalOptions.TryGetValue("build_property.KijiPackedProjects", out var value)
+            || string.IsNullOrWhiteSpace(value)) { return; }
 
-    private static ImmutableHashSet<string> Namespaces(INamespaceSymbol root)
-    {
-        var names = ImmutableHashSet.CreateBuilder<string>();
-        var pending = new Stack<INamespaceSymbol>([root]);
-        while (pending.Count > 0)
+        var packed = value.Split(',').ToImmutableHashSet(StringComparer.Ordinal);
+        var package = context.Compilation.Assembly;
+        var owners = new Dictionary<string, string>(StringComparer.Ordinal);
+        var assemblies = context.Compilation.References.Select(context.Compilation.GetAssemblyOrModuleSymbol)
+            .OfType<IAssemblySymbol>().Where(assembly => packed.Contains(assembly.Name)).Append(package);
+        foreach (var assembly in assemblies)
         {
-            var current = pending.Pop();
-            if (!current.IsGlobalNamespace && current.GetTypeMembers().Any(static type => !type.IsImplicitlyDeclared))
+            var pending = new Stack<INamespaceSymbol>([assembly.GlobalNamespace]);
+            while (pending.Count > 0)
             {
-                names.Add(current.ToDisplayString());
+                var ns = pending.Pop();
+                foreach (var child in ns.GetNamespaceMembers()) { pending.Push(child); }
+                if (ns.IsGlobalNamespace) { continue; }
+
+                var name = ns.ToDisplayString();
+                var type = ns.GetTypeMembers().FirstOrDefault(type => !type.IsImplicitlyDeclared
+                    && !(assembly.Equals(package, SymbolEqualityComparer.Default) && name == package.Name && type.MetadataName == "StaticSite"));
+                if (type is null) { continue; }
+
+                if (owners.TryGetValue(name, out var owner))
+                {
+                    var location = type.Locations.FirstOrDefault(static location => location.IsInSource) ?? Location.None;
+                    context.ReportDiagnostic(Diagnostic.Create(Rule, location, name, owner, assembly.Name));
+                }
+                else
+                {
+                    owners.Add(name, assembly.Name);
+                }
             }
-            foreach (var child in current.GetNamespaceMembers()) { pending.Push(child); }
         }
-        return names.ToImmutable();
     }
 }

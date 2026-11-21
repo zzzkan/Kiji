@@ -17,25 +17,23 @@ public sealed class CommentAnalyzer : DiagnosticAnalyzer
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
-
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [Rule];
 
     public override void Initialize(AnalysisContext context)
     {
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
-        context.RegisterSyntaxTreeAction(tree => ReportComments(tree.Tree, tree.ReportDiagnostic, tree.CancellationToken));
+        context.RegisterSyntaxTreeAction(ReportComments);
         context.RegisterSemanticModelAction(AnalyzeDocumentation);
-        context.RegisterAdditionalFileAction(AnalyzeAdditionalFile);
     }
 
-    private static void ReportComments(SyntaxTree tree, Action<Diagnostic> report, CancellationToken cancellationToken)
+    private static void ReportComments(SyntaxTreeAnalysisContext context)
     {
-        foreach (var trivia in tree.GetRoot(cancellationToken).DescendantTrivia(descendIntoTrivia: true))
+        foreach (var trivia in context.Tree.GetRoot(context.CancellationToken).DescendantTrivia(descendIntoTrivia: true))
         {
             if (trivia.IsKind(SyntaxKind.SingleLineCommentTrivia) || trivia.IsKind(SyntaxKind.MultiLineCommentTrivia))
             {
-                report(Diagnostic.Create(Rule, trivia.GetLocation(), "Comments are not allowed"));
+                context.ReportDiagnostic(Diagnostic.Create(Rule, trivia.GetLocation(), "Comments are not allowed"));
             }
         }
     }
@@ -51,39 +49,6 @@ public sealed class CommentAnalyzer : DiagnosticAnalyzer
             {
                 context.ReportDiagnostic(Diagnostic.Create(Rule, trivia.GetLocation(), "XML documentation belongs only to the public API of a library project in src"));
             }
-        }
-    }
-
-    private static void AnalyzeAdditionalFile(AdditionalFileAnalysisContext context)
-    {
-        var path = context.AdditionalFile.Path;
-        var text = context.AdditionalFile.GetText(context.CancellationToken);
-        if (text is null)
-        {
-            return;
-        }
-
-        if (path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
-        {
-            var tree = CSharpSyntaxTree.ParseText(text, new CSharpParseOptions(LanguageVersion.Preview), cancellationToken: context.CancellationToken);
-            var outside = new List<Diagnostic>();
-            ReportComments(tree, outside.Add, context.CancellationToken);
-            outside.AddRange(DocumentationComments(tree.GetRoot(context.CancellationToken)).Select(trivia =>
-                Diagnostic.Create(Rule, trivia.GetLocation(), "XML documentation belongs only to the public API of a library project in src")));
-            foreach (var diagnostic in outside)
-            {
-                var span = diagnostic.Location.SourceSpan;
-                context.ReportDiagnostic(Diagnostic.Create(Rule, Location.Create(path, span, text.Lines.GetLinePositionSpan(span)), diagnostic.GetMessage(System.Globalization.CultureInfo.InvariantCulture).Split('.')[0]));
-            }
-
-            return;
-        }
-
-        var lines = text.Lines.Select(static line => line.ToString()).ToArray();
-        foreach (var number in CommentScanner.CommentLines(Path.GetFileName(path), lines).OrderBy(static number => number))
-        {
-            var line = text.Lines[number];
-            context.ReportDiagnostic(Diagnostic.Create(Rule, Location.Create(path, line.Span, text.Lines.GetLinePositionSpan(line.Span)), $"Comment \"{lines[number].Trim()}\""));
         }
     }
 

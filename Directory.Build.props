@@ -38,8 +38,6 @@
   <ItemGroup Condition="'$(KijiExample)' != 'true'">
     <CompilerVisibleProperty Include="KijiPublicApi" />
     <CompilerVisibleProperty Include="KijiPackedProjects" />
-    <CompilerVisibleProperty Include="KijiPackageProject" />
-    <CompilerVisibleProperty Include="MSBuildProjectName" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(KijiExample)' != 'true' and '$(MSBuildProjectName)' != 'Kiji.Analyzers' and '$(MSBuildProjectName)' != 'Kiji.Runtime' and '$(NoBuild)' != 'true'">

@@ -20,7 +20,6 @@
     <Project Path="tests/Kiji.RepositoryTests/Kiji.RepositoryTests.csproj" />
     <Project Path="tests/Kiji.Tests/Kiji.Tests.csproj" />
     <Project Path="tests/Kiji.Testing/Kiji.Testing.csproj" />
-    <Project Path="tests/Kiji.Analyzers.Tests/Kiji.Analyzers.Tests.csproj" />
     <Project Path="tests/Kiji.Core.Tests/Kiji.Core.Tests.csproj" />
     <Project Path="tests/Kiji.Feeds.Tests/Kiji.Feeds.Tests.csproj" />
     <Project Path="tests/Kiji.Hosting.Tests/Kiji.Hosting.Tests.csproj" />

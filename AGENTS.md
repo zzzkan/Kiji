@@ -2,64 +2,17 @@
 
 A .NET static site generator: Razor components rendered with Blazor's HtmlRenderer.
 
-## How rules work here
+## Repository conventions
 
-Agents copy the code around them more than they read prose, so quality comes from the
-environment they work in, not from more instructions or harder review. Rules are placed at
-the most reliable level that can hold them, in this order:
+Project boundaries and packaging are defined in `Directory.Build.targets`. Compiler
+settings live in `Directory.Build.props` and `.editorconfig`, and repository analyzers in
+`tools/Kiji.Analyzers`. The docs project is a usage example.
 
-1. **Codebase.** API design and architecture make the wrong thing impossible or awkward: one
-   way to do each task, internals not reachable, no workarounds or old ways left to copy.
-2. **Static checks.** Compiler, types, analyzers, `.editorconfig` severities, tests and CI fail
-   the build, with messages that say how to fix the root cause.
-3. **Verification.** The site is run the way an author runs it, and the evidence is kept.
-4. **Prose.** This file and the skills hold only what needs judgment.
-5. **Human review** reads the evidence from levels 2 and 3, not every line of the diff.
+Prefer names, types and tests that explain the code. In compiled C#, KR0004 permits XML
+documentation on the public library API. In scripts and other languages, omit explanatory
+comments when the code conveys the same information. Keep directives that tools consume.
 
-- A correction is not a new line here. When a human corrects an agent, a mistake recurs,
-  or a rule below is broken, use the `correct` skill.
-- Automate a loop (agents merging their own changes, generated fix pull requests) only
-  after its corrections are checks and its results are verified. Automating a loop that
-  produces bad code produces more of it.
-
-### Rule table
-
-Each rule names what enforces it. `judgment` rules are prose on purpose; when one is broken
-twice, encode it. `none` is debt: encode it the next time it matters. Remove prose rules
-below once a check covers them.
-
-| Rule | Enforced by |
-| --- | --- |
-| Warnings and recommended .NET analyzers fail the build | `Directory.Build.props` (`TreatWarningsAsErrors`, `AnalysisLevel`, `EnforceCodeStyleInBuild`) |
-| File-scoped namespaces | `.editorconfig` IDE0160 at `error` |
-| A namespace matches its folder | `.editorconfig` IDE0130 at `error` |
-| A namespace is declared in one `src` library project (a project may declare several); the package project adds only `StaticSite` to `Kiji` | `Kiji.Analyzers` KR0008 |
-| Internal namespaces depend in one direction; public types are exempt | `Kiji.Analyzers` KR0007 |
-| Public API stays compatible, except listed breaks | Package validation against 0.1.0, `src/Kiji/CompatibilitySuppressions.xml` |
-| Consumers use the matching ReadyToRun image for every packaged library assembly | `PackageScenarios.Publish_UsesSdkDefaultDestination` |
-| ReadyToRun images have third-party notices | Pack error in `src/Kiji/Kiji.csproj` |
-| Incremental output equals a clean build | `IncrementalBuildTests` |
-| The package works through the SDK in a real consumer | `Kiji.PackageTests` in CI |
-| Docs site builds | CI `Build docs` step |
-| A user-visible change is done only when driven through `dotnet publish` or `dotnet watch`, with the evidence in the report | `verify-site` skill (judgment) |
-| No comments; XML docs only on the public API of `src` library projects | `Kiji.Analyzers` KR0004 (other file kinds reach it as `AdditionalFiles` in `Directory.Build.targets`) |
-| Kiji's public API is documented, with one-line summaries of what an author can rely on | CS1591 at `error` in `src/.editorconfig` |
-| One type per file | `Kiji.Analyzers` KR0001 in every project |
-| Kiji avoids APIs that break its constraints (environment reads, `ExitCode`, frozen collections, machine-dependent configuration, reflection JSON, open redirects); each ban says why | `src/BannedSymbols.txt` (RS0030) |
-| `Kiji.targets` packs under `build/`, never `buildTransitive/` | KR0005 in `src/Kiji/Kiji.csproj` |
-| Library tests never mutate process-wide state | `tests/BannedSymbols.txt` (RS0030) in every `*.Tests` project and `Kiji.Testing` |
-| Every project is in the graph and lives at its path under `src`, `tests`, `benchmarks` or `tools` | `KijiProject` items in `Directory.Build.targets`, KR0003 |
-| `docs` is a usage example, built like an author's site: none of the rules above apply to it | `KijiExample` in `docs/Directory.Build.props` |
-| Repository scripts are PowerShell or C#; another language needs a stated advantage | KR0009 in `Directory.Build.targets` (`KijiScriptException` with `Reason`) |
-| Projects reference only the projects the graph allows (library layers point toward `Kiji.Core`; each library's tests reference that library, its dependencies and `Kiji.Testing`); `Kiji.PackageTests` stays black-box | `Directory.Build.targets` KR0003 |
-| A `src` project references only the packages the graph allows (Markdig and YamlDotNet in `Kiji.Markdown`, SkiaSharp in `Kiji.Images.Skia`) | `Directory.Build.targets` KR0006 |
-| No unused project or package references | ReferenceTrimmer (RT0001-RT0003) in every project, from `Directory.Build.props` |
-| `src` holds only what ships: library projects all pack into the one Kiji package, whose dependencies follow from theirs | `Packed` projects in `Directory.Build.targets` (KR0003), pack targets in `src/Kiji/Kiji.csproj` |
-| Public types that move out of `Kiji.dll` stay reachable through it | Package validation (`src/Kiji/TypeForwards.cs`) |
-| `src` library and library test components are hand-written `ComponentBase` classes | `Directory.Build.targets` KR0002 (no Razor SDK, no `.razor`) |
-| `benchmarks/Kiji.SyntheticSite` stays frozen outside `Harness/`, including the site definition every harness runs | `SyntheticWorkloadTests` against `tests/Kiji.RepositoryTests/synthetic-workload.sha256` |
-| `docs/content/api-*` pages follow author-facing API changes | judgment |
-| Design and constraint decisions below | judgment |
+Update the corresponding `docs/content/api-*` page when the author-facing API changes.
 
 ## Commands and layout
 
@@ -89,8 +42,6 @@ below once a check covers them.
   they share. A test belongs to the lowest project it can reference; `tests/Kiji.Tests` holds
   the tests that run a whole site through `StaticSite`, with the TestSite fixtures. Classes run
   in parallel; library tests do not pack or build consumers.
-- `tools/Kiji.Analyzers` holds the KR* analyzers; `Directory.Build.targets` holds the project
-  graph and the MSBuild checks.
 - `tests/Kiji.PackageTests` contains serial, black-box package scenarios with one fixed
   consumer workspace. External dependencies use NuGet's global cache; only Kiji
   is isolated. See its README for execution and cleanup.

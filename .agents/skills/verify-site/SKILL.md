@@ -75,15 +75,11 @@ browser. Not test-only endpoints, not a hand-built host.
 
 ## Helpers
 
-- `scripts/dev-server.ps1 start|doctor|stop [project] [url]`: PowerShell (`dotnet pwsh`) on Linux,
-  macOS and Windows. State goes in `artifacts/verify/dev-server-<port>/` (`process.json`,
-  `watch.log`). `stop` kills the process tree (`dotnet watch`, `dotnet run`, the site) only
-  while the recorded process still has the recorded start time; build nodes are not reused,
-  so none outlive the server. `/bin/sh` (or `cmd.exe` on Windows) only redirects the
-  server's output to the log, so it keeps writing after PowerShell exits.
-- `scripts/screenshot.mjs <url> <out.png> [width] [height]`: the preinstalled Playwright and
-  Chromium. It stays in JavaScript because the browser is installed for Node's Playwright;
-  Playwright for .NET would download a second browser. Take screenshots a reviewer will see at the default size.
+- `dev-server.ps1` records the process and its start time in `artifacts/verify/dev-server-<port>/`
+  and kills the whole tree (`dotnet watch`, `dotnet run`, the site) on `stop`; it refuses a
+  process that started at another time.
+- `screenshot.mjs` stays in JavaScript: the browser here is installed for Node's Playwright.
+  Take screenshots a reviewer will see at the default size.
 
 ## Keep this skill true
 

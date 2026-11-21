@@ -11,7 +11,7 @@ again. Fix the cause where the agent cannot miss it.
 
 Write one sentence: what was done, what should have been done, and where. Find other
 occurrences in the tree and in history (`git log -S`, `git log --grep`, review comments,
-reverted commits, workaround comments). One occurrence is a fix; a class exists once it
+reverted commits). One occurrence is a fix; a class exists once it
 has happened twice or a human has corrected it.
 
 ## 2. Fix it at the highest level that works

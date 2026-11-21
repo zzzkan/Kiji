@@ -17,15 +17,7 @@ the most reliable level that can hold them, in this order:
 5. **Human review** reads the evidence from levels 2 and 3, not every line of the diff.
 
 - A correction is not a new line here. When a human corrects an agent, a mistake recurs,
-  or a rule below is broken, use the `correct` skill: encode it at the highest level that
-  works, prove the check fails on the real mistake, and update the rule table.
-- Keep the tree free of what should not be copied: delete old ways, dead code and
-  workarounds in the change that replaces them. Fix root causes, not symptoms.
-- For a pattern that already exists, block new occurrences first, then clean up the old ones.
-  Baselines only go down.
-- A change to user-visible behavior is not done until the `verify-site` skill has driven it
-  through `dotnet publish` or `dotnet watch` and the evidence (commands, output, files,
-  screenshots) is in the report or pull request.
+  or a rule below is broken, use the `correct` skill.
 - Automate a loop (agents merging their own changes, generated fix pull requests) only
   after its corrections are checks and its results are verified. Automating a loop that
   produces bad code produces more of it.
@@ -48,28 +40,23 @@ below once a check covers them.
 | Incremental output equals a clean build | `IncrementalBuildTests` |
 | The package works through the SDK in a real consumer | `Kiji.PackageTests` in CI |
 | Docs site builds | CI `Build docs` step |
-| User-visible changes are driven before they are called done | `verify-site` skill (judgment) |
-| No comments; XML docs only on the public API of `src` library projects | `Kiji.Analyzers` KR0004 (compiled C#, plus other files as `AdditionalFiles` in `Directory.Build.targets`) |
-| Kiji's public API is documented | CS1591 at `error` in `src/.editorconfig` |
+| A user-visible change is done only when driven through `dotnet publish` or `dotnet watch`, with the evidence in the report | `verify-site` skill (judgment) |
+| No comments; XML docs only on the public API of `src` library projects | `Kiji.Analyzers` KR0004 (other file kinds reach it as `AdditionalFiles` in `Directory.Build.targets`) |
+| Kiji's public API is documented, with one-line summaries of what an author can rely on | CS1591 at `error` in `src/.editorconfig` |
 | One type per file | `Kiji.Analyzers` KR0001 in every project |
-| Kiji reads environment variables through IConfiguration | `src/BannedSymbols.txt` (RS0030) |
-| Kiji never sets `Environment.ExitCode` | `src/BannedSymbols.txt` (RS0030) |
-| Kiji uses no frozen collections (measured slower for a publish) | `src/BannedSymbols.txt` (RS0030) |
-| Kiji configuration stays project-local: no environment variable, command-line or user-secrets sources | `src/BannedSymbols.txt` (RS0030) |
-| Kiji serializes JSON without reflection | `src/BannedSymbols.txt` (RS0030) |
-| Kiji's redirects stay inside the site | `src/BannedSymbols.txt` (RS0030) |
+| Kiji avoids APIs that break its constraints (environment reads, `ExitCode`, frozen collections, machine-dependent configuration, reflection JSON, open redirects); each ban says why | `src/BannedSymbols.txt` (RS0030) |
 | `Kiji.targets` packs under `build/`, never `buildTransitive/` | KR0005 in `src/Kiji/Kiji.csproj` |
 | Library tests never mutate process-wide state | `tests/BannedSymbols.txt` (RS0030) in every `*.Tests` project and `Kiji.Testing` |
 | Every project is in the graph and lives at its path under `src`, `tests`, `benchmarks` or `tools` | `KijiProject` items in `Directory.Build.targets`, KR0003 |
 | `docs` is a usage example, built like an author's site: none of the rules above apply to it | `KijiExample` in `docs/Directory.Build.props` |
 | Repository scripts are PowerShell or C#; another language needs a stated advantage | KR0009 in `Directory.Build.targets` (`KijiScriptException` with `Reason`) |
 | Projects reference only the projects the graph allows (library layers point toward `Kiji.Core`; each library's tests reference that library, its dependencies and `Kiji.Testing`); `Kiji.PackageTests` stays black-box | `Directory.Build.targets` KR0003 |
-| Packages are referenced only by the projects the graph allows (Markdig and YamlDotNet in `Kiji.Markdown`, SkiaSharp in `Kiji.Images.Skia`) | `Directory.Build.targets` KR0006 |
+| A `src` project references only the packages the graph allows (Markdig and YamlDotNet in `Kiji.Markdown`, SkiaSharp in `Kiji.Images.Skia`) | `Directory.Build.targets` KR0006 |
 | No unused project or package references | ReferenceTrimmer (RT0001-RT0003) in every project, from `Directory.Build.props` |
 | `src` holds only what ships: library projects all pack into the one Kiji package, whose dependencies follow from theirs | `Packed` projects in `Directory.Build.targets` (KR0003), pack targets in `src/Kiji/Kiji.csproj` |
 | Public types that move out of `Kiji.dll` stay reachable through it | Package validation (`src/Kiji/TypeForwards.cs`) |
 | `src` library and library test components are hand-written `ComponentBase` classes | `Directory.Build.targets` KR0002 (no Razor SDK, no `.razor`) |
-| `benchmarks/Kiji.SyntheticSite` workload stays frozen, including its site definition (`SyntheticSiteDefinition`), which every harness uses | `SyntheticWorkloadTests` against `tests/Kiji.RepositoryTests/synthetic-workload.sha256` |
+| `benchmarks/Kiji.SyntheticSite` stays frozen outside `Harness/`, including the site definition every harness runs | `SyntheticWorkloadTests` against `tests/Kiji.RepositoryTests/synthetic-workload.sha256` |
 | `docs/content/api-*` pages follow author-facing API changes | judgment |
 | Design and constraint decisions below | judgment |
 
@@ -77,44 +64,38 @@ below once a check covers them.
 
 - `dotnet build -c Release` and `dotnet test -c Release` cover the whole solution.
   Pass no extra flags to test: unsupported flags reach Microsoft.Testing.Platform.
-- Scripts are PowerShell: `dotnet tool restore` once, then `dotnet pwsh <script>.ps1` (the version
-  is pinned in `dotnet-tools.json`). CI steps use `shell: pwsh`.
+- Run scripts with `dotnet tool restore` once, then `dotnet pwsh <script>.ps1`; CI steps use
+  `shell: pwsh`.
 - `dotnet publish docs -c Release -o docs/dist` generates docs;
-  `dotnet watch --project docs` serves it. Docs is a usage example, not Kiji's code: it
-  references the local Kiji project, imports its publish targets, and is outside the
-  repository's analyzers and checks. Use an isolated consumer of the packed local
+  `dotnet watch --project docs` serves it. Docs references the local Kiji project and
+  imports its publish targets. Use an isolated consumer of the packed local
   package to verify package integration.
-- `src` holds only what ships: the library projects packed into the single Kiji package,
-  and `src/Kiji.Runtime`, which only packs per-runtime images (`Kiji.Runtime.<rid>`) during
-  Kiji's pack. `Kiji.Core` holds the model, generation, rendering, routing, assets and builder
-  state; `Kiji.Hosting` (publish, dev server), `Kiji.Markdown`, `Kiji.Images.Skia` (SkiaSharp),
-  `Kiji.Feeds` and `Kiji.Sitemaps` build on it; `src/Kiji` holds `StaticSite`, wires the
-  defaults, forwards moved public types and packs them all. A project reference to Kiji brings
-  the packed projects, as the package does. `src/Kiji/MSBuild/Kiji.targets` integrates
-  publish, watch and clean. Tests go in `tests`, measurements in `benchmarks`, build tooling
-  in `tools`.
+- `Kiji.Core` holds the model, generation, rendering, routing, assets and builder state;
+  `Kiji.Hosting` (publish, dev server), `Kiji.Markdown`, `Kiji.Images.Skia`, `Kiji.Feeds` and
+  `Kiji.Sitemaps` build on it; `src/Kiji` holds `StaticSite`, wires the defaults and packs them
+  all. A project reference to Kiji brings the packed projects, as the package does.
+  `src/Kiji.Runtime` only packs per-runtime images during Kiji's pack;
+  `src/Kiji/MSBuild/Kiji.targets` integrates publish, watch and clean.
 - Public namespaces are what an author imports, one per feature: `Kiji` (site, pages, content,
   builder), `Kiji.Images` (the image processor and its options), `Kiji.Markdown`, `Kiji.Feeds`,
-  `Kiji.Sitemaps`; package validation keeps them stable. Internal namespaces in `Kiji.Core`, from
+  `Kiji.Sitemaps`. Internal namespaces in `Kiji.Core`, from
   the bottom: `Kiji.Paths`, `Kiji.Diagnostics`, `Kiji.Incremental` (fingerprints, dependency
   recording, manifest, caches, code identity), `Kiji.Definition` (what the builder records),
   `Kiji.Rendering`, `Kiji.Routing`, `Kiji.Components`, `Kiji.StaticAssets`, then the image
   pipeline in `Kiji.Images` and `Kiji.Generation` on top. Other projects use their own namespace
   (`Kiji.Hosting`, `Kiji.Images.Skia` for the default SkiaSharp processor, ...).
-- Each `src` library project has `tests/<Project>.Tests`, which references only that project,
-  its dependencies and `tests/Kiji.Testing` (shared helpers over `Kiji.Core`). A test belongs to
-  the lowest project it can reference; `tests/Kiji.Tests` holds the tests that run a whole
-  site through `StaticSite`, with the TestSite fixtures. Classes run in parallel; library tests
-  do not pack or build consumers.
-- `tools/Kiji.Analyzers` holds the repository's own analyzers (KR*), referenced by every project
-  through `Directory.Build.props`; `Directory.Build.targets` holds MSBuild rule checks.
-  `tests/Kiji.RepositoryTests` checks the frozen workload.
+- Each `src` library project has `tests/<Project>.Tests`; `tests/Kiji.Testing` holds helpers
+  they share. A test belongs to the lowest project it can reference; `tests/Kiji.Tests` holds
+  the tests that run a whole site through `StaticSite`, with the TestSite fixtures. Classes run
+  in parallel; library tests do not pack or build consumers.
+- `tools/Kiji.Analyzers` holds the KR* analyzers; `Directory.Build.targets` holds the project
+  graph and the MSBuild checks.
 - `tests/Kiji.PackageTests` contains serial, black-box package scenarios with one fixed
   consumer workspace. External dependencies use NuGet's global cache; only Kiji
   is isolated. See its README for execution and cleanup.
   Run `dotnet test -c Release` from a test project to select that level.
-- `benchmarks/Kiji.SyntheticSite` is the frozen end-to-end workload; `benchmarks/Kiji.Benchmarks`
-  contains BenchmarkDotNet measurements.
+- `benchmarks/Kiji.SyntheticSite` is the frozen end-to-end workload, run by the code in its
+  `Harness/` folder; `benchmarks/Kiji.Benchmarks` contains BenchmarkDotNet measurements.
 - Stop any verification server/watch process before completion. Stop only processes
   started by the current task (`verify-site`'s `dev-server.ps1 stop` does this).
 
@@ -140,9 +121,6 @@ one, the `correct` skill decides whether it can become a check.
 - Dev and publish share SiteEngine.RenderPageAsync. Never emit stale output;
   ambiguous incremental state requires rendering.
 - Docs and the package consumer fixture use .razor files and the Razor SDK.
-- Update the `docs/content/api-*` pages (one per namespace) for author-facing API changes.
-  Keep pack's baseline validation enabled; intentional breaks get only their specific
-  entries in `src/Kiji/CompatibilitySuppressions.xml`.
 - Tests must catch realistic regressions, not repeat library guarantees or visibility
   checks already covered by compilation/pack. Keep experiments/reports in ignored artifacts.
 
@@ -256,7 +234,6 @@ Read before working in the corresponding area; keep reusable verification here:
 - `.agents/skills/verify-site/SKILL.md`: required before calling a user-visible change done;
   drives a real site and records evidence. Its `features/` map is the shared vocabulary for
   Kiji's features.
-- `.agents/skills/no-comments/SKILL.md`: what to write instead of a comment.
 - `.agents/skills/measure-performance/SKILL.md`: required for hot-path changes and
   performance claims; harness selection, saved baselines and interleaved comparisons.
 - `.agents/skills/incremental-build/SKILL.md`: required for new inputs/outputs or

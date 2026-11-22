@@ -4,7 +4,7 @@ namespace Kiji.Images;
 public sealed class ImageProcessorOptions
 {
     /// <summary>Widths of the smaller variants; null means 320, 640, 960 and 1280.</summary>
-    /// <remarks>Widths not below the image or <see cref="MaxWidth"/> are skipped; the image's own width is always added.</remarks>
+    /// <remarks>The largest output width is always included, capped by the source size, <see cref="MaxWidth"/> and WebP dimensions.</remarks>
     public IReadOnlyList<int>? Widths { get; set; }
 
     /// <summary>The widest variant in pixels. Defaults to 1920.</summary>

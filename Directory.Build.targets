@@ -1,21 +1,5 @@
 <Project>
 
-  <ItemGroup Condition="'$(KijiExample)' != 'true' and '$(MSBuildProjectName)' != 'Kiji.Analyzers' and '$(MSBuildProjectName)' != 'Kiji.Runtime'">
-    <AdditionalFiles Include="$(MSBuildProjectFullPath);**/*.props;**/*.targets;**/*.css;**/*.js;**/*.mjs;**/*.cs"
-                     Exclude="@(Compile);@(AdditionalFiles);bin/**;obj/**;dist/**;.kiji/**" />
-    <AdditionalFiles Include="**/*.razor;**/*.csproj" Exclude="@(AdditionalFiles);bin/**;obj/**;dist/**;.kiji/**"
-                     Condition="'$(UsingMicrosoftNETSdkRazor)' != 'true'" />
-  </ItemGroup>
-
-  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Kiji'">
-    <AdditionalFiles Include="$(MSBuildThisFileDirectory)Directory.Build.props;$(MSBuildThisFileDirectory)Directory.Build.targets;$(MSBuildThisFileDirectory)Directory.Packages.props;$(MSBuildThisFileDirectory)src/Directory.Build.props;$(MSBuildThisFileDirectory)tests/Directory.Build.props" />
-    <AdditionalFiles Include="$(MSBuildThisFileDirectory).editorconfig;$(MSBuildThisFileDirectory).gitignore" />
-    <AdditionalFiles Include="$(MSBuildThisFileDirectory).github/**/*.yml" />
-    <AdditionalFiles Include="$(MSBuildThisFileDirectory).agents/**/*.ps1;$(MSBuildThisFileDirectory).agents/**/*.mjs;$(MSBuildThisFileDirectory).agents/**/*.cs" />
-    <AdditionalFiles Include="$(MSBuildThisFileDirectory)tools/Kiji.Analyzers/**/*.cs;$(MSBuildThisFileDirectory)tools/Kiji.Analyzers/*.csproj;$(MSBuildThisFileDirectory)src/Kiji.Runtime/*.csproj"
-                     Exclude="$(MSBuildThisFileDirectory)tools/Kiji.Analyzers/obj/**;$(MSBuildThisFileDirectory)tools/Kiji.Analyzers/bin/**" />
-  </ItemGroup>
-
   <ItemGroup>
     <_KijiReferenceToKiji Include="@(ProjectReference->WithMetadataValue('Filename', 'Kiji')->WithoutMetadataValue('ReferenceOutputAssembly', 'false'))" />
     <ProjectReference Include="$(MSBuildThisFileDirectory)src/*/*.csproj"

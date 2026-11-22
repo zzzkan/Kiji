@@ -4,4 +4,8 @@
     <RootNamespace>Kiji</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <AdditionalFiles Include="BannedSymbols.Json.txt" />
+  </ItemGroup>
+
 </Project>

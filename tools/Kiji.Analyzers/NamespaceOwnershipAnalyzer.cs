@@ -10,11 +10,12 @@ public sealed class NamespaceOwnershipAnalyzer : DiagnosticAnalyzer
     public static readonly DiagnosticDescriptor Rule = new(
         id: "KR0008",
         title: "A namespace is declared in one project",
-        messageFormat: "Namespace {0} is declared in both {1} and {2}. A namespace belongs to one project: rename it in one of them, or move {3} into the other.",
+        messageFormat: "Namespace {0} is declared in both {1} and {2}. Move its types into one project or give the features distinct namespaces.",
         category: "Repository",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "A src project may declare several namespaces, but none that a Kiji project it references declares; src/Kiji adds only StaticSite to the root namespace.");
+        description: "A project may declare several namespaces, but no namespace spans the src libraries packed into Kiji; src/Kiji adds only StaticSite to the root namespace.",
+        customTags: WellKnownDiagnosticTags.CompilationEnd);
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [Rule];
 
@@ -22,49 +23,43 @@ public sealed class NamespaceOwnershipAnalyzer : DiagnosticAnalyzer
     {
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
-        context.RegisterCompilationStartAction(start =>
-        {
-            if (!start.Options.AnalyzerConfigOptionsProvider.GlobalOptions.TryGetValue("build_property.KijiPublicApi", out var publicApi)
-                || publicApi != "true") { return; }
-            var project = start.Compilation.AssemblyName ?? string.Empty;
-            var libraries = start.Compilation.References
-                .Select(start.Compilation.GetAssemblyOrModuleSymbol).OfType<IAssemblySymbol>()
-                .Where(static assembly => assembly.Name == "Kiji" || assembly.Name.StartsWith("Kiji.", System.StringComparison.Ordinal))
-                .Select(static assembly => (assembly.Name, Namespaces: Namespaces(assembly.GlobalNamespace)))
-                .ToList();
-            start.RegisterSymbolAction(symbol => AnalyzeType(symbol, project, libraries), SymbolKind.NamedType);
-        });
+        context.RegisterCompilationAction(AnalyzePackage);
     }
 
-    private static void AnalyzeType(SymbolAnalysisContext context, string project,
-        List<(string Name, ImmutableHashSet<string> Namespaces)> libraries)
+    private static void AnalyzePackage(CompilationAnalysisContext context)
     {
-        var type = (INamedTypeSymbol)context.Symbol;
-        if (type.ContainingType is not null || type.IsImplicitlyDeclared || type.ContainingNamespace.IsGlobalNamespace) { return; }
-        var name = type.ContainingNamespace.ToDisplayString();
-        if (project == "Kiji" && name == "Kiji" && type.MetadataName == "StaticSite") { return; }
-        foreach (var library in libraries.Where(library => library.Namespaces.Contains(name)))
-        {
-            foreach (var location in type.Locations.Where(static location => location.IsInSource))
-            {
-                context.ReportDiagnostic(Diagnostic.Create(Rule, location, name, project, library.Name, "'" + type.Name + "'"));
-            }
-        }
-    }
+        var package = context.Compilation.Assembly;
+        if (package.Name != "Kiji"
+            || !context.Options.AnalyzerConfigOptionsProvider.GlobalOptions.TryGetValue("build_property.KijiPublicApi", out var publicApi)
+            || publicApi != "true") { return; }
 
-    private static ImmutableHashSet<string> Namespaces(INamespaceSymbol root)
-    {
-        var names = ImmutableHashSet.CreateBuilder<string>();
-        var pending = new Stack<INamespaceSymbol>([root]);
-        while (pending.Count > 0)
+        var owners = new Dictionary<string, string>(StringComparer.Ordinal);
+        var assemblies = context.Compilation.References.Select(context.Compilation.GetAssemblyOrModuleSymbol)
+            .OfType<IAssemblySymbol>().Where(static assembly => assembly.Name.StartsWith("Kiji.", StringComparison.Ordinal)).Append(package);
+        foreach (var assembly in assemblies)
         {
-            var current = pending.Pop();
-            if (!current.IsGlobalNamespace && current.GetTypeMembers().Any(static type => !type.IsImplicitlyDeclared))
+            var pending = new Stack<INamespaceSymbol>([assembly.GlobalNamespace]);
+            while (pending.Count > 0)
             {
-                names.Add(current.ToDisplayString());
+                var ns = pending.Pop();
+                foreach (var child in ns.GetNamespaceMembers()) { pending.Push(child); }
+                if (ns.IsGlobalNamespace) { continue; }
+
+                var name = ns.ToDisplayString();
+                var type = ns.GetTypeMembers().FirstOrDefault(type => !type.IsImplicitlyDeclared
+                    && !(assembly.Equals(package, SymbolEqualityComparer.Default) && name == package.Name && type.MetadataName == "StaticSite"));
+                if (type is null) { continue; }
+
+                if (owners.TryGetValue(name, out var owner))
+                {
+                    var location = type.Locations.FirstOrDefault(static location => location.IsInSource) ?? Location.None;
+                    context.ReportDiagnostic(Diagnostic.Create(Rule, location, name, owner, assembly.Name));
+                }
+                else
+                {
+                    owners.Add(name, assembly.Name);
+                }
             }
-            foreach (var child in current.GetNamespaceMembers()) { pending.Push(child); }
         }
-        return names.ToImmutable();
     }
 }

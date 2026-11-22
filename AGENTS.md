@@ -33,9 +33,8 @@ below once a check covers them.
 | Warnings and recommended .NET analyzers fail the build | `Directory.Build.props` (`TreatWarningsAsErrors`, `AnalysisLevel`, `EnforceCodeStyleInBuild`) |
 | File-scoped namespaces | `.editorconfig` IDE0160 at `error` |
 | A namespace matches its folder | `.editorconfig` IDE0130 at `error` |
-| A namespace is declared in one `src` library project (a project may declare several); the package project adds only `StaticSite` to `Kiji` | `Kiji.Analyzers` KR0008 |
+| A namespace is declared in one `src` project (a project may declare several); `src/Kiji` adds only `StaticSite` to `Kiji` | `Kiji.Analyzers` KR0008 |
 | Internal namespaces depend in one direction; public types are exempt | `Kiji.Analyzers` KR0007 |
-| Public API stays compatible, except listed breaks | Package validation against 0.1.0, `src/Kiji/CompatibilitySuppressions.xml` |
 | Consumers use the matching ReadyToRun image for every packaged library assembly | `PackageScenarios.Publish_UsesSdkDefaultDestination` |
 | ReadyToRun images have third-party notices | Pack error in `src/Kiji/Kiji.csproj` |
 | Incremental output equals a clean build | `IncrementalBuildTests` |
@@ -48,14 +47,13 @@ below once a check covers them.
 | Kiji avoids APIs that break its constraints (environment reads, `ExitCode`, frozen collections, machine-dependent configuration, reflection JSON, open redirects); each ban says why | `src/BannedSymbols.txt` (RS0030) |
 | `Kiji.targets` packs under `build/`, never `buildTransitive/` | KR0005 in `src/Kiji/Kiji.csproj` |
 | Library tests never mutate process-wide state | `tests/BannedSymbols.txt` (RS0030) in every `*.Tests` project and `Kiji.Testing` |
-| Every project is in the graph and lives at its path under `src`, `tests`, `benchmarks` or `tools` | `KijiProject` items in `Directory.Build.targets`, KR0003 |
+| A project lives in `<root>/<ProjectName>/`, with root `src`, `tests`, `benchmarks` or `tools` | KR0003 in `Directory.Build.targets` |
 | `docs` is a usage example, built like an author's site: none of the rules above apply to it | `KijiExample` in `docs/Directory.Build.props` |
 | Repository scripts are PowerShell or C#; another language needs a stated advantage | KR0009 in `Directory.Build.targets` (`KijiScriptException` with `Reason`) |
-| Projects reference only the projects the graph allows (library layers point toward `Kiji.Core`; each library's tests reference that library, its dependencies and `Kiji.Testing`); `Kiji.PackageTests` stays black-box | `Directory.Build.targets` KR0003 |
-| A `src` project references only the packages the graph allows (Markdig and YamlDotNet in `Kiji.Markdown`, SkiaSharp in `Kiji.Images.Skia`) | `Directory.Build.targets` KR0006 |
+| A `src` library references only `Kiji.Core`; `X.Tests` references only `X`, `Kiji.Core` and `Kiji.Testing`; `Kiji.PackageTests` stays black-box | KR0003 in `Directory.Build.targets` |
+| A `src` project references only the packages whose `UsedBy` names it | `UsedBy` in `Directory.Packages.props`, KR0006 in `Directory.Build.targets` |
 | No unused project or package references | ReferenceTrimmer (RT0001-RT0003) in every project, from `Directory.Build.props` |
-| `src` holds only what ships: library projects all pack into the one Kiji package, whose dependencies follow from theirs | `Packed` projects in `Directory.Build.targets` (KR0003), pack targets in `src/Kiji/Kiji.csproj` |
-| Public types that move out of `Kiji.dll` stay reachable through it | Package validation (`src/Kiji/TypeForwards.cs`) |
+| Every `src` library packs into the one Kiji package, whose dependencies follow from theirs | `src/*` glob in `Directory.Build.targets`, pack targets in `src/Kiji/Kiji.csproj` |
 | `src` library and library test components are hand-written `ComponentBase` classes | `Directory.Build.targets` KR0002 (no Razor SDK, no `.razor`) |
 | `benchmarks/Kiji.SyntheticSite` stays frozen outside `Harness/`, including the site definition every harness runs | `SyntheticWorkloadTests` against `tests/Kiji.RepositoryTests/synthetic-workload.sha256` |
 | `docs/content/api-*` pages follow author-facing API changes | judgment |
@@ -74,7 +72,7 @@ below once a check covers them.
 - `Kiji.Core` holds the model, generation, rendering, routing, assets and builder state;
   `Kiji.Hosting` (publish, dev server), `Kiji.Markdown`, `Kiji.Images.Skia`, `Kiji.Feeds` and
   `Kiji.Sitemaps` build on it; `src/Kiji` holds `StaticSite`, wires the defaults and packs them
-  all. A project reference to Kiji brings the packed projects, as the package does.
+  all. A project reference to Kiji brings every `src` library, as the package does.
   `src/Kiji.Runtime` only packs per-runtime images during Kiji's pack;
   `src/Kiji/MSBuild/Kiji.targets` integrates publish, watch and clean.
 - Public namespaces are what an author imports, one per feature: `Kiji` (site, pages, content,
@@ -89,8 +87,9 @@ below once a check covers them.
   they share. A test belongs to the lowest project it can reference; `tests/Kiji.Tests` holds
   the tests that run a whole site through `StaticSite`, with the TestSite fixtures. Classes run
   in parallel; library tests do not pack or build consumers.
-- `tools/Kiji.Analyzers` holds the KR* analyzers; `Directory.Build.targets` holds the project
-  graph and the MSBuild checks.
+- `tools/Kiji.Analyzers` holds the KR* analyzers; `Directory.Build.targets` holds the MSBuild
+  checks. Internals are visible to every project in the repository; references decide who
+  reaches them.
 - `tests/Kiji.PackageTests` contains serial, black-box package scenarios with one fixed
   consumer workspace. External dependencies use NuGet's global cache; only Kiji
   is isolated. See its README for execution and cleanup.

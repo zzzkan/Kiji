@@ -4,23 +4,14 @@
     <OutputType>Library</OutputType>
     <IsPackable>true</IsPackable>
     <PackageId>Kiji</PackageId>
-    <EnablePackageValidation>true</EnablePackageValidation>
-    <PackageValidationBaselineVersion>0.1.0</PackageValidationBaselineVersion>
     <Description>Write Razor. Publish a purely static site. Kiji brings your .NET components and Markdown together in plain HTML, ready for any static host.</Description>
     <PackageTags>static-site-generator;ssg;razor;blazor;markdown;kiji;</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" PrivateAssets="all" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="../Kiji.Core/Kiji.Core.csproj" PrivateAssets="all" />
-    <ProjectReference Include="../Kiji.Hosting/Kiji.Hosting.csproj" PrivateAssets="all" />
-    <ProjectReference Include="../Kiji.Markdown/Kiji.Markdown.csproj" PrivateAssets="all" />
-    <ProjectReference Include="../Kiji.Images.Skia/Kiji.Images.Skia.csproj" PrivateAssets="all" />
-    <ProjectReference Include="../Kiji.Feeds/Kiji.Feeds.csproj" PrivateAssets="all" />
-    <ProjectReference Include="../Kiji.Sitemaps/Kiji.Sitemaps.csproj" PrivateAssets="all" />
+    <PackageReference Include="@(PackageVersion->WithMetadataValue('UsedBy', 'Kiji')->'%(Identity)')" Version="" PrivateAssets="all" />
+    <PackageReference Include="@(PackageVersion->HasMetadata('UsedBy')->'%(Identity)')" Version="" KijiLibrary="true" TreatAsUsed="true"
+                      Exclude="@(PackageVersion->WithMetadataValue('UsedBy', 'Kiji')->'%(Identity)');@(PackageVersion->WithMetadataValue('UsedBy', 'build')->'%(Identity)')" />
   </ItemGroup>
 
   <PropertyGroup>

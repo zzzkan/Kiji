@@ -36,10 +36,8 @@
   </PropertyGroup>
 
   <ItemGroup Condition="'$(KijiExample)' != 'true'">
+    <_KijiRepositoryProject Include="$(MSBuildThisFileDirectory)src/*/*.csproj;$(MSBuildThisFileDirectory)tests/*/*.csproj;$(MSBuildThisFileDirectory)benchmarks/*/*.csproj" />
     <CompilerVisibleProperty Include="KijiPublicApi" />
-    <CompilerVisibleProperty Include="KijiPackedProjects" />
-    <CompilerVisibleProperty Include="KijiPackageProject" />
-    <CompilerVisibleProperty Include="MSBuildProjectName" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(KijiExample)' != 'true' and '$(MSBuildProjectName)' != 'Kiji.Analyzers' and '$(MSBuildProjectName)' != 'Kiji.Runtime' and '$(NoBuild)' != 'true'">
@@ -48,6 +46,7 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(KijiExample)' != 'true'">
+    <InternalsVisibleTo Include="@(_KijiRepositoryProject->'%(Filename)')" />
     <PackageReference Include="ReferenceTrimmer" PrivateAssets="all" />
   </ItemGroup>
 

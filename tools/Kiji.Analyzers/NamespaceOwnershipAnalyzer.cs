@@ -14,7 +14,7 @@ public sealed class NamespaceOwnershipAnalyzer : DiagnosticAnalyzer
         category: "Repository",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "A project may declare several namespaces, but no namespace spans the library projects packed into Kiji; the package project adds only its entry point to the root namespace.");
+        description: "A src project may declare several namespaces, but none that a Kiji project it references declares; src/Kiji adds only StaticSite to the root namespace.");
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [Rule];
 
@@ -24,33 +24,25 @@ public sealed class NamespaceOwnershipAnalyzer : DiagnosticAnalyzer
         context.EnableConcurrentExecution();
         context.RegisterCompilationStartAction(start =>
         {
-            var options = start.Options.AnalyzerConfigOptionsProvider.GlobalOptions;
-            if (!options.TryGetValue("build_property.KijiPackedProjects", out var value)
-                || !options.TryGetValue("build_property.MSBuildProjectName", out var project)) { return; }
-            var packed = value.Split([','], System.StringSplitOptions.RemoveEmptyEntries).Select(static name => name.Trim()).ToImmutableHashSet();
+            if (!start.Options.AnalyzerConfigOptionsProvider.GlobalOptions.TryGetValue("build_property.KijiPublicApi", out var publicApi)
+                || publicApi != "true") { return; }
+            var project = start.Compilation.AssemblyName ?? string.Empty;
             var libraries = start.Compilation.References
                 .Select(start.Compilation.GetAssemblyOrModuleSymbol).OfType<IAssemblySymbol>()
-                .Where(assembly => packed.Contains(assembly.Name))
+                .Where(static assembly => assembly.Name == "Kiji" || assembly.Name.StartsWith("Kiji.", System.StringComparison.Ordinal))
                 .Select(static assembly => (assembly.Name, Namespaces: Namespaces(assembly.GlobalNamespace)))
                 .ToList();
-            if (packed.Contains(project))
-            {
-                start.RegisterSymbolAction(symbol => AnalyzeType(symbol, project, libraries, entryNamespace: null), SymbolKind.NamedType);
-            }
-            else if (options.TryGetValue("build_property.KijiPackageProject", out var package) && package == project)
-            {
-                start.RegisterSymbolAction(symbol => AnalyzeType(symbol, project, libraries, entryNamespace: project), SymbolKind.NamedType);
-            }
+            start.RegisterSymbolAction(symbol => AnalyzeType(symbol, project, libraries), SymbolKind.NamedType);
         });
     }
 
     private static void AnalyzeType(SymbolAnalysisContext context, string project,
-        List<(string Name, ImmutableHashSet<string> Namespaces)> libraries, string? entryNamespace)
+        List<(string Name, ImmutableHashSet<string> Namespaces)> libraries)
     {
         var type = (INamedTypeSymbol)context.Symbol;
         if (type.ContainingType is not null || type.IsImplicitlyDeclared || type.ContainingNamespace.IsGlobalNamespace) { return; }
         var name = type.ContainingNamespace.ToDisplayString();
-        if (name == entryNamespace && type.MetadataName == "StaticSite") { return; }
+        if (project == "Kiji" && name == "Kiji" && type.MetadataName == "StaticSite") { return; }
         foreach (var library in libraries.Where(library => library.Namespaces.Contains(name)))
         {
             foreach (var location in type.Locations.Where(static location => location.IsInSource))

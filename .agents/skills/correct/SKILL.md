@@ -21,8 +21,8 @@ Try each level in order and record why a higher one did not work.
 1. **Codebase (make the wrong thing impossible).** One owner for each piece of state, one
    supported way to do each task, internals `internal` or `private` so the wrong call does
    not compile, one source of truth instead of lists kept in sync by hand. Code that must not
-   depend on something belongs in a project that cannot reference it: the `KijiProject` graph
-   in `Directory.Build.targets` fixes which projects and packages each project may use.
+   depend on something belongs in a project that cannot reference it: a `src` library
+   references only `Kiji.Core`, and a package only the project its `UsedBy` names.
    Inside a project, internal namespaces may not form cycles (KR0007), so code that must not
    reach something goes in a namespace below it.
    Delete the old way and its dead code in the same change.

@@ -3,14 +3,16 @@ name: correct
 description: Use when addressing a review correction, a repeated mistake or a change to repository rules.
 ---
 
-1. Reproduce the mistake and check for other occurrences.
-2. Fix it at the source. Prefer a single owner for data, a type that rules out an
-   invalid value, or a project boundary that prevents an invalid dependency.
-3. When the mistake still compiles, use the smallest check that catches it. Reuse
-   existing compiler diagnostics, analyzers or behavior tests. Put guidance that
-   requires judgment in the relevant skill or AGENTS.md and remove guidance the
-   change has made redundant.
-   If existing violations need a baseline, lower it as they are fixed. Keep suppressions
-   narrow and document the external constraint; get human approval in the pull request.
-4. Verify that the original mistake fails and the corrected case passes. Report the
-   reproducer and result. For user-visible behavior, drive the affected site feature.
+Fix the mistake where it originates, then make a recurrence fail the build or a test instead
+of adding prose. Prefer, in order: a single owner for the data, a type that rules out the
+invalid value, a project boundary, an existing diagnostic or banned API
+(`BannedSymbols*.txt`), an MSBuild check in `Directory.Build.targets`, an analyzer in
+`tools/Kiji.Analyzers`, a test in `tests/Kiji.RepositoryTests`. A failure message says what
+to do instead.
+
+A new KR check needs a test that makes it fail (`Kiji.Analyzers.Tests`, or
+`ProjectBoundaryTests` for MSBuild checks). Suppressions stay as narrow as one member, give
+their reason in the suppression, and need the reviewer's approval in the pull request.
+
+Only a decision that needs judgment and cannot be checked goes into AGENTS.md or a skill;
+remove prose a new check makes redundant.

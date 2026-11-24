@@ -10,7 +10,7 @@
 
   <ItemGroup>
     <PackageReference Include="@(PackageVersion->WithMetadataValue('UsedBy', 'Kiji')->'%(Identity)')" Version="" PrivateAssets="all" />
-    <PackageReference Include="@(PackageVersion->HasMetadata('UsedBy')->'%(Identity)')" Version="" KijiLibrary="true" TreatAsUsed="true"
+    <PackageReference Include="@(PackageVersion->HasMetadata('UsedBy')->'%(Identity)')" Version="" TreatAsUsed="true"
                       Exclude="@(PackageVersion->WithMetadataValue('UsedBy', 'Kiji')->'%(Identity)');@(PackageVersion->WithMetadataValue('UsedBy', 'build')->'%(Identity)')" />
   </ItemGroup>
 
@@ -178,14 +178,6 @@
     </PropertyGroup>
     <Error Condition="'%(KijiReadyToRunAssembly.PackageId)' != '' and !$(_KijiNotices.Contains('%(KijiReadyToRunAssembly.PackageId) %(KijiReadyToRunAssembly.PackageVersion) - '))"
            Text="THIRD-PARTY-NOTICES.txt has no section for %(KijiReadyToRunAssembly.PackageId) %(KijiReadyToRunAssembly.PackageVersion), whose image the runtime packages carry. Update the notice with the license of that version." />
-  </Target>
-
-  <Target Name="KijiCheckPackageLayout" BeforeTargets="GenerateNuspec">
-    <ItemGroup>
-      <_KijiTransitiveFile Include="@(None)" Condition="'%(None.Pack)' == 'true' and $([System.String]::Copy('%(None.PackagePath)').StartsWith('buildTransitive'))" />
-    </ItemGroup>
-    <Error Condition="'@(_KijiTransitiveFile)' != ''" Code="KR0005"
-           Text="@(_KijiTransitiveFile) must pack under build/, not buildTransitive/: Kiji's targets turn a project's publish into a site, which is right only for a project that references Kiji directly, not for its test projects." />
   </Target>
 
 </Project>

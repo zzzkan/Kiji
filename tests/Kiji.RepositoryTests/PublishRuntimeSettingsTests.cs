@@ -18,6 +18,7 @@ public sealed class PublishRuntimeSettingsTests
         ["System.Runtime.TieredCompilation.CallCountingDelayMs"] = "compiling optimized code costs more than a short process gets back",
         ["System.GC.Concurrent"] = "no difference",
         ["System.GC.Gen0Size"] = "no difference",
+        ["Microsoft.Extensions.DependencyInjection.DisableDynamicEngine"] = "no difference",
         ["DOTNET_EnableWriteXorExecute"] = "faster, but removes a runtime mitigation; a site owner can set it, Kiji does not",
     };
 

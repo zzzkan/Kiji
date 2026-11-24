@@ -100,6 +100,33 @@ public sealed class ProjectBoundaryTests
         AssertFails(workspace.RunTarget("src/Kiji.Core/Kiji.Core.csproj", "KijiCheckPackageLayout"), "KR0005", "buildTransitive");
     }
 
+    [Theory]
+    [InlineData("PublishAot")]
+    [InlineData("IsTrimmable")]
+    public void LibraryRejectsAotAndTrimming(string property)
+    {
+        using var workspace = BuildWorkspace.Create()
+            .Library("Kiji.Core")
+            .Write("src/Kiji.Core/Directory.Build.props", $"""
+                <Project>
+                  <Import Project="../Directory.Build.props" />
+                  <PropertyGroup><{property}>true</{property}></PropertyGroup>
+                </Project>
+                """);
+
+        AssertFails(workspace.RunTarget("src/Kiji.Core/Kiji.Core.csproj", "KijiRejectEvaluatedDesigns"), "KR0012", "AOT and trimming were evaluated and rejected");
+    }
+
+    [Fact]
+    public void LibraryRejectsSourceGenerators()
+    {
+        using var workspace = BuildWorkspace.Create()
+            .Library("Kiji.Core", """<ProjectReference Include="../../tools/Kiji.PageGenerator/Kiji.PageGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />""")
+            .Project("tools/Kiji.PageGenerator/Kiji.PageGenerator.csproj", "");
+
+        AssertFails(workspace.RunTarget("src/Kiji.Core/Kiji.Core.csproj", "KijiRejectEvaluatedDesigns"), "KR0012", "source generator was evaluated and rejected");
+    }
+
     private static string Reference(string library, string metadata = "")
     {
         var path = library.EndsWith(".Tests", StringComparison.Ordinal) ? $"../../tests/{library}/{library}.csproj" : $"../../src/{library}/{library}.csproj";

@@ -48,6 +48,7 @@ internal static class MarkdownWarmup
 
     private static int s_started;
 
+    [SuppressMessage("ApiDesign", "RS0030", Justification = "The warm-up runs on a spare processor while the host is built, outside the thread pool the host uses.")]
     internal static void Start()
     {
         if (Environment.ProcessorCount < 2 || Interlocked.Exchange(ref s_started, 1) != 0)

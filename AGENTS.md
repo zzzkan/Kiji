@@ -85,17 +85,11 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   ImageProcessorOptions setting stays in its CacheIdentity. Options are validated when the
   site starts running, never in Build.
 
-Do not reintroduce evaluated alternatives: pooled HtmlRenderer (root/scope state cannot
-reset), AOT/trimming (reflection), source-generated page discovery (cached scanning
-suffices), IBufferWriter rendering (HtmlRootComponent exposes TextWriter), page-bundle image
-variants (articles could not share an image), incremental RSS/sitemap (depend on all metadata
-and are cheap to regenerate), or a frozen configuration snapshot (default sources do not
-reload during a publish). For the cold publish process, measured and rejected: reading code
-identity from assembly files with MetadataReader (slower than loading them), collecting code
-identity while the host is built (contends with the host's own loading), warming the
-component renderer, disabling DI's dynamic engine or validation on build (no difference),
-persisting pages on dedicated writer threads (no gain on Windows, much slower on ext4) and
-skipping the Markdown warm-up while a profile replays (slower).
+Evaluated and rejected; checks report the others with their reasons: rendering through an
+IBufferWriter (HtmlRootComponent exposes only a TextWriter), a frozen configuration snapshot
+(default sources do not reload during a publish), collecting code identity while the host is
+built (contends with the host's own loading), warming the component renderer (no difference)
+and skipping the Markdown warm-up while a JIT profile replays (slower).
 
 ## Skills
 

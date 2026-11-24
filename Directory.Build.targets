@@ -59,6 +59,20 @@
            Text="$(MSBuildProjectName) may not reference the package @(_KijiForbiddenPackage). A src project references only the packages whose PackageVersion in Directory.Packages.props names it in UsedBy; changing UsedBy is a reviewed design change. Kiji's package dependencies follow from its libraries'." />
   </Target>
 
+  <Target Name="KijiRejectEvaluatedDesigns" Condition="'$(KijiPublicApi)' == 'true'" BeforeTargets="CollectPackageReferences;ResolveProjectReferences">
+    <ItemGroup>
+      <_KijiTrimmingProperty Include="PublishAot" Condition="'$(PublishAot)' == 'true'" />
+      <_KijiTrimmingProperty Include="PublishTrimmed" Condition="'$(PublishTrimmed)' == 'true'" />
+      <_KijiTrimmingProperty Include="IsAotCompatible" Condition="'$(IsAotCompatible)' == 'true'" />
+      <_KijiTrimmingProperty Include="IsTrimmable" Condition="'$(IsTrimmable)' == 'true'" />
+      <_KijiGeneratorReference Include="@(ProjectReference->WithMetadataValue('OutputItemType', 'Analyzer')->'%(Filename)')" Exclude="Kiji.Analyzers" />
+    </ItemGroup>
+    <Error Condition="'@(_KijiTrimmingProperty)' != ''" Code="KR0012"
+           Text="$(MSBuildProjectName) sets @(_KijiTrimmingProperty). Kiji discovers pages, binds parameters and loads components by reflection, so AOT and trimming were evaluated and rejected." />
+    <Error Condition="'$(IsRoslynComponent)' == 'true' or '@(_KijiGeneratorReference)' != ''" Code="KR0012"
+           Text="$(MSBuildProjectName) builds or uses a source generator (@(_KijiGeneratorReference)). Page discovery scans the entry assembly by reflection and caches the result; a source generator was evaluated and rejected because cached scanning suffices." />
+  </Target>
+
   <Target Name="KijiCheckPackageLayout" Condition="'$(IsPackable)' == 'true'" BeforeTargets="GenerateNuspec">
     <ItemGroup>
       <_KijiTransitiveFile Include="@(None)" Condition="'%(None.Pack)' == 'true' and $([System.String]::Copy('%(None.PackagePath)').StartsWith('buildTransitive'))" />

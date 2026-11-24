@@ -47,7 +47,8 @@ properties.
   Verify inputs before manifest publication, including joining verification on failure.
   Conflicting reads within one build must fail.
 - Add site-wide settings to the options fingerprint, record every new output, and keep
-  identities source-relative so equivalent checkouts reuse the cache.
+  identities source-relative so equivalent checkouts reuse the cache. Configuration is read
+  live: default sources do not reload during a publish, so a frozen snapshot was rejected.
 
 ## Publication
 

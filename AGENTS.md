@@ -60,8 +60,7 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   `Kiji.Runtime.<rid>` with ReadyToRun images of Kiji's assemblies and of the Markdig and
   YamlDotNet versions Kiji references. Kiji's assemblies are one version bubble because they
   ship and load together. Images keep the IL's metadata and MVID, so code identity and caches
-  are unchanged. Partial images from a MIBC profile need dotnet-pgo, which nuget.org does not
-  carry.
+  are unchanged.
 - Each render owns a DI scope. Loaders, page parameter/feed factories and artifacts use the
   root provider and cannot resolve scoped services. Content reload does not recreate
   singletons, so compute derived data during rendering or in scoped services. Use
@@ -84,12 +83,6 @@ A .NET static site generator: Razor components rendered with Blazor's HtmlRender
   recreate it. Include external configuration and encoder versions in cache identities; every
   ImageProcessorOptions setting stays in its CacheIdentity. Options are validated when the
   site starts running, never in Build.
-
-Evaluated and rejected; checks report the others with their reasons: rendering through an
-IBufferWriter (HtmlRootComponent exposes only a TextWriter), a frozen configuration snapshot
-(default sources do not reload during a publish), collecting code identity while the host is
-built (contends with the host's own loading), warming the component renderer (no difference)
-and skipping the Markdown warm-up while a JIT profile replays (slower).
 
 ## Skills
 

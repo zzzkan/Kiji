@@ -54,6 +54,14 @@ there is no automatic performance gate.
 - By hand, time the command `KijiGenerateSite` runs:
   `dotnet exec --runtimeconfig obj/Release/net10.0/<rid>/kiji/publish.runtimeconfig.json bin/Release/net10.0/<rid>/<Site>.dll`.
 
+## Already measured for the cold publish
+
+Rejected: collecting code identity while the host is built (contends with the host's own
+loading), warming the component renderer (no difference), skipping the Markdown warm-up while
+a JIT profile replays (slower). Partial ReadyToRun images from a MIBC profile need dotnet-pgo,
+which nuget.org does not carry. Rejected runtime settings and APIs report their measurements
+from `PublishRuntimeSettingsTests` and `src/BannedSymbols.txt`.
+
 ## Reading Measure-Publish results
 
 - ManifestRemoved (only `.kiji/cache/manifest.json` deleted) replaces the older ForceRender;

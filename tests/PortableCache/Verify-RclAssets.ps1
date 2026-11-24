@@ -8,7 +8,7 @@ $site = Join-Path $root 'site'
 $project = Join-Path $site 'Consumer.csproj'
 @"
 <Project Sdk="Microsoft.NET.Sdk.Razor">
-  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <PropertyGroup><OutputType>Exe</OutputType><UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier></PropertyGroup>
   <ItemGroup><PackageReference Include="Kiji" Version="$PackageVersion" /><ProjectReference Include="../library/Library.csproj" /></ItemGroup>
 </Project>
 "@ | Set-Content $project

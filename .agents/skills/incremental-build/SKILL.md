@@ -89,29 +89,14 @@ Keep identities source-relative so equivalent checkouts reuse cache.
 
 IncrementalBuildTests checks clean/incremental byte equality, actual render skips,
 equal-size/equal-mtime content edits, orphan cleanup, failure recovery and concurrent
-publication. Extend relevant regression cases when changing the planner.
+publication; extend it when changing the planner. Keep byte/URL/path and stale-source
+static asset cases in `StaticAssetTests`, and package-level journeys in `Kiji.PackageTests`;
+do not add another static-asset harness or assert storage optimizations as Kiji behavior.
 
-For cache identity, MSBuild or package changes, run:
-
-```pwsh
-./.agents/skills/incremental-build/scripts/Verify-PortableCache.ps1
-```
-
-`dotnet test -c Release` runs the library tests in `tests/*.Tests` and serial package
-scenarios in `Kiji.PackageTests`: publish/edit/clean and watch/reload with the
-Razor and Web SDKs. See `tests/Kiji.PackageTests/README.md` for running them and
-workspace cleanup. Keep dependencies in the shared NuGet cache and reuse one
-fixed consumer workspace; do not assert storage optimizations as Kiji behavior.
-
-Static asset pipeline changes use these same package scenarios. Keep detailed
-byte/URL/path and stale-source cases in `StaticAssetTests`; do not recreate a
-separate retained SDK/asset/format matrix or another static-asset test harness.
-
-The portable-cache script validates isolated Razor consumers across checkout/revision,
-content/code edits, corruption, PathMap and build modes. Logs stay in `artifacts`.
+CI's portable-cache job runs `tests/PortableCache/Verify-PortableCache.ps1`: isolated Razor
+consumers of the packed package across checkout/revision, content/code edits, corruption,
+PathMap and build modes. Run it locally for cache identity, MSBuild or package changes.
 Release site executables normalize source/revision metadata and omit debug symbols;
 Debug, libraries and tests retain their settings. MSBuild owns source recompilation.
 Preserve observable CallerFilePath semantics; changed dependency MVIDs invalidate.
 Post-compilation binary edits retaining the MVID are outside code change detection.
-
-Use the measure-performance skill for hot-path changes.

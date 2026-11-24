@@ -22,6 +22,11 @@ Console.WriteLine(JsonSerializer.Serialize(new {
 if ($LASTEXITCODE) { throw 'Inspector build failed.' }
 $inspectorDll = Join-Path $inspector 'bin/Release/net10.0/Inspector.dll'
 
+function Get-SiteOutput([string] $configuration, [string] $file) {
+    $found = @(Get-ChildItem (Join-Path $Site "bin/$configuration") -Recurse -Filter $file | Where-Object { $_.Directory.Name -ne 'publish' })
+    if ($found.Count -ne 1) { throw "Expected one $file under bin/$configuration, found $($found.Count)." }
+    return $found[0].FullName
+}
 function Read-Identity([string] $dll) {
     $json = & dotnet $inspectorDll $dll
     if ($LASTEXITCODE) { throw "Cannot inspect $dll" }
@@ -30,7 +35,7 @@ function Read-Identity([string] $dll) {
 function Invoke-Mode([string] $label, [string] $verb, [string] $configuration, [bool] $symbols, [string[]] $extra = @()) {
     & dotnet $verb $Site -c $configuration -p:SourceRevisionId=build-modes "-p:RestorePackagesPath=$RunRoot/packages" @extra > (Join-Path $RunRoot "$label.log") 2>&1
     if ($LASTEXITCODE) { throw "Build mode failed: $label" }
-    $identity = Read-Identity (Join-Path $Site "bin/$configuration/net10.0/Portable.dll")
+    $identity = Read-Identity (Get-SiteOutput $configuration 'Portable.dll')
     if ($identity.Symbols -ne $symbols) { throw "Wrong symbol mode: $label" }
     $identity | ConvertTo-Json | Set-Content (Join-Path $RunRoot "$label-identity.json")
     return $identity
@@ -123,7 +128,7 @@ try {
         }
     }
     if (-not $ready) { throw 'Watch did not serve the expected article.' }
-    $identity = Read-Identity (Join-Path $Site 'bin/Debug/net10.0/Portable.dll')
+    $identity = Read-Identity (Get-SiteOutput 'Debug' 'Portable.dll')
     if (-not $identity.Symbols -or $identity.PdbPath.StartsWith('/_/source')) { throw 'Watch did not retain Debug symbols and paths.' }
     $identity | ConvertTo-Json | Set-Content (Join-Path $RunRoot 'mode-watch-identity.json')
 

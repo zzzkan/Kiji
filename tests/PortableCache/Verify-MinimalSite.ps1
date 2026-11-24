@@ -4,7 +4,7 @@ $site = Join-Path $RunRoot 'minimal-site'
 New-Item -ItemType Directory -Force $site | Out-Null
 @"
 <Project Sdk="Microsoft.NET.Sdk.Razor">
-  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <PropertyGroup><OutputType>Exe</OutputType><UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier></PropertyGroup>
   <ItemGroup><PackageReference Include="Kiji" Version="$PackageVersion" /></ItemGroup>
 </Project>
 "@ | Set-Content (Join-Path $site 'Minimal.csproj')
@@ -88,7 +88,7 @@ try {
     & dotnet publish $site -c Release -o (Join-Path $site 'dist') "-p:RestorePackagesPath=$RunRoot/packages" *> (Join-Path $RunRoot 'minimal-emptied.log')
     if ($LASTEXITCODE -or (Compare-Object @('index.html') @(Get-ChildItem (Join-Path $site 'dist') -File -Recurse | Select-Object -ExpandProperty Name | Sort-Object))) { throw 'Retired assets remain.' }
     foreach ($kind in @('runtime', 'publish.runtime')) {
-        $manifest = Get-Content (Join-Path $site "bin/Release/net10.0/Minimal.staticwebassets.$kind.json") -Raw | ConvertFrom-Json
+        $manifest = Get-Content (Get-ChildItem (Join-Path $site 'bin/Release') -Recurse -Filter "Minimal.staticwebassets.$kind.json" | Select-Object -First 1).FullName -Raw | ConvertFrom-Json
         if ($manifest.ContentRoots.Count) { throw "Stale asset roots remain: $kind" }
     }
 } finally { [IO.File]::WriteAllText($project, $original); [IO.File]::Delete((Join-Path $site 'Home.razor.css')) }

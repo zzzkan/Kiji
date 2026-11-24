@@ -1,6 +1,6 @@
 param()
 $ErrorActionPreference = 'Stop'
-$repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../../..'))
+$repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $runRoot = Join-Path $repository ('artifacts/portable-cache-check/' + [guid]::NewGuid().ToString('N'))
 $feed = Join-Path $runRoot 'feed'
 New-Item -ItemType Directory -Path $feed -Force | Out-Null
@@ -25,7 +25,7 @@ function New-Fixture([string] $name) {
     New-Item -ItemType Directory -Path (Join-Path $root 'content') -Force | Out-Null
     @"
 <Project Sdk="Microsoft.NET.Sdk.Razor">
-  <PropertyGroup><OutputType>Exe</OutputType><RootNamespace>Portable</RootNamespace></PropertyGroup>
+  <PropertyGroup><OutputType>Exe</OutputType><RootNamespace>Portable</RootNamespace><UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier></PropertyGroup>
   <ItemGroup><PackageReference Include="Kiji" Version="$version" /></ItemGroup>
   <ItemGroup><Content Update="wwwroot/excluded.txt" CopyToPublishDirectory="Never" /></ItemGroup>
 </Project>

@@ -11,3 +11,5 @@ M:Microsoft.AspNetCore.Http.HttpResponse.Redirect(System.String,System.Boolean);
 T:Microsoft.Extensions.Configuration.EnvironmentVariablesExtensions;Kiji configuration stays project-local, so a publish is the same on every machine: read settings from the project's appsettings files.
 T:Microsoft.Extensions.Configuration.CommandLineConfigurationExtensions;Kiji configuration stays project-local, so a publish is the same on every machine: read settings from the project's appsettings files.
 T:Microsoft.Extensions.Configuration.UserSecretsConfigurationExtensions;Kiji configuration stays project-local, so a publish is the same on every machine: read settings from the project's appsettings files.
+T:System.Console;Kiji logs through the site's ILogger (Kiji's own under Kiji.Build), so log levels and formatting follow the Logging section. Only the dev server's watch-style status lines write to the console.
+T:Microsoft.AspNetCore.Components.RouteView;PageView owns Kiji's layout resolution; RouteView would resolve layouts a second way.

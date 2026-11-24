@@ -44,6 +44,7 @@ internal sealed class DevServer(SiteEngine app, WebApplicationBuilder webBuilder
     private readonly HashSet<string> _retiredImages = new(StringComparer.Ordinal);
     private readonly Dictionary<WatchedPath, (string Target, FileSystemWatcher Watcher)> _linkedWatchers = [];
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("ApiDesign", "RS0030", Justification = "The dev server's watch-style status lines go to the console, as dotnet watch's own do.")]
     internal static DevServer Create(SiteEngine app, string[] args,
         DevServerStatusReporter? reporter = null, TextWriter? statusOutput = null, bool? isOutputRedirected = null)
     {

@@ -24,11 +24,11 @@ public sealed class SyntheticWorkloadTests
         {
             if (!recorded.TryGetValue(path, out var expected))
             {
-                failures.Add($"{path} is new in the frozen benchmark workload. Remove it; do not change the workload to improve results (AGENTS.md).");
+                failures.Add($"{path} is new in the frozen benchmark workload. Remove it: results are only comparable while the workload stays the same.");
             }
             else if (hash != expected)
             {
-                failures.Add($"{path} is part of the frozen benchmark workload. Revert it; do not change the workload to improve results (AGENTS.md). Only a breaking Kiji API change may force an edit that keeps the generated site the same: then record \"{hash}  {path}\" in {HashFile} and say why in the pull request.");
+                failures.Add($"{path} is part of the frozen benchmark workload. Revert it: results are only comparable while the workload stays the same. Only a breaking Kiji API change may force an edit that keeps the generated site the same: then record \"{hash}  {path}\" in {HashFile} and say why in the pull request.");
             }
         }
 

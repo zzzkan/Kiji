@@ -12,6 +12,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../../src/Kiji/Kiji.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>KijiConfiguration</_Parameter1>
+      <_Parameter2>$(Configuration)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="synthetic-workload.sha256" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

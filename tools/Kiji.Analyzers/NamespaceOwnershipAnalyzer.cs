@@ -52,7 +52,7 @@ public sealed class NamespaceOwnershipAnalyzer : DiagnosticAnalyzer
 
                 if (owners.TryGetValue(name, out var owner))
                 {
-                    var location = type.Locations.FirstOrDefault(static location => location.IsInSource) ?? Location.None;
+                    var location = type.Locations.FirstOrDefault(location => location.SourceTree is not null && context.Compilation.ContainsSyntaxTree(location.SourceTree)) ?? Location.None;
                     context.ReportDiagnostic(Diagnostic.Create(Rule, location, name, owner, assembly.Name));
                 }
                 else

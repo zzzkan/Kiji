@@ -10,8 +10,6 @@
     min-width: 0;
 }
 
-/* ---------- headings ---------- */
-
 .doc-content ::deep h2 {
     margin-top: 3rem;
     padding-top: 1.5rem;
@@ -23,8 +21,6 @@
     padding-top: 0;
     border-top: 0;
 }
-
-/* ---------- previous / next ---------- */
 
 .edit-link {
     margin: 4rem 0 0;
@@ -89,8 +85,6 @@
     grid-column: 2;
     text-align: right;
 }
-
-/* ---------- on this page ---------- */
 
 .outline {
     position: sticky;

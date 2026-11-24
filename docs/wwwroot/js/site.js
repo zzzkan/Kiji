@@ -1,4 +1,3 @@
-// Copy buttons for code blocks.
 if (navigator.clipboard) {
     for (const pre of document.querySelectorAll('pre')) {
         const block = document.createElement('div');
@@ -18,7 +17,6 @@ if (navigator.clipboard) {
     }
 }
 
-// Mark the section being read in "On this page".
 const links = new Map();
 for (const link of document.querySelectorAll('.outline a')) {
     const heading = document.getElementById(decodeURIComponent(link.hash.slice(1)));
@@ -31,7 +29,6 @@ if (links.size > 0) {
     const headings = [...links.keys()];
     let current;
     const update = () => {
-        // The last heading above a line just below the sticky header; the final one at the page end.
         const atEnd = innerHeight + scrollY >= document.documentElement.scrollHeight - 2;
         const active = atEnd
             ? headings.at(-1)

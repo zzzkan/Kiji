@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <KijiExample>true</KijiExample>
+  </PropertyGroup>
+
+  <Import Project="../Directory.Build.props" />
+</Project>

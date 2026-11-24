@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Kiji.Core/Kiji.Core.csproj" />
+    <ProjectReference Include="../../src/Kiji.Feeds/Kiji.Feeds.csproj" />
+  </ItemGroup>
+
+</Project>

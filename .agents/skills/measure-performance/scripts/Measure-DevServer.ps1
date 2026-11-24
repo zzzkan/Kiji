@@ -31,23 +31,12 @@ foreach ($pageCount in $Pages) {
         $site = Join-Path $root "$variant-$pageCount"
         New-Item -ItemType Directory $site | Out-Null
         foreach ($directory in @('contents', 'wwwroot')) { Copy-Item -LiteralPath (Join-Path $corpus $directory) -Destination $site -Recurse }
-        $sourceRoot = Join-Path $repository 'src/Kiji.SyntheticSite'
-        foreach ($source in Get-ChildItem $sourceRoot -Recurse -Filter '*.cs' -File | Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' -and $_.Name -ne 'Program.cs' }) {
+        $sourceRoot = Join-Path $repository 'benchmarks/Kiji.SyntheticSite'
+        foreach ($source in Get-ChildItem $sourceRoot -Recurse -Filter '*.cs' -File | Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' -and $_.FullName -notmatch '[\\/]Harness[\\/]' }) {
             $path = Join-Path $site ([IO.Path]::GetRelativePath($sourceRoot, $source.FullName))
             Write-File $path ([IO.File]::ReadAllText($source.FullName))
         }
-        $runner = Join-Path $site 'BuildRunner.cs'
-        $code = [IO.File]::ReadAllText($runner)
-        $createLine = 'StaticSite.CreateBuilder([], new SiteExecutionPaths(root, Path.Combine(root, "obj", "synthetic")), typeof(BuildRunner).Assembly, runtimeData: name => name == "Kiji.OutputPath" ? Path.Combine(root, "dist") : null)'
-        $publishLine = 'await host.Services.GetRequiredService<SiteEngine>().PublishAsync();'
-        if (!$code.Contains($createLine) -or !$code.Contains($publishLine)) { throw 'Frozen site adapter requires review.' }
-        $code = $code.Replace($createLine, 'StaticSite.CreateBuilder([])').Replace($publishLine, 'await app.RunAsync();')
-        $code = $code.Replace('using var host = builder.Build();', 'var app = builder.Build();')
-        $code = $code.Replace('using Kiji.Hosting;', 'using Microsoft.Extensions.Hosting;')
-        # The real host validates options at startup; only the direct runner needs the explicit call.
-        $code = $code.Replace('        host.Services.GetService<IStartupValidator>()?.Validate();', '')
-        Write-File $runner $code
-        Write-File (Join-Path $site 'Program.cs') 'Console.WriteLine($"Kiji probe PID: {Environment.ProcessId}"); await Kiji.SyntheticSite.BuildRunner.BuildSiteAsync(Directory.GetCurrentDirectory());'
+        Write-File (Join-Path $site 'Program.cs') 'Console.WriteLine($"Kiji probe PID: {Environment.ProcessId}"); var builder = Kiji.StaticSite.CreateBuilder(args); Kiji.SyntheticSite.SyntheticSiteDefinition.Configure(builder); await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.RunAsync(builder.Build());'
         $package = [IO.Path]::GetFullPath($(if ($variant -eq 'baseline') { $BaselinePackage } else { $CandidatePackage }))
         $archive = [IO.Compression.ZipFile]::OpenRead($package)
         try {
@@ -59,11 +48,12 @@ foreach ($pageCount in $Pages) {
         $feed = Join-Path $site 'feed'
         New-Item -ItemType Directory $feed | Out-Null
         Copy-Item -LiteralPath $package -Destination (Join-Path $feed "Kiji.$version.nupkg")
+        Get-ChildItem -LiteralPath (Split-Path $package) -Filter "Kiji.Runtime.*.$version.nupkg" | Copy-Item -Destination $feed
         Write-File (Join-Path $site 'NuGet.Config') "<configuration><packageSources><clear/><add key=`"local`" value=`"$([Security.SecurityElement]::Escape($feed))`"/><add key=`"nuget`" value=`"https://api.nuget.org/v3/index.json`"/></packageSources></configuration>"
         $cache = [Security.SecurityElement]::Escape((Join-Path $root "packages/$variant"))
-        Write-File (Join-Path $site 'Site.csproj') "<Project Sdk=`"Microsoft.NET.Sdk.Razor`"><PropertyGroup><OutputType>Exe</OutputType><AssemblyName>Kiji.SyntheticSite</AssemblyName><RestorePackagesPath>$cache</RestorePackagesPath></PropertyGroup><ItemGroup><PackageReference Include=`"Kiji`" Version=`"$version`" /></ItemGroup></Project>"
+        Write-File (Join-Path $site 'Site.csproj') "<Project Sdk=`"Microsoft.NET.Sdk.Razor`"><PropertyGroup><OutputType>Exe</OutputType><UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier><AssemblyName>Kiji.SyntheticSite</AssemblyName><RestorePackagesPath>$cache</RestorePackagesPath></PropertyGroup><ItemGroup><PackageReference Include=`"Kiji`" Version=`"$version`" /></ItemGroup></Project>"
         Run-Dotnet @('build', $site, '-c', 'Debug') (Join-Path $root "$variant-$pageCount-build.log")
-        $sites += [ordered]@{ Path=$site; Pages=$pageCount; Variant=$variant; Package=$package; SHA256=(Get-FileHash $package).Hash; DefinitionSHA256=(Get-FileHash $runner).Hash }
+        $sites += [ordered]@{ Path=$site; Pages=$pageCount; Variant=$variant; Package=$package; SHA256=(Get-FileHash $package).Hash; DefinitionSHA256=(Get-FileHash (Join-Path $site 'SyntheticSiteDefinition.cs')).Hash }
     }
 }
 if (@($sites.DefinitionSHA256 | Select-Object -Unique).Count -ne 1) { throw 'Site definitions differ.' }

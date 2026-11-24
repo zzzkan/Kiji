@@ -3,7 +3,6 @@ using System.Text.RegularExpressions;
 
 namespace Kiji.Docs.Models;
 
-/// <summary>A documentation page with its site-specific route and presentation metadata.</summary>
 public sealed class Article
 {
     private readonly MarkdownContent<FrontMatter> _content;
@@ -40,7 +39,6 @@ public sealed class Article
 
     public string Section => _content.FrontMatter.Section;
 
-    /// <summary>The Markdown file's path relative to the content directory.</summary>
     public string SourcePath => _content.Path;
 
     public ValueTask<string> RenderAsync(CancellationToken cancellationToken = default) =>

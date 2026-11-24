@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Kiji.Hosting</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="livereload.js" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Kiji.Core/Kiji.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -35,8 +35,10 @@ dotnet build -c Release
 dotnet test -c Release
 ```
 
-The library is in `src/Kiji`, its unit and component tests are in `src/Kiji.Tests`, and
-`src/Kiji.PackageTests` tests the packed package from a consumer project.
+The library is in `src`, as projects packed into the one Kiji package. Each project's unit and
+component tests are in `tests/<Project>.Tests`, whole-site tests in `tests/Kiji.Tests`, and
+`tests/Kiji.PackageTests` tests the packed package from a consumer project.
+`Directory.Build.targets` lists every project and the projects and packages each may reference.
 
 ## Open a pull request
 

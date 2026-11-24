@@ -1,5 +1,3 @@
-# GitHub uses these PR labels when "Generate release notes" is selected.
-# A PR without a matching label appears under Other changes.
 changelog:
   exclude:
     labels:

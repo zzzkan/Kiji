@@ -8,7 +8,6 @@ on:
   workflow_dispatch:
 
 concurrency:
-  # Identify the workflow file and ref independently of its display name.
   group: ${{ github.workflow_ref }}
   cancel-in-progress: true
 
@@ -22,17 +21,12 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    # A healthy job takes about four minutes. A step timeout is enforced by the runner,
-    # which a stalled runner ignores; the job timeout is enforced by the service and
-    # would otherwise default to six hours.
     timeout-minutes: 20
     env:
-      # Share dependencies on the checkout volume so CopyLocal can use hard links.
       NUGET_PACKAGES: ${{ github.workspace }}/artifacts/nuget-packages
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # MinVer derives the package version from git tags and history.
           fetch-depth: 0
 
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
@@ -42,16 +36,26 @@ jobs:
       - name: Build
         run: dotnet build -c Release
 
-      - name: Library tests
-        working-directory: src/Kiji.Tests
+      - name: Repository checks
+        working-directory: tests/Kiji.RepositoryTests
         run: dotnet test -c Release
+
+      - name: Library tests
+        shell: pwsh
+        run: |
+          foreach ($project in Get-ChildItem tests -Directory -Filter '*.Tests') {
+            Push-Location $project.FullName
+            dotnet test -c Release
+            $code = $LASTEXITCODE
+            Pop-Location
+            if ($code) { exit $code }
+          }
 
       - name: Pack
         shell: pwsh
         run: |
           dotnet pack src/Kiji -c Release --no-build -o artifacts/packages
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          # Kiji's package, and beside it one Kiji.Runtime package per runtime with images.
           $packages = @(Get-ChildItem artifacts/packages -Filter 'Kiji.*.nupkg' | Where-Object { -not $_.Name.StartsWith('Kiji.Runtime.') })
           if ($packages.Count -ne 1) { throw 'Expected exactly one Kiji package.' }
           $runtimePackages = @(Get-ChildItem artifacts/packages -Filter 'Kiji.Runtime.*.nupkg')
@@ -60,25 +64,32 @@ jobs:
 
       - name: Package scenarios
         timeout-minutes: 10
-        working-directory: src/Kiji.PackageTests
-        shell: bash
+        working-directory: tests/Kiji.PackageTests
+        shell: pwsh
         env:
           KIJI_TEST_TRACE: ${{ runner.temp }}/package-scenarios.log
-        # Passed tests print nothing until the run ends. Follow the scenario trace so a
-        # stalled run shows its last step; the tests end themselves before the timeout.
         run: |
-          : > "$KIJI_TEST_TRACE"
-          tail -f "$KIJI_TEST_TRACE" &
-          code=0
-          dotnet test -c Release || code=$?
-          kill $!
-          exit $code
+          New-Item -ItemType File -Force $env:KIJI_TEST_TRACE | Out-Null
+          $test = Start-Process dotnet -ArgumentList 'test', '-c', 'Release' -NoNewWindow -PassThru
+          $null = $test.Handle
+          $trace = [IO.StreamReader]::new([IO.FileStream]::new($env:KIJI_TEST_TRACE, 'Open', 'Read', 'ReadWrite'))
+          while (-not $test.HasExited) {
+            while ($null -ne ($line = $trace.ReadLine())) { $line }
+            Start-Sleep -Milliseconds 500
+          }
+          while ($null -ne ($line = $trace.ReadLine())) { $line }
+          exit $test.ExitCode
 
       - name: Build docs
         if: matrix.os == 'ubuntu-latest'
-        run: dotnet publish docs -c Release --no-build -o docs/dist
+        shell: pwsh
+        run: |
+          dotnet publish docs -c Release --no-build -o docs/dist
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $republish = dotnet publish docs -c Release --no-build -o docs/dist | Out-String
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          if ($republish -notmatch 'Generated 0 pages') { $republish; throw 'A publish with no changes rendered pages.' }
 
-      # Upload once per PR run; Docs Deploy waits for the entire CI matrix.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request'
         with:
@@ -86,3 +97,21 @@ jobs:
           path: docs/dist
           if-no-files-found: error
           retention-days: 1
+
+  portable-cache:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: global.json
+
+      - name: Restore tools
+        run: dotnet tool restore
+
+      - name: Portable cache
+        run: dotnet pwsh tests/PortableCache/Verify-PortableCache.ps1

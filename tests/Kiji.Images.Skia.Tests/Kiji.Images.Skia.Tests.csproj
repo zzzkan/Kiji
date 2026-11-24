@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Kiji.Core/Kiji.Core.csproj" />
+    <ProjectReference Include="../../src/Kiji.Images.Skia/Kiji.Images.Skia.csproj" />
+    <ProjectReference Include="../Kiji.Testing/Kiji.Testing.csproj" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
+  </ItemGroup>
+
+</Project>

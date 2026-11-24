@@ -5,169 +5,82 @@ description: Measure Kiji build performance and validate an optimization. Use wh
 
 ## Choose the measurement
 
-- **BenchmarkDotNet**: compare implementations with an explicit baseline, warmup,
-  allocation measurements, and output equivalence checked in setup.
-- **SiteBuildBenchmarks**: authoritative whole-build results for 200/1000 pages and
-  Full, NoChange, CacheOnly, OneEdited, CodeChanged scenarios.
-- **SyntheticSite --phases**: attribute changes to build stages and compare saved
-  binaries in interleaved runs. Its absolute times are not comparable with BDN.
+| Harness | Use for |
+| --- | --- |
+| BenchmarkDotNet (`benchmarks/Kiji.Benchmarks`) | Implementation comparisons. `SiteBuildBenchmarks` is the authoritative whole-build result (200/1000 pages; Full, NoChange, CacheOnly, OneEdited, CodeChanged). `ImageProcessingBenchmarks` and `ContentLoadBenchmarks` isolate images and content loading. |
+| `benchmarks/Kiji.SyntheticSite --phases` | Attributing time to build phases with saved binaries. Its absolute times are not comparable with BDN. |
+| `scripts/Measure-ColdPublish.ps1` | What a user's `dotnet publish` runs. Most of that time is first use of code, which the warm, repeated builds above do not show. |
+| `scripts/Measure-Publish.ps1` | Whole-publish regressions through real Razor SDK consumers, including SDK work outside Kiji. |
+| `scripts/Measure-DevServer.ps1` | Dev server startup, first response and edit-to-reload. |
 
 ```pwsh
-dotnet run -c Release --project src/Kiji.Benchmarks -- --filter "*SiteBuildBenchmarks*"
-dotnet run -c Release --project src/Kiji.Benchmarks -- --filter "*Markdown*"
-dotnet run -c Release --project src/Kiji.SyntheticSite -- --pages 1000 --runs 5 --full --phases --root <dir> --out <json>
+dotnet run -c Release --project benchmarks/Kiji.Benchmarks -- --filter "*SiteBuildBenchmarks*"
+dotnet run -c Release --project benchmarks/Kiji.SyntheticSite -- --pages 1000 --runs 5 --full --phases --root <dir> --out <json>
+dotnet pwsh .agents/skills/measure-performance/scripts/Measure-ColdPublish.ps1 -Baseline <revision> -Work <new directory> [-Phases]
+dotnet pwsh .agents/skills/measure-performance/scripts/Measure-Publish.ps1 -BaselinePackage <nupkg> -CandidatePackage <nupkg> -CorpusWriter <saved Kiji.SyntheticSite.dll>
+dotnet pwsh .agents/skills/measure-performance/scripts/Measure-DevServer.ps1 -BaselinePackage <nupkg> -CandidatePackage <nupkg> -CorpusWriter <saved Kiji.SyntheticSite.dll> -OutputDirectory <new directory>
 ```
 
-ImageProcessingBenchmarks covers shared/distinct images, cold/warm output and
-ordinary/high resolution. ContentLoadBenchmarks separates file I/O from parsing.
-Keep maintained benchmarks on current production paths; temporary comparisons and
-rejected experiments belong in ignored `artifacts`.
+Keep maintained benchmarks on current production paths; temporary comparisons and rejected
+experiments go in `artifacts/`. `.github/workflows/benchmarks.yml` runs weekly and on demand;
+there is no automatic performance gate.
 
-- **Cold publish process**: what a user's `dotnet publish` runs. Most of its time is
-  first use (loading, compiling and initializing code), which the three harnesses above do
-  not show: they build repeatedly in one warm process.
+## Comparing builds
 
-## Before/after protocol
+- The baseline is saved Release binaries or packages from the actual starting state,
+  including uncommitted changes. A project reference to the working tree is not a baseline;
+  for BDN, load both versions through equivalent AssemblyLoadContexts.
+- Use one corpus (`--root`) for both. The SyntheticSite definition is frozen; integration
+  fixtures belong in tests.
+- SyntheticSite has no warmup: discard run 1 of each invocation, and extend warmup equally if
+  times keep falling. Without `--full`, runs after the first are no-change builds; `--full`
+  clears `.kiji` each run; `--images` adds a cover every tenth post.
+- Phase names with a dot are nested inside their parent: sum only names without one. The
+  remainder includes site construction.
+- Output must stay identical; do not normalize differences unless the task allows it.
 
-1. Set an acceptance threshold before measuring. Save Release baseline binaries
-   from the actual starting state, including uncommitted changes.
-2. Generate one corpus and use the same `--root` for both binaries. Keep the
-   SyntheticSite site definition frozen; integration fixtures belong in Tests.
-3. Alternate baseline/candidate for at least three rounds, `--runs 5 --full`.
-   Discard run 1 of **each invocation** for JIT warmup; compare remaining medians.
-   Inspect samples for drift: one discarded run does not guarantee steady state.
-   If times keep declining, extend warmup equally for both saved versions and
-   preserve the preliminary reports. Do not mix transient and steady-state samples.
-4. Confirm with SiteBuildBenchmarks. For a BDN saved-binary comparison, load both
-   versions through equivalent AssemblyLoadContexts and verify identical output
-   in setup. A project reference to the working tree is not a saved baseline.
-5. Record commands, CPU/core count, .NET version, GC mode and output equivalence.
-   Attribute differences with `--phases`; sum only names without a dot, since
-   nested phases overlap their parents. The remainder includes site construction.
+## Cold publish
 
-Filesystem/virus-scanner variation makes a single before-then-after pair unreliable.
-Do not normalize output differences unless the task explicitly permits them.
+- Compare packages packed with the default `KijiReadyToRun`, with the `Kiji.Runtime.*`
+  packages in the same feed: a package consumer runs ReadyToRun images, a project reference
+  runs IL, and the two are not comparable.
+- Report two states. Fresh: no `.kiji`, staged `site` or `publish.jitprofile*`, as in a clean
+  checkout. Profiled: remove only `.kiji/cache` and the staged `site`, and discard the first
+  two runs, which record the profile.
+- `-Phases` adds a startup hook that itself costs time: use it to attribute, not for headline
+  numbers. To measure Windows and macOS, push a branch with a temporary CI step.
+- File systems differ far more than Kiji's own time: compare processor time on a memory file
+  system and repeat on a disk for writes.
+- By hand, time the command `KijiGenerateSite` runs:
+  `dotnet exec --runtimeconfig obj/Release/net10.0/<rid>/kiji/publish.runtimeconfig.json bin/Release/net10.0/<rid>/<Site>.dll`.
 
-## Measure the cold publish process
+## Already measured for the cold publish
 
-`scripts/measure_cold_publish.py --baseline <revision> --work <new directory>` does all of
-this on any platform: it packs the baseline revision and the working tree, publishes the
-frozen site against each package, alternates the two consumers through four scenarios and
-checks after every round that their output is identical and that each one-edited round
-changes it. `--phases` adds a startup hook that reports each
-generation's build phases, the time before the first and after the last, and the JIT time and
-compiled-method count; use it to attribute a platform's time, not for headline numbers, since
-the hook itself adds time to both sides. Push a branch with a temporary CI step to measure on
-Windows and macOS runners. By hand, publish a consumer of each saved package once,
-then time the command `KijiGenerateSite` executes, alternating the two consumers:
+Rejected: collecting code identity while the host is built (contends with the host's own
+loading), warming the component renderer (no difference), skipping the Markdown warm-up while
+a JIT profile replays (slower). Partial ReadyToRun images from a MIBC profile need dotnet-pgo,
+which nuget.org does not carry. Rejected runtime settings and APIs report their measurements
+from `PublishRuntimeSettingsTests` and `src/BannedSymbols.txt`.
 
-```sh
-dotnet exec --runtimeconfig obj/Release/net10.0/<rid>/kiji/publish.runtimeconfig.json bin/Release/net10.0/<rid>/<Site>.dll
-```
+## Reading Measure-Publish results
 
-- Pack with the default `KijiReadyToRun` and keep the `Kiji.Runtime.*` packages in the same
-  feed: a consumer of the package runs the ReadyToRun images, a project reference runs IL. Do
-  not compare one with the other.
-- Measure two states and report both. Fresh: remove `.kiji`, the staged `site` directory and
-  `publish.jitprofile*` beside it, as a clean checkout has none. Profiled: remove only
-  `.kiji/cache` and the staged `site`; discard the first two runs, which record the profile.
-- Alternate at least ten runs per state and compare medians. Check the staged output of
-  both consumers is identical.
-- File systems differ far more than Kiji's own time. Use a memory file system to compare
-  processor time, and repeat on a disk for the writes. A disk that slows down as files are
-  repeatedly deleted and recreated inflates both variants; only interleaved runs compare.
-- Runtime events and `/proc/self` counters attribute a cold process without a profiler:
-  JIT time and method counts by namespace, system calls, page faults, per-thread time.
-  `System.Runtime.JitInfo` gives the totals.
+- ManifestRemoved (only `.kiji/cache/manifest.json` deleted) replaces the older ForceRender;
+  re-run both packages under it to compare with a ForceRender baseline.
+- PublishOutputRemoved removes only `dist` and is not Kiji's CacheOnly scenario.
+- Fresh restores outside timing with warm OS and NuGet caches; it is not a cold machine.
+- MSBuild categories are exclusive wall time and add up to the mean publish time; do not add
+  inclusive task/target totals or dotted Kiji phases to them, and do not subtract the
+  measured instrumentation overhead from phase timings.
+- Unexpected compiler invocations mean unwanted recompilation; diagnose with a separate
+  build instead of changing consumer settings.
+- Older packages compress by default and current ones opt in: set the same
+  `CompressionEnabled` in both property sets. The changed default is not an optimization.
+  `AllowCompressionDifferences` and `AllowNewFingerprintAliases` are only for deliberate
+  representation changes against versions without them.
 
-## Harness details
+## Reading Measure-DevServer results
 
-- SyntheticSite has no warmup. Without `--full`, runs after the first are no-change
-  builds. `--full` clears `.kiji` each run; `--images` adds a cover every tenth post.
-- BDN creates and removes corpora outside measurement. Alternate equal-length
-  edits in iteration setup; do not accumulate edits across iterations.
-- Server GC is off by default; report any override.
-- `.github/workflows/benchmarks.yml` runs manually and weekly, outside blocking CI.
-  There is no automatic performance gate.
-
-## Attribute whole-publish regressions
-
-Use `scripts/Measure-Publish.ps1` to compare saved packages through real isolated
-Razor SDK consumers, including SDK work outside Kiji's generator:
-
-```pwsh
-./.agents/skills/measure-performance/scripts/Measure-Publish.ps1 `
-  -BaselinePackage <saved-baseline.nupkg> -CandidatePackage <candidate.nupkg> `
-  -CorpusWriter <saved-Kiji.SyntheticSite.dll> -Pages 1000 -Rounds 5
-```
-
-The script copies the frozen site definition and one corpus into both consumers.
-Only the entry adapter changes from direct PublishAsync to package RunAsync and
-installs the existing phase observer. Package and workload hashes are recorded.
-The measurement-only MSBuild logger compiles under the ignored run directory;
-it is not a Kiji dependency, solution project or packaged build task.
-
-- NoChange retains all outputs.
-- ManifestRemoved deletes only `.kiji/cache/manifest.json` before timing. Every page
-  renders with image caches, staging, and published files retained. It replaces
-  ForceRender. Re-run both packages under ManifestRemoved for a like-for-like comparison
-  with a baseline previously measured using ForceRender.
-- OneEdited alternates equal-length edits to one Markdown input.
-- PublishOutputRemoved removes only dist, retaining Kiji staging and caches. Do not
-  call this Kiji's CacheOnly scenario: that benchmark repairs the generator output.
-- Fresh clears bin, obj, .kiji and dist before every invocation, then restores outside
-  timing. OS and NuGet package caches remain warm; this is not a cold machine test.
-- Each scenario discards one warmup pair and alternates at least three measured pairs.
-  All common public bytes and every compressed representation are verified per pair.
-- MSBuild events provide exclusive wall-time categories, including inline item-list
-  work. Do not add inclusive task/target totals or dotted Kiji sub-phases to them.
-  Category means add to mean whole-publish time; independent medians need not add up.
-- Kiji entry timing covers construction, RunAsync and disposal. Exec also includes
-  process startup/shutdown and report writing. Keep these distinct from warm BDN.
-- File counts and SDK manifest counts show added work. Reported write counts infer
-  new/updated files from size/mtime; they are not OS-level I/O tracing.
-- The on/off control measures instrumentation overhead with the same compiled
-  adapter. Do not silently subtract that estimate from reported phase timings.
-- Compiler invocation counts reveal unwanted recompilation. Diagnose unexpected
-  calls with a separate diagnostic build; do not alter consumer settings just to
-  make the comparison faster or conceal production behavior.
-- Use `BaselineProperties` and `CandidateProperties` for explicit MSBuild option
-  comparisons; these apply to restore, publish and instrumentation controls across
-  the project graph. Record the settings with package provenance. Opt into
-  `AllowCompressionDifferences` only for deliberate representation changes: plain
-  file sets/bytes must remain identical and retained sidecars must decode correctly.
-  Report physical output storage separately from HTTP transfer sizes; sidecars
-  increase disk usage but reduce transfer only when the host negotiates them.
-- Older packages compress by default; current packages make compression opt-in.
-  Across that change, set the same `CompressionEnabled` in both property sets.
-  The changed default is not an optimization.
-- When comparing against a version without fingerprint URL materialization, use
-  `AllowNewFingerprintAliases` explicitly. Added ordinary files must correspond
-  to SDK endpoints carrying both a label and fingerprint and must match that
-  label's baseline bytes; arbitrary extra outputs still fail. Keep this separate
-  from permission to add or remove compressed representations.
-
-Preserve the run directory (raw spans, per-publish Kiji phases, results, output
-checks, package identities and harness snapshot). Run one measurement at a time.
-
-## Measure the development loop
-
-Use `scripts/Measure-DevServer.ps1` with saved `BaselinePackage`, `CandidatePackage`,
-`CorpusWriter`, and a new `OutputDirectory`. It adapts the same frozen site to
-RunAsync and measures 200/1000 pages with the ordinary Debug configuration.
-
-- Direct runs use a built DLL; WatchWarm includes watch/MSBuild with existing build
-  outputs; WatchFresh removes bin/obj/.kiji, restores outside timing, then runs watch.
-- Separate process-to-listening, first complete HTTP response, and their total.
-  Kiji warms its content snapshot in the background, so first-request time depends
-  on when the request arrives; do not add independent medians.
-- Keep one warmup process pair outside the result and alternate five measured
-  pairs. Discard the first five requests per endpoint and first edit per type.
-  Aggregate repeated requests within each process before comparing processes.
-- Verify response bytes between variants in each mode. Content/CSS edits wait for
-  the real WebSocket reload and assert updated response bytes; include the 250ms
-  debounce in edit-to-visible time. This measures HTTP completion, not browser paint.
-- Record medians, ranges and request p95. Do not infer a meaningful slowdown from
-  percentages on submillisecond requests alone. Keep raw samples and process logs.
-- All owned process trees stop in finally blocks; no global environment changes.
-  No other tests or benchmarks may run concurrently with the measurements.
+Kiji warms its content snapshot in the background, so first-request time depends on when the
+request arrives: do not add independent medians of startup and first response. Edit-to-visible
+time includes the 250 ms debounce and measures HTTP completion, not browser paint. Do not
+infer a slowdown from percentages on submillisecond requests.

@@ -6,13 +6,16 @@
 
   <ItemGroup>
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
-    <PackageVersion Include="Markdig" Version="1.6.0" />
+    <PackageVersion Include="Markdig" Version="1.6.0" UsedBy="Kiji.Markdown" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" UsedBy="build" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.6.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="11.0.0" />
     <PackageVersion Include="Microsoft.Testing.Platform" Version="2.5.3" />
-    <PackageVersion Include="MinVer" Version="8.0.0" />
-    <PackageVersion Include="SkiaSharp" Version="4.156.1" />
-    <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.156.1" />
+    <PackageVersion Include="MinVer" Version="8.0.0" UsedBy="build" />
+    <PackageVersion Include="ReferenceTrimmer" Version="3.5.13" UsedBy="build" />
+    <PackageVersion Include="SkiaSharp" Version="4.156.1" UsedBy="Kiji.Images.Skia" />
+    <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.156.1" UsedBy="Kiji" />
     <PackageVersion Include="xunit.v3" Version="4.0.3" />
-    <PackageVersion Include="YamlDotNet" Version="18.1.0" />
+    <PackageVersion Include="YamlDotNet" Version="18.1.0" UsedBy="Kiji.Markdown" />
   </ItemGroup>
 </Project>

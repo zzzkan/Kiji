@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Kiji</RootNamespace>
+    <KijiNamespaceLayers>Kiji.Paths, Kiji.Diagnostics, Kiji.Incremental, Kiji.Definition, Kiji.Rendering, Kiji.Routing, Kiji.Components, Kiji.StaticAssets, Kiji.Images, Kiji.Generation</KijiNamespaceLayers>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="BannedSymbols.Json.txt" />
+  </ItemGroup>
+
+</Project>
